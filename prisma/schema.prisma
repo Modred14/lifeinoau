@@ -1,0 +1,346 @@
+// prisma/schema.prisma
+// OAU Life - Phase 1 schema. All money is BigInt KOBO (1 naira = 100 kobo).
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Gender {
+  M
+  F
+}
+
+enum Class {
+  NEPO
+  MAPO
+  LAPO
+}
+
+enum AccountKind {
+  PLAYER
+  SYSTEM
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  isAdult      Boolean // 18+ checkbox, stored at signup
+  adultAckAt   DateTime   @default(now())
+  role         String     @default("PLAYER") // PLAYER | ADMIN
+  createdAt    DateTime   @default(now())
+  character    Character?
+}
+
+model Faculty {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  difficulty  Decimal      @default(1.00) @db.Decimal(3, 2)
+  verified    Boolean      @default(false) // flip to true once checked against oauife.edu.ng
+  departments Department[]
+  characters  Character[]
+}
+
+model Department {
+  id        Int     @id @default(autoincrement())
+  facultyId Int
+  name      String
+  faculty   Faculty @relation(fields: [facultyId], references: [id])
+
+  @@unique([facultyId, name])
+}
+
+model Character {
+  id                 String         @id @default(cuid())
+  userId             String         @unique
+  name               String         @unique
+  gender             Gender
+  class              Class // assigned server-side with crypto RNG, never from the client
+  personalities      String[]
+  facultyId          Int
+  level              Int            @default(100)
+  hostel             String         @default("") // empty until chosen after the class reveal
+  transport          String         @default("Trek")
+  // 0-100 stats, clamped in the engine
+  health             Int            @default(80)
+  energy             Int            @default(90)
+  happiness          Int            @default(60)
+  academics          Int            @default(40)
+  popularity         Int            @default(10)
+  suspicion          Int            @default(0)
+  luck               Int
+  riskTolerance      Int
+  lastTickWeek       Int            @default(0) // last game week fully simulated for this player
+  missedCallStreak   Int            @default(0)
+  lastParentCallWeek Int            @default(0)
+  jailedUntil        DateTime?
+  joinedWeek         Int            @default(1)
+  strikes            Int            @default(0)
+  suspendedUntilWeek Int            @default(0)
+  expelled           Boolean        @default(false)
+  sessionStartWeek   Int            @default(1) // game week the current level began; sessions are 12 weeks
+  failedSessions     Int            @default(0) // consecutive failed sessions (2 = academic withdrawal)
+  graduated          Boolean        @default(false)
+  graduatedWeek      Int?
+  finalCgpaX100      Int?
+  classification     String?
+  dependents         Int            @default(0) // kept pregnancies: childcare is charged weekly
+  jobKey             String?
+  jobXp              Int            @default(0)
+  businesses         Business[]
+  createdAt          DateTime       @default(now())
+  user               User           @relation(fields: [userId], references: [id])
+  faculty            Faculty        @relation(fields: [facultyId], references: [id])
+  account            Account?
+  notifications      Notification[]
+
+  @@index([facultyId])
+}
+
+// Cached balance for fast reads. The ledger is the source of truth.
+model Account {
+  id          String        @id @default(cuid())
+  kind        AccountKind
+  systemName  String?       @unique // 'WORLD', 'PARENTS', 'LANDLORDS', 'DSA' ...
+  characterId String?       @unique
+  balance     BigInt        @default(0)
+  character   Character?    @relation(fields: [characterId], references: [id])
+  debits      LedgerEntry[] @relation("debit")
+  credits     LedgerEntry[] @relation("credit")
+  // SYSTEM balances are not cached (derive them from the ledger). Enforced in the first migration (raw SQL):
+  //   CHECK (kind = 'SYSTEM' OR balance >= 0)
+}
+
+model LedgerEntry {
+  id              BigInt   @id @default(autoincrement())
+  idempotencyKey  String   @unique // replaying a request can never double-pay
+  debitAccountId  String // money leaves this account
+  creditAccountId String // money arrives here
+  amount          BigInt // > 0, enforced by CHECK (amount > 0)
+  memo            String
+  gameWeek        Int
+  createdAt       DateTime @default(now())
+  debit           Account  @relation("debit", fields: [debitAccountId], references: [id])
+  credit          Account  @relation("credit", fields: [creditAccountId], references: [id])
+
+  @@index([debitAccountId, createdAt])
+  @@index([creditAccountId, createdAt])
+  @@index([memo, creditAccountId]) // leaderboard: income by memo type
+}
+
+model GameClock {
+  id        Int      @id @default(1)
+  startedAt DateTime // week = floor((now - startedAt) / 1 day) + 1
+}
+
+model Notification {
+  id          BigInt    @id @default(autoincrement())
+  characterId String
+  kind        String
+  body        String
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+  character   Character @relation(fields: [characterId], references: [id])
+
+  @@index([characterId, createdAt])
+}
+
+model AuditLog {
+  id        BigInt   @id @default(autoincrement())
+  actorId   String // admin or 'SYSTEM'
+  action    String
+  target    String?
+  detail    Json?
+  createdAt DateTime @default(now())
+}
+
+// One row per processed action request. The unique key makes replays (double-taps, retries) harmless.
+model ActionLog {
+  id          BigInt   @id @default(autoincrement())
+  characterId String
+  requestId   String
+  action      String
+  gameWeek    Int
+  createdAt   DateTime @default(now())
+
+  @@unique([characterId, requestId])
+}
+
+enum JailStatus {
+  JAILED
+  PAID
+  SERVED
+}
+
+model FloorZero {
+  id          BigInt     @id @default(autoincrement())
+  characterId String
+  reason      String
+  startedAt   DateTime   @default(now())
+  releaseAt   DateTime
+  bill        BigInt // kobo, fixed at arrest time so it cannot be gamed by moving money
+  status      JailStatus @default(JAILED)
+
+  @@index([characterId, status])
+}
+
+model ExamResult {
+  id          BigInt  @id @default(autoincrement())
+  characterId String
+  gameWeek    Int
+  level       Int
+  score       Int
+  gradePoint  Int
+  cheated     Boolean @default(false)
+  caught      Boolean @default(false)
+  missed      Boolean @default(false)
+
+  @@unique([characterId, gameWeek]) // one result per exam week: no re-sitting
+}
+
+model Message {
+  id        BigInt    @id @default(autoincrement())
+  fromId    String // Character ids
+  toId      String
+  body      String // max 500 chars, validated server-side
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([toId, readAt])
+  @@index([fromId, toId, createdAt])
+}
+
+model Block {
+  id        BigInt @id @default(autoincrement())
+  blockerId String
+  blockedId String
+
+  @@unique([blockerId, blockedId])
+}
+
+model Report {
+  id         BigInt   @id @default(autoincrement())
+  reporterId String
+  targetId   String
+  reason     String
+  status     String   @default("OPEN") // reviewed in the admin panel
+  createdAt  DateTime @default(now())
+
+  @@index([status, createdAt])
+}
+
+// Fixed-window counters for rate limiting. One row per (key, window); old rows are pruned opportunistically.
+model RateLimit {
+  key         String
+  windowStart DateTime
+  count       Int      @default(0)
+
+  @@id([key, windowStart])
+}
+
+// Attendance counter per venue per game week. Capacity is enforced by one atomic upsert, so the last ticket cannot be sold twice.
+model PartyNight {
+  venue     String
+  gameWeek  Int
+  attendees Int    @default(0)
+
+  @@id([venue, gameWeek])
+}
+
+model PartyTicket {
+  id          BigInt   @id @default(autoincrement())
+  characterId String
+  venue       String
+  gameWeek    Int
+  pricePaid   BigInt
+  createdAt   DateTime @default(now())
+
+  @@unique([characterId, gameWeek]) // one night out per game week
+  @@index([characterId])
+}
+
+enum RelStatus {
+  ACTIVE
+  ENDED
+}
+
+model Relationship {
+  id           BigInt    @id @default(autoincrement())
+  characterId  String
+  npcName      String
+  npcTrait     String
+  stage        String    @default("STRANGER") // STRANGER | FRIEND | TALKING | SNEAKY | DATING
+  affection    Int       @default(0)
+  lastWeek     Int // last game week of contact (affection fades 3/week without contact)
+  lastGiftWeek Int?
+  lastDateWeek Int?
+  startedWeek  Int
+  endedWeek    Int?
+  status       RelStatus @default(ACTIVE)
+  // constraints.sql adds: UNIQUE (characterId) WHERE status = 'ACTIVE'  -> one active relationship per player
+
+  @@index([characterId, status])
+}
+
+enum PregStatus {
+  PENDING
+  KEPT
+  ENDED
+  UNRESOLVED
+}
+
+model Pregnancy {
+  id             BigInt     @id @default(autoincrement())
+  characterId    String
+  relationshipId BigInt
+  startedWeek    Int
+  decideBy       Int // game week after which an undecided case settles on its own
+  status         PregStatus @default(PENDING)
+
+  @@index([characterId, status])
+}
+
+model Achievement {
+  characterId String
+  key         String
+  earnedWeek  Int
+
+  @@id([characterId, key]) // earned once, never twice
+}
+
+// Business capital is real money held in the BUSINESS system account, so the ledger always shows what is locked inside businesses.
+model Business {
+  id          BigInt    @id @default(autoincrement())
+  characterId String
+  type        String // key of TYPES in lib/business.js
+  name        String
+  level       Int       @default(1)
+  employees   Int       @default(0)
+  reputation  Int       @default(50)
+  capital     BigInt // kobo; CHECK (capital >= 0) in constraints.sql
+  status      String    @default("ACTIVE") // ACTIVE | CLOSED | BANKRUPT
+  startedWeek Int
+  lastWeek    Int // last game week that was traded: each week is settled exactly once
+  character   Character @relation(fields: [characterId], references: [id])
+
+  @@index([characterId, status])
+  @@index([status, capital])
+}
+
+// One row per (player, product). Units are integer micro-units; valueKobo is a mark-to-market snapshot refreshed each time the player is caught up.
+model Holding {
+  id          BigInt @id @default(autoincrement())
+  characterId String
+  product     String
+  unitsMicro  BigInt
+  costKobo    BigInt // what you paid for the units you still hold
+  valueKobo   BigInt @default(0)
+  lastBuyWeek Int
+
+  @@unique([characterId, product])
+  @@index([characterId])
+}
