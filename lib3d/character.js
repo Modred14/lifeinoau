@@ -37,49 +37,53 @@ function limb(parent, r1, r2, len, mat, x, y, z) { // a tapered limb segment han
 export function buildCharacter(lookIn, gender = "F") {
   const look = cleanLook(lookIn, gender), F = gender === "F";
   const accent = ACCENTS[look.accent], skinHex = SKIN_TONES[look.skin];
-  const skin = std(skinHex, { roughness: 0.55 }), lip = std(new THREE.Color(skinHex).multiplyScalar(0.86).lerp(new THREE.Color("#8a3a3a"), 0.22), { roughness: 0.45 });
+  const skin = std(skinHex, { roughness: 0.5, emissive: new THREE.Color(skinHex).multiplyScalar(0.07) }), lip = std(new THREE.Color(skinHex).multiplyScalar(0.86).lerp(new THREE.Color("#8a3a3a"), 0.22), { roughness: 0.45 });
   const hairMat = std("#120e0c", { roughness: 0.85 });
   const map = fabricMap(look.fabric, accent), fab = std(map ? "#ffffff" : accent, { map, roughness: 0.8 });
-  const P = F ? { sc: 0.97, sh: 0.185, chest: 0.150, waist: 0.118, hip: 0.172, thigh: 0.082 } : { sc: 1.03, sh: 0.215, chest: 0.178, waist: 0.150, hip: 0.158, thigh: 0.088 };
+  // Distinct male and female builds: men get broad shoulders, a thick neck, heavy limbs and a straight torso; women get narrow shoulders, a slim neck, a small waist and wide hips.
+  const P = F ? { sc: 0.96, sh: 0.172, chest: 0.142, waist: 0.104, hip: 0.186, thigh: 0.086, neck: 0.043, arm: 0.86, lg: 0.94, depth: 0.62 }
+              : { sc: 1.04, sh: 0.258, chest: 0.205, waist: 0.172, hip: 0.158, thigh: 0.098, neck: 0.068, arm: 1.22, lg: 1.12, depth: 0.7 };
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body); body.scale.setScalar(P.sc);
   const add = (geo, mat, x = 0, y = 0, z = 0, p = body) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; p.add(m); return m; };
 
   // ---- body ----
   const torsoPts = [[P.hip * 0.86, 0.86], [P.hip, 0.93], [P.waist, 1.08], [P.chest, 1.27], [P.sh * 0.84, 1.37], [P.sh * 0.6, 1.415], [0.1, 1.46], [0.058, 1.50]];
-  const torso = add(latheOf(torsoPts), skin); torso.scale.set(1.12, 1, 0.64);
-  add(new THREE.CylinderGeometry(0.05, 0.06, 0.14, 20), skin, 0, 1.53, 0.006);
-  for (const s of [-1, 1]) add(new THREE.SphereGeometry(0.056, 20, 16), skin, s * P.sh, 1.4, 0);
+  const torso = add(latheOf(torsoPts), skin); torso.scale.set(1.12, 1, P.depth);
+  add(new THREE.CylinderGeometry(P.neck, P.neck * 1.2, 0.14, 24), skin, 0, 1.53, 0.006);
+  for (const s of [-1, 1]) add(new THREE.SphereGeometry(F ? 0.05 : 0.07, 20, 16), skin, s * P.sh, 1.4, 0);
   const pelvis = add(new THREE.SphereGeometry(P.hip * 0.97, 24, 18), skin, 0, 0.9, 0); pelvis.scale.set(1.08, 0.72, 0.62);
   const arms = [], legs = [];
   for (const s of [-1, 1]) {
     const arm = new THREE.Group(); arm.position.set(s * (P.sh + 0.006), 1.405, 0); arm.rotation.z = s * 0.17; body.add(arm);
-    limb(arm, 0.052, 0.042, 0.28, skin, 0, 0, 0); const fore = new THREE.Group(); fore.position.set(0, -0.28, 0); fore.rotation.x = -0.14; arm.add(fore);
-    limb(fore, 0.042, 0.032, 0.25, skin, 0, 0, 0); add(new THREE.SphereGeometry(0.036, 16, 12), skin, 0, -0.29, 0.004, fore).scale.set(0.8, 1.25, 0.6);
+    const A = P.arm; limb(arm, 0.052 * A, 0.042 * A, 0.28, skin, 0, 0, 0); const fore = new THREE.Group(); fore.position.set(0, -0.28, 0); fore.rotation.x = -0.14; arm.add(fore);
+    limb(fore, 0.042 * A, 0.032 * A, 0.25, skin, 0, 0, 0); add(new THREE.SphereGeometry(0.036 * (F ? 0.9 : 1.2), 16, 12), skin, 0, -0.29, 0.004, fore).scale.set(0.8, 1.25, 0.6);
     arms.push({ arm, fore, s });
     const leg = new THREE.Group(); leg.position.set(s * P.hip * 0.5, 0.92, 0); body.add(leg);
-    limb(leg, P.thigh * 1.08, 0.062, 0.43, skin, 0, 0, 0); limb(leg, 0.062, 0.042, 0.42, skin, 0, -0.43, 0.004); add(new THREE.SphereGeometry(0.056, 18, 14), skin, 0, -0.6, -0.012, leg).scale.set(1, 1.7, 1.05);
+    limb(leg, P.thigh * 1.08, 0.062 * P.lg, 0.43, skin, 0, 0, 0); limb(leg, 0.062 * P.lg, 0.042 * P.lg, 0.42, skin, 0, -0.43, 0.004); add(new THREE.SphereGeometry(0.056 * P.lg, 18, 14), skin, 0, -0.6, -0.012, leg).scale.set(1, 1.7, 1.05);
     add(new THREE.SphereGeometry(0.05, 16, 12), skin, 0, -0.865, 0.04, leg).scale.set(0.95, 0.55, 1.65);
     legs.push({ leg, s });
   }
 
   // ---- head and face ----
-  const head = new THREE.Group(); head.position.set(0, 1.64, 0.006); head.scale.setScalar(1.07); body.add(head);
+  const head = new THREE.Group(); head.position.set(0, 1.64, 0.006); head.scale.setScalar(F ? 1.04 : 1.1); body.add(head);
   add(new THREE.SphereGeometry(0.105, 36, 28), skin, 0, 0, 0, head).scale.set(0.9, 1.12, 1.0);
-  add(new THREE.SphereGeometry(0.07, 28, 22), skin, 0, -0.046, 0.026, head).scale.set(0.96, 0.85, 0.9); // jaw and chin
-  for (const s of [-1, 1]) add(new THREE.SphereGeometry(0.021, 14, 10), skin, s * 0.093, -0.004, -0.004, head).scale.set(0.5, 1.2, 0.8);
+  add(new THREE.SphereGeometry(0.07, 28, 22), skin, 0, -0.046, 0.026, head).scale.set(F ? 0.88 : 1.12, F ? 0.82 : 0.92, 0.9); // jaw and chin: soft and narrow for women, square and wide for men
+  if (!F) add(new THREE.SphereGeometry(0.03, 16, 12), skin, 0, -0.095, 0.05, head).scale.set(1.5, 0.7, 0.8); // stronger chin
+  for (const s of [-1, 1]) add(new THREE.SphereGeometry(F ? 0.019 : 0.024, 14, 10), skin, s * 0.093, -0.004, -0.004, head).scale.set(0.5, 1.2, 0.8);
   const eyes = [];
   for (const s of [-1, 1]) {
     const eye = new THREE.Group(); eye.position.set(s * 0.04, 0.012, 0.088); head.add(eye); eyes.push(eye);
     add(new THREE.SphereGeometry(0.0195, 18, 14), std("#f4f0ea", { roughness: 0.2 }), 0, 0, 0, eye).scale.set(1.2, 0.8, 0.55);
     add(new THREE.SphereGeometry(0.0108, 14, 12), std("#2a1a10", { roughness: 0.15 }), 0, 0, 0.008, eye);
     add(new THREE.SphereGeometry(0.0055, 10, 8), std("#050302"), 0, 0, 0.0135, eye);
-    const lid = add(new THREE.CapsuleGeometry(0.0034, 0.036, 4, 8), std("#0c0807"), 0, 0.0115, 0.0045, eye); lid.rotation.z = Math.PI / 2 + s * 0.06; lid.scale.z = 0.8;
-    const brow = add(new THREE.CapsuleGeometry(0.0036, 0.036, 4, 8), hairMat, s * 0.042, 0.057, 0.088, head); brow.rotation.z = Math.PI / 2 + s * 0.14;
+    const lid = add(new THREE.CapsuleGeometry(F ? 0.0052 : 0.0034, F ? 0.042 : 0.036, 4, 8), std("#0c0807"), 0, F ? 0.0125 : 0.0115, 0.0045, eye); // women: heavier lash line
+    if (F) { const lash = add(new THREE.CapsuleGeometry(0.0022, 0.012, 3, 6), std("#0c0807"), s * 0.021, 0.014, 0.006, eye); lash.rotation.z = -s * 0.9; } lid.rotation.z = Math.PI / 2 + s * 0.06; lid.scale.z = 0.8;
+    const brow = add(new THREE.CapsuleGeometry(F ? 0.0028 : 0.0058, F ? 0.034 : 0.04, 4, 8), hairMat, s * 0.042, F ? 0.062 : 0.052, 0.088, head); brow.rotation.z = Math.PI / 2 + s * (F ? 0.22 : 0.08); // women: thin arched brows, men: straight and heavy
   }
-  add(new THREE.CapsuleGeometry(0.0075, 0.03, 4, 10), skin, 0, -0.008, 0.098, head).rotation.x = -0.2; add(new THREE.SphereGeometry(0.0145, 16, 12), skin, 0, -0.026, 0.106, head).scale.set(1.2, 0.9, 1.0); // nose
+  add(new THREE.CapsuleGeometry(0.0075, 0.03, 4, 10), skin, 0, -0.008, 0.098, head).rotation.x = -0.2; add(new THREE.SphereGeometry(F ? 0.0135 : 0.0165, 16, 12), skin, 0, -0.026, 0.106, head).scale.set(F ? 1.1 : 1.35, 0.9, 1.0); // nose
   for (const s of [-1, 1]) add(new THREE.SphereGeometry(0.0072, 10, 8), skin, s * 0.011, -0.03, 0.1, head);
-  add(new THREE.SphereGeometry(0.026, 18, 12), lip, 0, -0.062, 0.094, head).scale.set(1.5, 0.38, 0.6);
-  add(new THREE.SphereGeometry(0.0235, 18, 12), lip, 0, -0.0745, 0.09, head).scale.set(1.45, 0.45, 0.6);
+  add(new THREE.SphereGeometry(0.026, 18, 12), lip, 0, -0.062, 0.094, head).scale.set(F ? 1.55 : 1.4, F ? 0.5 : 0.3, 0.6); // women: fuller lips, men: thinner
+  add(new THREE.SphereGeometry(0.0235, 18, 12), lip, 0, -0.0745, 0.09, head).scale.set(F ? 1.5 : 1.35, F ? 0.62 : 0.36, 0.6);
 
   // ---- hair ----
   const cap = (r = 0.111, len = 0.56) => { const m = add(new THREE.SphereGeometry(r, 32, 22, 0, Math.PI * 2, 0, Math.PI * (len - 0.04)), hairMat, 0, 0.006, -0.012, head); m.scale.set(0.93, 1.13, 1.03); m.rotation.x = -0.3; return m; };
@@ -103,17 +107,17 @@ export function buildCharacter(lookIn, gender = "F") {
   }
 
   // ---- clothes ----
-  const sleeve = (len, bot = 0.056) => { for (const { arm, fore } of arms) { const up = Math.min(len, 0.28);
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.061, len <= 0.28 ? bot : 0.054, up, 18), CL.top); m.position.set(0, -up / 2 + 0.01, 0); m.castShadow = true; arm.add(m);
-    if (len > 0.28) { const fl = len - 0.28, f = new THREE.Mesh(new THREE.CylinderGeometry(0.054, bot, fl, 18), CL.top); f.position.set(0, -fl / 2 + 0.005, 0); f.castShadow = true; fore.add(f); } } };
+  const sleeve = (len, bot = 0.056) => { bot *= P.arm; for (const { arm, fore } of arms) { const up = Math.min(len, 0.28);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.061 * P.arm, len <= 0.28 ? bot : 0.054 * P.arm, up, 18), CL.top); m.position.set(0, -up / 2 + 0.01, 0); m.castShadow = true; arm.add(m);
+    if (len > 0.28) { const fl = len - 0.28, f = new THREE.Mesh(new THREE.CylinderGeometry(0.054 * P.arm, bot, fl, 18), CL.top); f.position.set(0, -fl / 2 + 0.005, 0); f.castShadow = true; fore.add(f); } } };
   const flat = (g) => { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.094, 0.5); return g; }; // one plain spot of the fabric
-  const shell = (pts, mat, sz = 0.72) => { const m = add(latheOf(pts.map(([r, y]) => [r + 0.009, y])), mat); m.scale.set(1.12, 1, sz); for (const s of [-1, 1]) add(flat(new THREE.SphereGeometry(0.061, 20, 16)), mat, s * P.sh, 1.4, 0); return m; };
-  const trousers = (mat, flare = 1) => { add(new THREE.SphereGeometry(P.hip * 0.88, 22, 16), mat, 0, 0.88, 0).scale.set(1.02, 0.7, 0.56); for (const { leg } of legs) { const a = new THREE.Mesh(new THREE.CylinderGeometry(P.thigh * 1.06, 0.067 * flare, 0.43, 20), mat); a.position.y = -0.225; a.castShadow = true; leg.add(a);
-    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.067 * flare, 0.05 * flare, 0.42, 20), mat); b.position.set(0, -0.64, 0.004); b.castShadow = true; leg.add(b); } };
+  const shell = (pts, mat, sz = P.depth + 0.08) => { const m = add(latheOf(pts.map(([r, y]) => [r + 0.009, y])), mat); m.scale.set(1.12, 1, sz); for (const s of [-1, 1]) add(flat(new THREE.SphereGeometry(F ? 0.056 : 0.077, 20, 16)), mat, s * P.sh, 1.4, 0); return m; };
+  const trousers = (mat, flare = 1) => { const g = P.lg; add(new THREE.SphereGeometry(P.hip * 0.88, 22, 16), mat, 0, 0.88, 0).scale.set(1.02, 0.7, 0.56); for (const { leg } of legs) { const a = new THREE.Mesh(new THREE.CylinderGeometry(P.thigh * 1.06, 0.067 * g * flare, 0.43, 20), mat); a.position.y = -0.225; a.castShadow = true; leg.add(a);
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.067 * g * flare, 0.05 * g * flare, 0.42, 20), mat); b.position.set(0, -0.64, 0.004); b.castShadow = true; leg.add(b); } };
   const shoes = (mat, tall = 0) => { for (const { leg } of legs) { const s = add(new THREE.SphereGeometry(0.056, 18, 14), mat, 0, -0.9, 0.045, leg); s.scale.set(0.95, 0.62 + tall, 1.95); if (tall) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.052, 0.14, 16), mat); b.position.set(0, -0.82, 0.004); leg.add(b); } } };
   const jeans = std("#2d4263", { roughness: 0.85 }), dark = std("#1d2026", { roughness: 0.8 }), white = std("#ecebe6", { roughness: 0.7 }), tee = std(darker(accent, 0.8), { roughness: 0.8 });
   const CL = { top: white };
-  const fullTop = [[P.hip * 1.18, 0.72], [P.hip * 1.12, 0.8], [P.hip * 1.04, 0.88], [P.hip, 0.93], [P.waist, 1.08], [P.chest, 1.27], [P.sh * 0.84, 1.37], [P.sh * 0.6, 1.415], [0.105, 1.46], [0.064, 1.5]];
+  const fullTop = [...(F ? [[P.hip * 1.18, 0.72], [P.hip * 1.12, 0.8]] : [[P.hip * 1.12, 0.8]]), [P.hip * 1.04, 0.88], [P.hip, 0.93], [P.waist, 1.08], [P.chest, 1.27], [P.sh * 0.84, 1.37], [P.sh * 0.6, 1.415], [0.105, 1.46], [0.064, 1.5]];
   switch (look.outfit) {
     case "casual": CL.top = tee; shell(fullTop, tee); sleeve(0.13, 0.057); trousers(jeans); shoes(white); break;
     case "office": CL.top = F ? std(darker(accent, 1.1)) : white; shell(fullTop, CL.top); sleeve(0.5, 0.05);
@@ -130,6 +134,9 @@ export function buildCharacter(lookIn, gender = "F") {
         const stripe = std("#d8dde0", { metalness: 0.3, roughness: 0.4 }), vestR = (y) => (y < 1.08 ? P.waist + (1.08 - y) * 0.5 + 0.02 : P.waist + (y - 1.08) * 0.9 + 0.02);
         for (const y of [1.0, 1.14]) { const st = add(new THREE.CylinderGeometry(vestR(y) + 0.012, vestR(y) + 0.012, 0.028, 40, 1, true), stripe, 0, y, 0); st.scale.set(1.12, 1, 0.64); } } break;
   }
+
+  // women: a bust under the top (a lathe body is round, so it is added as two shapes in the top's fabric)
+  if (F && look.outfit !== "owambe") for (const s of [-1, 1]) add(new THREE.SphereGeometry(look.outfit === "sitework" ? 0.034 : 0.042, 22, 16), CL.top, s * 0.048, 1.185, P.depth * 0.146 - 0.002).scale.set(1.05, 0.9, 0.62);
 
   // ---- life ----
   const bodyBase = { sh: body.scale.y };
