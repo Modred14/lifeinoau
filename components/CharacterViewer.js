@@ -12,7 +12,7 @@ export default function CharacterViewer({ look, gender = "F", className = "", st
     let alive = true, stage = null, cur = null, ro = null;
     (async () => {
       try {
-        const [{ createStage }, { buildCharacter, addCharacterLights }, THREE] = await Promise.all([import("../lib3d/stage.js"), import("../lib3d/character.js"), import("three")]);
+        const [{ createStage }, { addCharacterLights }, { createAvatar }, THREE] = await Promise.all([import("../lib3d/stage.js"), import("../lib3d/character.js"), import("../lib3d/avatar/loadAvatar.js"), import("three")]);
         if (!alive) return;
         const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         stage = createStage(box.current.querySelector("[data-canvas]"), { alpha: true, fov: 30, controls: { enablePan: false, minDistance: 2.2, maxDistance: 6, minPolarAngle: 1.05, maxPolarAngle: 1.7, autoRotate: autoSpin && !reduce, autoRotateSpeed: 1.1 } });
@@ -20,8 +20,10 @@ export default function CharacterViewer({ look, gender = "F", className = "", st
         const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.9, 0.06, 72), new THREE.MeshStandardMaterial({ color: 0x1c2738, roughness: 0.85 })); disc.position.y = -0.03; disc.receiveShadow = true; stage.scene.add(disc);
         const ring = new THREE.Mesh(new THREE.TorusGeometry(0.86, 0.012, 8, 96), new THREE.MeshBasicMaterial({ color: 0x3fd08a })); ring.rotation.x = Math.PI / 2; ring.position.y = 0.003; stage.scene.add(ring);
         stage.controls.target.set(0, 0.8, 0); stage.camera.position.set(Math.sin(0.35) * 4.25, 1.05, Math.cos(0.35) * 4.25); stage.controls.update();
-        const set = (lk, g) => { if (cur) { stage.scene.remove(cur.root); cur.dispose(); } cur = buildCharacter(lk, g); stage.scene.add(cur.root); };
-        stage.onFrame((t) => { if (cur && !reduce) cur.update(t); });
+        let ticket = 0; // only the newest request may put a character on stage
+        const set = async (lk, g) => { const mine = ++ticket, next = await createAvatar(lk, g); if (!alive || mine !== ticket) { next.dispose(); return; }
+          if (cur) { stage.scene.remove(cur.root); cur.dispose(); } cur = next; stage.scene.add(cur.root); };
+        stage.onFrame((t, dt) => { if (cur && !reduce) cur.update(t, dt); });
         set(latest.current.look, latest.current.gender); api.current = { stage, set };
         ro = new ResizeObserver(() => stage.resize()); ro.observe(box.current);
       } catch (e) { console.error("3D preview unavailable", e); if (box.current) box.current.dataset.failed = "1"; }
