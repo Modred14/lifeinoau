@@ -5,6 +5,7 @@ import { allowed, tooMany } from "@/lib/ratelimit";
 import { currentWeek } from "@/lib/clock";
 import { drawClass, lifestyle } from "@/lib/rng";
 import { PERSONALITIES, allowedHostels, startingTransport } from "@/lib/rules";
+import { cleanLook } from "@/lib/look";
 export const dynamic = "force-dynamic"; // never cache API responses
 const db = globalThis.db ??= new PrismaClient();
 const bad = (m, s = 400) => Response.json({ error: m }, { status: s });
@@ -28,7 +29,7 @@ export async function POST(req) {
     const c = await db.$transaction(async (tx) => {
       const ch = await tx.character.create({ data: {
         userId, name, gender: b.gender, class: cls, personalities: pers, facultyId: faculty.id, hostel: "",
-        transport: startingTransport(cls), lastTickWeek: week - 1, lastParentCallWeek: week, joinedWeek: week, sessionStartWeek: week, ...lifestyle(pers) } });
+        transport: startingTransport(cls), look: cleanLook(b.look, b.gender), lastTickWeek: week - 1, lastParentCallWeek: week, joinedWeek: week, sessionStartWeek: week, ...lifestyle(pers) } });
       await tx.account.create({ data: { kind: "PLAYER", characterId: ch.id } });
       return ch; // allowance arrives through catchUp(), which pays week `week` exactly once
     });

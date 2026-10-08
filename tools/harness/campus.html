@@ -1,0 +1,10 @@
+<!-- tools/harness/campus.html -->
+<!doctype html><html><body style="margin:0;background:#0a1120"><div id="stage" style="width:100vw;height:100vh"></div>
+<script type="importmap">{"imports":{"three":"/three/build/three.module.js","three/addons/":"/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from "three"; import {createStage} from "/lib3d/stage.js"; import {buildCampus,addCampusLighting} from "/lib3d/campus.js";
+const st=createStage(document.getElementById("stage"),{fov:42,far:900,controls:{maxPolarAngle:1.38,minDistance:30,maxDistance:320}});
+addCampusLighting(st.scene); const campus=buildCampus(); st.scene.add(campus.root); st.onFrame((t,dt)=>campus.update(t,dt));
+window.view=(tx,tz,dist,az,pol)=>{ st.controls.target.set(tx,0,tz); st.camera.position.set(tx+Math.sin(az)*Math.sin(pol)*dist, Math.cos(pol)*dist, tz+Math.cos(az)*Math.sin(pol)*dist); st.controls.update(); st.renderer.render(st.scene,st.camera); window.__ready=true; };
+window.sel=(id)=>campus.setSelected(id);
+</script></body></html>

@@ -4,7 +4,7 @@
 A multiplayer life-simulation game about student life at Obafemi Awolowo University (OAU), Ile-Ife.
 Built with Next.js (App Router), React, PostgreSQL and Prisma. Plain JavaScript, no TypeScript.
 
-> **Status:** about 90 files, all passing syntax checks and 13 test files. Everything was tested against
+> **Status:** about 95 files, all passing syntax checks and 14 test files. Everything was tested against
 > *fake in-memory databases*. It has **never been run against a real Postgres or a real Next.js server**.
 > Expect to fix small things on the first real run. See "Known limits" at the end.
 
@@ -124,6 +124,7 @@ oau-life-backend/
 | `/relationship` | `app/relationship/page.js` | NPC love interests, dates, pregnancy decisions |
 | `/career` | `app/career/page.js` | Jobs and businesses |
 | `/invest` | `app/invest/page.js` | Market news, prices, buy and sell investments |
+| `/courses` | `app/courses/page.js` | Your four courses, lecturers, attend lectures, study |
 | `/leaderboards` | `app/leaderboards/page.js` | FORBES OAU and other boards |
 | `/achievements` | `app/achievements/page.js` | Achievement cards |
 | `/admin` | `app/admin/page.js` | Admin panel (admins only; others see "Not found") |
@@ -158,6 +159,7 @@ oau-life-backend/
 | `/api/career/job` | POST | `app/api/career/job/route.js` | Pick, quit, work a shift |
 | `/api/career/business` | POST | `app/api/career/business/route.js` | Start, hire, upgrade, withdraw, close |
 | `/api/invest` | GET, POST | `app/api/invest/route.js` | Market, buy, sell |
+| `/api/courses` | GET, POST | `app/api/courses/route.js` | Your courses and progress; attend a lecture or study a course |
 | `/api/admin/overview` | GET | `app/api/admin/overview/route.js` | Integrity check and economy numbers |
 | `/api/admin/reports` | GET, POST | `app/api/admin/reports/route.js` | Report queue, resolve |
 | `/api/admin/report-messages` | GET | `app/api/admin/report-messages/route.js` | Chat behind a report (logged) |
@@ -176,8 +178,8 @@ Grouped by job. Files marked *pure* have no database access and are the easiest 
 | Foundation | `rules.js` (hostel and class rules, transfer limits), `rng.js` (secure random), `clock.js` (game week from server time), `auth.js` (sessions), `client.js` (browser helper), `ratelimit.js` |
 | Money | `ledger.js` (**the only code allowed to move money**) |
 | Weekly simulation | `tick.js` (catches a player up on missed weeks: allowance, rent, exams, sessions, childcare, businesses, investments valuation) |
-| Rules (*pure*) | `engine.js` (actions, risk, exams, progression), `parties.js`, `relationships.js`, `jobs.js`, `business.js`, `market.js`, `achievements.js` |
-| Services (touch the database) | `gameService.js`, `relationshipService.js`, `careerService.js`, `investService.js`, `achievementService.js`, `notifications.js`, `leaderboards.js`, `admin.js` |
+| Rules (*pure*) | `engine.js` (actions, risk, exams, progression), `parties.js`, `relationships.js`, `jobs.js`, `business.js`, `market.js`, `achievements.js`, `curriculum.js` (courses and fictional lecturers), `courses.js` (attendance, preparation, exams, surprise tests) |
+| Services (touch the database) | `gameService.js`, `relationshipService.js`, `careerService.js`, `investService.js`, `courseService.js`, `achievementService.js`, `notifications.js`, `leaderboards.js`, `admin.js` |
 
 ### Order to put the files in (if you copy them by hand)
 
@@ -213,10 +215,16 @@ off-campus ₦6,000, Ojaja ₦15,000 a week.
 200L. LAPO: all four school hostels of their gender plus off-campus. Women: Moremi, Mozambique, Akintola, Alumni.
 Men: Awo, Fajuyi, Angola, ETF.
 
-**Academics.** Sessions are 12 game weeks with 2 exams (every 6th week of the player's own timeline). Missing an exam
-is an automatic fail. Average grade point of 1.0 or more advances you (100L to 500L). Two failed sessions in a row means
-withdrawal. Graduation at 500L gives a Nigerian-style class (First Class from 4.5 and so on). CGPA is the average over
-every exam sat. Cheating adds marks but a caught cheat caps the score at 25 and adds a strike.
+**Academics.** Each level you take **four courses** (game content, not the official OAU curriculum) taught by fictional lecturers
+with their own difficulty, personality and teaching style. Science-like faculties (Science, Technology, Computer Science, Pharmacy,
+Agriculture) get Mathematics with **Boroks**: loud, strict and the toughest lecturer, who loves surprise tests. Your **ability**
+(the academics stat) is fixed at the start. What you can change is **effort**: attend a lecture (12 energy) and study (15 energy),
+once per course per game week. Attendance and preparation in each course, plus your energy, luck and the lecturer's difficulty, decide
+your exam score, which is the average of your four courses. Lecturers can also spring a **surprise test** during the weeks, scored
+out of 20 from the effort you have put in. Sessions are 12 game weeks with 2 exams (every 6th week of the player's own timeline).
+Missing an exam is an automatic fail. An average grade point of 1.0 or more advances you (100L to 500L). Two failed sessions in a row
+means withdrawal. Graduation at 500L gives a Nigerian-style class (First Class from 4.5 and so on). CGPA is the average over every
+exam sat. Cheating adds marks, but a caught cheat caps the score at 25 and adds a strike.
 
 **Risk and Floor 0.** Risky hustle: 30% chance to win ₦100k to ₦600k, but each attempt raises suspicion and the DSA
 catch chance rises with it. Arrest: Floor 0 for 30 minutes to 3 hours, lose 15 health, 25 energy and 10 happiness, the
@@ -270,7 +278,7 @@ and a total cap of ₦5M times your level number (100L = ₦5M, 200L = ₦10M an
 | Honest MAPO allowance | about ₦5.9M after rent |
 | Risky hustling, greedy | expelled 100% of the time, within about 10 weeks |
 | Risky hustling, occasional | about ₦390k net, expelled 31% of the time |
-| Student with academics 25 / 35 / 45 / 55 | graduates 0% / 12% / 93% / 100% (starting academics are 35 to 60) |
+| Student by effort (all four courses, Science) | full effort: CGPA about 4.2 and 100% graduate; balanced: about 3.2; light: 74% graduate; minimal: about 1% |
 | Food business, 4 staff, withdrawing | median about ₦3.3M |
 | Food business, 8 staff, saving and upgrading | median about ₦15.7M |
 | Tech business, careful vs thin buffer | median about ₦8.6M vs 70% go bankrupt |
@@ -293,8 +301,8 @@ These are starting numbers. Real players will find strategies the simulations di
 **Missing from your spec:**
 - The interactive **OAU map and locations** (the server does not track where a player is, so actions work from anywhere).
 - Transport choices (trek, shuttle, bike off campus, Daddy Benz). The rules are in the prototype only.
-- Lecturers (including Boroks), timetables, assignments and class attendance. Exams exist, but courses do not.
-- Bribing or fighting a lecturer; Yahoo-style hustle is replaced by the generic risky hustle.
+- Departments and assignments. (Courses, fictional lecturers including Boroks, attendance, preparation and surprise tests ARE built.
+  Lecture slots are flavour only.) Bribing or fighting a lecturer is not built; the Yahoo-style hustle is the generic risky hustle.
 - Daily and weekly objectives, audio, the cinematic onboarding, the full landing page (features, FAQ).
 - Real-player romance and cheating. Relationships are with NPCs only.
 - Hostel changes (so MAPO players cannot yet use the 200L Ojaja unlock).
@@ -310,7 +318,7 @@ These are starting numbers. Real players will find strategies the simulations di
 ## 7. Suggested next steps
 
 1. Do the first real run (section 1) and fix whatever breaks. This matters more than any new feature.
-2. Add courses, lecturers and the timetable (Boroks), then the map and transport.
+2. Add the campus map and transport, then departments and assignments.
 3. Objectives and rewards, then audio and the full landing page.
 4. Deploy: Vercel for the app, Neon or Supabase for Postgres. Set the three environment variables, run
    `npx prisma migrate deploy`, then `npm run seed` once.
@@ -331,6 +339,7 @@ These are starting numbers. Real players will find strategies the simulations di
 | Starting academics | Raised from 25-55 to 35-60 (otherwise a third of players would struggle from week one) |
 | Relationships | NPC love interests, text-only, non-graphic; real-player romance later with consent |
 | Faculties | 12 listed including Computer Science; names still to be verified |
+| Courses | Four per level per faculty, fictional lecturers; ability is fixed, effort (attendance and preparation) decides results |
 | Styling | Plain CSS reused from the prototype instead of Tailwind |
 
 ## 9. Bugs found and fixed while building (so you know the test suite earns its keep)
@@ -343,6 +352,8 @@ These are starting numbers. Real players will find strategies the simulations di
 - The investment market had a negative average and ruined MemeCoin. Retuned.
 - **The weekly catch-up refilled energy on every request.** Fixed, with a regression test.
 - A graduating player's business stopped trading. Fixed.
+- Course actions that raised the academics stat made every student a perfect scorer within six weeks. Fixed: ability stays fixed.
+- The weekly catch-up made two needless database queries on every request before checking for nothing to do. Fixed.
 
 ## 10. Test files
 
@@ -358,5 +369,6 @@ Run them all with `npm test`. Each file prints what it checked.
 | `party.test.mjs` | Party generation, nights, ticket purchase, sell-outs |
 | `rel.test.mjs`, `relsvc.test.mjs` | Relationship rules and full journey, pregnancy decisions |
 | `ach.test.mjs` | Achievements |
+| `courses.test.mjs` | Curriculum, Boroks, attendance and study rules, effort-driven exams, course service |
 | `biz.test.mjs`, `career.test.mjs` | Business economics simulation, jobs and businesses service |
 | `market.test.mjs`, `inv.test.mjs` | Market simulation, buying and selling |

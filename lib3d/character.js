@@ -37,7 +37,7 @@ function limb(parent, r1, r2, len, mat, x, y, z) { // a tapered limb segment han
 export function buildCharacter(lookIn, gender = "F") {
   const look = cleanLook(lookIn, gender), F = gender === "F";
   const accent = ACCENTS[look.accent], skinHex = SKIN_TONES[look.skin];
-  const skin = std(skinHex, { roughness: 0.55 }), lip = std(darker(skinHex, 0.62), { roughness: 0.45 });
+  const skin = std(skinHex, { roughness: 0.55 }), lip = std(new THREE.Color(skinHex).multiplyScalar(0.86).lerp(new THREE.Color("#8a3a3a"), 0.22), { roughness: 0.45 });
   const hairMat = std("#120e0c", { roughness: 0.85 });
   const map = fabricMap(look.fabric, accent), fab = std(map ? "#ffffff" : accent, { map, roughness: 0.8 });
   const P = F ? { sc: 0.97, sh: 0.185, chest: 0.150, waist: 0.118, hip: 0.172, thigh: 0.082 } : { sc: 1.03, sh: 0.215, chest: 0.178, waist: 0.150, hip: 0.158, thigh: 0.088 };
@@ -52,10 +52,10 @@ export function buildCharacter(lookIn, gender = "F") {
   const pelvis = add(new THREE.SphereGeometry(P.hip * 0.97, 24, 18), skin, 0, 0.9, 0); pelvis.scale.set(1.08, 0.72, 0.62);
   const arms = [], legs = [];
   for (const s of [-1, 1]) {
-    const arm = new THREE.Group(); arm.position.set(s * (P.sh + 0.006), 1.405, 0); arm.rotation.z = s * 0.1; body.add(arm);
+    const arm = new THREE.Group(); arm.position.set(s * (P.sh + 0.006), 1.405, 0); arm.rotation.z = s * 0.17; body.add(arm);
     limb(arm, 0.052, 0.042, 0.28, skin, 0, 0, 0); const fore = new THREE.Group(); fore.position.set(0, -0.28, 0); fore.rotation.x = -0.14; arm.add(fore);
     limb(fore, 0.042, 0.032, 0.25, skin, 0, 0, 0); add(new THREE.SphereGeometry(0.036, 16, 12), skin, 0, -0.29, 0.004, fore).scale.set(0.8, 1.25, 0.6);
-    arms.push({ arm, s });
+    arms.push({ arm, fore, s });
     const leg = new THREE.Group(); leg.position.set(s * P.hip * 0.5, 0.92, 0); body.add(leg);
     limb(leg, P.thigh * 1.08, 0.062, 0.43, skin, 0, 0, 0); limb(leg, 0.062, 0.042, 0.42, skin, 0, -0.43, 0.004); add(new THREE.SphereGeometry(0.056, 18, 14), skin, 0, -0.6, -0.012, leg).scale.set(1, 1.7, 1.05);
     add(new THREE.SphereGeometry(0.05, 16, 12), skin, 0, -0.865, 0.04, leg).scale.set(0.95, 0.55, 1.65);
@@ -74,7 +74,7 @@ export function buildCharacter(lookIn, gender = "F") {
     add(new THREE.SphereGeometry(0.0108, 14, 12), std("#2a1a10", { roughness: 0.15 }), 0, 0, 0.008, eye);
     add(new THREE.SphereGeometry(0.0055, 10, 8), std("#050302"), 0, 0, 0.0135, eye);
     const lid = add(new THREE.CapsuleGeometry(0.0034, 0.036, 4, 8), std("#0c0807"), 0, 0.0115, 0.0045, eye); lid.rotation.z = Math.PI / 2 + s * 0.06; lid.scale.z = 0.8;
-    const brow = add(new THREE.CapsuleGeometry(0.0055, 0.04, 4, 8), hairMat, s * 0.042, 0.05, 0.088, head); brow.rotation.z = Math.PI / 2 + s * 0.14;
+    const brow = add(new THREE.CapsuleGeometry(0.0036, 0.036, 4, 8), hairMat, s * 0.042, 0.057, 0.088, head); brow.rotation.z = Math.PI / 2 + s * 0.14;
   }
   add(new THREE.CapsuleGeometry(0.0075, 0.03, 4, 10), skin, 0, -0.008, 0.098, head).rotation.x = -0.2; add(new THREE.SphereGeometry(0.0145, 16, 12), skin, 0, -0.026, 0.106, head).scale.set(1.2, 0.9, 1.0); // nose
   for (const s of [-1, 1]) add(new THREE.SphereGeometry(0.0072, 10, 8), skin, s * 0.011, -0.03, 0.1, head);
@@ -103,36 +103,39 @@ export function buildCharacter(lookIn, gender = "F") {
   }
 
   // ---- clothes ----
-  const sleeve = (len, rScale = 1.14) => { for (const { arm } of arms) { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.048 * rScale, 0.04 * rScale, len, 18), CL.top); m.position.set(0, -len / 2 + 0.01, 0); m.castShadow = true; arm.add(m); } };
+  const sleeve = (len, bot = 0.056) => { for (const { arm, fore } of arms) { const up = Math.min(len, 0.28);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.061, len <= 0.28 ? bot : 0.054, up, 18), CL.top); m.position.set(0, -up / 2 + 0.01, 0); m.castShadow = true; arm.add(m);
+    if (len > 0.28) { const fl = len - 0.28, f = new THREE.Mesh(new THREE.CylinderGeometry(0.054, bot, fl, 18), CL.top); f.position.set(0, -fl / 2 + 0.005, 0); f.castShadow = true; fore.add(f); } } };
   const flat = (g) => { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.094, 0.5); return g; }; // one plain spot of the fabric
-  const shell = (pts, mat, sz = 0.64) => { const m = add(latheOf(pts.map(([r, y]) => [r + 0.009, y])), mat); m.scale.set(1.12, 1, sz); for (const s of [-1, 1]) add(flat(new THREE.SphereGeometry(0.058, 20, 16)), mat, s * P.sh, 1.4, 0); return m; };
-  const trousers = (mat, flare = 1) => { add(new THREE.SphereGeometry(P.hip * 0.97, 22, 16), mat, 0, 0.9, 0).scale.set(1.08, 0.72, 0.62); for (const { leg } of legs) { const a = new THREE.Mesh(new THREE.CylinderGeometry(P.thigh * 1.14, 0.067 * flare, 0.43, 20), mat); a.position.y = -0.215; a.castShadow = true; leg.add(a);
+  const shell = (pts, mat, sz = 0.72) => { const m = add(latheOf(pts.map(([r, y]) => [r + 0.009, y])), mat); m.scale.set(1.12, 1, sz); for (const s of [-1, 1]) add(flat(new THREE.SphereGeometry(0.061, 20, 16)), mat, s * P.sh, 1.4, 0); return m; };
+  const trousers = (mat, flare = 1) => { add(new THREE.SphereGeometry(P.hip * 0.88, 22, 16), mat, 0, 0.88, 0).scale.set(1.02, 0.7, 0.56); for (const { leg } of legs) { const a = new THREE.Mesh(new THREE.CylinderGeometry(P.thigh * 1.06, 0.067 * flare, 0.43, 20), mat); a.position.y = -0.225; a.castShadow = true; leg.add(a);
     const b = new THREE.Mesh(new THREE.CylinderGeometry(0.067 * flare, 0.05 * flare, 0.42, 20), mat); b.position.set(0, -0.64, 0.004); b.castShadow = true; leg.add(b); } };
   const shoes = (mat, tall = 0) => { for (const { leg } of legs) { const s = add(new THREE.SphereGeometry(0.056, 18, 14), mat, 0, -0.9, 0.045, leg); s.scale.set(0.95, 0.62 + tall, 1.95); if (tall) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.052, 0.14, 16), mat); b.position.set(0, -0.82, 0.004); leg.add(b); } } };
   const jeans = std("#2d4263", { roughness: 0.85 }), dark = std("#1d2026", { roughness: 0.8 }), white = std("#ecebe6", { roughness: 0.7 }), tee = std(darker(accent, 0.8), { roughness: 0.8 });
   const CL = { top: white };
-  const fullTop = [[P.hip * 0.96, 0.8], [P.hip * 0.98, 0.86], [P.hip, 0.93], [P.waist, 1.08], [P.chest, 1.27], [P.sh * 0.84, 1.37], [P.sh * 0.6, 1.415], [0.105, 1.46], [0.064, 1.5]];
+  const fullTop = [[P.hip * 1.18, 0.72], [P.hip * 1.12, 0.8], [P.hip * 1.04, 0.88], [P.hip, 0.93], [P.waist, 1.08], [P.chest, 1.27], [P.sh * 0.84, 1.37], [P.sh * 0.6, 1.415], [0.105, 1.46], [0.064, 1.5]];
   switch (look.outfit) {
-    case "casual": CL.top = tee; shell(fullTop, tee); sleeve(0.13); trousers(jeans); shoes(white); break;
-    case "office": CL.top = F ? std(darker(accent, 1.1)) : white; shell(fullTop, CL.top); sleeve(0.5, 1.12);
+    case "casual": CL.top = tee; shell(fullTop, tee); sleeve(0.13, 0.057); trousers(jeans); shoes(white); break;
+    case "office": CL.top = F ? std(darker(accent, 1.1)) : white; shell(fullTop, CL.top); sleeve(0.5, 0.05);
       if (F) { const sk = add(latheOf([[P.waist + 0.016, 1.02], [P.hip + 0.03, 0.88], [P.hip + 0.026, 0.6], [P.hip * 0.82, 0.5]]), dark); sk.scale.set(1.1, 1, 0.68); shoes(dark); }
-      else { trousers(dark); shoes(dark); add(new THREE.BoxGeometry(0.03, 0.2, 0.012), std(accent), 0, 1.24, 0.12 * 0.62 + 0.04); }
+      else { trousers(dark); shoes(dark); add(new THREE.BoxGeometry(0.034, 0.22, 0.012), std(accent), 0, 1.22, 0.172); }
       break;
     case "owambe": CL.top = fab;
-      if (F) { shell(fullTop, fab); sleeve(0.2, 1.5); const iro = add(latheOf([[P.waist + 0.012, 1.1], [P.hip + 0.04, 0.92], [P.hip + 0.075, 0.5], [P.hip + 0.1, 0.06]]), fab); iro.scale.z = 0.8; shoes(std("#c9a24a", { metalness: 0.4, roughness: 0.4 })); }
+      if (F) { shell(fullTop, fab); sleeve(0.2, 0.078); const iro = add(latheOf([[P.waist + 0.012, 1.1], [P.hip + 0.04, 0.92], [P.hip + 0.075, 0.5], [P.hip + 0.1, 0.06]]), fab); iro.scale.z = 0.8; shoes(std("#c9a24a", { metalness: 0.4, roughness: 0.4 })); }
       else { const top = std(darker(accent, 0.55)); CL.top = fab; shell(fullTop, top); trousers(std(darker(accent, 0.55))); shoes(std("#2a1d17"));
-        const robe = add(latheOf([[0.07, 1.47], [P.sh * 0.95, 1.4], [0.27, 1.12], [0.34, 0.55], [0.4, 0.2]]), fab); robe.scale.z = 0.72; sleeve(0.34, 1.9);
+        const robe = add(latheOf([[0.07, 1.47], [P.sh * 0.95, 1.4], [0.27, 1.12], [0.34, 0.55], [0.4, 0.2]]), fab); robe.scale.z = 0.72; sleeve(0.34, 0.11);
         add(new THREE.CylinderGeometry(0.075, 0.095, 0.1, 20), top, 0, 1.76, 0.0, head).position.y = 0.14; } break;
-    case "sitework": CL.top = std("#4b5560"); shell(fullTop, CL.top); sleeve(0.16); trousers(std("#3a3f47")); shoes(std("#3b2a1f"), 0.5);
+    case "sitework": CL.top = std("#4b5560"); shell(fullTop, CL.top); sleeve(0.16, 0.057); trousers(std("#3a3f47")); shoes(std("#3b2a1f"), 0.5);
       { const v = std("#e8631f", { roughness: 0.6 }); shell([[P.hip * 0.9, 0.95], [P.waist, 1.08], [P.chest, 1.26], [P.sh * 0.78, 1.37], [P.sh * 0.5, 1.4]].map(([r, y]) => [r + 0.012, y]), v);
-        const stripe = std("#d8dde0", { metalness: 0.3, roughness: 0.4 }); for (const y of [1.0, 1.14]) { const st = add(new THREE.CylinderGeometry(P.waist + 0.03, P.waist + 0.032, 0.03, 28, 1, true), stripe, 0, y, 0); st.scale.z = 0.66; } } break;
+        const stripe = std("#d8dde0", { metalness: 0.3, roughness: 0.4 }), vestR = (y) => (y < 1.08 ? P.waist + (1.08 - y) * 0.5 + 0.02 : P.waist + (y - 1.08) * 0.9 + 0.02);
+        for (const y of [1.0, 1.14]) { const st = add(new THREE.CylinderGeometry(vestR(y) + 0.012, vestR(y) + 0.012, 0.028, 40, 1, true), stripe, 0, y, 0); st.scale.set(1.12, 1, 0.64); } } break;
   }
 
   // ---- life ----
   const bodyBase = { sh: body.scale.y };
   function update(t) {
     body.scale.y = P.sc * (1 + Math.sin(t * 1.7) * 0.0035); head.rotation.y = Math.sin(t * 0.55) * 0.12; head.rotation.x = Math.sin(t * 0.37) * 0.025;
-    arms.forEach(({ arm, s }, i) => { arm.rotation.x = Math.sin(t * 1.1 + i) * 0.03; arm.rotation.z = s * (0.1 + Math.sin(t * 1.7) * 0.006); });
+    arms.forEach(({ arm, s }, i) => { arm.rotation.x = Math.sin(t * 1.1 + i) * 0.03; arm.rotation.z = s * (0.17 + Math.sin(t * 1.7) * 0.006); });
     const blink = (t % 4.3) < 0.13 ? 0.1 : 1; eyes.forEach((e) => (e.scale.y = blink)); body.position.y = 0;
   }
   const dispose = () => root.traverse((o) => { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : m ? [m] : []).forEach((x) => { x.map?.dispose?.(); x.dispose(); }); });

@@ -1,5 +1,5 @@
 {
-  "name": "oau-life",
+  "name": "lifeinoau",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,12 +10,14 @@
     "test": "node tests/run-all.mjs"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
     "jose": "^5.9.6",
-    "next": "^14.2.15",
+    "next": "14.2.35",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "three": "^0.160.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

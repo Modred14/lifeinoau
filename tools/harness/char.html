@@ -1,0 +1,14 @@
+<!-- tools/harness/char.html -->
+<!doctype html><html><body style="margin:0;background:#0b1118"><div id="stage" style="width:100vw;height:100vh"></div>
+<script type="importmap">{"imports":{"three":"/three/build/three.module.js","three/addons/":"/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from "three"; import {createStage} from "/lib3d/stage.js"; import {buildCharacter,addCharacterLights} from "/lib3d/character.js";
+const st=createStage(document.getElementById("stage"),{fov:30,controls:{enablePan:false,minDistance:2,maxDistance:7}});
+st.scene.background=new THREE.Color(0x0e1822);
+addCharacterLights(st.scene);
+const disc=new THREE.Mesh(new THREE.CylinderGeometry(.8,.86,.06,72),new THREE.MeshStandardMaterial({color:0x1a2530,roughness:.9}));disc.position.y=-.03;disc.receiveShadow=true;st.scene.add(disc);
+let cur=null;
+window.show=(look,g,az=0.35,dist=4.3,ty=0.88)=>{ if(cur){st.scene.remove(cur.root);cur.dispose()} cur=buildCharacter(look,g);st.scene.add(cur.root);
+  st.controls.target.set(0,ty,0);st.camera.position.set(Math.sin(az)*dist,ty+.25,Math.cos(az)*dist);st.controls.update();st.onFrame((t)=>cur.update(t));
+  st.renderer.render(st.scene,st.camera); window.__ready=true; };
+</script></body></html>
