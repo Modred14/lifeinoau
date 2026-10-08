@@ -1,11 +1,29 @@
 // prisma/schema.prisma
 // OAU Life - Phase 1 schema. All money is BigInt KOBO (1 naira = 100 kobo).
-generator client { provider = "prisma-client-js" }
-datasource db { provider = "postgresql"  url = env("DATABASE_URL") }
+generator client {
+  provider = "prisma-client-js"
+}
 
-enum Gender { M F }
-enum Class { NEPO MAPO LAPO }
-enum AccountKind { PLAYER SYSTEM }
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Gender {
+  M
+  F
+}
+
+enum Class {
+  NEPO
+  MAPO
+  LAPO
+}
+
+enum AccountKind {
+  PLAYER
+  SYSTEM
+}
 
 model User {
   id           String      @id @default(cuid())
