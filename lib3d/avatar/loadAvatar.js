@@ -25,6 +25,13 @@ export function missingBones(root) {
   return REQUIRED_BONES.filter((b) => !have.has(b));
 }
 
+/** Standing height estimated from the skeleton (head joint above the lowest ankle). Bounding boxes of skinned meshes differ between three.js versions, so bones are used instead. */
+function skeletonHeight(root) {
+  root.updateWorldMatrix(true, true); const y = {};
+  root.traverse((o) => { if (o.isBone) { const k = boneKey(o.name); if (["Head", "LeftFoot", "RightFoot"].includes(k)) y[k] = new THREE.Vector3().setFromMatrixPosition(o.matrixWorld).y; } });
+  return Math.max(0.01, (y.Head - Math.min(y.LeftFoot, y.RightFoot)) / 0.89);
+}
+
 /** Colours the skin materials (any material whose name contains "skin") with the chosen tone. The base albedo should be a light neutral so the tint reads correctly. */
 function tintSkin(root, hex) {
   root.traverse((o) => { if (!o.isMesh) return; const list = Array.isArray(o.material) ? o.material : [o.material];
@@ -58,16 +65,16 @@ async function loadModel(look, gender) {
   const clips = [...gltf.animations]; if (await available(ANIM_LIBRARY)) clips.push(...(await loadGltf(ANIM_LIBRARY)).animations);
   // body and height: blend shapes when the model has them, otherwise a plain scale
   root.traverse((o) => { if (!o.isMesh || !o.morphTargetDictionary) return; for (const [k, m] of Object.entries(BODY_MORPHS)) { const i = o.morphTargetDictionary[m]; if (i !== undefined) o.morphTargetInfluences[i] = look.build === k || look.height === k ? 1 : 0; } });
-  const raw = new THREE.Box3().setFromObject(root); root.scale.multiplyScalar((1.76 * HEIGHT[look.height]) / Math.max(0.01, raw.max.y - raw.min.y)); // any export unit becomes a 1.76 m adult, like the built-in character
+  const target = 1.76 * (HEIGHT[look.height] ?? 1); root.scale.multiplyScalar(target / skeletonHeight(root)); // any export unit becomes a 1.76 m adult, like the built-in character
   root.updateMatrixWorld(true);
   // modular parts: each is optional, a missing file is skipped
-  const parts = [["hair", look.hair], ["outfit", look.outfit], ...look.acc.map((a) => [a, a])], extra = [];
+  const parts = [["hair", look.hair], ["outfit", look.outfit], ...(look.acc ?? []).map((a) => [a, a])], extra = [];
   for (const [slot, id] of parts) { const u = partUrl(slot, id); if (!(await available(u))) continue;
     const part = SkeletonUtils.clone((await loadGltf(u)).scene), meshes = attachSkinnedPart(root, part);
     if (!meshes.length && ATTACH_BONES[slot]) { attachToBone(root, part, ATTACH_BONES[slot]); extra.push(part); } else extra.push(...meshes); }
-  const box = new THREE.Box3().setFromObject(root), animator = createAnimator(root, clips), face = createFace(root);
+  const animator = createAnimator(root, clips), face = createFace(root);
   animator.play("idle");
-  return { kind: "glb", root, height: box.max.y - box.min.y, animator, face, parts: extra.length };
+  return { kind: "glb", root, height: target, animator, face, parts: extra.length };
 }
 
 /**

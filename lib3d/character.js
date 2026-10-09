@@ -56,8 +56,8 @@ export function buildCharacter(lookIn, gender = "F") {
   // Distinct male and female builds: men get broad shoulders, a thick neck, heavy limbs and a straight torso; women get narrow shoulders, a slim neck, a small waist and wide hips.
   const P = F ? { sc: 0.96, sh: 0.172, chest: 0.142, waist: 0.104, hip: 0.186, thigh: 0.086, neck: 0.043, arm: 0.86, lg: 0.94, depth: 0.62 }
               : { sc: 1.04, sh: 0.258, chest: 0.205, waist: 0.172, hip: 0.158, thigh: 0.098, neck: 0.068, arm: 1.22, lg: 1.12, depth: 0.7 };
-  const BM = { slim: [0.96, 0.93], average: [1, 1], athletic: [1.06, 1.15] }[look.build];
-  P.sh *= BM[0]; P.chest *= BM[0]; P.arm *= BM[1]; P.sc *= { short: 0.95, average: 1, tall: 1.06 }[look.height];
+  const BM = { slim: [0.96, 0.93], average: [1, 1], athletic: [1.06, 1.15] }[look.build] ?? [1, 1]; // safe even if look.js is an older version
+  P.sh *= BM[0]; P.chest *= BM[0]; P.arm *= BM[1]; P.sc *= { short: 0.95, average: 1, tall: 1.06 }[look.height] ?? 1;
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body); body.scale.setScalar(P.sc);
   const add = (geo, mat, x = 0, y = 0, z = 0, p = body) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; p.add(m); return m; };
 
@@ -190,7 +190,7 @@ export function buildCharacter(lookIn, gender = "F") {
   if (F && look.outfit !== "owambe") for (const s of [-1, 1]) add(new THREE.SphereGeometry(look.outfit === "sitework" ? 0.034 : 0.044, 22, 16), CL.top, s * 0.046, 1.2, P.depth * 0.146 - 0.012).scale.set(1.1, 0.85, 0.42);
 
   // ---- accessories ----
-  const gold = std("#d6b25e", { metalness: 0.85, roughness: 0.3 }), steel = std("#c9ced4", { metalness: 0.85, roughness: 0.3 }), blk2 = std("#272a2f", { roughness: 0.9 }), has = (a) => look.acc.includes(a);
+  const gold = std("#d6b25e", { metalness: 0.85, roughness: 0.3 }), steel = std("#c9ced4", { metalness: 0.85, roughness: 0.3 }), blk2 = std("#272a2f", { roughness: 0.9 }), has = (a) => (look.acc ?? []).includes(a);
   const necklace = (k, mat, drop) => { const pts = [[-0.07, 1.49, 0], [-0.065, 1.46, 0.05], [-0.04, 1.42, 0.085], [0, 1.395 - drop, 0.105], [0.04, 1.42, 0.085], [0.065, 1.46, 0.05], [0.07, 1.49, 0], [0.045, 1.495, -0.055], [0, 1.5, -0.065], [-0.045, 1.495, -0.055]].map(([x, y, z]) => new THREE.Vector3(x * k, y, z * k * (F ? 1 : 1.1)));
     add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 48, 0.0028, 6, true), mat); add(new THREE.SphereGeometry(0.0095, 14, 10), mat, 0, 1.385 - drop, 0.107 * k * (F ? 1 : 1.1)).scale.set(1, 1, 0.6); };
   if (F && has("necklace")) necklace(1, gold, 0);
