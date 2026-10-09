@@ -1,0 +1,138 @@
+/* components/auth-modal.css */
+/* Sign up / log in dialog. Everything is prefixed `am-` and scoped under .am-dialog so the global
+   button/input/label rules in globals.css can't leak in. Reduced motion is handled by the global
+   prefers-reduced-motion rule. */
+
+.am-scrim { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
+  padding: max(16px, var(--safe-t)) 16px max(16px, var(--safe-b));
+  background: rgba(6, 9, 17, 0.62); backdrop-filter: blur(5px) saturate(1.1); -webkit-backdrop-filter: blur(5px) saturate(1.1);
+  animation: am-fade 260ms var(--ease) both; }
+.am-scrim[data-closing] { animation: am-fade-out 190ms ease-in forwards; }
+
+.am-dialog { position: relative; width: min(440px, 100%); max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  padding: 28px; border-radius: 24px; border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(27, 38, 64, 0.97), rgba(20, 28, 46, 0.98) 40%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 44px 90px -28px rgba(0, 0, 0, 0.8), 0 14px 30px -14px rgba(0, 0, 0, 0.55);
+  animation: am-in 340ms var(--ease) both; }
+.am-scrim[data-closing] .am-dialog { animation: am-out 190ms ease-in forwards; }
+.am-dialog::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 200px; border-radius: inherit; pointer-events: none;
+  background: radial-gradient(80% 100% at 12% 0%, rgba(63, 208, 138, 0.15), transparent 70%); }
+.am-body { position: relative; }
+.am-body[data-shake] { animation: am-shake 380ms cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+
+/* header */
+.am-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.am-headtext { min-width: 0; padding-top: 2px; animation: am-swap 280ms var(--ease) both; }
+.am-dialog .am-title { margin: 0; font-family: var(--font-head); font-size: 1.65rem; font-weight: 600; line-height: 1.15; letter-spacing: -0.02em; }
+.am-dialog .am-sub { margin: 8px 0 0; max-width: 30ch; color: var(--muted); font-size: 0.95rem; line-height: 1.45; text-wrap: balance; }
+.am-dialog .am-x { flex: none; width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.04); color: var(--muted); }
+.am-dialog .am-x:hover:not(:disabled) { background: rgba(255, 255, 255, 0.09); border-color: rgba(255, 255, 255, 0.22); color: var(--text); }
+.am-x svg { transition: transform 280ms var(--ease); }
+.am-dialog .am-x:hover:not(:disabled) svg { transform: rotate(90deg); }
+
+/* segmented tabs with a sliding thumb */
+.am-tabs { position: relative; display: grid; grid-template-columns: 1fr 1fr; margin-top: 24px; padding: 4px; border-radius: 16px; border: 1px solid var(--line); background: rgba(6, 9, 17, 0.55); }
+.am-thumb { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 12px; border: 1px solid rgba(63, 208, 138, 0.5);
+  background: linear-gradient(180deg, rgba(63, 208, 138, 0.2), rgba(21, 128, 61, 0.2)); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 6px 16px -8px rgba(21, 128, 61, 0.8);
+  transition: transform 380ms var(--ease); }
+.am-tabs[data-mode="login"] .am-thumb { transform: translateX(100%); }
+.am-dialog .am-tab { position: relative; z-index: 1; min-height: 44px; padding: 8px 12px; border: 0; border-radius: 12px; background: transparent; color: var(--muted); font-weight: 500; transition: color 220ms var(--ease); }
+.am-dialog .am-tab:hover:not(:disabled) { background: transparent; color: var(--text); }
+.am-dialog .am-tab[aria-selected="true"] { color: var(--text); }
+.am-dialog .am-tab:disabled { opacity: 1; cursor: default; }
+
+/* form rhythm: 8px label gap, 18px between fields */
+.am-form { margin-top: 6px; }
+.am-field { padding-top: 18px; }
+.am-label { display: block; margin: 0 0 8px; font-size: 0.92rem; font-weight: 500; color: var(--text); }
+.am-control { position: relative; }
+.am-dialog .am-input { width: 100%; min-height: 52px; padding: 12px 14px 12px 46px; border-radius: var(--r-md); border: 1px solid var(--field); background: rgba(8, 12, 22, 0.72); color: var(--text);
+  font: 400 1rem/1.3 var(--font-ui); transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease), background-color 160ms var(--ease); }
+.am-dialog .am-input.am-has-trail { padding-right: 56px; }
+.am-dialog .am-input::placeholder { color: #7f8da3; }
+.am-dialog .am-input:hover { border-color: #8d9bb5; }
+.am-dialog .am-input:focus { outline: none; border-color: var(--green-text); background: rgba(8, 12, 22, 0.92); box-shadow: 0 0 0 3px rgba(63, 208, 138, 0.28); }
+.am-dialog .am-input[aria-invalid="true"] { border-color: var(--danger-text); }
+.am-dialog .am-input[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px rgba(255, 128, 128, 0.28); }
+.am-dialog .am-input[readonly] { opacity: 0.7; }
+.am-lead { position: absolute; left: 0; top: 0; bottom: 0; width: 46px; display: grid; place-items: center; color: var(--muted); pointer-events: none; transition: color 160ms var(--ease); }
+.am-control:focus-within .am-lead { color: var(--green-text); }
+.am-control:has(.am-input[aria-invalid="true"]) .am-lead { color: var(--danger-text); }
+.am-dialog .am-eye { position: absolute; top: 4px; right: 4px; bottom: 4px; width: 44px; min-height: 0; padding: 0; border: 0; border-radius: 10px; background: transparent; color: var(--muted); }
+.am-dialog .am-eye:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+
+/* height-animated reveal (confirm field, age row, meter, help, messages, banner) */
+.am-collapse, .am-msg { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 280ms var(--ease), opacity 200ms var(--ease); }
+.am-collapse[data-open="true"], .am-msg[data-open="true"] { grid-template-rows: 1fr; opacity: 1; }
+.am-collapse-in, .am-msg > div { min-height: 0; overflow: hidden; }
+.am-bleed { padding: 4px; margin: -4px; } /* room for the focus ring inside the clipped box */
+.am-msg p { margin: 0; padding-top: 8px; max-width: none; display: flex; align-items: flex-start; gap: 6px; font-size: 0.86rem; line-height: 1.4; color: var(--danger-text); }
+.am-msg p[data-tone="ok"] { color: var(--green-text); }
+.am-msg p svg { flex: none; margin-top: 1px; }
+.am-dialog .am-help { margin: 0; padding-top: 8px; max-width: none; color: var(--muted); font-size: 0.86rem; line-height: 1.4; }
+
+/* password strength */
+.am-meter { display: flex; align-items: center; gap: 12px; padding-top: 10px; }
+.am-bars { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.am-bars i { height: 4px; border-radius: 4px; background: rgba(255, 255, 255, 0.12); transition: background-color 260ms var(--ease); }
+.am-meter[data-level="1"] .am-bars i:nth-child(-n + 1) { background: var(--danger-text); }
+.am-meter[data-level="2"] .am-bars i:nth-child(-n + 2) { background: var(--gold-text); }
+.am-meter[data-level="3"] .am-bars i:nth-child(-n + 3), .am-meter[data-level="4"] .am-bars i { background: var(--green-text); }
+.am-strength { min-width: 64px; text-align: right; font-size: 0.82rem; font-weight: 500; color: var(--muted); }
+.am-meter[data-level="1"] .am-strength { color: var(--danger-text); }
+.am-meter[data-level="2"] .am-strength { color: var(--gold-text); }
+.am-meter[data-level="3"] .am-strength, .am-meter[data-level="4"] .am-strength { color: var(--green-text); }
+
+/* 18+ confirmation: the whole row is the target */
+.am-dialog .am-check { position: relative; display: flex; align-items: center; gap: 14px; min-height: 56px; padding: 12px 14px; border-radius: var(--r-md); border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03); font-size: 0.95rem; font-weight: 400; cursor: pointer; transition: border-color 180ms var(--ease), background-color 180ms var(--ease), box-shadow 180ms var(--ease); }
+.am-dialog .am-check:hover { border-color: rgba(255, 255, 255, 0.24); }
+.am-dialog .am-check input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.am-box { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 8px; border: 2px solid var(--field); color: #fff; transition: background-color 180ms var(--ease), border-color 180ms var(--ease); }
+.am-box svg { transform: scale(0); transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+.am-check input:checked + .am-box { background: var(--green); border-color: var(--green-text); }
+.am-check input:checked + .am-box svg { transform: scale(1); }
+.am-check:has(input:checked) { border-color: rgba(63, 208, 138, 0.45); background: rgba(21, 128, 61, 0.12); }
+.am-check:has(input:focus-visible) { border-color: var(--green-text); box-shadow: 0 0 0 3px rgba(63, 208, 138, 0.28); }
+.am-check[data-invalid="true"] { border-color: var(--danger-text); }
+
+/* server error banner */
+.am-pad { padding-top: 18px; }
+.am-banner { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-radius: var(--r-md); border: 1px solid rgba(255, 128, 128, 0.4); background: rgba(220, 38, 38, 0.1); font-size: 0.92rem; line-height: 1.45; }
+.am-banner > svg { flex: none; margin-top: 2px; color: var(--danger-text); }
+.am-dialog .am-banner .am-link { display: inline-flex; min-height: 36px; margin-top: 2px; padding: 0; }
+
+/* actions */
+.am-actions { padding-top: 22px; }
+.am-dialog .am-submit { width: 100%; min-height: 54px; padding: 12px 20px; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: var(--r-md); background: var(--green); color: #fff; font: 600 1.02rem/1.2 var(--font-ui);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.22) inset, 0 12px 24px -12px rgba(21, 128, 61, 0.9); transition: box-shadow 200ms var(--ease), background-color 200ms var(--ease), transform 150ms var(--ease); }
+.am-dialog .am-submit:hover:not(:disabled) { background: var(--green); border-color: rgba(255, 255, 255, 0.26); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.28) inset, 0 16px 32px -12px rgba(21, 128, 61, 1); }
+.am-dialog .am-submit:disabled { opacity: 1; cursor: progress; }
+.am-dialog .am-submit[data-state="done"] { background: #0f6b32; cursor: default; }
+.am-spin { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid rgba(255, 255, 255, 0.35); border-top-color: #fff; animation: am-rotate 700ms linear infinite; }
+.am-pop { display: inline-grid; animation: am-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+.am-foot { margin: 20px 0 0; padding-top: 6px; max-width: none; text-align: center; color: var(--muted); font-size: 0.93rem; }
+.am-dialog .am-link { display: inline-flex; min-height: 44px; padding: 0 6px; border: 0; border-radius: 8px; background: transparent; color: var(--green-text); font: 600 inherit/1.2 var(--font-ui); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.am-dialog .am-link:hover:not(:disabled) { background: transparent; color: #7be8b4; }
+.am-sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+@keyframes am-fade { from { opacity: 0; } }
+@keyframes am-fade-out { to { opacity: 0; } }
+@keyframes am-in { from { opacity: 0; transform: translateY(16px) scale(0.965); } }
+@keyframes am-out { to { opacity: 0; transform: translateY(8px) scale(0.975); } }
+@keyframes am-sheet-in { from { transform: translateY(100%); } }
+@keyframes am-sheet-out { to { transform: translateY(100%); } }
+@keyframes am-swap { from { opacity: 0; transform: translateY(6px); } }
+@keyframes am-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-7px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
+@keyframes am-rotate { to { transform: rotate(360deg); } }
+@keyframes am-pop { from { opacity: 0; transform: scale(0.3) rotate(-30deg); } }
+
+/* phones: the dialog becomes a bottom sheet */
+@media (max-width: 560px) {
+  .am-scrim { place-items: end center; padding: 0; }
+  .am-dialog { width: 100%; max-height: calc(100dvh - 24px); padding: 24px 20px calc(24px + var(--safe-b)); border-radius: 24px 24px 0 0; border-bottom: 0; animation: am-sheet-in 420ms var(--ease) both; }
+  .am-scrim[data-closing] .am-dialog { animation: am-sheet-out 220ms ease-in forwards; }
+  .am-dialog .am-title { font-size: 1.5rem; }
+}
+@media (min-width: 561px) and (max-height: 680px) { .am-dialog { padding: 22px 24px; } .am-tabs { margin-top: 18px; } }
