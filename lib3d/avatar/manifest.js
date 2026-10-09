@@ -7,8 +7,10 @@ export const AVATAR_BASE = "/models/avatars";
 export const BASES = { M: `${AVATAR_BASE}/base_male.glb`, F: `${AVATAR_BASE}/base_female.glb` };
 /** Optional shared animation library, authored on the same skeleton. Its clips are added to the base's own clips. */
 export const ANIM_LIBRARY = `${AVATAR_BASE}/anim/library.glb`;
-/** Modular clothing and hair: /models/avatars/parts/<slot>/<id>.glb, skinned to the same skeleton as the base (or attached to a bone). */
-export const partUrl = (slot, id) => `${AVATAR_BASE}/parts/${slot}/${id}.glb`;
+/** Modular clothing and hair: /models/avatars/parts/<slot>/<id>_m.glb or <id>_f.glb (they fit each base body), skinned to the same skeleton as the base or attached to a bone. */
+export const partUrl = (slot, id, gender = "M") => `${AVATAR_BASE}/parts/${slot}/${id}_${gender === "F" ? "f" : "m"}.glb`;
+/** Slots a look must have a part for before the authored model is used (otherwise the built-in character is shown, so nobody appears bare or bald). */
+export const REQUIRED_SLOTS = ["hair", "outfit"];
 
 /** Skeleton contract: bone names (without any "mixamorig" or "mixamorig:" prefix) every base and every skinned part must have. */
 export const REQUIRED_BONES = ["Hips", "Spine", "Spine1", "Spine2", "Neck", "Head",

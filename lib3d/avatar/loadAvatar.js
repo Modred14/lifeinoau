@@ -6,7 +6,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { SKIN_TONES, cleanLook } from "../../lib/look.js";
 import { buildCharacter } from "../character.js";
-import { BASES, ANIM_LIBRARY, REQUIRED_BONES, BODY_MORPHS, ATTACH_BONES, partUrl, boneKey } from "./manifest.js";
+import { BASES, ANIM_LIBRARY, REQUIRED_BONES, REQUIRED_SLOTS, BODY_MORPHS, ATTACH_BONES, partUrl, boneKey } from "./manifest.js";
 import { createAnimator, createFace } from "./animation.js";
 
 const loader = new GLTFLoader(), gltfCache = new Map(), exists = new Map();
@@ -65,11 +65,13 @@ async function loadModel(look, gender) {
   const clips = [...gltf.animations]; if (await available(ANIM_LIBRARY)) clips.push(...(await loadGltf(ANIM_LIBRARY)).animations);
   // body and height: blend shapes when the model has them, otherwise a plain scale
   root.traverse((o) => { if (!o.isMesh || !o.morphTargetDictionary) return; for (const [k, m] of Object.entries(BODY_MORPHS)) { const i = o.morphTargetDictionary[m]; if (i !== undefined) o.morphTargetInfluences[i] = look.build === k || look.height === k ? 1 : 0; } });
-  const target = 1.76 * (HEIGHT[look.height] ?? 1); root.scale.multiplyScalar(target / skeletonHeight(root)); // any export unit becomes a 1.76 m adult, like the built-in character
+  // keep the model's own size when it is already in metres (so men and women differ naturally); otherwise rescale any export unit to a 1.76 m adult
+  const raw = skeletonHeight(root), k = raw > 1.4 && raw < 2.1 ? (HEIGHT[look.height] ?? 1) : (1.76 * (HEIGHT[look.height] ?? 1)) / raw; root.scale.multiplyScalar(k); const target = raw * k;
   root.updateMatrixWorld(true);
   // modular parts: each is optional, a missing file is skipped
   const parts = [["hair", look.hair], ["outfit", look.outfit], ...(look.acc ?? []).map((a) => [a, a])], extra = [];
-  for (const [slot, id] of parts) { const u = partUrl(slot, id); if (!(await available(u))) continue;
+  for (const [slot, id] of parts) { const u = partUrl(slot, id, gender);
+    if (!(await available(u))) { if (REQUIRED_SLOTS.includes(slot)) return null; continue; } // a look without its hair or outfit part uses the built-in character
     const part = SkeletonUtils.clone((await loadGltf(u)).scene), meshes = attachSkinnedPart(root, part);
     if (!meshes.length && ATTACH_BONES[slot]) { attachToBone(root, part, ATTACH_BONES[slot]); extra.push(part); } else extra.push(...meshes); }
   const animator = createAnimator(root, clips), face = createFace(root);
