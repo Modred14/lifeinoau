@@ -7,7 +7,7 @@ const rngOf = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul
 const mat = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0, ...o });
 const PAL = { cream: "#d9ceb4", sand: "#c6b08a", stone: "#d8d8d0", brick: "#a5664e", slate: "#aab7c4", white: "#e8e6dc", teal: "#2f6f6a", dark: "#2a3340", roof: "#8f4a37", gold: "#d9a441" };
 
-function windowTextures(seed) { // one tile = 4 x 4 windows; some are lit
+export function windowTextures(seed) { // one tile = 4 x 4 windows; some are lit
   const mk = (lit) => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d"), r = rngOf(seed);
     g.fillStyle = lit ? "#000" : "#fff"; g.fillRect(0, 0, 128, 128);
     for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) { const on = r() < 0.55; g.fillStyle = lit ? (on ? ["#ffd48a", "#ffc46b", "#fff0c4"][Math.floor(r() * 3)] : "#000") : "#2b394b"; g.fillRect(x * 32 + 6, y * 32 + 8, 20, 16); }
@@ -71,10 +71,11 @@ export function buildCampus() {
       case "statue": cyl(g, 2.4, 2.8, 0.8, mat(PAL.stone), 0, 0, 0); box(g, 2.2, 3, 2.2, mat(PAL.stone), 0, 0.8, 0); { const gm = mat("#d9a441", { metalness: 0.6, roughness: 0.35 }); const b = new THREE.Mesh(new THREE.CapsuleGeometry(0.7, 2.2, 6, 12), gm); b.position.y = 5.6; b.castShadow = true; g.add(b); const h = new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 12), gm); h.position.y = 7.7; g.add(h); const a = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 1.6, 4, 8), gm); a.position.set(0.9, 7.2, 0); a.rotation.z = -0.5; g.add(a); } top = 10; r = 6; break;
       case "faculty": { const cols = [PAL.cream, PAL.sand, PAL.stone, PAL.slate, "#d3c3a6"], c = cols[fi++ % cols.length], acc = ["#2f6f6a", "#8c3b46", "#355a8a", "#6b7f3a", "#a1692f"][fi % 5];
         lit(g, 16, 8.5, 9, c, 0, 0, 0, fi % 3, "#2c3540"); lit(g, 8, 6, 8, c, 9, 0, 3, (fi + 1) % 3); box(g, 16.4, 1, 9.4, mat(acc), 0, 8.5, 0, false); box(g, 5, 0.4, 2.6, mat("#ddd"), 0, 0, 5.6, false); top = 12; r = 14; break; }
-      case "hospital": lit(g, 20, 11, 10, PAL.white, 0, 0, 0, 1, "#cfd6dd"); lit(g, 8, 8, 14, PAL.white, 11, 0, 4, 2); box(g, 0.5, 5, 1.6, mat("#c0343a", { emissive: "#7a1218", emissiveIntensity: 0.5 }), 0, 11.8, 5.1, false); box(g, 0.5, 1.6, 5, mat("#c0343a", { emissive: "#7a1218", emissiveIntensity: 0.5 }), 0, 13.4, 5.1, false); top = 18; r = 16; break;
+      case "hospital": if (L.id === "health_centre") { lit(g, 13, 6, 8, PAL.white, 0, 0, 0, 1, "#cfd6dd"); box(g, 0.5, 3.2, 1.1, mat("#c0343a", { emissive: "#7a1218", emissiveIntensity: 0.5 }), 0, 6.6, 4.1, false); box(g, 0.5, 1.1, 3.2, mat("#c0343a", { emissive: "#7a1218", emissiveIntensity: 0.5 }), 0, 7.6, 4.1, false); top = 11; r = 10; break; }
+        lit(g, 20, 11, 10, PAL.white, 0, 0, 0, 1, "#cfd6dd"); lit(g, 8, 8, 14, PAL.white, 11, 0, 4, 2); box(g, 0.5, 5, 1.6, mat("#c0343a", { emissive: "#7a1218", emissiveIntensity: 0.5 }), 0, 11.8, 5.1, false); box(g, 0.5, 1.6, 5, mat("#c0343a", { emissive: "#7a1218", emissiveIntensity: 0.5 }), 0, 13.4, 5.1, false); top = 18; r = 16; break;
       case "farm": for (let i = 0; i < 9; i++) box(g, 22, 0.25, 1.6, mat(i % 2 ? "#6f8f3a" : "#4f6f2c"), 0, 0, -8 + i * 2, false); box(g, 7, 4, 5, mat("#a1442f"), -14, 0, 4); { const rf = new THREE.Mesh(new THREE.ConeGeometry(5.2, 2.6, 4), roofMat("#5b2d22")); rf.position.set(-14, 5.3, 4); rf.rotation.y = Math.PI / 4; rf.castShadow = true; g.add(rf); } top = 8; r = 16; break;
-      case "hostel": { const male = L.id === "h_awo" || L.id === "h_fajuyi" || L.id === "h_angola" || L.id === "h_etf", oj = L.id === "h_ojaja";
-        const c = oj ? "#26303a" : male ? PAL.brick : "#d7e2dc", rf = oj ? "#101419" : male ? "#53392e" : PAL.teal;
+      case "hostel": { const male = L.id === "h_awo" || L.id === "h_fajuyi" || L.id === "h_angola" || L.id === "h_etf", oj = L.id === "h_ojaja", pg = L.id === "h_pg";
+        const c = oj ? "#26303a" : pg ? PAL.slate : male ? PAL.brick : "#d7e2dc", rf = oj ? "#101419" : pg ? "#3a4654" : male ? "#53392e" : PAL.teal;
         lit(g, 15, 9.5, 6.5, c, 0, 0, -5, (L.x | 0) % 3 < 0 ? 0 : Math.abs(L.x | 0) % 3, rf); lit(g, 15, 9.5, 6.5, c, 0, 0, 6, Math.abs(L.z | 0) % 3, rf); box(g, 15.4, 0.8, 6.9, mat(oj ? PAL.gold : rf), 0, 9.5, -5, false); box(g, 15.4, 0.8, 6.9, mat(oj ? PAL.gold : rf), 0, 9.5, 6, false);
         box(g, 4, 0.2, 5, mat("#b9ad93"), 0, 0, 0.5, false); top = 14; r = 16; break; }
       case "gate": for (const s of [-1, 1]) lit(g, 3, 8, 3, PAL.stone, s * 6.5, 0, 0, 0); box(g, 16, 2, 3.4, mat("#1f6f4a", { emissive: "#0d3b27", emissiveIntensity: 0.6 }), 0, 8, 0); box(g, 8, 0.4, 0.4, mat("#d33"), 0, 1.4, 4, false); top = 12; r = 10; break;
@@ -125,13 +126,13 @@ export function buildCampus() {
 }
 
 /** Dusk sky, fog and light for the campus. Returns the sun so callers can tune shadows. */
-export function addCampusLighting(scene) {
+export function addCampusLighting(scene, extent = 135) {
   const c = document.createElement("canvas"); c.width = 2; c.height = 256; const g = c.getContext("2d"), gr = g.createLinearGradient(0, 0, 0, 256);
   gr.addColorStop(0, "#0a1120"); gr.addColorStop(0.55, "#16294a"); gr.addColorStop(0.85, "#3a4a6e"); gr.addColorStop(1, "#6a5a6a"); g.fillStyle = gr; g.fillRect(0, 0, 2, 256);
-  const bg = new THREE.CanvasTexture(c); bg.colorSpace = THREE.SRGBColorSpace; scene.background = bg; scene.fog = new THREE.FogExp2(0x22335a, 0.0028);
+  const bg = new THREE.CanvasTexture(c); bg.colorSpace = THREE.SRGBColorSpace; scene.background = bg; scene.fog = new THREE.FogExp2(0x22335a, 0.0028 * (135 / extent));
   scene.add(new THREE.HemisphereLight(0xa9bdf0, 0x5a5a3e, 1.35));
-  const sun = new THREE.DirectionalLight(0xffcf9a, 3.4); sun.position.set(-90, 70, 70); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -135, right: 135, top: 125, bottom: -90, near: 10, far: 330 }); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.4; scene.add(sun);
-  const moon = new THREE.DirectionalLight(0x7f9fe8, 1.1); moon.position.set(80, 60, -60); scene.add(moon);
+  const sun = new THREE.DirectionalLight(0xffcf9a, 3.4); sun.position.set(-extent * 0.67, extent * 0.52, extent * 0.52); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -extent, right: extent, top: extent * 0.93, bottom: -extent * 0.67, near: 10, far: extent * 2.5 }); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.4; scene.add(sun);
+  const moon = new THREE.DirectionalLight(0x7f9fe8, 1.1); moon.position.set(extent * 0.6, extent * 0.45, -extent * 0.45); scene.add(moon);
   return sun;
 }
