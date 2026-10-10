@@ -12,7 +12,7 @@ export default function Home() {
   useEffect(() => { call("/api/meta").then((r) => { if (!r.failed) setNews(r); }); }, []);
 
   return (<>
-    <div className="mapwrap"><CampusMap interactive={false} pins={false} autoRotate view={{ x: 0, z: 22, dist: 175, az: 0.55, pol: 1.0 }} /></div>
+    <div className="mapwrap"><CampusMap interactive={false} pins={false} autoRotate view={{ x: 0, z: 8, dist: 185, az: 0.55, pol: 1.0 }} /></div>
     <header className="hud">
       <span className="brand">life<i>in</i>oau</span>
       {news && <><span className="sep" aria-hidden="true" /><span className="meta num">Game week {news.week} · {news.headline}</span></>}

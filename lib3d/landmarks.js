@@ -70,3 +70,9 @@ export const ROADS = [
 ];
 export const SLAB = { x0: -122, x1: 122, z0: -72, z1: 112 };
 export const kindOf = (id) => LANDMARKS.find((l) => l.id === id);
+
+// ---- Real-map support (lib3d/campusData.js, lib3d/campusReal.js) ----
+// The ids above stay stable: gameplay and pages can keep using them. Positions for the real map come from public/data/oau-campus.json.
+export const ICON_OF = { hall: "hall", library: "library", faculty: "faculty", lecture: "faculty", admin: "hall", hospital: "hospital", farm: "farm", hostel: "hostel", block: "hostel", social: "social", statue: "statue", sports: "statue", worship: "hall", gate: "gate", parking: "gate", club: "club", town: "town", bank: "town", shop: "town" };
+export const KIND_LABEL = { hall: "Hall", library: "Library", faculty: "Faculty or department", lecture: "Lecture theatre or teaching building", admin: "Administration", hospital: "Health", farm: "Farm", hostel: "Hostel", block: "Hostel block", social: "Student life", statue: "Landmark", sports: "Sports", worship: "Place of worship", gate: "Gate", parking: "Parking", club: "Nightlife", town: "Town", bank: "Bank", shop: "Shop or food" };
+export const MAP_GROUPS = [["Campus core", ["hall", "library", "social", "admin", "statue"]], ["Faculties and teaching", ["faculty", "lecture", "hospital", "farm"]], ["Hostels", ["hostel", "block"]], ["Banks, shops and food", ["bank", "shop"]], ["Sports and worship", ["sports", "worship", "parking"]], ["Town and gate", ["gate", "town"]], ["Nightlife", ["club"]]];

@@ -1,18 +1,19 @@
-// app/map/page.js
+// src/app/map/page.js
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { LANDMARKS } from "@/lib3d/landmarks.js";
-import { Icon, KIND_ICON } from "@/components/Icon";
+import { ICON_OF, KIND_LABEL, MAP_GROUPS } from "@/lib3d/landmarks.js";
+import { loadCampusData, listPlaces, trustNote } from "@/lib3d/campusData.js";
+import { Icon } from "@/components/Icon";
 
 const CampusMap = dynamic(() => import("@/components/CampusMap"), { ssr: false });
-const GROUPS = [["Campus core", ["hall", "library", "statue", "social"]], ["Faculties", ["faculty", "hospital", "farm"]], ["Hostels", ["hostel"]], ["Town and gate", ["gate", "town"]], ["Nightlife", ["club"]]];
-const KIND_LABEL = { hall: "Hall", library: "Library", faculty: "Faculty", hospital: "Health sciences", farm: "Farm", hostel: "Hostel", social: "Student life", statue: "Landmark", gate: "Gate", club: "Nightlife", town: "Town" };
 
 export default function MapPage() {
-  const [sel, setSel] = useState(null), [list, setList] = useState(false), L = LANDMARKS.find((l) => l.id === sel);
+  const [sel, setSel] = useState(null), [list, setList] = useState(false), [places, setPlaces] = useState([]), [q, setQ] = useState("");
+  useEffect(() => { let on = true; loadCampusData().then((d) => on && setPlaces(listPlaces(d))).catch(() => {}); return () => { on = false; }; }, []);
   useEffect(() => { if (!list) return; const k = (e) => e.key === "Escape" && setList(false); document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [list]);
+  const L = places.find((l) => l.id === sel), shown = useMemo(() => places.filter((p) => p.name.toLowerCase().includes(q.trim().toLowerCase())), [places, q]);
   return (<>
     <div className="mapwrap"><CampusMap selectedId={sel} onSelect={setSel} /></div>
     <div style={{ position: "fixed", zIndex: 20, left: 10, top: "calc(var(--safe-t) + 74px)" }}>
@@ -20,15 +21,16 @@ export default function MapPage() {
     </div>
     {L && (<div className="dock"><div className="card" role="region" aria-label={L.name}>
       <div className="top"><h2>{L.name}</h2><button type="button" className="ghost" aria-label="Close details" onClick={() => setSel(null)}><Icon name="close" /></button></div>
-      <p className="mut"><Icon name={KIND_ICON[L.kind]} size={16} /> {KIND_LABEL[L.kind]}{L.verified ? " · a real OAU landmark" : " · placement is schematic"}</p>
+      <p className="mut"><Icon name={ICON_OF[L.kind] ?? "town"} size={16} /> {KIND_LABEL[L.kind] ?? "Place"} · {trustNote(L)}</p>
       <p>{L.blurb}</p>
-      {L.actions.length > 0 && <div className="row">{L.actions.map((a) => <Link key={a.href} href={a.href} className="btn go">{a.label}</Link>)}</div>}
+      {L.actions?.length > 0 && <div className="row">{L.actions.map((a) => <Link key={a.href} href={a.href} className="btn go">{a.label}</Link>)}</div>}
     </div></div>)}
     {list && (<div className="sheet-scrim" onClick={() => setList(false)}><div className="sheet" role="dialog" aria-modal="true" aria-label="Places" onClick={(e) => e.stopPropagation()}>
       <div className="top"><h2>Places</h2><button type="button" className="ghost" aria-label="Close list" onClick={() => setList(false)}><Icon name="close" /></button></div>
-      <p className="mut">The map is stylised and not to scale. Names marked as real OAU landmarks were checked; the rest are game placements.</p>
-      {GROUPS.map(([title, kinds]) => (<div key={title}><h3 style={{ marginTop: 16 }}>{title}</h3>
-        {LANDMARKS.filter((l) => kinds.includes(l.kind)).map((l) => (<button key={l.id} type="button" className="ghost" style={{ width: "100%", justifyContent: "flex-start", marginTop: 6 }} onClick={() => { setSel(l.id); setList(false); }}><Icon name={KIND_ICON[l.kind]} />{l.name}</button>))}</div>))}
+      <p className="mut">Building outlines, roads and names come from the OpenStreetMap map of OAU. Heights are assumed (most OAU buildings are 5 to 8 m; the Senate Building is 24 m) and shown taller than life so you can read the map. Places marked approximate were placed from another map. Places with no position are game places that no map showed yet.</p>
+      <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a place" aria-label="Find a place" style={{ width: "100%", marginTop: 10 }} />
+      {MAP_GROUPS.map(([title, kinds]) => { const items = shown.filter((l) => kinds.includes(l.kind)); if (!items.length) return null; return (<div key={title}><h3 style={{ marginTop: 16 }}>{title}</h3>
+        {items.map((l) => (<button key={l.id} type="button" className="ghost" style={{ width: "100%", justifyContent: "flex-start", marginTop: 6 }} onClick={() => { setSel(l.id); setList(false); }}><Icon name={ICON_OF[l.kind] ?? "town"} />{l.name}{!l.located ? " (no map position yet)" : l.conf === "approximate" ? " (approx.)" : ""}</button>))}</div>); })}
     </div></div>)}
   </>);
 }
