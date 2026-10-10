@@ -7,7 +7,26 @@ import { windowTextures } from "./campus.js";
 import { matchLandmarks } from "./osm.js";
 import { LANDMARKS } from "./landmarks.js";
 
-const CLASS = { major: { c: "#1e242c", y: 0.07, min: 0.9 }, street: { c: "#252c35", y: 0.06, min: 0.6 }, service: { c: "#2d343d", y: 0.05, min: 0.4 }, path: { c: "#8f7f5e", y: 0.045, min: 0.3 } };
+export const MAP_BG = "#5aa9d6"; // the single background (sea blue) around the one light-green land slab
+const CLASS = { major: { c: "#2b323c", y: 0.07, min: 0.9 }, street: { c: "#363e4a", y: 0.06, min: 0.6 }, service: { c: "#4a5361", y: 0.05, min: 0.4 }, path: { c: "#8a6f45", y: 0.045, min: 0.3 } };
+
+/** Soft light-green grass with subtle patches and speckle, tileable. */
+function grassTexture() {
+  const N = 256, c = document.createElement("canvas"); c.width = c.height = N; const g = c.getContext("2d"); g.fillStyle = "#9bd081"; g.fillRect(0, 0, N, N);
+  let s = 12345; const r = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+  for (let i = 0; i < 70; i++) { const x = r() * N, y = r() * N, rad = 14 + r() * 40; for (const [dx, dy] of [[0, 0], [N, 0], [-N, 0], [0, N], [0, -N]]) { const gr = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, rad); const col = r() < 0.5 ? "130,190,100" : "175,215,130"; gr.addColorStop(0, `rgba(${col},0.35)`); gr.addColorStop(1, `rgba(${col},0)`); g.fillStyle = gr; g.fillRect(x + dx - rad, y + dy - rad, rad * 2, rad * 2); } }
+  for (let i = 0; i < 1400; i++) { g.fillStyle = r() < 0.5 ? "rgba(90,150,70,0.25)" : "rgba(200,230,150,0.25)"; g.fillRect(r() * N, r() * N, 1.5, 1.5); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+}
+
+/** Daylight for the real-data map: one flat background colour, no fog, soft white light. */
+export function addOsmLighting(scene, extent = 135) {
+  scene.background = new THREE.Color(MAP_BG); scene.fog = null;
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xcfe0f0, 1.5));
+  const sun = new THREE.DirectionalLight(0xfff4e0, 2.4); sun.position.set(-extent * 0.67, extent * 0.9, extent * 0.52); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -extent, right: extent, top: extent * 0.93, bottom: -extent * 0.67, near: 10, far: extent * 3 }); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.4; scene.add(sun);
+  return sun;
+}
 const WALLS = ["#d9ceb4", "#c6b08a", "#d8d8d0", "#aab7c4", "#d3c3a6", "#a5664e", "#e2dccb"];
 
 function slice(g, start, count) { // part of a non-indexed geometry (an ExtrudeGeometry group)
@@ -18,11 +37,12 @@ function slice(g, start, count) { // part of a non-indexed geometry (an ExtrudeG
 function paint(g, hex) { const c = new THREE.Color(hex), n = g.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) a.set([c.r, c.g, c.b], i * 3); g.setAttribute("color", new THREE.BufferAttribute(a, 3)); return g; }
 
 export function buildOsmCampus(data, opts = {}) {
-  const S = opts.scale ?? 0.1, EX = opts.heightExaggeration ?? 1.6, root = new THREE.Group(), pad = 120, b = data.bounds;
+  const S = opts.scale ?? 0.1, EX = opts.heightExaggeration ?? 1.6, root = new THREE.Group(), pad = 70, b = data.bounds;
   const x0 = (b.x0 - pad) * S, x1 = (b.x1 + pad) * S, z0 = (b.z0 - pad) * S, z1 = (b.z1 + pad) * S, W = x1 - x0, D = z1 - z0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
-  // ground
-  const grass = new THREE.Mesh(new THREE.PlaneGeometry(W, D), new THREE.MeshStandardMaterial({ color: "#3f7d4e", roughness: 1 })); grass.rotation.x = -Math.PI / 2; grass.position.set(cx, 0, cz); grass.receiveShadow = true; root.add(grass);
-  const soil = new THREE.Mesh(new THREE.BoxGeometry(W, 7, D), new THREE.MeshStandardMaterial({ color: "#3a2d24", roughness: 1 })); soil.position.set(cx, -3.6, cz); root.add(soil);
+  // ground: ONE light-green land slab (finely mottled so it reads as real grass) floating on ONE blue background (the "water", see addOsmLighting).
+  const tex = grassTexture(); tex.repeat.set(W / 40, D / 40);
+  const top = new THREE.MeshStandardMaterial({ map: tex, roughness: 1 }), side = new THREE.MeshStandardMaterial({ color: "#a98f66", roughness: 1 }), under = new THREE.MeshStandardMaterial({ color: "#7d6847", roughness: 1 });
+  const land = new THREE.Mesh(new THREE.BoxGeometry(W, 2.2, D), [side, side, top, under, side, side]); land.position.set(cx, -1.1, cz); land.receiveShadow = true; root.add(land);
   // roads: one merged mesh per class
   for (const [cls, st] of Object.entries(CLASS)) {
     const pos = [], idx = []; let n = 0;
@@ -51,11 +71,11 @@ export function buildOsmCampus(data, opts = {}) {
   // places: only the ones really found in the data. Nothing is invented.
   const { found, missing } = matchLandmarks(data, LANDMARKS), byId = new Map(LANDMARKS.map((l) => [l.id, l])), anchors = new Map(), landmarks = [];
   for (const f of found) { const L = byId.get(f.id), x = f.x * S, z = f.z * S; landmarks.push({ ...L, x, z, conf: "osm", verified: true }); anchors.set(f.id, new THREE.Vector3(x, f.h * S * EX + 2.2, z)); }
-  const sel = new THREE.Mesh(new THREE.RingGeometry(1, 1.2, 48), new THREE.MeshBasicMaterial({ color: "#3fd08a", transparent: true, opacity: 0.9, side: THREE.DoubleSide })); sel.rotation.x = -Math.PI / 2; sel.visible = false; root.add(sel);
+  const sel = new THREE.Mesh(new THREE.RingGeometry(1, 1.2, 48), new THREE.MeshBasicMaterial({ color: "#d9480f", transparent: true, opacity: 0.9, side: THREE.DoubleSide })); sel.rotation.x = -Math.PI / 2; sel.visible = false; root.add(sel);
   const setSelected = (id) => { const L = landmarks.find((l) => l.id === id); if (!L) { sel.visible = false; return; } sel.position.set(L.x, 0.3, L.z); sel.scale.setScalar(4); sel.visible = true; };
   const update = (t) => { if (sel.visible) { sel.material.opacity = 0.65 + Math.sin(t * 3) * 0.25; sel.rotation.z = t * 0.4; } };
   const extent = Math.max(W, D) / 2;
-  const dispose = () => { root.traverse((o) => { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : m ? [m] : []).forEach((x) => { x.dispose(); }); }); win.map.dispose(); win.emis.dispose(); };
+  const dispose = () => { tex.dispose(); root.traverse((o) => { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : m ? [m] : []).forEach((x) => { x.dispose(); }); }); win.map.dispose(); win.emis.dispose(); };
   return { root, anchors, groups: new Map(), landmarks, unmatched: missing, update, setSelected, dispose, osm: true, synthetic: !!data.synthetic, attribution: data.attribution, extent,
     bounds: { x0, x1, z0, z1 }, camera: { home: { x: cx, z: cz, dist: extent * 1.25, pol: 0.95 }, min: 10, max: extent * 3.5 } };
 }

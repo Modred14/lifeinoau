@@ -7,11 +7,14 @@ def bad(m): fail.append(m)
 pkg=json.load(open('package.json')); deps=set(pkg['dependencies'])|set(pkg.get('devDependencies',{}))
 BUILTIN={'fs','path','crypto','child_process','url','os'}
 # 1. first line is the path comment
-fmt={'.js':'// %s','.mjs':'// %s','.prisma':'// %s','.css':'/* %s */','.sql':'-- %s','.md':'<!-- %s -->','.py':'# %s','.html':'<!-- %s -->'}
+fmt={'.js':'// %s','.mjs':'// %s','.prisma':'// %s','.css':'/* %s */','.sql':'-- %s','.md':'<!-- %s -->','.py':'# %s','.html':'<!-- %s -->','.overpassql':'// %s'}
 commented=0
 for f in files:
     if f in('package.json','jsconfig.json'): continue
-    ext=os.path.splitext(f)[1]; exp=('# %s' if os.path.basename(f)=='.env.example' else fmt.get(ext,'')) % f
+    if f.endswith('.json'): continue  # JSON cannot hold comments
+    ext=os.path.splitext(f)[1]; tpl=('# %s' if os.path.basename(f)=='.env.example' else fmt.get(ext))
+    if tpl is None: continue
+    exp=tpl % f
     first=open(f,encoding='utf-8').read().split('\n')[0]
     if first!=exp: bad(f'first line wrong in {f}: {first!r}')
     else: commented+=1

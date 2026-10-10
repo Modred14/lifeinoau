@@ -501,7 +501,7 @@ input[type="checkbox"] {
 .stage {
   position: relative;
   width: 100%;
-  background: radial-gradient(120% 90% at 50% 0%, #17233b 0%, #0d1321 70%);
+  background: #5aa9d6;
   overflow: hidden;
   border-radius: var(--r-lg);
 }
@@ -719,73 +719,4 @@ input[type="checkbox"] {
   .hud .meta {
     display: none;
   }
-}
-
-/* Building labels on the real 3D campus map (components/CampusMap.js) */
-.bl {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 0;
-  height: 22px;
-  padding: 0 8px 0 6px;
-  max-width: 190px;
-  border-radius: var(--r-pill);
-  background: rgba(13, 19, 33, 0.9);
-  color: var(--text);
-  border: 1px solid var(--line);
-  font-size: 0.7rem;
-  line-height: 1;
-  white-space: nowrap;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
-  transform: translateY(-12px);
-  cursor: pointer;
-}
-.bl span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.bl::before {
-  content: "";
-  position: absolute;
-  inset: -6px -2px;
-} /* larger touch target */
-.bl[data-tier="1"] {
-  height: 26px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  background: rgba(24, 74, 70, 0.94);
-  border-color: rgba(255, 255, 255, 0.55);
-}
-.bl[data-kind="faculty"],
-.bl[data-kind="lecture"] {
-  border-color: #5a74d6;
-}
-.bl[data-kind="hostel"],
-.bl[data-kind="block"] {
-  border-color: #4fb3ad;
-}
-.bl[data-kind="shop"],
-.bl[data-kind="bank"],
-.bl[data-kind="town"] {
-  border-color: #c58b4a;
-}
-.bl[data-approx="true"] {
-  border-style: dashed;
-}
-.bl[aria-pressed="true"] {
-  max-width: none;
-  background: var(--gold);
-  color: #1a1100;
-  border-color: #fff;
-}
-.stage-credit {
-  position: absolute;
-  left: 10px;
-  bottom: 6px;
-  margin: 0;
-  font-size: 0.66rem;
-  color: var(--muted);
-  pointer-events: none;
-  z-index: 2;
 }
