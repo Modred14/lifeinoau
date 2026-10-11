@@ -6,6 +6,7 @@ import { call, naira, notifyError, loggedOut, say } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import dynamic from "next/dynamic";
 import CreateFlow from "@/components/CreateFlow";
+import Loader from "@/components/Loader";
 const CharacterViewer = dynamic(() => import("@/components/CharacterViewer"), { ssr: false, loading: () => <div className="stage" style={{ height: 220 }} aria-busy="true" /> });
 
 const STATS = [["Health", "health"], ["Energy", "energy"], ["Happiness", "happiness"], ["Academics", "academics"], ["Popularity", "popularity"], ["Suspicion", "suspicion"]];
@@ -69,7 +70,7 @@ export default function Play() {
     setReveal(res); setView("reveal");
   }
 
-  if (view === "loading") return <p className="mut">Loading your life...</p>;
+  if (view === "loading") return <Loader label="Loading your life" />;
   if (view === "error") return <div className="card"><p className="mut">Your game didn&apos;t load.</p><button onClick={load}>Try again</button></div>;
 
   if (view === "create") return <CreateFlow meta={meta} busy={busy} onSubmit={create} />;

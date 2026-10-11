@@ -66,7 +66,7 @@ export default function AuthModal({ initialMode = "signup", onClose }) {
   const id = (k) => `${uid}-${k}`;
 
   const [mode, setMode] = useState(initialMode);
-  const [f, setF] = useState({ email: "", password: "", confirm: "", isAdult: false });
+  const [f, setF] = useState({ email: "", password: "", confirm: "", isAdult: false, remember: true });
   const [touched, setTouched] = useState({});
   const [attempted, setAttempted] = useState(false);
   const [vis, setVis] = useState({ pw: false, cf: false });
@@ -145,7 +145,7 @@ export default function AuthModal({ initialMode = "signup", onClose }) {
   const edit = (k) => (e) => {
     const v = e.target.type === "checkbox" ? e.target.checked : e.target.value;
     setF((p) => ({ ...p, [k]: v }));
-    if (e.target.type === "checkbox") setTouched((t) => ({ ...t, age: true }));
+    if (e.target.type === "checkbox" && k === "isAdult") setTouched((t) => ({ ...t, age: true }));
   };
 
   const bump = () => { setShake(false); requestAnimationFrame(() => requestAnimationFrame(() => setShake(true))); };
@@ -170,7 +170,7 @@ export default function AuthModal({ initialMode = "signup", onClose }) {
     const firstBad = [["email", emailRef], ["password", pwRef], ["confirm", cfRef], ["age", ageRef]].find(([k]) => errors[k]);
     if (firstBad) { toast.error(errors[firstBad[0]], { id: "auth-invalid" }); firstBad[1].current?.focus(); bump(); return; }
     setBusy(true);
-    const body = isSignup ? { email, password: f.password, isAdult: true } : { email, password: f.password };
+    const body = isSignup ? { email, password: f.password, isAdult: true } : { email, password: f.password, remember: f.remember };
     const res = await call(isSignup ? "/api/signup" : "/api/login", body);
     if (res.failed) {
       if (mounted.current) { setBusy(false); bump(); }
@@ -256,6 +256,16 @@ export default function AuthModal({ initialMode = "signup", onClose }) {
                     aria-invalid={marked("age")} />
                   <span className="am-box" aria-hidden="true"><Icon name="check" size={16} weight="bold" /></span>
                   <span>I am 18 or older</span>
+                </label>
+              </div>
+            </Collapse>
+
+            <Collapse open={!isSignup} bleed>
+              <div className="am-field">
+                <label className="am-check">
+                  <input type="checkbox" name="remember" checked={f.remember} onChange={edit("remember")} disabled={locked} />
+                  <span className="am-box" aria-hidden="true"><Icon name="check" size={16} weight="bold" /></span>
+                  <span>Keep me logged in on this device</span>
                 </label>
               </div>
             </Collapse>

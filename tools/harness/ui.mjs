@@ -2,7 +2,7 @@
 import {createRequire} from "node:module"; const require=createRequire("/home/claude/.npm-global/lib/node_modules/");
 const {chromium}=require("playwright");
 const [scenario,path,out,W="390",H="844",...clicks]=process.argv.slice(2);
-const look={skin:"chestnut",hair:"braids",outfit:"owambe",fabric:"ankara",accent:"gold"};
+const look={skin:"chestnut",hair:"braids",outfit:"owambe",top:"navy",bottom:"blue"};
 const char={name:"tolu_ife",gender:"F",look,faculty:"Science",class:"MAPO",hostel:"Moremi",personalities:["Extrovert","Party Animal"],level:200,health:82,energy:64,happiness:70,academics:52,popularity:34,suspicion:6,strikes:0,expelled:false,graduated:false};
 const J=(o,s=200)=>({status:s,contentType:"application/json",body:JSON.stringify(o)});
 const meta={faculties:["College of Health Sciences","Administration","Agriculture","Arts","Computer Science","Education","Environmental Design & Management","Law","Pharmacy","Science","Social Sciences","Technology"].map((name,i)=>({id:i+1,name})),personalities:[],week:12,headline:"Panic selling shakes the market"};

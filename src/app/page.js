@@ -2,13 +2,27 @@
 "use client";
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { call } from "@/lib/client";
 import AuthModal from "@/components/AuthModal";
+import Loader from "@/components/Loader";
 
 const CampusMap = dynamic(() => import("@/components/CampusMap"), { ssr: false });
 
 export default function Home() {
+  const router = useRouter();
   const [mode, setMode] = useState(null), [news, setNews] = useState(null);
+  // Returning player? The login cookie is remembered, so skip the landing page and go straight to the game.
+  const [checking, setChecking] = useState(true), [welcome, setWelcome] = useState("");
+  useEffect(() => {
+    let on = true;
+    call("/api/session").then((r) => {
+      if (!on) return;
+      if (r.authenticated) { setWelcome(r.name ? `Welcome back, ${r.name}` : "Welcome back"); router.replace("/play"); } // keep the loader up until the game page takes over
+      else setChecking(false);
+    });
+    return () => { on = false; };
+  }, [router]);
   useEffect(() => { call("/api/meta").then((r) => { if (!r.failed) setNews(r); }); }, []);
 
   return (<>
@@ -27,6 +41,7 @@ export default function Home() {
         <p className="mut" style={{ marginTop: 12, fontSize: "0.85rem" }}>For players 18 and over. The campus map is stylised, not to scale.</p>
       </div>
     </div>
+    {checking && <Loader fullscreen label={welcome || "Loading"} />}
     {mode && <AuthModal initialMode={mode} onClose={() => setMode(null)} />}
   </>);
 }

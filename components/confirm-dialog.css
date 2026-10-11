@@ -1,0 +1,48 @@
+/* components/confirm-dialog.css */
+/* Consent / confirmation modal. Centred card on desktop, bottom sheet on phones. Prefixed `cd-`; scoped so the global
+   button/input rules in globals.css don't leak in. Reduced motion is handled by the global rule. */
+
+.cd-scrim { position: fixed; inset: 0; z-index: 90; display: grid; place-items: end center; padding: 0; background: var(--scrim); backdrop-filter: blur(4px); animation: cd-fade 180ms var(--ease) both; overscroll-behavior: contain; }
+.cd-scrim[data-closing] { animation: cd-fade-out 160ms ease-in forwards; }
+
+.cd { position: relative; width: min(440px, 100%); max-height: 92dvh; overflow-y: auto; display: block; text-align: left;
+  padding: 28px 22px calc(22px + var(--safe-b)); background: var(--surface); border: 1px solid var(--line); border-bottom: 0; border-radius: var(--r-lg) var(--r-lg) 0 0;
+  box-shadow: 0 -12px 40px -12px rgba(0, 0, 0, 0.6); animation: cd-rise 280ms var(--ease) both; }
+.cd-scrim[data-closing] .cd { animation: cd-drop 160ms ease-in forwards; }
+
+.cd-icon { display: grid; place-items: center; width: 52px; height: 52px; margin-bottom: 14px; border-radius: 50%; background: rgba(63, 208, 138, 0.14); color: var(--green-text); }
+.cd[data-tone="danger"] .cd-icon { background: rgba(255, 128, 128, 0.14); color: var(--danger-text); }
+.cd .cd-title { margin: 0; font-size: 1.35rem; line-height: 1.2; }
+.cd .cd-msg { margin: 8px 0 0; max-width: none; color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+
+.cd-field { margin-top: 18px; }
+.cd-field label { display: block; margin-bottom: 8px; font-size: 0.92rem; font-weight: 500; }
+.cd-req { color: var(--muted); font-weight: 400; }
+.cd-field input, .cd-field textarea { width: 100%; font: inherit; color: var(--text); padding: 12px 14px; border-radius: var(--r-md); border: 1px solid var(--field); background: var(--bg); resize: vertical; min-height: 48px; }
+.cd-field input:focus-visible, .cd-field textarea:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+/* "I understand" consent checkbox */
+.cd-ack { display: flex; align-items: flex-start; gap: 12px; margin-top: 18px; padding: 12px 14px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--bg); cursor: pointer; line-height: 1.4; font-size: 0.95rem; }
+.cd-ack input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.cd-box { flex: none; display: grid; place-items: center; width: 22px; height: 22px; margin-top: 1px; border-radius: 7px; border: 1.5px solid var(--field); color: transparent; background: transparent; transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease); }
+.cd-ack input:checked + .cd-box { background: var(--green); border-color: var(--green-text); color: #fff; }
+.cd-ack input:focus-visible + .cd-box { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+.cd-actions { display: flex; flex-direction: column-reverse; gap: 10px; margin-top: 24px; }
+.cd .cd-cancel, .cd .cd-ok { width: 100%; min-height: 48px; margin: 0; border-radius: var(--r-md); font-weight: 600; }
+.cd .cd-ok { border: 1px solid var(--green-text); background: var(--green); color: #fff; }
+.cd .cd-ok[data-tone="danger"] { border-color: rgba(255, 128, 128, 0.5); background: #b42323; }
+.cd .cd-ok:disabled { opacity: 0.45; cursor: not-allowed; }
+
+@media (min-width: 560px) {
+  .cd-scrim { place-items: center; padding: 24px; }
+  .cd { border-bottom: 1px solid var(--line); border-radius: var(--r-lg); padding: 30px 28px 26px; animation-name: cd-pop; box-shadow: 0 24px 60px -16px rgba(0, 0, 0, 0.7); }
+  .cd-actions { flex-direction: row; justify-content: flex-end; }
+  .cd .cd-cancel, .cd .cd-ok { width: auto; min-width: 120px; padding: 0 20px; }
+}
+
+@keyframes cd-fade { from { opacity: 0; } }
+@keyframes cd-fade-out { to { opacity: 0; } }
+@keyframes cd-rise { from { transform: translateY(32px); opacity: 0; } }
+@keyframes cd-drop { to { transform: translateY(24px); opacity: 0; } }
+@keyframes cd-pop { from { transform: translateY(10px) scale(0.96); opacity: 0; } }

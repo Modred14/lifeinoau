@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { call, naira, notifyError } from "@/lib/client";
 import { toast } from "@/lib/toast";
+import { askText, confirmAction } from "@/lib/confirm";
 
 export default function Admin() {
   const [tab, setTab] = useState("overview"), [ov, setOv] = useState(null), [reports, setReports] = useState([]), [denied, setDenied] = useState(false);
@@ -17,14 +18,18 @@ export default function Admin() {
   useEffect(() => { load(); }, [load]);
 
   async function resolve(id, action) {
-    const note = prompt("Short note for the audit log (required):"); if (note === null) return; if (!note.trim()) return void toast.error("A short note is required to handle a report.");
+    const LABEL = { dismiss: "Dismiss report", actioned: "Mark as warned", suspend: "Suspend for 2 weeks" };
+    const note = await askText({ title: LABEL[action] ?? "Handle report", message: "This goes in the audit log.", label: "Short note for the audit log", placeholder: "What did you decide, and why?", multiline: true, maxLength: 500, confirmLabel: LABEL[action] ?? "Confirm", tone: action === "suspend" ? "danger" : "default" });
+    if (note === null) return;
     setBusy(true); const r = await call("/api/admin/reports", { id, action, note }); setBusy(false);
     guard(r) || (toast.success("Report handled."), load());
   }
   async function showMsgs(id) { const r = await call("/api/admin/report-messages?id=" + id); if (!guard(r)) setCtx((c) => ({ ...c, [id]: r.messages })); }
   async function find(e) { e.preventDefault(); const r = await call("/api/admin/player?name=" + encodeURIComponent(name)); guard(r) || setP(r); }
   async function adjust(e) {
-    e.preventDefault(); if (!confirm(`${adj.direction} ₦${Number(adj.amountNaira).toLocaleString()} for ${p.name}? This is permanent and audited.`)) return;
+    e.preventDefault();
+    const sure = await confirmAction({ title: `${adj.direction === "credit" ? "Credit" : "Debit"} ₦${Number(adj.amountNaira).toLocaleString()}?`, message: `This changes ${p.name}'s balance. It is permanent and audited.`, ack: "I understand this can't be undone", confirmLabel: adj.direction === "credit" ? "Credit account" : "Debit account", tone: "danger" });
+    if (!sure) return;
     setBusy(true); const r = await call("/api/admin/adjust", { ...adj, name: p.name, amountNaira: Number(adj.amountNaira), requestId: crypto.randomUUID() }); setBusy(false);
     if (!guard(r)) { toast.success("Adjustment recorded."); setAdj({ direction: "credit", amountNaira: "", reason: "" }); find(e); }
   }

@@ -4,7 +4,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
-import { SKIN_TONES, ACCENTS, cleanLook } from "../../lib/look.js";
+import { SKIN_TONES, COLORS, cleanLook } from "../../lib/look.js";
 import { buildCharacter } from "../character.js";
 import { BASES, ANIM_LIBRARY, REQUIRED_BONES, REQUIRED_SLOTS, BODY_MORPHS, ATTACH_BONES, partUrl, boneKey } from "./manifest.js";
 import { createAnimator, createFace } from "./animation.js";
@@ -43,10 +43,14 @@ function tintSkin(root, hex) {
     o.material = Array.isArray(o.material) ? out : out[0]; });
 }
 
-/** Parts can have materials named "Accent..." (trim, gele, cuffs): they take the colour the player picked as their accent. Materials are cloned because the loaded model is cached. */
-function tintAccent(meshes, hex) {
+/** Clothes are recoloured by material name, whatever outfit is worn: "Top_*" takes the shirt colour, "Bottom_*" the trouser/skirt colour, and "TopDark_*" / "BottomDark_*"
+ *  a slightly darker shade of the same (cuffs, a shirt under a vest). Trim, shoes, stripes, ties and hair keep their own colour. Materials are cloned because the loaded model is cached. */
+const SHADE = { "": 1, dark: 0.72, light: 1.18 };
+function tintOutfit(meshes, topHex, bottomHex) {
   for (const o of meshes) { const list = Array.isArray(o.material) ? o.material : [o.material];
-    const out = list.map((m) => { if (!/^accent/i.test(m.name)) return m; const c = m.clone(); c.color.set(hex); return c; }); o.material = Array.isArray(o.material) ? out : out[0]; }
+    const out = list.map((m) => { const k = /^(top|bottom)(dark|light)?_/i.exec(m.name ?? ""); if (!k) return m;
+      const c = m.clone(); c.color.set(k[1].toLowerCase() === "top" ? topHex : bottomHex); c.color.multiplyScalar(SHADE[(k[2] ?? "").toLowerCase()] ?? 1); return c; });
+    o.material = Array.isArray(o.material) ? out : out[0]; }
 }
 
 /** Hair is authored with a dithered, strand-like hairline (alpha-tested). Alpha-to-coverage turns that into smooth anti-aliased edges. */
@@ -90,7 +94,7 @@ async function loadModel(look, gender) {
     if (!(await available(u))) { if (REQUIRED_SLOTS.includes(slot)) return null; continue; } // a look without its hair or outfit part uses the built-in character
     const part = SkeletonUtils.clone((await loadGltf(u)).scene), meshes = attachSkinnedPart(root, part);
     if (!meshes.length && ATTACH_BONES[slot]) { attachToBone(root, part, ATTACH_BONES[slot]); extra.push(part); } else extra.push(...meshes); }
-  softenHair(extra); tintAccent(extra, ACCENTS[look.accent] ?? ACCENTS.gold);
+  softenHair(extra); tintOutfit(extra, COLORS[look.top] ?? COLORS.navy, COLORS[look.bottom] ?? COLORS.khaki);
   const animator = createAnimator(root, clips), face = createFace(root);
   animator.play("idle");
   return { kind: "glb", root, height: target, animator, face, parts: extra.length };

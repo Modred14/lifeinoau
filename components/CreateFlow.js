@@ -1,9 +1,12 @@
 // components/CreateFlow.js
+
+// components/CreateFlow.js
 "use client";
 import { useState } from "react";
 import dynamic from "next/dynamic";
+import Loader from "./Loader";
 import { toast } from "@/lib/toast";
-import { SKIN_TONES, HAIR, OUTFITS, FABRICS, ACCENTS, cleanLook, label } from "@/lib/look.js";
+import { SKIN_TONES, HAIR, OUTFITS, COLORS, cleanLook, label } from "@/lib/look.js";
 
 const CharacterViewer = dynamic(() => import("./CharacterViewer"), { ssr: false, loading: () => <div className="stage" style={{ height: "46vh" }} aria-busy="true" /> });
 // What each trait really does in the game rules.
@@ -42,15 +45,15 @@ export default function CreateFlow({ meta, busy, onSubmit }) {
           <h3 style={{ marginTop: 16 }}>Skin tone</h3><Swatches map={SKIN_TONES} k="skin" name="Skin tone" />
           <h3 style={{ marginTop: 16 }}>Hairstyle</h3><Chips items={HAIR[gender]} k="hair" />
           <h3 style={{ marginTop: 16 }}>Outfit</h3><Chips items={OUTFITS} k="outfit" />
-          <h3 style={{ marginTop: 16 }}>Fabric</h3><Chips items={FABRICS} k="fabric" />
-          <h3 style={{ marginTop: 16 }}>Colour</h3><Swatches map={ACCENTS} k="accent" name="Outfit colour" />
+          <h3 style={{ marginTop: 16 }}>Shirt colour</h3><Swatches map={COLORS} k="top" name="Shirt colour" />
+          <h3 style={{ marginTop: 16 }}>Trouser / skirt colour</h3><Swatches map={COLORS} k="bottom" name="Trouser or skirt colour" />
         </section>)}
         {step === 1 && (<section className="card" aria-labelledby="tr-h"><h2 id="tr-h">Choose up to 2 traits for {name.trim() || "your character"}</h2>
           <div className="row" style={{ marginTop: 12 }}>{TRAITS.map(([t, d]) => <button key={t} type="button" className={"trait" + (traits.includes(t) ? " on" : "")} aria-pressed={traits.includes(t)} onClick={() => toggle(t)}><b>{t}</b><span className="mut">{d}</span></button>)}</div></section>)}
         {step === 2 && (<section className="card" aria-labelledby="fa-h"><h2 id="fa-h">What do you study?</h2>
           <p className="mut">Your faculty decides your courses, your lecturers and how hard exams feel.</p>
           <div className="chips" style={{ marginTop: 12 }}>{meta?.faculties?.map((f) => <button key={f.id} type="button" aria-pressed={String(facultyId) === String(f.id)} className={String(facultyId) === String(f.id) ? "on" : ""} onClick={() => setFacultyId(f.id)}>{f.name}</button>)}</div>
-          {!meta?.faculties?.length && <p className="mut">Loading faculties...</p>}</section>)}
+            {!meta?.faculties?.length && <Loader label="Loading faculties" size={36} className="lo-inline" />}</section>)}
         <div className="row" style={{ marginTop: 12 }}>
           {step > 0 && <button type="button" onClick={() => setStep(step - 1)}>Back</button>}
           {step < 2 ? <button type="button" className="go" onClick={next}>Next</button>

@@ -109,6 +109,26 @@ def detail_deltas(gender, n, scale=1.0):
     return d
 
 
+# A gentle, friendly closed-mouth smile baked into the face: the mouth corners lift and widen, the cheeks rise a little.
+# (MakeHuman's own "mouth-angles-up" target also pushes the lips forward into a duck-bill, so the smile is shaped here instead.)
+# It is applied AFTER the skin texture is painted from the neutral face, so the painted lips and brows follow the mesh as it bends.
+def smile_offsets(P, nose_tip, strength=1.9):
+    my = nose_tip[1] - 0.030                      # height of the mouth line (same landmark the lips are painted from)
+    off = np.zeros_like(P); front = P[:, 2] > nose_tip[2] - 0.075  # only the front of the face
+    for s in (-1, 1):
+        # mouth corner: up, out and slightly back
+        d = np.hypot(P[:, 0] - s * 0.0265, P[:, 1] - (my + 0.0005)); w = np.exp(-(d / 0.0155) ** 2) * front
+        off[:, 1] += 0.0042 * strength * w; off[:, 0] += s * 0.0030 * strength * w; off[:, 2] -= 0.0022 * strength * w
+        # smile line beside the mouth, a little further out and up
+        d = np.hypot(P[:, 0] - s * 0.036, P[:, 1] - (my + 0.006)); w = np.exp(-(d / 0.016) ** 2) * front
+        off[:, 1] += 0.0022 * strength * w; off[:, 0] += s * 0.0012 * strength * w
+        # cheek: lifts and rounds up
+        d = np.hypot(P[:, 0] - s * 0.046, P[:, 1] - (my + 0.022)); w = np.exp(-(d / 0.024) ** 2) * front
+        off[:, 1] += 0.0028 * strength * w; off[:, 2] += 0.0014 * strength * w
+    # keep the centre of the lips where they were so the mouth stays closed and natural
+    return off
+
+
 # ---------------------------------------------------------------- helpers
 def qaxis(axis, ang):
     a = np.array(axis, float); a /= np.linalg.norm(a); s = math.sin(ang / 2)
@@ -317,6 +337,7 @@ def build(gender):
     # the nose tip anchors the face landmarks (the mesh's mouth joint sits inside the head, so it cannot place the lips)
     ey = J["joint-l-eye"][1]; body_ids = np.array(sorted(gv["body"])); Pb = P0[body_ids]
     sel = (np.abs(Pb[:, 0]) < 0.02) & (Pb[:, 1] > ey - 0.07) & (Pb[:, 1] < ey + 0.01); J["nose-tip"] = Pb[np.argmax(np.where(sel, Pb[:, 2], -9))]
+    P0s = P0 + smile_offsets(P0, J["nose-tip"])  # the same body with the friendly smile
     # skeleton
     rig = json.load(open(f"{DATA}/rigs/standard/rig.mixamo.json"))["bones"]
     names = []; 
@@ -346,6 +367,7 @@ def build(gender):
             ids.append(key2new[k])
         for k in range(1, len(ids) - 1): tris.append([ids[0], ids[k], ids[k + 1]])
     Pn, UVn, tris, orig = np.array(Pn), np.array(UVn), np.array(tris), np.array(orig)
+    Pn_neutral = Pn; Pn = P0s[orig]  # texture is painted on the neutral face, the mesh itself smiles
     Nn = smooth_normals(Pn, tris)
     # unify normals across split vertices
     acc = {}; 
@@ -360,7 +382,7 @@ def build(gender):
         tot = sum(w for _, w in inf)
         for k, (b, w) in enumerate(inf): JOINTS[i, k] = b; WEIGHTS[i, k] = w / tot
     # textures
-    pm = rasterize_positions(UVn, tris, Pn, TEX)
+    pm = rasterize_positions(UVn, tris, Pn_neutral, TEX)
     albedo, roughmap = build_skin_maps(pm, J, female); normal = build_normal(1024)
     eye_tex = build_eye_texture()
     # eyes (rigid on the head bone)

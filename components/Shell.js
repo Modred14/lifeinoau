@@ -2,16 +2,17 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { call, naira, notifyError } from "@/lib/client";
 import { Icon } from "./Icon";
+import { toast } from "@/lib/toast";
 
 const APPS = [["Courses", "courses", "/courses", ""], ["Messages", "chat", "/people", ""], ["Map", "map", "/map", "sky"], ["Jobs", "jobs", "/career", "gold"], ["Invest", "invest", "/invest", "gold"],
   ["Love", "love", "/relationship", "rose"], ["Parties", "party", "/parties", "rose"], ["Forbes", "forbes", "/leaderboards", "gold"], ["Awards", "medal", "/achievements", ""]];
 
 /** Status pill on top, four-item bottom navigation, and the phone. Hidden on the landing page and until you have a character. */
 export default function Shell({ children }) {
-  const path = usePathname(), [st, setSt] = useState(null), [phone, setPhone] = useState(false), opener = useRef(null), firstApp = useRef(null), failing = useRef(false);
+  const path = usePathname(), router = useRouter(), [loggingOut, setLoggingOut] = useState(false), [st, setSt] = useState(null), [phone, setPhone] = useState(false), opener = useRef(null), firstApp = useRef(null), failing = useRef(false);
   const bare = path === "/", full = path === "/map";
   const load = useCallback(async () => {
     const r = await call("/api/state");
@@ -22,6 +23,15 @@ export default function Shell({ children }) {
   useEffect(() => { if (bare) return; load(); const t = setInterval(load, 60000); return () => clearInterval(t); }, [bare, path, load]);
   useEffect(() => { if (!phone) return; firstApp.current?.focus(); const k = (e) => { if (e.key === "Escape") { setPhone(false); opener.current?.focus(); } }; document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [phone]);
   useEffect(() => { setPhone(false); }, [path]);
+  async function logout() {
+    if (loggingOut) return; setLoggingOut(true);
+    const r = await call("/api/logout", {});
+    setLoggingOut(false);
+    if (r.failed) return notifyError(r, "We couldn't log you out. Please try again.");
+    setPhone(false); setSt(null);
+    toast.info("You're logged out. See you soon.", { id: "session" });
+    router.push("/");
+  }
   if (bare) return children;
   const creating = path === "/play" && !st;
   return (<>
@@ -43,6 +53,7 @@ export default function Shell({ children }) {
         <div className="top"><h2>Phone</h2><button type="button" className="ghost" aria-label="Close phone" onClick={() => { setPhone(false); opener.current?.focus(); }}><Icon name="close" /></button></div>
         <p className="mut num">Game week {st?.week}</p>
         <div className="apps">{APPS.map(([name, icon, href, tone], i) => (<Link key={href} href={href} ref={i === 0 ? firstApp : undefined}><span className={"tile " + tone}><Icon name={icon} size={26} /></span>{name}</Link>))}</div>
+        <button type="button" className="ghost" style={{ marginTop: 16, width: "100%" }} disabled={loggingOut} onClick={logout}>{loggingOut ? "Logging out…" : "Log out"}</button>
       </div></div>)}
   </>);
 }

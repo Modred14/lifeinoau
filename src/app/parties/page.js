@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { call, naira, notifyError, loggedOut } from "@/lib/client";
 import { toast } from "@/lib/toast";
+import Loader from "@/components/Loader";
 
 export default function Parties() {
   const router = useRouter(), [d, setD] = useState(null), [busy, setBusy] = useState(""), outage = useRef(false);
@@ -23,7 +24,7 @@ export default function Parties() {
   return (<>
     <div className="top"><h2>Parties</h2><a href="/play"><button>Back to game</button></a></div>
     <p className="mut">Week {d?.week}. One night out per game week. New lineups every week.</p>
-    {!d && <p className="mut">Loading...</p>}
+    {!d && <Loader label="Loading parties" />}
     {d?.parties.map((p) => { const full = p.attendees >= p.capacity, pct = Math.min(100, Math.round((p.attendees / p.capacity) * 100));
       return (<div className="card" key={p.venue}>
         <div className="top"><h2>🔥 {p.venue}</h2><span className="cash">{naira(p.priceKobo)}</span></div>

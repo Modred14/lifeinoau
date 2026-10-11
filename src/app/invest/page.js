@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { call, naira, notifyError, loggedOut } from "@/lib/client";
 import { toast } from "@/lib/toast";
+import Loader from "@/components/Loader";
 
 const RISK = { LOW: "var(--ok)", MEDIUM: "var(--acc)", HIGH: "var(--bad)" };
 const MOOD = { BOOM: "📈", STEADY: "➖", SLUMP: "📉", CRASH: "🚨" };
@@ -27,7 +28,7 @@ export default function Invest() {
     if (r.failed) notifyError(r); else if (r.duplicate) toast.info("Already done."); else toast.success(r.note ?? "Done.");
     load();
   }
-  if (!d) return loadFailed ? <div className="card"><p className="mut">This page didn&apos;t load.</p><button onClick={load}>Try again</button></div> : <p className="mut">Loading...</p>;
+  if (!d) return loadFailed ? <div className="card"><p className="mut">This page didn&apos;t load.</p><button onClick={load}>Try again</button></div> : <Loader label="Loading markets" />;
   const room = BigInt(d.capKobo) - BigInt(d.investedKobo), held = Object.fromEntries(d.holdings.map((h) => [h.product, h]));
 
   return (<>

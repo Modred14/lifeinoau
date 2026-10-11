@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { call, notifyError, loggedOut } from "@/lib/client";
 import { toast } from "@/lib/toast";
+import { confirmAction } from "@/lib/confirm";
+import Loader from "@/components/Loader";
 
 const GIFTS = [["small", "Small gift", "₦5,000"], ["medium", "Nice gift", "₦20,000"], ["big", "Big gift", "₦50,000"]];
 
@@ -20,7 +22,7 @@ export default function Relationship() {
     load();
   }
   const act = (action, extra) => go("/api/relationship", { action, ...extra });
-  if (!d) return loadFailed ? <div className="card"><p className="mut">This page didn&apos;t load.</p><button onClick={load}>Try again</button></div> : <p className="mut">Loading...</p>;
+  if (!d) return loadFailed ? <div className="card"><p className="mut">This page didn&apos;t load.</p><button onClick={load}>Try again</button></div> : <Loader label="Loading" />;
   const c = d.current, pct = c ? Math.min(100, Math.round((c.affection / (c.nextNeeded ?? 100)) * 100)) : 0;
   return (<>
     <div className="top"><h2>Relationships</h2><a href="/play"><button>Back to game</button></a></div>
@@ -51,6 +53,6 @@ export default function Relationship() {
         <p className="mut">Adults only, and kept off-screen. There is a risk with every choice.</p>
         <div className="row"><button disabled={busy || !!d.pregnancy} onClick={() => act("safe-close")}>Be careful<br /><span className="mut">₦3,000 · lowest risk</span></button>
           <button disabled={busy || !!d.pregnancy} onClick={() => act("close")}>Just go with it<br /><span className="mut">free · higher risk</span></button></div></div>}
-      <button disabled={busy} onClick={() => confirm(`End things with ${c.npcName}?`) && act("breakup")}>End the relationship</button></>}
+      <button disabled={busy} onClick={async () => { if (await confirmAction({ title: `End things with ${c.npcName}?`, message: "You will break up. This can't be undone.", confirmLabel: "End relationship", cancelLabel: "Stay together", tone: "danger" })) act("breakup"); }}>End the relationship</button></>}
   </>);
 }

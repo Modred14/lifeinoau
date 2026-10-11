@@ -31,7 +31,7 @@ export async function POST(req) {
     const u = await db.user.create({
       data: { email, passwordHash: await hash(pw), isAdult: true },
     });
-    await startSession(u.id);
+    await startSession(u.id, true);
     return Response.json({ ok: true });
   } catch (e) {
     if (e.code === "P2002")

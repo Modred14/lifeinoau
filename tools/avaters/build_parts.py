@@ -68,6 +68,12 @@ def merge(a, b):
     n = len(a["P"]); return dict(name=a["name"], P=np.vstack([a["P"], b["P"]]), N=np.vstack([a["N"], b["N"]]), UV=np.vstack([a["UV"], b["UV"]]), T=np.vstack([a["T"], b["T"] + n]), J=np.vstack([a["J"], b["J"]]), W=np.vstack([a["W"], b["W"]]), color=a["color"], rough=a["rough"])
 
 
+def tag(M, mat):
+    """Names the glTF material. The game recolours materials by name: Top_* follows the player's shirt colour, Bottom_* the trouser/skirt colour,
+    TopDark_* / BottomDark_* the same colour a little darker (cuffs, shirts under a vest). Everything else keeps its own colour."""
+    M["mat"] = mat; return M
+
+
 def lin(r, g, b):
     """sRGB 0-255 -> linear glTF baseColorFactor (the old build fed sRGB-looking values in as linear, so every garment came out near black)."""
     return [(c / 255.0) ** 2.2 for c in (r, g, b)]
@@ -115,7 +121,7 @@ def write_part(path, meshes, normal_map=True):
         else:
             mat = g.Material(name=M["name"], pbrMetallicRoughness=g.PbrMetallicRoughness(baseColorFactor=col + [1], metallicFactor=0, roughnessFactor=M["rough"]),
                              **({"normalTexture": g.NormalMaterialTexture(index=tn, scale=0.5)} if normal_map and M.get("fabric", True) else {}))
-        gl.materials.append(mat)
+        mat.name = M.get("mat", M["name"]); gl.materials.append(mat)
         pa = G.acc(M["P"].astype(np.float32), g.FLOAT, g.VEC3, g.ARRAY_BUFFER, True); na = G.acc(M["N"].astype(np.float32), g.FLOAT, g.VEC3, g.ARRAY_BUFFER)
         ua = G.acc(np.stack([M["UV"][:, 0], 1 - M["UV"][:, 1]], 1).astype(np.float32) if not M.get("hairtex") else M["UV"].astype(np.float32), g.FLOAT, g.VEC2, g.ARRAY_BUFFER)
         ja = G.acc(M["J"].astype(np.uint16), g.UNSIGNED_SHORT, g.VEC4, g.ARRAY_BUFFER); wa = G.acc(M["W"].astype(np.float32), g.FLOAT, g.VEC4, g.ARRAY_BUFFER)
@@ -180,12 +186,33 @@ def refine(M, tri_mask):
     return M
 
 
-def collar(M, neck_y, drop=0.028):
-    """Cuts a round neckline (lower at the front): the band of triangles along the cut is subdivided twice, then everything above the curve is removed."""
-    cut_fn = lambda p: neck_y - 0.004 - drop * np.clip(p[:, 2] / 0.09, 0, 1) ** 2
+NECK = [None]
+
+
+def neck_info(B):
+    """(z of the neck axis, neck radius) measured on the real body, so every neckline hugs the neck instead of using a fixed width."""
+    P = B["P"]; dom = dominant(B); h = B["head"]["mixamorig:Neck"]; m = has(dom, "Neck") & (np.abs(P[:, 1] - h[1]) < 0.035)
+    zn = float(h[2]); r = np.hypot(P[m][:, 0], P[m][:, 2] - zn); return zn, float(np.percentile(r, 90))
+
+
+def collar(M, neck_y, drop=0.028, widen=0.0):
+    """Cuts a round neckline that hugs the neck. The opening is the part of the garment that is both inside an ellipse around the real neck axis
+    (so it is never wider than the neck + a thumb) and above a floor that dips at the front (the scoop). The band of triangles along the cut is
+    subdivided twice so the edge is smooth, then everything inside the opening is removed. `drop` = how far the front scoops; `widen` = extra width."""
+    zn, rn = NECK[0]; a = rn + 0.014 + widen; bf = rn + 0.014 + widen + drop * 1.3; bb = rn + 0.012 + widen
+    def s(p):  # > 0 inside the opening (metres, roughly)
+        dz = p[:, 2] - zn; b = np.where(dz > 0, bf, bb); inside = (1.0 - np.sqrt((p[:, 0] / a) ** 2 + (dz / b) ** 2)) * a
+        floor = neck_y - 0.010 - drop * 1.2 * np.clip(dz / bf, 0, 1) ** 1.5; return np.minimum(inside, p[:, 1] - floor)
     for _ in range(2):
-        P = M["P"]; d = P[:, 1] - cut_fn(P); band = (np.abs(d[M["T"]]).min(1) < 0.02) & ((d[M["T"]] > -0.03).any(1)) & ((d[M["T"]] < 0.03).any(1)); refine(M, band)
-    c = M["P"][M["T"]].mean(1); M["T"] = M["T"][c[:, 1] <= cut_fn(c) + 0.0005]
+        d = s(M["P"])[M["T"]]; band = (d.max(1) > -0.02) & (d.min(1) < 0.02); refine(M, band)
+    c = M["P"][M["T"]].mean(1); M["T"] = M["T"][s(c) <= 0.0]
+
+
+def refine_where(M, field, passes=2, tol=0.012):
+    """Subdivides the triangles that the line field(P)=0 passes through, so a cut or a trim band follows that line smoothly instead of in zigzag steps."""
+    for _ in range(passes):
+        d = field(M["P"])[M["T"]]; refine(M, (d.min(1) < tol) & (d.max(1) > -tol))
+    return M
 
 
 def cut_sleeve(M, B, side, t_cut):
@@ -205,22 +232,22 @@ def build_outfit(B):
         # hoodie: torso + long sleeves to the wrist (navy). Selection is a little generous and then trimmed to clean hem / collar / cuff lines.
         sel = (torso | armL | armR | (has(dom, "UpLeg") & (y > hem - 0.05))) & (y > hem - 0.05) & (y < neck_y + 0.06) & ~has(dom, "Hand", "Head")
         sel &= ~((armL & (tL > 0.95)) | (armR & (tR > 0.95)))
-        hz = garment(B, sel, np.full(len(P), 0.028), (38, 50, 84), "Hoodie", 0.95, smooth=6, min_clear=0.018)
-        hz["P"][:, 1] = np.maximum(hz["P"][:, 1], hem)  # straight hem
+        hz = tag(garment(B, sel, np.full(len(P), 0.011), (38, 50, 84), "Hoodie", 0.95, smooth=4, min_clear=0.007), "Top_Hoodie")
+        refine_where(hz, lambda p: p[:, 1] - hem); hz["P"][:, 1] = np.maximum(hz["P"][:, 1], hem)  # straight hem
         cut_sleeve(hz, B, 1, 0.90); cut_sleeve(hz, B, -1, 0.90)
         collar(hz, neck_y); meshes.append(hz)
         # straight khaki chinos, slightly tapered
         sel_t = has(dom, "Hips", "UpLeg", "Leg") & (y < hips_y + 0.06) & ~has(dom, "Foot", "Toe")
-        ct = garment(B, sel_t, np.full(len(P), 0.007), (122, 108, 84), "Chinos", 0.95, tube_warp(B, 0.083, 0.071), smooth=3, min_clear=0.006)
+        ct = tag(garment(B, sel_t, np.full(len(P), 0.006), (122, 108, 84), "Chinos", 0.95, tube_warp(B, 0.080, 0.068), smooth=3, min_clear=0.005), "Bottom_Chinos")
         ank_y = h["mixamorig:LeftFoot"][1] + 0.035
         ct["P"][:, 1] = np.maximum(ct["P"][:, 1], ank_y); ct["P"][:, 1] = np.minimum(ct["P"][:, 1], hips_y + 0.03); meshes.append(ct)
     else:
         hem = sp_y + 0.01
         sel = (torso | (armL & (tL < 0.45)) | (armR & (tR < 0.45))) & (y > hem - 0.05) & (y < neck_y + 0.06) & ~has(dom, "Hand", "Head")
-        top = garment(B, sel, np.full(len(P), 0.0075), (52, 52, 58), "CropTop", 0.9, smooth=2, min_clear=0.005); top["P"][:, 1] = np.maximum(top["P"][:, 1], hem)
+        top = tag(garment(B, sel, np.full(len(P), 0.012), (52, 52, 58), "CropTop", 0.9, smooth=6, min_clear=0.009), "Top_CropTop"); ease_chest(top, B, clear=0.012); refine_where(top, lambda p: p[:, 1] - hem); top["P"][:, 1] = np.maximum(top["P"][:, 1], hem)
         cut_sleeve(top, B, 1, 0.34); cut_sleeve(top, B, -1, 0.34); collar(top, neck_y); meshes.append(top)
         sel_t = has(dom, "Hips", "UpLeg", "Leg") & (y < hips_y + 0.10) & ~has(dom, "Foot", "Toe")
-        jn = garment(B, sel_t, np.full(len(P), 0.008), (62, 92, 138), "Jeans", 0.92, tube_warp(B, 0.066, 0.070), smooth=2, min_clear=0.005)
+        jn = tag(garment(B, sel_t, np.full(len(P), 0.008), (62, 92, 138), "Jeans", 0.92, tube_warp(B, 0.066, 0.070), smooth=2, min_clear=0.005), "Bottom_Jeans")
         ank_y = h["mixamorig:LeftFoot"][1] + 0.03; jn["P"][:, 1] = np.maximum(jn["P"][:, 1], ank_y); jn["P"][:, 1] = np.minimum(jn["P"][:, 1], hips_y + 0.075); meshes.append(jn)
     # sneakers: white upper and a grey sole
     foot = has(dom, "Foot", "Toe") | (has(dom, "Leg") & (y < h["mixamorig:LeftFoot"][1] + 0.03) & ~has(dom, "UpLeg"))
@@ -260,7 +287,7 @@ def fib_sphere(n):
 
 class Scalp:
     """The head surface as a ray-castable shell plus the hairline (where hair grows)."""
-    def __init__(self, B, nape=-0.075):
+    def __init__(self, B, nape=-0.075, low=False):
         P, T = B["P"], B["T"]; dom = dominant(B); self.B = B; ey = self.ey = B["joints"]["joint-l-eye"][1]
         headv = has(dom, "Head"); ok = headv & (P[:, 1] > ey - 0.13); self.Tp = P[T[ok[T].all(1)]]
         H = P[headv]; self.top = H[:, 1].max(); self.topey = self.top - ey
@@ -269,6 +296,8 @@ class Scalp:
         from scipy.interpolate import PchipInterpolator
         ph = [0, 25, 45, 60, 72, 88, 100, 112, 130, 155, 180]
         hv = [fh, fh - 0.002, fh - 0.012, fh - 0.032, e + 0.012, e + 0.016, e + 0.016, e - 0.004, -0.035, nape + 0.012, nape]
+        if low:  # swept-back styles (bun, ponytail): hair covers the forehead edge and the temples down to the ears, so no bare, shaved-looking scalp
+            f2 = fh * 0.86; hv = [f2, f2 - 0.002, f2 - 0.010, e + 0.030, e + 0.004, e - 0.002, e - 0.004, e - 0.020, -0.045, nape + 0.010, nape]
         self.hl = PchipInterpolator(ph, hv)
 
     def cover(self, S):
@@ -476,7 +505,7 @@ def rz(a): return np.array([[math.cos(a), -math.sin(a), 0], [math.sin(a), math.c
 
 
 def more_hair(B, style):
-    F = B["F"]; sc = Scalp(B, nape=-0.085 if style in ("long", "locs", "classic", "bun", "ponytail") and F else -0.072); ey = sc.ey; rng = np.random.default_rng(21); out = []
+    F = B["F"]; sc = Scalp(B, nape=-0.085 if style in ("long", "locs", "classic", "bun", "ponytail") and F else -0.072, low=style in ("bun", "ponytail")); ey = sc.ey; rng = np.random.default_rng(21); out = []
     taper = ey + 0.052
     if style == "lowcut" or (style == "classic" and not F):
         big = style == "classic"
@@ -509,23 +538,23 @@ def more_hair(B, style):
     elif style in ("bun", "ponytail"):
         out.append(hair_cap(sc, "HairCap", lambda f, p: 0.0032 * smoothstep(f / 0.02) + 0.0015, None))
         if style == "bun":
-            c = np.array([0, sc.top + 0.030, sc.zc - 0.015]); out.append(ellipsoid(c, (0.052, 0.040, 0.050), "Bun", HAIR_RGB, rng, mod=0.05, rough=0.55))
+            c = np.array([0, sc.top + 0.020, sc.zc - 0.030]); out.append(ellipsoid(c, (0.054, 0.043, 0.052), "Bun", HAIR_RGB, rng, mod=0.05, rough=0.55))
             ring_pts = []
-            for a in np.linspace(0, 2 * math.pi, 30, endpoint=False): ring_pts.append(c + np.array([math.cos(a) * 0.050, -0.030, math.sin(a) * 0.048]))
+            for a in np.linspace(0, 2 * math.pi, 30, endpoint=False): ring_pts.append(c + np.array([math.cos(a) * 0.051, -0.027, math.sin(a) * 0.049]))
             rp = np.array(ring_pts + [ring_pts[0], ring_pts[1]]); out.append(tube_mesh([rp], [np.full(len(rp), 0.0055)], "HairBand", rng, sides=6, color=(200, 150, 50), rough=0.5))
         else:
-            tree, Pb = body_tree(B); r0 = np.array([0, sc.top - 0.012, sc.zc - 0.050]); n = 64; u = np.sqrt(rng.random(n)) * 0.026; a = rng.random(n) * 6.28
+            tree, Pb = body_tree(B); r0 = np.array([0, sc.top - 0.012, sc.zc - 0.050]); n = 110; u = np.sqrt(rng.random(n)) * 0.029; a = rng.random(n) * 6.28
             p0 = np.stack([r0[0] + u * np.cos(a), r0[1] + u * np.sin(a) * 0.6, np.full(n, r0[2]) + u * np.sin(a) * 0.3], 1); v0 = np.tile([0, 0.35, -1.0], (n, 1)); L = rng.uniform(0.27, 0.34, n)
             paths = drape(tree, Pb, p0, v0, L, 0.016, 0.34, 0.013, rng, 0.04); rad = [0.0105 * np.concatenate([np.ones(max(1, len(p) - 3)), [0.8, 0.6, 0.35]])[:len(p)] for p in paths]
             neck_y = B["head"]["mixamorig:Neck"][1]; out.append(tube_mesh(paths, rad, "Ponytail", rng, sides=5, w_neck=lambda p: float(np.clip((neck_y + 0.01 - p[1]) / 0.12, 0, 1))))
             a2 = np.linspace(0, 2 * math.pi, 22); rp = np.stack([r0[0] + np.cos(a2) * 0.027, np.full(22, r0[1] - 0.004) + np.sin(a2) * 0.013 - 0.012, r0[2] - 0.016 + np.sin(a2) * 0.022 - 0.01], 1); out.append(tube_mesh([rp], [np.full(22, 0.0055)], "HairBand", rng, sides=6, color=(200, 150, 50), rough=0.5))
     elif style == "gele":   # Nigerian headwrap: a wrapped base plus a big folded crown and fan
         gold = (212, 160, 52)
-        out.append(cover_cap(sc, 0.016, gold, "GeleWrap", cover_off=0.0)); out[-1]["name"] = "AccentGele"
+        out.append(cover_cap(sc, 0.016, gold, "GeleWrap", cover_off=0.0)); out[-1]["name"] = "Top_Gele"
         t = sc.top; zc = sc.zc
-        out.append(ellipsoid([0, t + 0.012, zc - 0.005], (0.104, 0.062, 0.096), "AccentGele2", gold, rng, mod=0.10, rough=0.45))
-        out.append(ellipsoid([0.058, t + 0.050, zc - 0.012], (0.100, 0.040, 0.080), "AccentGele3", gold, rng, rot=rz(-0.45), mod=0.12, rough=0.45))
-        out.append(ellipsoid([-0.048, t + 0.034, zc + 0.012], (0.085, 0.034, 0.068), "AccentGele4", gold, rng, rot=rz(0.40), mod=0.12, rough=0.45))
+        out.append(ellipsoid([0, t + 0.012, zc - 0.005], (0.104, 0.062, 0.096), "Top_Gele2", gold, rng, mod=0.10, rough=0.45))
+        out.append(ellipsoid([0.058, t + 0.050, zc - 0.012], (0.100, 0.040, 0.080), "Top_Gele3", gold, rng, rot=rz(-0.45), mod=0.12, rough=0.45))
+        out.append(ellipsoid([-0.048, t + 0.034, zc + 0.012], (0.085, 0.034, 0.068), "Top_Gele4", gold, rng, rot=rz(0.40), mod=0.12, rough=0.45))
     return out
 
 
@@ -539,18 +568,52 @@ def ankle_y(B): return B["head"]["mixamorig:LeftFoot"][1]
 def knee_y(B): return B["head"]["mixamorig:LeftLeg"][1]
 
 
-def make_top(B, name, color, off, hem, sleeve_t, smooth=3, min_clear=0.01, drop=0.028, rough=0.9, off_arr=None):
+def ease_chest(M, B, clear=0.014, radius=0.05, passes=14):
+    """Makes a woman's top hang over the bust instead of being moulded to it. Over the chest the cloth is lifted to the highest point of the body
+    within `radius` (+ `clear`), which turns the two bumps into one broad shelf, then softened, then its normals are recomputed from the new shape.
+    `clear` is the loose-fit allowance over the skin."""
+    import scipy.sparse as sp
+    from scipy.spatial import cKDTree
+    P, T = M["P"].copy(), M["T"]; h = B["head"]; y = P[:, 1]; BP = B["P"]
+    y0, y1 = h["mixamorig:Hips"][1] + 0.10, h["mixamorig:Neck"][1] - 0.05
+    zone = np.clip((y - y0) / 0.04, 0, 1) * np.clip((y1 - y) / 0.04, 0, 1) * np.clip(P[:, 2] / 0.03, 0, 1) * (np.abs(P[:, 0]) < 0.20)
+    if zone.max() <= 0: return M
+    cm = (BP[:, 1] > y0 - 0.02) & (BP[:, 1] < y1 + 0.02) & (BP[:, 2] > 0.0) & (np.abs(BP[:, 0]) < 0.21); Pb = BP[cm]; tree = cKDTree(Pb[:, :2])
+    idx = np.where(zone > 0)[0]; hits = tree.query_ball_point(P[idx][:, :2], radius)
+    top = np.array([Pb[k, 2].max() + clear if len(k) else -9 for k in hits]); P[idx, 2] = np.where(zone[idx] > 0, P[idx, 2] + (np.maximum(P[idx, 2], top) - P[idx, 2]) * zone[idx], P[idx, 2])
+    _, wid = np.unique(np.round(M["P"] / 1e-5).astype(np.int64), axis=0, return_inverse=True); wid = wid.ravel(); nw = wid.max() + 1
+    e = wid[np.vstack([T[:, [0, 1]], T[:, [1, 2]], T[:, [2, 0]]])]; A = sp.coo_matrix((np.ones(len(e)), (e[:, 0], e[:, 1])), shape=(nw, nw)); A = ((A + A.T) > 0).astype(float).tocsr()
+    deg = np.maximum(np.asarray(A.sum(1)).ravel(), 1)[:, None]; cnt = np.bincount(wid, minlength=nw)[:, None]
+    zw = np.zeros(nw); np.maximum.at(zw, wid, zone); zw = zw[:, None]
+    def weld(Q): W = np.zeros((nw, 3)); np.add.at(W, wid, Q); return W / cnt
+    W = weld(P)
+    for _ in range(passes): W = (1 - 0.6 * zw) * W + 0.6 * zw * (A @ W) / deg
+    Q = W[wid]; tk = cKDTree(BP[:, :]); d, i = tk.query(Q); dv = Q - BP[i]; dist = np.maximum(np.linalg.norm(dv, axis=1), 1e-6)
+    near = (dist < clear * 0.5) & ((dv * B["N"][i]).sum(1) > 0) & (zone > 0)  # never let the smoothing sink the cloth into the skin
+    Q = np.where(near[:, None], BP[i] + dv / dist[:, None] * clear * 0.5, Q); M["P"] = Q
+    # normals from the new shape (the body's own normals would still shade the bumps)
+    fn = np.cross(Q[T[:, 1]] - Q[T[:, 0]], Q[T[:, 2]] - Q[T[:, 0]]); Nw = np.zeros((nw, 3))
+    for k in range(3): np.add.at(Nw, wid[T[:, k]], fn)
+    Nw /= np.maximum(np.linalg.norm(Nw, axis=1, keepdims=True), 1e-9); Nn = Nw[wid]; flip = ((Nn * M["N"]).sum(1) < 0)[:, None]; M["N"] = np.where(flip, -Nn, Nn)
+    return M
+
+
+def make_top(B, name, color, off, hem, sleeve_t, smooth=3, min_clear=0.01, drop=0.028, rough=0.9, off_arr=None, ease=0.0):
     P = B["P"]; dom = dominant(B); y = P[:, 1]; h = B["head"]; neck_y = h["mixamorig:Neck"][1]; tL, armL = side_arm_t(B, 1); tR, armR = side_arm_t(B, -1)
     torso = has(dom, "Spine", "Shoulder") | (has(dom, "Hips") & (y > hem - 0.14)); st = min(sleeve_t + 0.05, 0.95)
     sel = (torso | (armL & (tL < st)) | (armR & (tR < st)) | (has(dom, "UpLeg") & (y > hem - 0.05))) & (y > hem - 0.05) & (y < neck_y + 0.06) & ~has(dom, "Hand", "Head")
-    M = garment(B, sel, off_arr if off_arr is not None else np.full(len(P), off), color, name, rough, smooth=smooth, min_clear=min_clear)
-    M["P"][:, 1] = np.maximum(M["P"][:, 1], hem); cut_sleeve(M, B, 1, sleeve_t); cut_sleeve(M, B, -1, sleeve_t); collar(M, neck_y, drop); return M
+    oa = off_arr if off_arr is not None else np.full(len(P), off)
+    M = garment(B, sel, oa, color, name, rough, smooth=smooth, min_clear=min_clear)
+    if ease: ease_chest(M, B, clear=ease)
+    refine_where(M, lambda p: p[:, 1] - hem); M["P"][:, 1] = np.maximum(M["P"][:, 1], hem); cut_sleeve(M, B, 1, sleeve_t); cut_sleeve(M, B, -1, sleeve_t); collar(M, neck_y, drop); return M
 
 
-def make_vest(B, name, color, off, hem):
+def make_vest(B, name, color, off, hem, ease=0.0):
     P = B["P"]; dom = dominant(B); y = P[:, 1]; h = B["head"]; neck_y = h["mixamorig:Neck"][1]; _, armL = side_arm_t(B, 1); _, armR = side_arm_t(B, -1)
     sel = (has(dom, "Spine", "Shoulder") | (has(dom, "Hips") & (y > hem - 0.14)) | (has(dom, "UpLeg") & (y > hem - 0.05))) & ~(armL | armR) & (y > hem - 0.05) & (y < neck_y + 0.06) & ~has(dom, "Hand", "Head")
-    M = garment(B, sel, np.full(len(P), off), color, name, 0.8, smooth=4, min_clear=0.014); M["P"][:, 1] = np.maximum(M["P"][:, 1], hem); collar(M, neck_y, 0.075); return M
+    M = garment(B, sel, np.full(len(P), off), color, name, 0.8, smooth=4, min_clear=0.014)
+    if ease: ease_chest(M, B, clear=ease)
+    refine_where(M, lambda p: p[:, 1] - hem); M["P"][:, 1] = np.maximum(M["P"][:, 1], hem); collar(M, neck_y, 0.075); return M
 
 
 def make_trousers(B, name, color, r_knee, r_hem, top_y, hem_y, off=0.007, smooth=3, rough=0.95):
@@ -597,58 +660,63 @@ def outfit_variant(B, kind):
     F = B["F"]; h = B["head"]; hips_y = h["mixamorig:Hips"][1]; ay = ankle_y(B); ky = knee_y(B); P = B["P"]; tL, armL = side_arm_t(B, 1); tR, armR = side_arm_t(B, -1); m = []
     if kind == "casual":
         if not F:
-            m += [make_top(B, "Tee", (226, 222, 208), 0.016, hips_y - 0.02, 0.42, smooth=4), make_trousers(B, "Jeans", (46, 62, 98), 0.080, 0.072, hips_y, ay + 0.03, off=0.007)]
-        else:
-            m += [make_top(B, "Tee", (176, 196, 150), 0.012, hips_y + 0.03, 0.42, smooth=3, drop=0.035), make_trousers(B, "DenimShorts", (78, 108, 150), 0.075, 0.075, hips_y + 0.05, ky + 0.13, off=0.008, smooth=2)]
+            m += [tag(make_top(B, "Tee", (226, 222, 208), 0.010, hips_y - 0.02, 0.42, smooth=3, min_clear=0.006), "Top_Tee"),
+                  tag(make_trousers(B, "Jeans", (46, 62, 98), 0.078, 0.070, hips_y, ay + 0.03, off=0.006), "Bottom_Jeans")]
+        else:   # relaxed tee that hangs from the shoulders (not moulded round the chest) + knee-length denim shorts
+            m += [tag(make_top(B, "Tee", (176, 196, 150), 0.016, hips_y - 0.015, 0.40, smooth=9, min_clear=0.013, drop=0.032, ease=0.016), "Top_Tee"),
+                  tag(make_trousers(B, "DenimShorts", (78, 108, 150), 0.080, 0.082, hips_y + 0.05, ky + 0.09, off=0.010, smooth=3), "Bottom_DenimShorts")]
         m += shoes(B, "sneaker")
     elif kind == "office":
         if not F:
-            shirt = make_top(B, "Shirt", (214, 224, 236), 0.011, hips_y - 0.03, 0.93, smooth=3, min_clear=0.007)
-            tie = garment(B, has(dominant(B), "Spine", "Shoulder", "Hips") & (np.abs(P[:, 0]) < 0.026) & (P[:, 2] > 0) & (P[:, 1] > hips_y + 0.12) & (P[:, 1] < h["mixamorig:Neck"][1] - 0.012), 0.0215, (122, 26, 42), "Tie", 0.5, smooth=2, min_clear=0.018); tie["fabric"] = False
-            m += [shirt, tie, make_trousers(B, "SuitTrousers", (48, 50, 60), 0.078, 0.068, hips_y, ay + 0.035, off=0.007)] + shoes(B, "leather")
+            shirt = tag(make_top(B, "Shirt", (214, 224, 236), 0.009, hips_y - 0.03, 0.93, smooth=3, min_clear=0.006), "Top_Shirt")
+            tie = garment(B, has(dominant(B), "Spine", "Shoulder", "Hips") & (np.abs(P[:, 0]) < 0.026) & (P[:, 2] > 0) & (P[:, 1] > hips_y + 0.12) & (P[:, 1] < h["mixamorig:Neck"][1] - 0.012), 0.0195, (122, 26, 42), "Tie", 0.5, smooth=2, min_clear=0.016); tie["fabric"] = False
+            m += [shirt, tie, tag(make_trousers(B, "SuitTrousers", (48, 50, 60), 0.076, 0.066, hips_y, ay + 0.035, off=0.006), "Bottom_SuitTrousers")] + shoes(B, "leather")
         else:
-            m += [make_top(B, "Blouse", (236, 232, 224), 0.009, hips_y + 0.03, 0.78, smooth=3, drop=0.04, min_clear=0.006), loft(B, "PencilSkirt", (44, 46, 56), hips_y + 0.09, ky + 0.06, 0.018, 0.020)] + shoes(B, "leather", (40, 30, 28))
+            m += [tag(make_top(B, "Blouse", (236, 232, 224), 0.013, hips_y + 0.03, 0.78, smooth=8, drop=0.04, min_clear=0.010, ease=0.014), "Top_Blouse"),
+                  tag(loft(B, "PencilSkirt", (44, 46, 56), hips_y + 0.09, ky + 0.06, 0.018, 0.020), "Bottom_PencilSkirt")] + shoes(B, "leather", (40, 30, 28))
     elif kind == "owambe":
         teal = (24, 120, 110)
-        if not F:   # senator / kaftan: long tunic over matching trousers, accent trim at neck, cuffs and hem
-            tun = make_top(B, "Fabric_Tunic", teal, 0.030, hips_y - 0.02, 0.92, smooth=6, min_clear=0.018, drop=0.05)
-            skirt = loft(B, "Fabric_TunicSkirt", teal, hips_y + 0.02, ky + 0.08, 0.030, 0.050); trim = loft(B, "AccentTrim", GOLD, ky + 0.12, ky + 0.07, 0.0505, 0.0525, rough=0.5, rows=4, fabric=False)
-            cen = tun["P"][tun["T"]].mean(1); wy = h["mixamorig:LeftHand"][1]
-            cuffs = subset(tun, (cen[:, 1] < wy + 0.07) & (np.abs(cen[:, 0]) > 0.15), 0.002, "AccentTrim", GOLD)
-            neck = subset(tun, (cen[:, 1] > h["mixamorig:Neck"][1] - 0.05) & (np.abs(cen[:, 0]) < 0.11), 0.0018, "AccentTrim", GOLD)
-            m += [tun, skirt, trim, cuffs, neck, make_trousers(B, "Fabric_Trousers", (20, 98, 90), 0.078, 0.070, hips_y, ay + 0.035)] + shoes(B, "leather", (60, 38, 24))
+        if not F:   # senator / kaftan: tunic over matching trousers, gold trim at neck, cuffs and hem
+            tun = tag(make_top(B, "Fabric_Tunic", teal, 0.020, hips_y - 0.02, 0.92, smooth=6, min_clear=0.012, drop=0.04), "Top_Tunic")
+            skirt = tag(loft(B, "Fabric_TunicSkirt", teal, hips_y + 0.02, ky + 0.08, 0.026, 0.046), "Top_TunicSkirt"); trim = tag(loft(B, "AccentTrim", GOLD, ky + 0.12, ky + 0.07, 0.0465, 0.0485, rough=0.5, rows=4, fabric=False), "Trim")
+            wy = h["mixamorig:LeftHand"][1]; cuff_f = lambda p: np.minimum((wy + 0.07) - p[:, 1], np.abs(p[:, 0]) - 0.15)
+            refine_where(tun, cuff_f, passes=2, tol=0.012); cen = tun["P"][tun["T"]].mean(1)
+            cuffs = tag(subset(tun, cuff_f(cen) > 0, 0.002, "AccentTrim", GOLD), "Trim")
+            m += [tun, skirt, trim, cuffs, tag(make_trousers(B, "Fabric_Trousers", (20, 98, 90), 0.076, 0.068, hips_y, ay + 0.035), "Bottom_Trousers")] + shoes(B, "leather", (60, 38, 24))
         else:       # buba (blouse with flared sleeves) + iro (long wrapper)
-            tt, _ = side_arm_t(B, 1); off = np.full(len(P), 0.011)
-            for t_, ar in ((tL, armL), (tR, armR)): off[ar] = 0.011 + 0.075 * smoothstep((t_[ar] - 0.18) / 0.30)
-            bub = make_top(B, "Fabric_Buba", (200, 140, 40), 0.011, hips_y + 0.03, 0.52, smooth=3, drop=0.05, off_arr=off)
-            cuffs = subset(bub, (np.abs(bub["P"][bub["T"]].mean(1)[:, 0]) > 0.30) & (bub["P"][bub["T"]].mean(1)[:, 1] < h["mixamorig:LeftArm"][1] - 0.12), 0.002, "AccentTrim", teal)
-            wrap = loft(B, "Fabric_Iro", teal, hips_y + 0.09, ay + 0.04, 0.016, 0.115, back_extra=0.04); hem = loft(B, "AccentTrim", GOLD, ay + 0.085, ay + 0.04, 0.100, 0.118, rough=0.5, rows=4, back_extra=0.04, fabric=False)
+            tt, _ = side_arm_t(B, 1); off = np.full(len(P), 0.013)
+            for t_, ar in ((tL, armL), (tR, armR)): off[ar] = 0.013 + 0.075 * smoothstep((t_[ar] - 0.18) / 0.30)
+            bub = tag(make_top(B, "Fabric_Buba", (200, 140, 40), 0.013, hips_y + 0.03, 0.52, smooth=8, drop=0.04, min_clear=0.010, off_arr=off, ease=0.016), "Top_Buba")
+            cuff_f = lambda p: np.minimum(np.abs(p[:, 0]) - 0.30, (h["mixamorig:LeftArm"][1] - 0.12) - p[:, 1])
+            refine_where(bub, cuff_f, passes=2, tol=0.012); cen = bub["P"][bub["T"]].mean(1)
+            cuffs = tag(subset(bub, cuff_f(cen) > 0, 0.002, "AccentTrim", teal), "TopDark_Cuffs")
+            wrap = tag(loft(B, "Fabric_Iro", teal, hips_y + 0.09, ay + 0.04, 0.016, 0.115, back_extra=0.04), "Bottom_Iro"); hem = tag(loft(B, "AccentTrim", GOLD, ay + 0.085, ay + 0.04, 0.100, 0.118, rough=0.5, rows=4, back_extra=0.04, fabric=False), "Trim")
             m += [bub, cuffs, wrap, hem] + shoes(B, "leather", (200, 160, 60))
     elif kind == "sitework":
-        shirt = make_top(B, "WorkShirt", (112, 118, 124), 0.013, hips_y - 0.03 if not F else hips_y + 0.02, 0.93, smooth=3, min_clear=0.007)
-        vest = make_vest(B, "HiVisVest", (238, 108, 24), 0.026, hips_y - 0.02 if not F else hips_y + 0.03)
+        shirt = tag(make_top(B, "WorkShirt", (112, 118, 124), 0.011, hips_y - 0.03 if not F else hips_y + 0.02, 0.93, smooth=3 if not F else 8, min_clear=0.006 if not F else 0.010, ease=0 if not F else 0.014), "TopDark_WorkShirt")
+        vest = tag(make_vest(B, "HiVisVest", (238, 108, 24), 0.024 if not F else 0.028, hips_y - 0.02 if not F else hips_y + 0.03, ease=0 if not F else 0.030), "Top_HiVisVest")
         for _ in range(2):
             cy = vest["P"][vest["T"]].mean(1)[:, 1]; refine(vest, (np.abs(cy - (hips_y + 0.11)) < 0.045) | (np.abs(cy - (hips_y + 0.25)) < 0.045))
-        bands = [subset(vest, (np.abs(vest["P"][vest["T"]].mean(1)[:, 1] - (hips_y + dy)) < 0.016), 0.0015, "ReflectiveStripe", (214, 220, 226), rough=0.4) for dy in (0.11, 0.25)]
-        m += [shirt, vest] + bands + [make_trousers(B, "WorkTrousers", (62, 70, 84), 0.082 if not F else 0.070, 0.082 if not F else 0.072, hips_y, ay + 0.075)] + shoes(B, "boot")
+        bands = [tag(subset(vest, (np.abs(vest["P"][vest["T"]].mean(1)[:, 1] - (hips_y + dy)) < 0.016), 0.0015, "ReflectiveStripe", (214, 220, 226), rough=0.4), "Reflective") for dy in (0.11, 0.25)]
+        m += [shirt, vest] + bands + [tag(make_trousers(B, "WorkTrousers", (62, 70, 84), 0.080 if not F else 0.070, 0.080 if not F else 0.072, hips_y, ay + 0.075, off=0.006), "Bottom_WorkTrousers")] + shoes(B, "boot")
     return m
 
 
-HAIR_NEW = {"M": ["locs", "braids", "classic"], "F": ["bun", "ponytail", "long", "locs", "lowcut", "gele", "classic"]}
+HAIR_NEW = {"M": ["locs", "classic"], "F": ["bun", "ponytail", "locs", "lowcut", "gele", "classic"]}  # (no "long" for women, no "braids" for men)
 OUTFITS_NEW = ["casual", "office", "owambe", "sitework"]
 
 
 def main():
     which = _extra[0] if _extra else "all"
     for gender, tag in (("M", "m"), ("F", "f")):
-        B = load(gender); path_heads[0] = B["head"]; P_ALL[0] = B["P"]
-        if which in ("all", "outfit"): write_part(f"{OUT}/parts/outfit/campus_{tag}.glb", build_outfit(B))
+        B = load(gender); path_heads[0] = B["head"]; P_ALL[0] = B["P"]; NECK[0] = neck_info(B)
+        if which in ("all", "outfit", "outfits"): write_part(f"{OUT}/parts/outfit/campus_{tag}.glb", build_outfit(B))
         styles = ["lowcut", "afro"] if gender == "M" else ["braids", "afro"]
         if which in ("all", "hair"):
             for st in styles: write_part(f"{OUT}/parts/hair/{st}_{tag}.glb", hair_parts(B, st), normal_map=False)
         if which in ("all", "more", "morehair"):
             for st in HAIR_NEW[gender]: write_part(f"{OUT}/parts/hair/{st}_{tag}.glb", more_hair(B, st), normal_map=False)
-        if which in ("all", "more", "moreoutfit"):
+        if which in ("all", "more", "moreoutfit", "outfits"):
             for k in OUTFITS_NEW: write_part(f"{OUT}/parts/outfit/{k}_{tag}.glb", outfit_variant(B, k))
 
 

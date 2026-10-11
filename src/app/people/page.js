@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { call, naira, notifyError, loggedOut } from "@/lib/client";
 import { toast } from "@/lib/toast";
+import { askText } from "@/lib/confirm";
 
 export default function People() {
   const router = useRouter();
@@ -44,6 +45,6 @@ export default function People() {
         {Number(amt) > 0 && <p className="mut">You pay ₦{(Number(amt) + fee).toLocaleString("en-NG")} in total.</p>}
         <button className="go" disabled={busy || Number(amt) < 100}>Send {amt ? "₦" + Number(amt).toLocaleString("en-NG") : "money"}</button></form>
       <div className="card"><div className="row"><button disabled={busy} onClick={() => act("/api/safety", { action: "block", name: who }, () => "Blocked. You can no longer message or pay each other.")}>Block {prof.name}</button>
-        <button disabled={busy} onClick={() => { const reason = prompt("What happened?"); if (reason === null) return; if (!reason.trim()) return void toast.error("Add a short description so we can review the report."); act("/api/safety", { action: "report", name: who, reason }, () => "Report sent. Thank you."); }}>Report</button></div></div></>}
+        <button disabled={busy} onClick={async () => { const reason = await askText({ title: `Report ${prof.name}`, message: "Tell us what happened so we can review it. Our team can read the chat between you.", label: "What happened?", placeholder: "Describe the problem", multiline: true, maxLength: 500, confirmLabel: "Send report", tone: "danger" }); if (reason === null) return; act("/api/safety", { action: "report", name: who, reason }, () => "Report sent. Thank you."); }}>Report</button></div></div></>}
   </>);
 }

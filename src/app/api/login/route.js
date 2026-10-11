@@ -11,6 +11,6 @@ export async function POST(req) {
   const u = await db.user.findUnique({ where: { email } });
   if (!u || !(await check(String(b.password ?? ""), u.passwordHash)))
     return Response.json({ error: "Email or password is wrong." }, { status: 401 });
-  await startSession(u.id);
+  await startSession(u.id, b.remember !== false); // "keep me logged in" is on unless the client says otherwise
   return Response.json({ ok: true });
 }

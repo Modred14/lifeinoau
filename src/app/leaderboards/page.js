@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { call, naira, notifyError, loggedOut } from "@/lib/client";
+import Loader from "@/components/Loader";
 
 const TABS = [["forbes", "FORBES"], ["cgpa", "CGPA"], ["popular", "Popular"], ["party", "Party"], ["hustler", "Hustlers"], ["business", "Business"]];
 const MEDAL = { 1: "🥇", 2: "🥈", 3: "🥉" };
@@ -16,7 +17,7 @@ export default function Boards() {
     <div className="top"><h2>{key === "forbes" ? "FORBES OAU" : "Leaderboards"}</h2><a href="/play"><button>Back to game</button></a></div>
     <div className="row" role="tablist">{TABS.map(([k, l]) => <button key={k} role="tab" aria-selected={key === k} className={key === k ? "on" : ""} onClick={() => setKey(k)}>{l}</button>)}</div>
     {failed && <div className="card"><p className="mut">This board didn&apos;t load.</p><button onClick={() => setTries((t) => t + 1)}>Try again</button></div>}
-    {!b && !failed && <p className="mut">Loading...</p>}
+    {!b && !failed && <Loader label="Loading leaderboards" />}
     {b?.unavailable && <div className="card"><p>{b.unavailable}</p></div>}
     {b && !b.unavailable && <div className="card"><b>{b.title}</b>{b.note && <p className="mut">{b.note}</p>}
       {b.rows.length ? b.rows.map((r) => <div className="led" key={r.rank + r.name}><span>{MEDAL[r.rank] ?? r.rank + "."} <b>{r.name}</b>{r.graduated && " 🎓"}<br /><span className="mut">{r.class} · {r.faculty}{r.sub && ` · ${r.sub}`}</span>{r.cash != null && <><br /><span className="mut">Cash {naira(r.cash)} · Business {naira(r.business)} · Invested {naira(r.investments)}</span></>}</span>

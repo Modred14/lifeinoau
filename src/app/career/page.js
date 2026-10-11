@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { call, naira, notifyError, loggedOut } from "@/lib/client";
 import { toast } from "@/lib/toast";
+import { confirmAction } from "@/lib/confirm";
+import Loader from "@/components/Loader";
 
 const k = (n) => "₦" + n.toLocaleString("en-NG");
 
@@ -23,7 +25,7 @@ export default function Career() {
   }
   const job = (action, extra) => go("/api/career/job", { action, ...extra });
   const biz = (action, id, extra) => go("/api/career/business", { action, id, ...extra });
-  if (!d) return loadFailed ? <div className="card"><p className="mut">This page didn&apos;t load.</p><button onClick={load}>Try again</button></div> : <p className="mut">Loading...</p>;
+  if (!d) return loadFailed ? <div className="card"><p className="mut">This page didn&apos;t load.</p><button onClick={load}>Try again</button></div> : <Loader label="Loading jobs" />;
   const j = d.job, room = d.maxBusinesses - d.businesses.length;
 
   return (<>
@@ -33,7 +35,7 @@ export default function Career() {
     {tab === "jobs" && <>
       {j && <div className="card"><div className="top"><h2>{j.title}</h2><span className="mut">job level {j.level}</span></div>
         <p className="mut">{j.shiftsThisWeek} of {j.maxShifts} shifts this week · {j.shiftsToNext} more for the next level · each shift costs {j.energy} energy</p>
-        <div className="row"><button className="go" disabled={busy || j.shiftsThisWeek >= j.maxShifts} onClick={() => job("work")}>Work a shift</button><button disabled={busy} onClick={() => confirm("Quit? You lose your job experience.") && job("quit")}>Quit</button></div></div>}
+        <div className="row"><button className="go" disabled={busy || j.shiftsThisWeek >= j.maxShifts} onClick={() => job("work")}>Work a shift</button><button disabled={busy} onClick={async () => { if (await confirmAction({ title: "Quit your job?", message: "You lose your job experience.", confirmLabel: "Quit job", cancelLabel: "Keep job", tone: "danger" })) job("quit"); }}>Quit</button></div></div>}
       <div className="card"><b>{j ? "Switch job (resets experience)" : "Pick a job"}</b>
         {d.jobs.map((x) => <div className="led" key={x.key}><span>{x.title}<br /><span className="mut">{k(x.payMin)}–{k(x.payMax)} a shift · {x.energy} energy{x.locked ? ` · ${x.locked}` : ""}</span></span>
           <button disabled={busy || !!x.locked || j?.key === x.key} onClick={() => job("pick", { job: x.key })}>{j?.key === x.key ? "Current" : "Take"}</button></div>)}
@@ -51,7 +53,7 @@ export default function Career() {
             <button disabled={busy || !amt[b.id]} onClick={() => biz("capital", b.id, { amountNaira: Number(amt[b.id]) })}>Add capital</button>
             <button disabled={busy || !amt[b.id]} onClick={() => biz("withdraw", b.id, { amountNaira: Number(amt[b.id]) })}>Withdraw</button></div>
           <p className="mut">Safety reserve: {naira(b.reserveKobo)}. Volatile businesses need a bigger cushion.</p>
-          <button disabled={busy} onClick={() => confirm(`Close ${b.name}? Its capital comes back to you.`) && biz("close", b.id)}>Close business</button></div>); })}
+          <button disabled={busy} onClick={async () => { if (await confirmAction({ title: `Close ${b.name}?`, message: "Its capital comes back to you, but the business is gone for good.", confirmLabel: "Close business", cancelLabel: "Keep it open", tone: "danger" })) biz("close", b.id); }}>Close business</button></div>); })}
       {room > 0 ? <div className="card"><b>Start a business</b><p className="mut">At your level you can run {d.maxBusinesses}. The price becomes its starting capital.</p>
         <div className="row">{d.types.map((t) => <button key={t.type} className={form.type === t.type ? "on" : ""} onClick={() => setForm({ ...form, type: t.type })}>{t.label}<br /><span className="mut">{naira(t.costKobo)}</span></button>)}</div>
         <input type="text" maxLength={24} placeholder="Business name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={{ marginTop: 8 }} />

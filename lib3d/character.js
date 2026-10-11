@@ -1,31 +1,10 @@
 // lib3d/character.js
 // A stylised human built from smooth shapes (no model files needed). Runs in the browser only.
 import * as THREE from "three";
-import { SKIN_TONES, ACCENTS, cleanLook } from "../lib/look.js";
+import { SKIN_TONES, COLORS, cleanLook } from "../lib/look.js";
 
 const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.72, metalness: 0, ...o });
 const darker = (hex, f) => "#" + new THREE.Color(hex).multiplyScalar(f).getHexString();
-
-function fabricMap(kind, accent) {
-  if (kind === "plain") return null;
-  const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d");
-  if (kind === "ankara") { // wax-print: bold rings and leaf shapes
-    g.fillStyle = accent; g.fillRect(0, 0, 256, 256);
-    const cols = ["#f3e2b0", "#17181a", "#c8372d", "#1d7c8c"];
-    for (const [cx, cy] of [[64, 64], [192, 64], [64, 192], [192, 192]]) for (let r = 54, i = 0; r > 6; r -= 9, i++) { g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fillStyle = cols[i % 4]; g.fill(); }
-    g.fillStyle = "#f3e2b0"; for (const [x, y] of [[128, 0], [128, 128], [0, 128], [256, 128], [128, 256]]) for (const a of [0.8, -0.8]) { g.save(); g.translate(x, y); g.rotate(a); g.beginPath(); g.ellipse(0, 0, 22, 7, 0, 0, 7); g.fill(); g.restore(); }
-  } else if (kind === "adire") { // indigo with white resist-dye circles
-    g.fillStyle = "#18255a"; g.fillRect(0, 0, 256, 256); g.strokeStyle = "#e9efff"; g.lineWidth = 3;
-    for (let x = 0; x < 4; x++) for (let y = 0; y < 4; y++) for (let r = 4; r < 26; r += 6) { g.beginPath(); g.arc(32 + x * 64, 32 + y * 64, r, 0, Math.PI * 2); g.stroke(); }
-    g.lineWidth = 2; for (let i = 0; i < 256; i += 64) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 256); g.stroke(); }
-  } else { // aso-oke: woven stripes
-    g.fillStyle = accent; g.fillRect(0, 0, 256, 256);
-    const cols = ["#f1d98d", "#7d1f2b", "#1f5a3a", "#f1d98d"];
-    for (let x = 0; x < 256; x += 32) { g.fillStyle = cols[(x / 32) % 4]; g.fillRect(x, 0, 12, 256); g.fillStyle = "rgba(255,255,255,.18)"; g.fillRect(x + 14, 0, 2, 256); }
-    g.fillStyle = "rgba(0,0,0,.12)"; for (let y = 0; y < 256; y += 4) g.fillRect(0, y, 256, 1);
-  }
-  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
-}
 
 let _skinBump = null;
 /** Fine pores and slight unevenness so skin is not smooth plastic. Built once and shared by every character. */
@@ -49,10 +28,10 @@ function limb(parent, r1, r2, len, mat, x, y, z) { // a tapered limb segment han
 
 export function buildCharacter(lookIn, gender = "F") {
   const look = cleanLook(lookIn, gender), F = gender === "F";
-  const accent = ACCENTS[look.accent], skinHex = SKIN_TONES[look.skin];
+  const topC = COLORS[look.top], botC = COLORS[look.bottom], skinHex = SKIN_TONES[look.skin]; // the two clothing colours the player picked
   const skin = std(skinHex, { roughness: 0.58, bumpMap: skinBump(), bumpScale: 0.9, emissive: new THREE.Color(skinHex).multiplyScalar(0.07) }), lip = std(new THREE.Color(skinHex).multiplyScalar(0.86).lerp(new THREE.Color("#7a3a36"), 0.16), { roughness: 0.62 });
   const hairMat = std("#120e0c", { roughness: 0.85 });
-  const map = fabricMap(look.fabric, accent), fab = std(map ? "#ffffff" : accent, { map, roughness: 0.8 });
+  const fab = std(topC, { roughness: 0.8 }), botMat = std(botC, { roughness: 0.85 });
   // Distinct male and female builds: men get broad shoulders, a thick neck, heavy limbs and a straight torso; women get narrow shoulders, a slim neck, a small waist and wide hips.
   const P = F ? { sc: 0.96, sh: 0.172, chest: 0.142, waist: 0.104, hip: 0.186, thigh: 0.086, neck: 0.043, arm: 0.86, lg: 0.94, depth: 0.62 }
               : { sc: 1.04, sh: 0.258, chest: 0.205, waist: 0.172, hip: 0.158, thigh: 0.098, neck: 0.068, arm: 1.22, lg: 1.12, depth: 0.7 };
@@ -97,8 +76,10 @@ export function buildCharacter(lookIn, gender = "F") {
   }
   add(new THREE.CapsuleGeometry(0.0075, 0.03, 4, 10), skin, 0, -0.008, 0.098, head).rotation.x = -0.2; add(new THREE.SphereGeometry(F ? 0.0135 : 0.0165, 16, 12), skin, 0, -0.026, 0.106, head).scale.set(F ? 1.1 : 1.35, 0.9, 1.0); // nose
   for (const s of [-1, 1]) add(new THREE.SphereGeometry(0.0072, 10, 8), skin, s * 0.011, -0.03, 0.1, head);
-  add(new THREE.SphereGeometry(0.026, 18, 12), lip, 0, -0.062, 0.094, head).scale.set(F ? 1.3 : 1.22, F ? 0.4 : 0.27, 0.6); // women: fuller lips, men: thinner
-  add(new THREE.SphereGeometry(0.0235, 18, 12), lip, 0, -0.0745, 0.09, head).scale.set(F ? 1.25 : 1.15, F ? 0.5 : 0.31, 0.6);
+  // a friendly closed-mouth smile: two curved lips whose corners lift, with the cheeks pushed up a little
+  const smile = (dy, r, w) => { const pts = [-1, -0.5, 0, 0.5, 1].map((u) => new THREE.Vector3(u * w, -0.064 + dy + 0.0115 * u * u, 0.094 - 0.014 * u * u)); add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, r, 8, false), lip, 0, 0, 0, head); };
+  smile(0, F ? 0.0062 : 0.0048, F ? 0.029 : 0.033); smile(-0.0075, F ? 0.0056 : 0.0044, F ? 0.025 : 0.029);
+  for (const sx of [-1, 1]) add(new THREE.SphereGeometry(0.02, 14, 10), skin, sx * 0.055, -0.03, 0.074, head).scale.set(1, 0.8, 0.55);
 
   // ---- hair ----
   const cap = (r = 0.111, len = 0.56) => { const m = add(new THREE.SphereGeometry(r, 32, 22, 0, Math.PI * 2, 0, Math.PI * (len - 0.04)), hairMat, 0, 0.006, -0.012, head); m.scale.set(0.93, 1.13, 1.03); m.rotation.x = -0.3; return m; };
@@ -145,12 +126,12 @@ export function buildCharacter(lookIn, gender = "F") {
   const trousers = (mat, flare = 1) => { const g = P.lg; add(new THREE.SphereGeometry(P.hip * 0.88, 22, 16), mat, 0, 0.88, 0).scale.set(1.02, 0.7, 0.56); for (const { leg } of legs) { const a = new THREE.Mesh(new THREE.CylinderGeometry(P.thigh * 1.06, 0.067 * g * flare, 0.43, 20), mat); a.position.y = -0.225; a.castShadow = true; leg.add(a);
     const b = new THREE.Mesh(new THREE.CylinderGeometry(0.067 * g * flare, 0.064 * g * flare, 0.42, 20), mat); b.position.set(0, -0.64, -0.006); b.castShadow = true; leg.add(b); } };
   const shoes = (mat, tall = 0) => { for (const { leg } of legs) { const s = add(new THREE.SphereGeometry(0.056, 18, 14), mat, 0, -0.9, 0.045, leg); s.scale.set(0.95, 0.62 + tall, 1.95); if (tall) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.052, 0.14, 16), mat); b.position.set(0, -0.82, 0.004); leg.add(b); } } };
-  const jeans = std("#2d4263", { roughness: 0.85 }), dark = std("#1d2026", { roughness: 0.8 }), white = std("#ecebe6", { roughness: 0.7 }), tee = std(darker(accent, 0.8), { roughness: 0.8 });
+  const jeans = botMat, dark = botMat, white = std("#ecebe6", { roughness: 0.7 }), tee = std(topC, { roughness: 0.8 });
   const CL = { top: white };
   const fullTop = [...(F ? [[P.hip * 1.18, 0.72], [P.hip * 1.12, 0.8]] : [[P.hip * 1.12, 0.8]]), [P.hip * 1.04, 0.88], [P.hip, 0.93], [P.waist, 1.08], [P.chest, 1.27], [P.sh * 0.84, 1.37], [P.sh * 0.6, 1.415], [0.105, 1.46], [0.064, 1.5]];
   switch (look.outfit) {
     case "campus": { // the base look from the design sheet
-      const blk = std("#17191c", { roughness: 0.96 }), sole = std("#aeb3ba", { roughness: 0.6 }), denim = std("#3b5b86", { roughness: 0.92 }), cargo = std("#1f2226", { roughness: 0.95 }); CL.top = blk;
+      const blk = std(topC, { roughness: 0.96 }), sole = std("#aeb3ba", { roughness: 0.6 }), denim = std(botC, { roughness: 0.92 }), cargo = std(botC, { roughness: 0.95 }); CL.top = blk;
       const logo = (x, y, z, w, ry) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 0.44), new THREE.MeshBasicMaterial({ map: logoTex(), transparent: true })); m.position.set(x, y, z); m.rotation.y = ry; body.add(m); };
       if (!F) {
         shell([[P.hip * 1.13, 0.81], [P.hip * 1.13, 0.86]], white); // undershirt hem under the hoodie
@@ -163,7 +144,7 @@ export function buildCharacter(lookIn, gender = "F") {
         for (const { leg, s: sx } of legs) { const pk = add(new THREE.BoxGeometry(0.03, 0.13, 0.085), cargo, sx * (P.thigh * 1.06 + 0.012), -0.3, 0.005, leg); pk.rotation.z = sx * 0.04; }
       } else {
         shell([[P.waist, 1.12], [P.chest, 1.27], [P.sh * 0.84, 1.37], [P.sh * 0.6, 1.415], [0.105, 1.46], [0.064, 1.5]], blk); sleeve(0.13, 0.057); logo(-0.045, 1.275, 0.108, 0.03, -0.2);
-        add(latheOf([[P.waist + 0.012, 1.03], [P.hip + 0.012, 0.93], [P.hip + 0.01, 0.86]]), denim).scale.set(1.04, 1, 0.68); add(new THREE.SphereGeometry(P.hip + 0.01, 24, 16), denim, 0, 0.86, 0).scale.set(1.04, 0.8, 0.68); add(new THREE.CylinderGeometry(P.waist + 0.016, P.waist + 0.016, 0.026, 36), std("#2a4468", { roughness: 0.9 }), 0, 1.03, 0).scale.set(1.1, 1, 0.66);
+        add(latheOf([[P.waist + 0.012, 1.03], [P.hip + 0.012, 0.93], [P.hip + 0.01, 0.86]]), denim).scale.set(1.04, 1, 0.68); add(new THREE.SphereGeometry(P.hip + 0.01, 24, 16), denim, 0, 0.86, 0).scale.set(1.04, 0.8, 0.68); add(new THREE.CylinderGeometry(P.waist + 0.016, P.waist + 0.016, 0.026, 36), std(darker(botC, 0.85), { roughness: 0.9 }), 0, 1.03, 0).scale.set(1.1, 1, 0.66);
         for (const { leg } of legs) { // very wide, straight legs that fall over the sneakers
           const a = new THREE.Mesh(new THREE.CylinderGeometry(0.112, 0.112, 0.43, 22), denim), w = new THREE.Mesh(new THREE.CylinderGeometry(0.112, 0.126, 0.44, 22), denim);
           a.position.y = -0.225; w.position.set(0, -0.65, 0.002); for (const m of [a, w]) { m.castShadow = true; leg.add(m); } }
@@ -171,17 +152,17 @@ export function buildCharacter(lookIn, gender = "F") {
       for (const { leg } of legs) { const sl = add(new THREE.SphereGeometry(0.056, 18, 14), sole, 0, -0.925, 0.045, leg); sl.scale.set(1.0, 0.22, 2.0); }
       shoes(white); break; }
     case "casual": CL.top = tee; shell(fullTop, tee); sleeve(0.13, 0.057); trousers(jeans); shoes(white); break;
-    case "office": CL.top = F ? std(darker(accent, 1.1)) : white; shell(fullTop, CL.top); sleeve(0.5, 0.05);
+    case "office": CL.top = std(topC, { roughness: 0.8 }); shell(fullTop, CL.top); sleeve(0.5, 0.05);
       if (F) { const sk = add(latheOf([[P.waist + 0.016, 1.02], [P.hip + 0.03, 0.88], [P.hip + 0.026, 0.6], [P.hip * 0.82, 0.5]]), dark); sk.scale.set(1.1, 1, 0.68); shoes(dark); }
-      else { trousers(dark); shoes(dark); add(new THREE.BoxGeometry(0.034, 0.22, 0.012), std(accent), 0, 1.22, 0.172); }
+      else { trousers(dark); shoes(dark); add(new THREE.BoxGeometry(0.034, 0.22, 0.012), std("#7a1a2a"), 0, 1.22, 0.172); }
       break;
     case "owambe": CL.top = fab;
-      if (F) { shell(fullTop, fab); sleeve(0.2, 0.078); const iro = add(latheOf([[P.waist + 0.012, 1.1], [P.hip + 0.04, 0.92], [P.hip + 0.075, 0.5], [P.hip + 0.1, 0.06]]), fab); iro.scale.z = 0.8; shoes(std("#c9a24a", { metalness: 0.4, roughness: 0.4 })); }
-      else { const top = std(darker(accent, 0.55)); CL.top = fab; shell(fullTop, top); trousers(std(darker(accent, 0.55))); shoes(std("#2a1d17"));
+      if (F) { shell(fullTop, fab); sleeve(0.2, 0.078); const iro = add(latheOf([[P.waist + 0.012, 1.1], [P.hip + 0.04, 0.92], [P.hip + 0.075, 0.5], [P.hip + 0.1, 0.06]]), botMat); iro.scale.z = 0.8; shoes(std("#c9a24a", { metalness: 0.4, roughness: 0.4 })); }
+      else { const top = std(darker(topC, 0.8)); CL.top = fab; shell(fullTop, top); trousers(botMat); shoes(std("#2a1d17"));
         const robe = add(latheOf([[0.07, 1.47], [P.sh * 0.95, 1.4], [0.27, 1.12], [0.34, 0.55], [0.4, 0.2]]), fab); robe.scale.z = 0.72; sleeve(0.34, 0.11);
         add(new THREE.CylinderGeometry(0.075, 0.095, 0.1, 20), top, 0, 1.76, 0.0, head).position.y = 0.14; } break;
-    case "sitework": CL.top = std("#4b5560"); shell(fullTop, CL.top); sleeve(0.16, 0.057); trousers(std("#3a3f47")); shoes(std("#3b2a1f"), 0.5);
-      { const v = std("#e8631f", { roughness: 0.6 }); shell([[P.hip * 0.9, 0.95], [P.waist, 1.08], [P.chest, 1.26], [P.sh * 0.78, 1.37], [P.sh * 0.5, 1.4]].map(([r, y]) => [r + 0.012, y]), v);
+    case "sitework": CL.top = std(darker(topC, 0.72)); shell(fullTop, CL.top); sleeve(0.16, 0.057); trousers(botMat); shoes(std("#3b2a1f"), 0.5);
+      { const v = std(topC, { roughness: 0.6 }); shell([[P.hip * 0.9, 0.95], [P.waist, 1.08], [P.chest, 1.26], [P.sh * 0.78, 1.37], [P.sh * 0.5, 1.4]].map(([r, y]) => [r + 0.012, y]), v);
         const stripe = std("#d8dde0", { metalness: 0.3, roughness: 0.4 }), vestR = (y) => (y < 1.08 ? P.waist + (1.08 - y) * 0.5 + 0.02 : P.waist + (y - 1.08) * 0.9 + 0.02);
         for (const y of [1.0, 1.14]) { const st = add(new THREE.CylinderGeometry(vestR(y) + 0.012, vestR(y) + 0.012, 0.028, 40, 1, true), stripe, 0, y, 0); st.scale.set(1.12, 1, 0.64); } } break;
   }
@@ -209,7 +190,7 @@ export function buildCharacter(lookIn, gender = "F") {
     add(new THREE.BoxGeometry(0.3, 0.4, 0.13), blk2, 0, 1.17, zb); add(new THREE.BoxGeometry(0.22, 0.2, 0.05), blk2, 0, 1.08, zb - 0.085); add(new THREE.TorusGeometry(0.04, 0.007, 8, 16, Math.PI), blk2, 0, 1.37, zb);
     for (const sx of [-1, 1]) { const th = Math.asin(Math.min(0.9, 0.14 / (rb * 1.12))); add(new THREE.BoxGeometry(0.05, 0.012, 0.3), blk2, sx * 0.14, 1.425, zb / 2 + 0.01);
       const st = add(new THREE.CylinderGeometry(rb + 0.006, rb + 0.006, 0.34, 10, 1, true, sx * th - 0.1, 0.2), strapMat, 0, 1.26, 0); st.scale.set(1.12, 1, sz); } }
-  if (!F && has("cap")) { const hat = std(accent, { roughness: 0.8 }); add(new THREE.SphereGeometry(0.118, 28, 16, 0, Math.PI * 2, 0, Math.PI * 0.5), hat, 0, 0.018, 0, head).scale.set(0.95, 1.1, 1.05); const br = add(new THREE.CylinderGeometry(0.1, 0.1, 0.008, 28, 1, false, -Math.PI * 0.5, Math.PI), hat, 0, 0.03, 0.11, head); br.scale.set(1, 1, 0.9); br.rotation.x = 0.1; }
+  if (!F && has("cap")) { const hat = std(topC, { roughness: 0.8 }); add(new THREE.SphereGeometry(0.118, 28, 16, 0, Math.PI * 2, 0, Math.PI * 0.5), hat, 0, 0.018, 0, head).scale.set(0.95, 1.1, 1.05); const br = add(new THREE.CylinderGeometry(0.1, 0.1, 0.008, 28, 1, false, -Math.PI * 0.5, Math.PI), hat, 0, 0.03, 0.11, head); br.scale.set(1, 1, 0.9); br.rotation.x = 0.1; }
 
   // ---- life ----
   const bodyBase = { sh: body.scale.y };
