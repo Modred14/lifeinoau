@@ -1,4 +1,4 @@
-# tools/avatars/build_base.py
+# tools/avaters/build_base.py
 """
 Builds rigged GLB avatar bodies for OAU Life from the MPFB2 / MakeHuman base assets (CC0).
 
@@ -17,7 +17,7 @@ import pygltflib as g
 DATA = sys.argv[1] if len(sys.argv) > 1 else "/tmp/mpfb/src/mpfb/data"
 OUT = sys.argv[2] if len(sys.argv) > 2 else "/tmp/avatars"
 WHICH = sys.argv[3] if len(sys.argv) > 3 else "both"
-TEX = 1024
+TEX = 2048
 
 
 # ---------------------------------------------------------------- source mesh
@@ -39,6 +39,73 @@ def load_target(path, n):
     for l in gzip.open(path, "rt"):
         s = l.split()
         if len(s) == 4 and not l.startswith("#"): d[int(s[0])] = [float(x) for x in s[1:]]
+    return d
+
+
+
+# ---------------------------------------------------------------- MakeHuman macro model + detail targets
+# ROOT CAUSE FIX: the old build applied only the "african-<gender>-young" race delta. MakeHuman's real macro model is the SUM of
+#   universal-<gender>-<age>-<muscle>-<weight>  (the gender/age/muscle/weight shape: shoulders, jaw, chest, hips ...)  and
+#   <race>-<gender>-<age>                       (the ethnic delta on top of it)
+# so without the universal target the "male" kept the neutral base's narrow shoulders and soft androgynous face.
+def T(path, n, cache={}):
+    k = (path, n)
+    if k not in cache: cache[k] = load_target(f"{DATA}/targets/{path}.target.gz", n)
+    return cache[k]
+
+
+def macro_deltas(female, n, muscle=None, weight=0.5):
+    """Sum of macro targets. muscle/weight are MakeHuman sliders (0..1, 0.5 = average)."""
+    gdr = "female" if female else "male"
+    muscle = (0.5 if female else 0.60) if muscle is None else muscle
+    mw = {"minmuscle": max(0, (0.5 - muscle) * 2), "maxmuscle": max(0, (muscle - 0.5) * 2)}; mw["averagemuscle"] = 1 - mw["minmuscle"] - mw["maxmuscle"]
+    ww = {"minweight": max(0, (0.5 - weight) * 2), "maxweight": max(0, (weight - 0.5) * 2)}; ww["averageweight"] = 1 - ww["minweight"] - ww["maxweight"]
+    d = np.zeros((n, 3))
+    for m, wm in mw.items():
+        for w, ww_ in ww.items():
+            if wm * ww_ > 1e-6: d += wm * ww_ * T(f"macrodetails/universal-{gdr}-young-{m}-{w}", n)
+    d += T(f"macrodetails/african-{gdr}-young", n)
+    return d
+
+
+# per-character face / body detail targets (name -> weight; negative = the "-decr" side). Applied on top of the macro model.
+DETAILS = {
+    "M": {  # young Nigerian man: defined jaw, square-ish chin, strong brow, broad flat-ish nose, full lips, solid neck, V-shaped torso
+        "head/head-oval": 0.0, "head/head-rectangular": 0.25, "head/head-square": 0.20, "head/head-scale-horiz": 0.10, "head/head-scale-vert": -0.20,
+        "forehead/forehead-scale-vert": -0.25, "eyes/l-eye-scale": 0.20, "eyes/r-eye-scale": 0.20, "nose/nose-scale-vert": -0.25, "nose/nose-scale-depth": -0.15,
+        "mouth/mouth-scale-depth": -0.30,
+        "chin/chin-width": 0.35, "chin/chin-prominent": 0.30, "chin/chin-height": 0.10, "chin/chin-jaw-drop": -0.15, "chin/chin-bones": 0.45,
+        "cheek/l-cheek-bones": 0.22, "cheek/r-cheek-bones": 0.22,
+        "forehead/forehead-nubian": 0.30, "forehead/forehead-temple": -0.15,
+        "nose/nose-width1": 0.20, "nose/nose-width3": 0.30, "nose/nose-flaring": 0.30, "nose/nose-volume": 0.15,
+        "mouth/mouth-lowerlip-volume": 0.10, "mouth/mouth-upperlip-volume": 0.10, "mouth/mouth-scale-horiz": 0.08,
+        "eyebrows/eyebrows-trans-down": 0.25, "eyebrows/eyebrows-angle-down": 0.15,
+        "neck/neck-scale-horiz": 0.35, "neck/neck-scale-vert": -0.05,
+        "torso/torso-vshape": 0.55, "torso/torso-scale-horiz": 0.12, "torso/torso-muscle-pectoral": 0.25, "torso/torso-muscle-dorsi": 0.25,
+        "arms/l-upperarm-muscle": 0.2, "arms/r-upperarm-muscle": 0.2, "arms/l-lowerarm-muscle": 0.2, "arms/r-lowerarm-muscle": 0.2,
+        "hands/l-hand-scale": 0.10, "hands/r-hand-scale": 0.10, "hip/hip-scale-horiz": -0.12,
+        "legs/l-lowerleg-muscle": 0.15, "legs/r-lowerleg-muscle": 0.15, "legs/l-upperleg-muscle": 0.12, "legs/r-upperleg-muscle": 0.12,
+    },
+    "F": {  # young Nigerian woman: soft oval face, full lips, defined brows, narrow waist
+        "head/head-oval": 0.30, "cheek/l-cheek-bones": 0.12, "cheek/r-cheek-bones": 0.12,
+        "nose/nose-width3": 0.12, "nose/nose-flaring": 0.15,
+        "mouth/mouth-lowerlip-volume": 0.10, "mouth/mouth-upperlip-volume": 0.08,
+        "eyes/l-eye-scale": 0.10, "eyes/r-eye-scale": 0.10, "mouth/mouth-scale-depth": -0.20,
+    },
+}
+
+
+def detail_deltas(gender, n, scale=1.0):
+    d = np.zeros((n, 3))
+    for name, w in DETAILS[gender].items():
+        if abs(w) < 1e-6: continue
+        folder, base = name.split("/"); side = "incr" if w > 0 else "decr"
+        path = f"{folder}/{base}-{side}"
+        if not os.path.exists(f"{DATA}/targets/{path}.target.gz"):
+            alt = f"{folder}/{base}"
+            if os.path.exists(f"{DATA}/targets/{alt}.target.gz"): path = alt
+            else: print("  missing target", path); continue
+        d += abs(w) * scale * T(path, n)
     return d
 
 
@@ -93,45 +160,72 @@ def seg_dist(px, py, ax, ay, bx, by):
     return np.hypot(px - (ax + t * dx), py - (ay + t * dy)), t
 
 
-def build_albedo(pm, J, female):
-    """Neutral light albedo (tinted in game). Brows, lips and subtle shading are baked relative to the skin tone."""
+def _lowfreq(size, cells, rng):
+    return np.array(Image.fromarray((rng.random((cells, cells)) * 255).astype(np.uint8)).resize((size, size), Image.BICUBIC), np.float32) / 255
+
+
+def _ell(X, Y, cx, cy, rx, ry):
+    return np.clip(1 - np.hypot((X - cx) / rx, (Y - cy) / ry), 0, 1)
+
+
+def build_skin_maps(pm, J, female):
+    """Neutral light albedo (the game tints it with the chosen skin tone) + roughness map. Everything is painted relative to the tone, from 3D
+    positions, so features sit exactly on the geometry: tonal variation, under-eye shadow, cheek warmth, nostrils, natural lips, a real
+    brow with hair strokes, a lash line, stubble for the man, and a rougher/oilier map (T-zone shine, matte cheeks, glossy lips)."""
     size = pm.shape[0]; ok = ~np.isnan(pm[..., 0]); X, Y, Z = pm[..., 0], pm[..., 1], pm[..., 2]
-    img = np.ones((size, size, 3), np.float32)
-    rng = np.random.default_rng(3)
-    # low frequency blotchiness and fine variation
-    lo = np.array(Image.fromarray((rng.random((64, 64)) * 255).astype(np.uint8)).resize((size, size), Image.BICUBIC), np.float32) / 255
-    img *= (0.965 + 0.07 * lo)[..., None]
-    nt = J["nose-tip"]; mouth = np.array([0.0, nt[1] - 0.034, nt[2] - 0.012])  # lip centre line
-    # lips (ellipse around the mouth, front of the face)
-    lipw, liph = 0.0265, 0.0115
-    e = ((X - mouth[0]) / lipw) ** 2 + ((Y - (mouth[1] - 0.0005)) / liph) ** 2
-    lip = np.clip(1 - e, 0, 1) ** 0.5 * (Z > nt[2] - 0.05) * ok
-    lipc = np.array([0.80, 0.60, 0.60], np.float32) if not female else np.array([0.78, 0.55, 0.57], np.float32)
-    img = img * (1 - lip[..., None]) + img * lipc * lip[..., None]
-    # mouth line
-    line = np.clip(1 - np.abs(Y - (mouth[1] + 0.0008)) / 0.0012, 0, 1) * (np.abs(X - mouth[0]) < lipw * 0.92) * (Z > nt[2] - 0.05) * ok
-    img *= (1 - 0.35 * line)[..., None]
-    # eyebrows
+    rng = np.random.default_rng(3); img = np.ones((size, size, 3), np.float32); rough = np.full((size, size), 0.60, np.float32)
+    lo = _lowfreq(size, 48, rng); mid = _lowfreq(size, 220, rng); hi = _lowfreq(size, 700, rng)
+    tone = (0.955 + 0.06 * lo + 0.03 * mid + 0.015 * hi); img *= tone[..., None]
+    img *= (np.array([1.0, 0.985, 0.97], np.float32) + (lo - 0.5)[..., None] * np.array([0.03, 0.0, -0.03], np.float32))  # warm/cool drift
+    rough += (mid - 0.5) * 0.12 + (hi - 0.5) * 0.06
+    nt = J["nose-tip"]; front = (Z > nt[2] - 0.06) & ok
+    # --- face anatomy
     for s in (-1, 1):
-        E = J["joint-l-eye"] if s > 0 else J["joint-r-eye"]
-        ex = E[0]; base_y = E[1] + (0.0215 if female else 0.0185); arch = 0.0085 if female else 0.004
-        thick = 0.0030 if female else 0.0042
-        inner, outer = ex - s * 0.018, ex + s * 0.031
-        n = 24; xs_ = np.linspace(inner, outer, n); t_ = np.linspace(0, 1, n)
-        ys_ = base_y + arch * np.sin(t_ * math.pi * 0.85) - 0.002 * t_
+        E = J["joint-l-eye"] if s > 0 else J["joint-r-eye"]; ex = E[0]
+        bag = _ell(X, Y, ex, E[1] - 0.0145, 0.021, 0.0085) * front; img *= (1 - 0.075 * bag)[..., None] * np.array([1.0, 0.985, 1.0], np.float32)[None, None]  # under-eye
+        cheek = _ell(X, Y, s * 0.047, nt[1] + 0.001, 0.034, 0.028) * front; img *= (1 - 0.04 * cheek)[..., None] * np.array([1.0, 0.97, 0.96], np.float32)  # warm cheeks
+        rough -= 0.07 * _ell(X, Y, s * 0.047, nt[1] + 0.012, 0.03, 0.02) * front  # cheekbone shine
+        nost = _ell(X, Y, s * 0.0105, nt[1] - 0.0045, 0.0075, 0.0042) * front; img *= (1 - 0.40 * nost)[..., None]  # nostrils
+        alar = _ell(X, Y, s * 0.019, nt[1] - 0.001, 0.009, 0.010) * front; img *= (1 - 0.04 * alar)[..., None] * np.array([1.0, 0.97, 0.96], np.float32)
+    rough -= 0.13 * _ell(X, Y, 0.0, nt[1] + 0.065, 0.045, 0.025) * front   # forehead
+    rough -= 0.15 * _ell(X, Y, 0.0, nt[1] + 0.004, 0.012, 0.030) * front   # nose bridge / tip
+    rough -= 0.05 * _ell(X, Y, 0.0, nt[1] - 0.075, 0.022, 0.014) * front   # chin
+    # --- lips: natural tone relative to the skin, soft edge, a mouth line and fine vertical lines
+    my = nt[1] - 0.030; mw = 0.0255 if not female else 0.0245
+    up = _ell(X, Y, 0.0, my + 0.0075, mw, 0.0105); lw = _ell(X, Y, 0.0, my - 0.0085, mw * 0.92, 0.0125); lip = np.clip(up + lw, 0, 1) ** 0.6 * front
+    lipc = np.array([0.93, 0.74, 0.72], np.float32) if not female else np.array([0.90, 0.66, 0.68], np.float32)
+    img = img * (1 - lip[..., None]) + img * lipc * lip[..., None]
+    img *= (1 - 0.06 * lip * (0.5 + 0.5 * np.sin(X * 2.0 * math.pi / 0.0012)))[..., None]
+    line = np.clip(1 - np.abs(Y - (my + 0.0003)) / 0.0010, 0, 1) * (np.abs(X) < mw * 0.95) * front * (1 - 0.7 * np.clip(np.abs(X) / mw, 0, 1) ** 4); img *= (1 - 0.45 * line)[..., None]
+    rough = np.where(lip > 0.15, 0.50 + (mid - 0.5) * 0.1, rough)
+    # --- eyebrows (hair strokes) and a lash line
+    for s in (-1, 1):
+        E = J["joint-l-eye"] if s > 0 else J["joint-r-eye"]; ex = E[0]
+        base_y = E[1] + (0.0225 if female else 0.0185); arch = 0.0085 if female else 0.0045; thick = 0.0031 if female else 0.0052
+        inner, outer = ex - s * 0.019, ex + s * 0.034; n = 28; xs_ = np.linspace(inner, outer, n); t_ = np.linspace(0, 1, n)
+        ys_ = base_y + arch * np.sin(t_ * math.pi * 0.85) - 0.0026 * t_
         d = np.full(X.shape, 1e9, np.float32); tt = np.zeros(X.shape, np.float32)
         for i in range(n - 1):
-            dd, t = seg_dist(X, Y, xs_[i], ys_[i], xs_[i + 1], ys_[i + 1]); m = dd < d
-            d = np.where(m, dd, d); tt = np.where(m, t_[i] + t * (t_[i + 1] - t_[i]), tt)
-        w = thick * (1.0 - 0.55 * tt)
-        br = np.clip((w - d) / 0.0026, 0, 1) ** 1.3 * (Z > E[2] - 0.004) * ok
-        br *= 0.85 + 0.15 * lo
-        img = img * (1 - br[..., None]) + img * np.array([0.34, 0.31, 0.30], np.float32) * br[..., None]
-        # eyelid shadow / eyeliner feel around the eye
-        ee = np.hypot((X - ex) / 0.0235, (Y - E[1]) / 0.0135); sh = np.clip(1.25 - ee, 0, 1) * (Z > E[2] - 0.006) * ok
-        img *= (1 - 0.10 * sh)[..., None]
-    img[~ok] = 1.0
-    return (np.clip(img, 0, 1) * 255).astype(np.uint8)
+            dd, t = seg_dist(X, Y, xs_[i], ys_[i], xs_[i + 1], ys_[i + 1]); m = dd < d; d = np.where(m, dd, d); tt = np.where(m, t_[i] + t * (t_[i + 1] - t_[i]), tt)
+        w = thick * (1.0 - 0.50 * tt) * (0.85 + 0.15 * (1 - tt)); br = np.clip((w - d) / 0.0022, 0, 1) ** 1.2 * (Z > E[2] - 0.004) * ok
+        strokes = 0.55 + 0.45 * _lowfreq(size, 900, np.random.default_rng(11)); br *= np.clip(strokes * 1.25, 0, 1)
+        img = img * (1 - 0.92 * br[..., None]) + img * np.array([0.30, 0.26, 0.25], np.float32) * (0.92 * br[..., None])
+        rim = np.hypot((X - ex) / 0.0158, (Y - (E[1] + 0.0008)) / 0.0074); lash = np.clip(1 - np.abs(rim - 1.02) / 0.20, 0, 1) * (Y > E[1] - 0.0004) * (Z > E[2] - 0.006) * ok
+        img *= (1 - 0.62 * lash)[..., None]
+        lid = np.clip(1.30 - np.hypot((X - ex) / 0.0240, (Y - (E[1] + 0.002)) / 0.0150), 0, 1) * (Z > E[2] - 0.006) * ok; img *= (1 - 0.10 * lid)[..., None]
+    # --- stubble / short beard shadow (man)
+    if not female:
+        reg = np.clip((nt[1] - 0.010 - Y) / 0.012, 0, 1) * np.clip((Y - (nt[1] - 0.105)) / 0.020, 0, 1) * np.clip((0.092 - np.abs(X)) / 0.020, 0, 1) * (Z > -0.01) * ok
+        reg = reg * (1 - 0.8 * lip) * (1 - 0.6 * np.clip(_ell(X, Y, 0.0, nt[1] - 0.016, 0.022, 0.012), 0, 1) * 0.0)
+        side = np.clip((np.abs(X) - 0.060) / 0.015, 0, 1) * np.clip((Y - (nt[1] - 0.060)) / 0.02, 0, 1) * np.clip((nt[1] + 0.018 - Y) / 0.02, 0, 1) * (Z > 0.0) * ok  # sideburn/cheek
+        reg = np.clip(reg + 0.6 * side, 0, 1)
+        stip = (np.random.default_rng(5).random((size, size)) > 0.50).astype(np.float32); stip = np.array(Image.fromarray((stip * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(0.7)), np.float32) / 255
+        img *= (1 - reg * (0.07 + 0.22 * stip))[..., None]; rough += 0.05 * reg
+    # --- joints / extremities: slightly darker knuckles, elbows, knees
+    for nm in ("joint-l-elbow", "joint-r-elbow", "joint-l-knee", "joint-r-knee"):
+        if nm in J: pj = J[nm]; r = np.sqrt((X - pj[0]) ** 2 + (Y - pj[1]) ** 2 + (Z - pj[2]) ** 2); img *= (1 - 0.07 * np.clip(1 - r / 0.045, 0, 1) * ok)[..., None]
+    img = np.nan_to_num(img, nan=1.0); img[~ok] = 1.0; rough = np.where(ok, np.nan_to_num(rough, nan=0.6), 0.6)  # texels outside the UV islands stay neutral (no mirror-smooth seams)
+    return (np.clip(img, 0, 1) * 255).astype(np.uint8), (np.clip(rough, 0.3, 0.9) * 255).astype(np.uint8)
 
 
 def build_normal(size, seed=5):
@@ -210,8 +304,9 @@ class GLB:
 def build(gender):
     female = gender == "F"
     V, VT, faces, gnames = load_obj(f"{DATA}/3dobjs/base.obj")
-    V = V + load_target(f"{DATA}/targets/macrodetails/african-{'female' if female else 'male'}-young.target.gz", len(V))
+    V = V + macro_deltas(female, len(V)) + detail_deltas(gender, len(V))
     V = V * 0.1  # decimetres -> metres
+    if not female: V = V * 0.975  # young adult man ~1.77 m (the raw macro model is a little tall)
     body_idx = [i for i, n in enumerate(gnames) if n == "body"]
     P0 = V.copy()
     # group -> vertex ids (joints, eyes)
@@ -266,19 +361,20 @@ def build(gender):
         for k, (b, w) in enumerate(inf): JOINTS[i, k] = b; WEIGHTS[i, k] = w / tot
     # textures
     pm = rasterize_positions(UVn, tris, Pn, TEX)
-    albedo = build_albedo(pm, J, female); normal = build_normal(TEX)
+    albedo, roughmap = build_skin_maps(pm, J, female); normal = build_normal(1024)
     eye_tex = build_eye_texture()
     # eyes (rigid on the head bone)
     eyes = []
     for s, n in ((1, "helper-l-eye"), (-1, "helper-r-eye")):
-        pts = P0[sorted(gv[n])]; c = pts.mean(0); r = float(np.ptp(pts, axis=0).max()) / 2 * 1.0
+        pts = P0[sorted(gv[n])]; c = pts.mean(0) + np.array([0, 0, 0.0012]); r = float(np.ptp(pts, axis=0).max()) / 2 * 1.04
         eyes.append((c, r))
     # ----- glTF
     G = GLB(); gl = G.gltf; gl.asset = g.Asset(version="2.0", generator="OAU Life avatar builder (MPFB2/MakeHuman CC0 base)")
     gl.samplers = [g.Sampler(magFilter=9729, minFilter=9987, wrapS=10497, wrapT=10497)]
-    t_alb = G.image(png_bytes(Image.fromarray(albedo), "JPEG", 92), "image/jpeg"); t_nrm = G.image(png_bytes(normal), "image/png"); t_eye = G.image(png_bytes(eye_tex), "image/png")
+    mr = np.zeros(roughmap.shape + (3,), np.uint8); mr[..., 0] = 255; mr[..., 1] = roughmap  # glTF: G = roughness, B = metalness (0)
+    t_alb = G.image(png_bytes(Image.fromarray(albedo), "JPEG", 88), "image/jpeg"); t_nrm = G.image(png_bytes(normal, "JPEG", 90), "image/jpeg"); t_mr = G.image(png_bytes(Image.fromarray(mr).resize((1024, 1024), Image.LANCZOS), "JPEG", 90), "image/jpeg"); t_eye = G.image(png_bytes(eye_tex), "image/png")
     gl.materials = [
-        g.Material(name="skin", pbrMetallicRoughness=g.PbrMetallicRoughness(baseColorTexture=g.TextureInfo(index=t_alb), baseColorFactor=[0.55, 0.36, 0.25, 1], metallicFactor=0, roughnessFactor=0.6), normalTexture=g.NormalMaterialTexture(index=t_nrm, scale=0.6)),
+        g.Material(name="skin", pbrMetallicRoughness=g.PbrMetallicRoughness(baseColorTexture=g.TextureInfo(index=t_alb), baseColorFactor=[0.55, 0.36, 0.25, 1], metallicFactor=0, roughnessFactor=1.0, metallicRoughnessTexture=g.TextureInfo(index=t_mr)), normalTexture=g.NormalMaterialTexture(index=t_nrm, scale=0.75)),
         g.Material(name="eye", pbrMetallicRoughness=g.PbrMetallicRoughness(baseColorTexture=g.TextureInfo(index=t_eye), metallicFactor=0, roughnessFactor=0.12)),
     ]
     # nodes: bones

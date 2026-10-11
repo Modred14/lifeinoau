@@ -32,10 +32,20 @@ function skeletonHeight(root) {
   return Math.max(0.01, (y.Head - Math.min(y.LeftFoot, y.RightFoot)) / 0.89);
 }
 
-/** Colours the skin materials (any material whose name contains "skin") with the chosen tone. The base albedo should be a light neutral so the tint reads correctly. */
+/** Colours the skin materials (any material whose name contains "skin") with the chosen tone. The base albedo is a light neutral so the tint reads correctly.
+ *  Skin is rendered as a physical material: the baked roughness map gives oily T-zone / matte cheeks / glossy lips, and a soft sheen gives the velvety rim light real skin has. */
 function tintSkin(root, hex) {
+  const tone = new THREE.Color(hex), sheen = tone.clone().lerp(new THREE.Color(0xffffff), 0.12);
   root.traverse((o) => { if (!o.isMesh) return; const list = Array.isArray(o.material) ? o.material : [o.material];
-    const out = list.map((m) => { if (!/skin/i.test(m.name)) return m; const c = m.clone(); c.color.set(hex); return c; }); o.material = Array.isArray(o.material) ? out : out[0]; });
+    const out = list.map((m) => { if (!/skin/i.test(m.name)) return m;
+      const p = new THREE.MeshPhysicalMaterial({ name: m.name, map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, metalnessMap: m.metalnessMap, roughness: m.roughness, metalness: 0, color: tone, specularIntensity: 0.5, sheen: 0.28, sheenRoughness: 0.6, sheenColor: sheen });
+      if (m.normalScale) p.normalScale.copy(m.normalScale); return p; });
+    o.material = Array.isArray(o.material) ? out : out[0]; });
+}
+
+/** Hair is authored with a dithered, strand-like hairline (alpha-tested). Alpha-to-coverage turns that into smooth anti-aliased edges. */
+function softenHair(meshes) {
+  for (const o of meshes) { const list = Array.isArray(o.material) ? o.material : [o.material]; for (const m of list) if (m.alphaTest > 0) { m.alphaToCoverage = true; m.needsUpdate = true; } }
 }
 
 /** Joins a skinned part (hair, jacket, trousers) to the base skeleton by bone name. Returns the meshes it added, or [] if the part does not fit. */
@@ -74,6 +84,7 @@ async function loadModel(look, gender) {
     if (!(await available(u))) { if (REQUIRED_SLOTS.includes(slot)) return null; continue; } // a look without its hair or outfit part uses the built-in character
     const part = SkeletonUtils.clone((await loadGltf(u)).scene), meshes = attachSkinnedPart(root, part);
     if (!meshes.length && ATTACH_BONES[slot]) { attachToBone(root, part, ATTACH_BONES[slot]); extra.push(part); } else extra.push(...meshes); }
+  softenHair(extra);
   const animator = createAnimator(root, clips), face = createFace(root);
   animator.play("idle");
   return { kind: "glb", root, height: target, animator, face, parts: extra.length };
