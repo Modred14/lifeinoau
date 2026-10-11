@@ -4,7 +4,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
-import { SKIN_TONES, cleanLook } from "../../lib/look.js";
+import { SKIN_TONES, ACCENTS, cleanLook } from "../../lib/look.js";
 import { buildCharacter } from "../character.js";
 import { BASES, ANIM_LIBRARY, REQUIRED_BONES, REQUIRED_SLOTS, BODY_MORPHS, ATTACH_BONES, partUrl, boneKey } from "./manifest.js";
 import { createAnimator, createFace } from "./animation.js";
@@ -41,6 +41,12 @@ function tintSkin(root, hex) {
       const p = new THREE.MeshPhysicalMaterial({ name: m.name, map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, metalnessMap: m.metalnessMap, roughness: m.roughness, metalness: 0, color: tone, specularIntensity: 0.5, sheen: 0.28, sheenRoughness: 0.6, sheenColor: sheen });
       if (m.normalScale) p.normalScale.copy(m.normalScale); return p; });
     o.material = Array.isArray(o.material) ? out : out[0]; });
+}
+
+/** Parts can have materials named "Accent..." (trim, gele, cuffs): they take the colour the player picked as their accent. Materials are cloned because the loaded model is cached. */
+function tintAccent(meshes, hex) {
+  for (const o of meshes) { const list = Array.isArray(o.material) ? o.material : [o.material];
+    const out = list.map((m) => { if (!/^accent/i.test(m.name)) return m; const c = m.clone(); c.color.set(hex); return c; }); o.material = Array.isArray(o.material) ? out : out[0]; }
 }
 
 /** Hair is authored with a dithered, strand-like hairline (alpha-tested). Alpha-to-coverage turns that into smooth anti-aliased edges. */
@@ -84,7 +90,7 @@ async function loadModel(look, gender) {
     if (!(await available(u))) { if (REQUIRED_SLOTS.includes(slot)) return null; continue; } // a look without its hair or outfit part uses the built-in character
     const part = SkeletonUtils.clone((await loadGltf(u)).scene), meshes = attachSkinnedPart(root, part);
     if (!meshes.length && ATTACH_BONES[slot]) { attachToBone(root, part, ATTACH_BONES[slot]); extra.push(part); } else extra.push(...meshes); }
-  softenHair(extra);
+  softenHair(extra); tintAccent(extra, ACCENTS[look.accent] ?? ACCENTS.gold);
   const animator = createAnimator(root, clips), face = createFace(root);
   animator.play("idle");
   return { kind: "glb", root, height: target, animator, face, parts: extra.length };

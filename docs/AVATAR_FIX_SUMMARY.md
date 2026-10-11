@@ -18,3 +18,10 @@ Front/side/back/three-quarter/face for M lowcut, M afro, F braids, F afro; idle 
 - Small thin skin-coloured slits remain at the shoulder/neckline of the clothing on close-ups.
 - Full-body sneakers remain simple.
 - Rebuild: `python3 tools/avaters/build_base.py <mpfb2>/src/mpfb/data <out> both` then `build_parts.py <data> <out>` (needs numpy, scipy, Pillow, pygltflib).
+
+## Update: all remaining hairstyles and outfits now exist
+- Women hair: bun, ponytail, long, locs, lowcut, gele (headwrap), classic (bob). Men hair: locs, braids (cornrows), classic.
+- Outfits for both genders: casual, office, owambe, sitework (plus the existing campus).
+- All 70 hair x outfit combinations were rendered through the real loader; every one loads as a real model (none fall back to the procedural character).
+- Loader: materials named "Accent..." (gele, trim, cuffs) take the player's accent colour.
+- Limits: no hard hat for sitework; fabric patterns (ankara/adire/aso-oke) are not applied; only idle and walk animations exist.
