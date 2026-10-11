@@ -1,33 +1,34 @@
-// app/career/page.js
+// src/app/career/page.js
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { call, naira } from "@/lib/client";
+import { call, naira, notifyError, loggedOut } from "@/lib/client";
+import { toast } from "@/lib/toast";
 
 const k = (n) => "₦" + n.toLocaleString("en-NG");
 
 export default function Career() {
-  const router = useRouter(), [d, setD] = useState(null), [msg, setMsg] = useState(null), [busy, setBusy] = useState(false), [tab, setTab] = useState("jobs");
+  const router = useRouter(), [d, setD] = useState(null), [loadFailed, setLoadFailed] = useState(false), [busy, setBusy] = useState(false), [tab, setTab] = useState("jobs");
   const [form, setForm] = useState({ type: "", name: "" }), [amt, setAmt] = useState({});
-  const load = useCallback(async () => { const r = await call("/api/career"); if (r.status === 401) return router.push("/"); r.failed ? setMsg({ bad: true, text: r.error }) : setD(r); }, [router]);
+  const load = useCallback(async () => { const r = await call("/api/career"); if (r.status === 401) return loggedOut(router); if (r.failed) { notifyError(r); setLoadFailed(true); return; } setLoadFailed(false); setD(r); }, [router]);
   useEffect(() => { load(); }, [load]);
 
   async function go(path, body, ok) {
-    if (busy) return; setBusy(true); setMsg(null);
+    if (busy) return; setBusy(true);
     const r = await call(path, { ...body, requestId: crypto.randomUUID() }); setBusy(false);
-    if (r.failed) setMsg({ bad: true, text: r.error }); else if (r.duplicate) setMsg({ text: "Already done." });
-    else setMsg({ text: r.note ?? (r.paidKobo ? `Shift done. You earned ${naira(r.paidKobo)}.${r.levelUp ? ` You reached job level ${r.levelUp}!` : ""}` : ok ?? "Done.") });
+    if (r.status === 401) return loggedOut(router);
+    if (r.failed) notifyError(r); else if (r.duplicate) toast.info("Already done.");
+    else toast.success(r.note ?? (r.paidKobo ? `Shift done. You earned ${naira(r.paidKobo)}.${r.levelUp ? ` You reached job level ${r.levelUp}!` : ""}` : ok ?? "Done."));
     load();
   }
   const job = (action, extra) => go("/api/career/job", { action, ...extra });
   const biz = (action, id, extra) => go("/api/career/business", { action, id, ...extra });
-  if (!d) return <p className="mut">{msg?.text ?? "Loading..."}</p>;
+  if (!d) return loadFailed ? <div className="card"><p className="mut">This page didn&apos;t load.</p><button onClick={load}>Try again</button></div> : <p className="mut">Loading...</p>;
   const j = d.job, room = d.maxBusinesses - d.businesses.length;
 
   return (<>
     <div className="top"><h2>Career</h2><a href="/play"><button>Back to game</button></a></div>
     <div className="row" role="tablist">{[["jobs", "Jobs"], ["biz", `Businesses (${d.businesses.length}/${d.maxBusinesses})`]].map(([t, l]) => <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>{l}</button>)}</div>
-    {msg && <div className={"msg " + (msg.bad ? "bad" : "ok")} role="status">{msg.text}</div>}
 
     {tab === "jobs" && <>
       {j && <div className="card"><div className="top"><h2>{j.title}</h2><span className="mut">job level {j.level}</span></div>

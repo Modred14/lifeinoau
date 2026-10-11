@@ -1,8 +1,9 @@
-// app/courses/page.js
+// src/app/courses/page.js
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { call } from "@/lib/client";
+import { call, notifyError, loggedOut } from "@/lib/client";
+import { toast } from "@/lib/toast";
 
 function Meter({ label, pct, color }) {
   return (<div style={{ marginTop: 6 }}><div className="top"><span className="mut">{label}</span><span className="mut">{pct}%</span></div>
@@ -10,23 +11,23 @@ function Meter({ label, pct, color }) {
 }
 
 export default function Courses() {
-  const router = useRouter(), [d, setD] = useState(null), [msg, setMsg] = useState(null), [busy, setBusy] = useState(false);
-  const load = useCallback(async () => { const r = await call("/api/courses"); if (r.status === 401) return router.push("/"); r.failed ? setMsg({ bad: true, text: r.error }) : setD(r); }, [router]);
+  const router = useRouter(), [d, setD] = useState(null), [loadFailed, setLoadFailed] = useState(false), [busy, setBusy] = useState(false);
+  const load = useCallback(async () => { const r = await call("/api/courses"); if (r.status === 401) return loggedOut(router); if (r.failed) { notifyError(r); setLoadFailed(true); return; } setLoadFailed(false); setD(r); }, [router]);
   useEffect(() => { load(); }, [load]);
 
   async function act(action, code) {
-    if (busy) return; setBusy(true); setMsg(null);
+    if (busy) return; setBusy(true);
     const r = await call("/api/courses", { action, code, requestId: crypto.randomUUID() }); setBusy(false);
-    r.failed ? setMsg({ bad: true, text: r.error }) : r.duplicate ? setMsg({ text: "Already done." }) : setMsg({ text: r.note });
+    if (r.status === 401) return loggedOut(router);
+    if (r.failed) notifyError(r); else if (r.duplicate) toast.info("Already done."); else toast.success(r.note ?? "Done.");
     load();
   }
-  if (!d) return <p className="mut">{msg?.text ?? "Loading..."}</p>;
+  if (!d) return loadFailed ? <div className="card"><p className="mut">This page didn&apos;t load.</p><button onClick={load}>Try again</button></div> : <p className="mut">Loading...</p>;
   return (<>
     <div className="top"><h2>Courses</h2><a href="/play"><button>Back to game</button></a></div>
     <p className="mut">{d.faculty} · {d.level}L · week {d.weeksElapsed} of {d.sessionWeeks} this session · energy {d.energy}</p>
-    {d.examToday ? <div className="msg bad" role="alert"><b>Exam today.</b> Sit it on the game screen before the week ends. Your attendance and preparation so far decide your score.</div>
+    {d.examToday ? <p><b>Exam today.</b> Sit it on the game screen before the week ends. Your attendance and preparation so far decide your score.</p>
       : <p className="mut">Next exam: game week {d.nextExamWeek}. Attend lectures and study so you are ready.</p>}
-    {msg && <div className={"msg " + (msg.bad ? "bad" : "ok")} role="status">{msg.text}</div>}
     {d.courses.map((c) => (<div className="card" key={c.code}>
       <div className="top"><h2>{c.code}</h2><span className="mut">lecture slot: {c.slot}</span></div>
       <p><b>{c.title}</b><br /><span className="mut">{c.lecturer.name} · {c.lecturer.reputation} · difficulty {c.difficulty}</span></p>

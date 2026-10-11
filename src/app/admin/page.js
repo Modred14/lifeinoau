@@ -1,13 +1,14 @@
-// app/admin/page.js
+// src/app/admin/page.js
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { call, naira } from "@/lib/client";
+import { call, naira, notifyError } from "@/lib/client";
+import { toast } from "@/lib/toast";
 
 export default function Admin() {
   const [tab, setTab] = useState("overview"), [ov, setOv] = useState(null), [reports, setReports] = useState([]), [denied, setDenied] = useState(false);
-  const [msg, setMsg] = useState(null), [busy, setBusy] = useState(false), [ctx, setCtx] = useState({}), [name, setName] = useState(""), [p, setP] = useState(null);
+  const [busy, setBusy] = useState(false), [ctx, setCtx] = useState({}), [name, setName] = useState(""), [p, setP] = useState(null);
   const [adj, setAdj] = useState({ direction: "credit", amountNaira: "", reason: "" });
-  const guard = (r) => { if (r.status === 404 && r.error === "Not found.") { setDenied(true); return true; } if (r.failed) { setMsg({ bad: true, text: r.error }); return true; } return false; };
+  const guard = (r) => { if (r.status === 404 && r.error === "Not found.") { setDenied(true); return true; } if (r.failed) { notifyError(r); return true; } return false; };
 
   const load = useCallback(async () => {
     const [o, r] = await Promise.all([call("/api/admin/overview"), call("/api/admin/reports")]);
@@ -16,22 +17,21 @@ export default function Admin() {
   useEffect(() => { load(); }, [load]);
 
   async function resolve(id, action) {
-    const note = prompt("Short note for the audit log (required):"); if (!note) return;
+    const note = prompt("Short note for the audit log (required):"); if (note === null) return; if (!note.trim()) return void toast.error("A short note is required to handle a report.");
     setBusy(true); const r = await call("/api/admin/reports", { id, action, note }); setBusy(false);
-    guard(r) || (setMsg({ text: "Report handled." }), load());
+    guard(r) || (toast.success("Report handled."), load());
   }
   async function showMsgs(id) { const r = await call("/api/admin/report-messages?id=" + id); if (!guard(r)) setCtx((c) => ({ ...c, [id]: r.messages })); }
-  async function find(e) { e.preventDefault(); setMsg(null); const r = await call("/api/admin/player?name=" + encodeURIComponent(name)); guard(r) || setP(r); }
+  async function find(e) { e.preventDefault(); const r = await call("/api/admin/player?name=" + encodeURIComponent(name)); guard(r) || setP(r); }
   async function adjust(e) {
     e.preventDefault(); if (!confirm(`${adj.direction} ₦${Number(adj.amountNaira).toLocaleString()} for ${p.name}? This is permanent and audited.`)) return;
     setBusy(true); const r = await call("/api/admin/adjust", { ...adj, name: p.name, amountNaira: Number(adj.amountNaira), requestId: crypto.randomUUID() }); setBusy(false);
-    if (!guard(r)) { setMsg({ text: "Adjustment recorded." }); setAdj({ direction: "credit", amountNaira: "", reason: "" }); find(e); }
+    if (!guard(r)) { toast.success("Adjustment recorded."); setAdj({ direction: "credit", amountNaira: "", reason: "" }); find(e); }
   }
   if (denied) return <p>Not found.</p>;
   return (<>
     <div className="top"><h2>Admin</h2><a href="/play"><button>Back</button></a></div>
     <div className="row" role="tablist">{[["overview", "Overview"], ["reports", `Reports${ov?.openReports ? " (" + ov.openReports + ")" : ""}`], ["player", "Player"]].map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>)}</div>
-    {msg && <div className={"msg " + (msg.bad ? "bad" : "ok")} role="status">{msg.text}</div>}
     {tab === "overview" && ov && <>
       <div className="card"><b>{ov.integrity.ok ? "✅ Ledger integrity: every player balance matches the ledger" : "🚨 Ledger mismatch found"}</b>
         {!ov.integrity.businessOk && <p className="bad">The BUSINESS pool does not match the capital held in businesses ({naira(ov.integrity.businessCapitalKobo)}).</p>}

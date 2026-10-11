@@ -7,6 +7,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 export const S = 0.1;   // metres -> scene units
 export const EX = 2;    // visual height exaggeration (buildings only)
+export const MAP_BG = "#a9cbe8"; // the ONE background: sky, horizon and ground are all this flat semi-light blue. Keep .mapwrap .stage in globals.css the same.
 const WALLS = ["#d9ceb4", "#c6b08a", "#d8d8d0", "#aab7c4", "#d3c3a6", "#b98b73", "#e2dccb"];
 const KIND_WALL = { hostel: "#c58b6e", block: "#c58b6e", library: "#cdbb92", hall: "#e4dcc6", faculty: "#d8d2bf", lecture: "#d3cdb9", bank: "#9fb4c8", shop: "#d9a86a", worship: "#e8e4d4", sports: "#b9c9a9", admin: "#d6d0c0" };
 const rngOf = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -34,13 +35,11 @@ function flat(areas, color, y, o = {}) { // flat polygons (roads, parking, pitch
 export function buildRealCampus(data, meta = {}) {
   const root = new THREE.Group(), b = data.bounds, disposables = [];
   const x0 = b.x0 * S, x1 = b.x1 * S, z0 = b.z0 * S, z1 = b.z1 * S;
-  // ---- ground: unsurveyed margin, the mapped campus, and the area outside the campus boundary ----
+  // ---- ground: there is none to draw. MAP_BG is the single flat background all the way to the horizon, so there are no plates,
+  // edges, dark surround or soil block. One transparent plane underneath only catches the buildings' shadows. ----
   const gx0 = x0 - 120, gx1 = x1 + 120, gz0 = z0 - 120, gz1 = z1 + 420; // extra room to the south for places that lie beyond the screenshot
-  const far = new THREE.Mesh(new THREE.PlaneGeometry(gx1 - gx0, gz1 - gz0), new THREE.MeshStandardMaterial({ color: "#35603f", roughness: 1 })); far.rotation.x = -Math.PI / 2; far.position.set((gx0 + gx1) / 2, -0.02, (gz0 + gz1) / 2); far.receiveShadow = true; root.add(far);
-  const grass = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), new THREE.MeshStandardMaterial({ color: "#3f7d4e", roughness: 1 })); grass.rotation.x = -Math.PI / 2; grass.position.set((x0 + x1) / 2, 0, (z0 + z1) / 2); grass.receiveShadow = true; root.add(grass);
-  const soil = new THREE.Mesh(new THREE.BoxGeometry(gx1 - gx0, 7, gz1 - gz0), new THREE.MeshStandardMaterial({ color: "#3a2d24", roughness: 1 })); soil.position.set((gx0 + gx1) / 2, -3.6, (gz0 + gz1) / 2); root.add(soil);
-  const edge = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([[x0, z0], [x1, z0], [x1, z1], [x0, z1]].map(([x, z]) => new THREE.Vector3(x, 0.08, z))), new THREE.LineBasicMaterial({ color: "#6fa2d8", transparent: true, opacity: 0.35 })); root.add(edge); // edge of the surveyed screenshot
-  for (const m of [flat(data.outside, "#6e6a58", 0.02, { layer: 1 }), flat(data.areas.park, "#5aa064", 0.03, { layer: 2 }), flat(data.areas.sports, "#4c9a68", 0.035, { layer: 2 }), flat(data.areas.wood, "#2f6b3b", 0.04, { layer: 2 }),
+  const shade = new THREE.Mesh(new THREE.PlaneGeometry(gx1 - gx0, gz1 - gz0), new THREE.ShadowMaterial({ color: "#1d2c47", opacity: 0.26, depthWrite: false })); shade.rotation.x = -Math.PI / 2; shade.position.set((gx0 + gx1) / 2, 0.01, (gz0 + gz1) / 2); shade.receiveShadow = true; root.add(shade);
+  for (const m of [flat(data.areas.park, "#5aa064", 0.03, { layer: 2 }), flat(data.areas.sports, "#4c9a68", 0.035, { layer: 2 }), flat(data.areas.wood, "#2f6b3b", 0.04, { layer: 2 }),
     flat(data.areas.pitch, "#2fb98a", 0.06, { layer: 3 }), flat(data.areas.water, "#2f6f95", 0.05, { layer: 3, rough: 0.15, metal: 0.2 }), flat(data.areas.parking, "#46505c", 0.06, { layer: 3 }), flat(data.roads, "#343b46", 0.08, { layer: 4 })]) if (m) root.add(m);
 
   // ---- buildings: real footprints, merged into one wall mesh and one roof mesh ----
@@ -58,7 +57,7 @@ export function buildRealCampus(data, meta = {}) {
       if (sideG.count) { const sg = paint(slice(g, sideG.start, sideG.count), col); sides.push(sg); vs += sg.attributes.position.count; } g.dispose(); }
     ranges.push({ bid: bd.id, s0, s1: vs, c0, c1: vc });
   } catch { /* a malformed footprint is skipped, never fatal */ } });
-  const wallMesh = sides.length ? new THREE.Mesh(mergeGeometries(sides), new THREE.MeshStandardMaterial({ vertexColors: true, map: win.map, emissive: 0xffffff, emissiveMap: win.emis, emissiveIntensity: 0.8, roughness: 0.8 })) : null;
+  const wallMesh = sides.length ? new THREE.Mesh(mergeGeometries(sides), new THREE.MeshStandardMaterial({ vertexColors: true, map: win.map, emissive: 0xffffff, emissiveMap: win.emis, emissiveIntensity: 0.18, roughness: 0.8 })) : null;
   const capMesh = caps.length ? new THREE.Mesh(mergeGeometries(caps), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 })) : null;
   for (const m of [wallMesh, capMesh]) if (m) { m.castShadow = m.receiveShadow = true; root.add(m); } sides.forEach((g) => g.dispose()); caps.forEach((g) => g.dispose());
 
@@ -93,13 +92,11 @@ export function buildRealCampus(data, meta = {}) {
 
 /** Dusk sky, fog and light. The sun follows the camera target so shadows stay sharp wherever you look. Returns { sun, follow(target) }. */
 export function addRealLighting(scene) {
-  const c = document.createElement("canvas"); c.width = 2; c.height = 256; const g = c.getContext("2d"), gr = g.createLinearGradient(0, 0, 0, 256);
-  gr.addColorStop(0, "#0a1120"); gr.addColorStop(0.55, "#16294a"); gr.addColorStop(0.85, "#3a4a6e"); gr.addColorStop(1, "#6a5a6a"); g.fillStyle = gr; g.fillRect(0, 0, 2, 256);
-  const bg = new THREE.CanvasTexture(c); bg.colorSpace = THREE.SRGBColorSpace; scene.background = bg; scene.fog = new THREE.FogExp2(0x22335a, 0.0017);
-  scene.add(new THREE.HemisphereLight(0xa9bdf0, 0x5a5a3e, 1.35));
-  const sun = new THREE.DirectionalLight(0xffcf9a, 3.4); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+  scene.background = new THREE.Color(MAP_BG); scene.fog = new THREE.FogExp2(MAP_BG, 0.0011); // far buildings fade into the same one colour
+  scene.add(new THREE.HemisphereLight(0xf3f8ff, 0xc3cbbd, 1.5));
+  const sun = new THREE.DirectionalLight(0xfff3e0, 2.8); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -80, right: 80, top: 80, bottom: -80, near: 5, far: 400 }); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.25; scene.add(sun, sun.target);
-  const moon = new THREE.DirectionalLight(0x7f9fe8, 1.1); moon.position.set(80, 60, -60); scene.add(moon);
+  const fill = new THREE.DirectionalLight(0xcfe0ff, 0.6); fill.position.set(80, 60, -60); scene.add(fill);
   const follow = (t) => { sun.target.position.copy(t); sun.position.set(t.x - 90, 70, t.z + 70); };
   follow(new THREE.Vector3()); return { sun, follow };
 }

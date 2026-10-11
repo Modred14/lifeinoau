@@ -1,28 +1,29 @@
-// app/relationship/page.js
+// src/app/relationship/page.js
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { call } from "@/lib/client";
+import { call, notifyError, loggedOut } from "@/lib/client";
+import { toast } from "@/lib/toast";
 
 const GIFTS = [["small", "Small gift", "₦5,000"], ["medium", "Nice gift", "₦20,000"], ["big", "Big gift", "₦50,000"]];
 
 export default function Relationship() {
-  const router = useRouter(), [d, setD] = useState(null), [msg, setMsg] = useState(null), [busy, setBusy] = useState(false);
-  const load = useCallback(async () => { const r = await call("/api/relationship"); if (r.status === 401) return router.push("/"); r.failed ? setMsg({ bad: true, text: r.error }) : setD(r); }, [router]);
+  const router = useRouter(), [d, setD] = useState(null), [loadFailed, setLoadFailed] = useState(false), [busy, setBusy] = useState(false);
+  const load = useCallback(async () => { const r = await call("/api/relationship"); if (r.status === 401) return loggedOut(router); if (r.failed) { notifyError(r); setLoadFailed(true); return; } setLoadFailed(false); setD(r); }, [router]);
   useEffect(() => { load(); }, [load]);
 
   async function go(path, body) {
-    if (busy) return; setBusy(true); setMsg(null);
+    if (busy) return; setBusy(true);
     const r = await call(path, { ...body, requestId: crypto.randomUUID() }); setBusy(false);
-    r.failed ? setMsg({ bad: true, text: r.error }) : r.duplicate ? setMsg({ text: "Already done." }) : setMsg({ text: r.note ?? "Done." });
+    if (r.status === 401) return loggedOut(router);
+    if (r.failed) notifyError(r); else if (r.duplicate) toast.info("Already done."); else toast.success(r.note ?? "Done.");
     load();
   }
   const act = (action, extra) => go("/api/relationship", { action, ...extra });
-  if (!d) return <p className="mut">{msg?.text ?? "Loading..."}</p>;
+  if (!d) return loadFailed ? <div className="card"><p className="mut">This page didn&apos;t load.</p><button onClick={load}>Try again</button></div> : <p className="mut">Loading...</p>;
   const c = d.current, pct = c ? Math.min(100, Math.round((c.affection / (c.nextNeeded ?? 100)) * 100)) : 0;
   return (<>
     <div className="top"><h2>Relationships</h2><a href="/play"><button>Back to game</button></a></div>
-    {msg && <div className={"msg " + (msg.bad ? "bad" : "ok")} role="status">{msg.text}</div>}
 
     {d.pregnancy && <div className="card" role="alert"><h2>🚨 A big decision</h2>
       <p>{d.partnerIsPregnant ? "Your partner says she is pregnant." : "You think you might be pregnant."} You have <b>{d.pregnancy.weeksLeft}</b> game week(s) to decide. If you wait too long, life decides for you, and that has consequences.</p>

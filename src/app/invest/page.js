@@ -1,8 +1,9 @@
-// app/invest/page.js
+// src/app/invest/page.js
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { call, naira } from "@/lib/client";
+import { call, naira, notifyError, loggedOut } from "@/lib/client";
+import { toast } from "@/lib/toast";
 
 const RISK = { LOW: "var(--ok)", MEDIUM: "var(--acc)", HIGH: "var(--bad)" };
 const MOOD = { BOOM: "📈", STEADY: "➖", SLUMP: "📉", CRASH: "🚨" };
@@ -15,17 +16,18 @@ function Spark({ data, label }) { // tiny price chart: no chart library needed
 }
 
 export default function Invest() {
-  const router = useRouter(), [d, setD] = useState(null), [msg, setMsg] = useState(null), [busy, setBusy] = useState(false), [amt, setAmt] = useState({});
-  const load = useCallback(async () => { const r = await call("/api/invest"); if (r.status === 401) return router.push("/"); r.failed ? setMsg({ bad: true, text: r.error }) : setD(r); }, [router]);
+  const router = useRouter(), [d, setD] = useState(null), [loadFailed, setLoadFailed] = useState(false), [busy, setBusy] = useState(false), [amt, setAmt] = useState({});
+  const load = useCallback(async () => { const r = await call("/api/invest"); if (r.status === 401) return loggedOut(router); if (r.failed) { notifyError(r); setLoadFailed(true); return; } setLoadFailed(false); setD(r); }, [router]);
   useEffect(() => { load(); }, [load]);
 
   async function go(body) {
-    if (busy) return; setBusy(true); setMsg(null);
+    if (busy) return; setBusy(true);
     const r = await call("/api/invest", { ...body, requestId: crypto.randomUUID() }); setBusy(false);
-    r.failed ? setMsg({ bad: true, text: r.error }) : r.duplicate ? setMsg({ text: "Already done." }) : setMsg({ text: r.note ?? "Done." });
+    if (r.status === 401) return loggedOut(router);
+    if (r.failed) notifyError(r); else if (r.duplicate) toast.info("Already done."); else toast.success(r.note ?? "Done.");
     load();
   }
-  if (!d) return <p className="mut">{msg?.text ?? "Loading..."}</p>;
+  if (!d) return loadFailed ? <div className="card"><p className="mut">This page didn&apos;t load.</p><button onClick={load}>Try again</button></div> : <p className="mut">Loading...</p>;
   const room = BigInt(d.capKobo) - BigInt(d.investedKobo), held = Object.fromEntries(d.holdings.map((h) => [h.product, h]));
 
   return (<>
@@ -33,7 +35,6 @@ export default function Invest() {
     <div className="card"><b>{MOOD[d.news.regime]} Week {d.week}: {d.news.headline}</b>
       <p className="mut">Invested {naira(d.investedKobo)} of your {naira(d.capKobo)} limit ({naira(room > 0n ? room.toString() : "0")} left). Fee {d.feePercent}% on every buy and sell. Selling inside a lock period costs {d.earlyPenaltyPercent}% extra.</p>
       <p className="mut">Prices move every game week and nothing is guaranteed. You can lose money, and high-risk products usually do.</p></div>
-    {msg && <div className={"msg " + (msg.bad ? "bad" : "ok")} role="status">{msg.text}</div>}
 
     {d.holdings.length > 0 && <div className="card"><b>Your investments</b>
       {d.holdings.map((h) => { const pnl = BigInt(h.pnlKobo); return (<div className="led" key={h.product} style={{ display: "block" }}>

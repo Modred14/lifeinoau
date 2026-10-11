@@ -1,26 +1,27 @@
-// app/people/page.js
+// src/app/people/page.js
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { call, naira } from "@/lib/client";
+import { call, naira, notifyError, loggedOut } from "@/lib/client";
+import { toast } from "@/lib/toast";
 
 export default function People() {
   const router = useRouter();
   const [q, setQ] = useState(""), [found, setFound] = useState([]), [inbox, setInbox] = useState([]);
   const [who, setWho] = useState(null), [prof, setProf] = useState(null), [thread, setThread] = useState([]);
-  const [text, setText] = useState(""), [amt, setAmt] = useState(""), [note, setNote] = useState(""), [msg, setMsg] = useState(null), [busy, setBusy] = useState(false);
-  const fail = (r) => r.status === 401 ? router.push("/") : setMsg({ bad: true, text: r.error ?? "Something went wrong." });
+  const [text, setText] = useState(""), [amt, setAmt] = useState(""), [note, setNote] = useState(""), [busy, setBusy] = useState(false);
+  const fail = (r) => (r.status === 401 ? loggedOut(router) : notifyError(r, "Something went wrong. Please try again."));
 
   const loadInbox = useCallback(async () => { const r = await call("/api/messages"); r.failed ? fail(r) : setInbox(r.conversations); }, []); // eslint-disable-line
   useEffect(() => { loadInbox(); }, [loadInbox]);
-  useEffect(() => { if (q.trim().length < 2) return setFound([]); const t = setTimeout(async () => { const r = await call("/api/players?q=" + encodeURIComponent(q)); if (!r.failed) setFound(r.players); }, 300); return () => clearTimeout(t); }, [q]);
+  useEffect(() => { if (q.trim().length < 2) return setFound([]); const t = setTimeout(async () => { const r = await call("/api/players?q=" + encodeURIComponent(q)); if (r.failed) fail(r); else setFound(r.players); }, 300); return () => clearTimeout(t); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function open(name) {
-    setWho(name); setMsg(null); setProf(null);
+    setWho(name); setProf(null);
     const [p, m] = await Promise.all([call("/api/profile?name=" + encodeURIComponent(name)), call("/api/messages?with=" + encodeURIComponent(name))]);
     p.failed ? fail(p) : setProf(p); m.failed ? fail(m) : setThread(m.messages); loadInbox();
   }
-  async function act(path, body, ok, after) { if (busy) return; setBusy(true); const r = await call(path, body); setBusy(false); if (r.failed) return fail(r); setMsg({ text: r.duplicate ? "Already done." : ok(r) }); after?.(); }
+  async function act(path, body, ok, after) { if (busy) return; setBusy(true); const r = await call(path, body); setBusy(false); if (r.failed) return fail(r); if (r.duplicate) toast.info("Already done."); else toast.success(ok(r)); after?.(); }
   const send = (e) => { e.preventDefault(); act("/api/messages", { to: who, body: text }, () => "Sent.", () => { setText(""); open(who); }); };
   const pay = (e) => { e.preventDefault(); act("/api/transfer", { to: who, amountNaira: Number(amt), memo: note, requestId: crypto.randomUUID() }, (r) => `Sent ${naira(r.sentKobo)} (fee ${naira(r.feeKobo)}).`, () => { setAmt(""); setNote(""); }); };
   const fee = Number.isInteger(Number(amt)) && Number(amt) > 0 ? Math.floor(Number(amt) * 0.02) : 0;
@@ -31,7 +32,6 @@ export default function People() {
       <div className="row" style={{ marginTop: 8 }}>{found.map((p) => <button key={p.name} onClick={() => open(p.name)}>{p.name}<br /><span className="mut">{p.level}L · {p.faculty}</span></button>)}</div></div>
     {!who && <div className="card"><b>Messages</b>{inbox.length ? inbox.map((c) => <button key={c.name} style={{ display: "block", width: "100%", textAlign: "left", marginTop: 8 }} onClick={() => open(c.name)}>
       <b>{c.name}</b> {c.unread > 0 && <span className="ok">({c.unread} new)</span>}<br /><span className="mut">{c.last.slice(0, 60)}</span></button>) : <p className="mut">No conversations yet. Search for a player to say hi.</p>}</div>}
-    {msg && <div className={"msg " + (msg.bad ? "bad" : "ok")} role="status">{msg.text}</div>}
     {who && prof && <>
       <div className="card"><div className="top"><h2>{prof.name}</h2><button onClick={() => { setWho(null); setProf(null); }}>Close</button></div>
         <p className="mut">{prof.faculty} · {prof.level}L · {prof.class} · {prof.personalities.join(", ")}</p>
@@ -44,6 +44,6 @@ export default function People() {
         {Number(amt) > 0 && <p className="mut">You pay ₦{(Number(amt) + fee).toLocaleString("en-NG")} in total.</p>}
         <button className="go" disabled={busy || Number(amt) < 100}>Send {amt ? "₦" + Number(amt).toLocaleString("en-NG") : "money"}</button></form>
       <div className="card"><div className="row"><button disabled={busy} onClick={() => act("/api/safety", { action: "block", name: who }, () => "Blocked. You can no longer message or pay each other.")}>Block {prof.name}</button>
-        <button disabled={busy} onClick={() => { const reason = prompt("What happened?"); if (reason) act("/api/safety", { action: "report", name: who, reason }, () => "Report sent. Thank you."); }}>Report</button></div></div></>}
+        <button disabled={busy} onClick={() => { const reason = prompt("What happened?"); if (reason === null) return; if (!reason.trim()) return void toast.error("Add a short description so we can review the report."); act("/api/safety", { action: "report", name: who, reason }, () => "Report sent. Thank you."); }}>Report</button></div></div></>}
   </>);
 }

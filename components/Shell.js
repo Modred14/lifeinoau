@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { call, naira } from "@/lib/client";
+import { call, naira, notifyError } from "@/lib/client";
 import { Icon } from "./Icon";
 
 const APPS = [["Courses", "courses", "/courses", ""], ["Messages", "chat", "/people", ""], ["Map", "map", "/map", "sky"], ["Jobs", "jobs", "/career", "gold"], ["Invest", "invest", "/invest", "gold"],
@@ -11,9 +11,14 @@ const APPS = [["Courses", "courses", "/courses", ""], ["Messages", "chat", "/peo
 
 /** Status pill on top, four-item bottom navigation, and the phone. Hidden on the landing page and until you have a character. */
 export default function Shell({ children }) {
-  const path = usePathname(), [st, setSt] = useState(null), [phone, setPhone] = useState(false), opener = useRef(null), firstApp = useRef(null);
+  const path = usePathname(), [st, setSt] = useState(null), [phone, setPhone] = useState(false), opener = useRef(null), firstApp = useRef(null), failing = useRef(false);
   const bare = path === "/", full = path === "/map";
-  const load = useCallback(async () => { const r = await call("/api/state"); setSt(r.failed || !r.character?.hostel ? null : r); }, []);
+  const load = useCallback(async () => {
+    const r = await call("/api/state");
+    // 401/404 are normal (logged out / no character yet). Anything else: say so once per outage, not every poll.
+    if (r.failed && r.status !== 401 && r.status !== 404) { if (!failing.current) { failing.current = true; notifyError(r, "We couldn't refresh your game. Check your connection."); } } else failing.current = false;
+    setSt(r.failed || !r.character?.hostel ? null : r);
+  }, []);
   useEffect(() => { if (bare) return; load(); const t = setInterval(load, 60000); return () => clearInterval(t); }, [bare, path, load]);
   useEffect(() => { if (!phone) return; firstApp.current?.focus(); const k = (e) => { if (e.key === "Escape") { setPhone(false); opener.current?.focus(); } }; document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [phone]);
   useEffect(() => { setPhone(false); }, [path]);
