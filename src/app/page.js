@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { call } from "@/lib/client";
 import AuthModal from "@/components/AuthModal";
 import Loader from "@/components/Loader";
+import { CLASS_ORDER, CLASS_INFO, ODDS, allowanceOf, fmtN } from "@/lib/classes.js";
+import "./landing.css";
 
 const CampusMap = dynamic(() => import("@/components/CampusMap"), { ssr: false });
 
@@ -33,14 +35,16 @@ export default function Home() {
       <span className="grow" />
       <button type="button" className="ghost" onClick={() => setMode("login")}>Log in</button>
     </header>
-    <div className="authwrap">
-      <div className="card">
-        <h1 style={{ fontSize: "1.9rem" }}>Live your OAU story with real people.</h1>
-        <p className="mut">Pick a look, get dealt a life, and see how far you go from your first lecture to your last.</p>
-        <div className="row" style={{ marginTop: 12 }}><button type="button" className="go" onClick={() => setMode("signup")}>Sign up</button><button type="button" onClick={() => setMode("login")}>Log in</button></div>
-        <p className="mut" style={{ marginTop: 12, fontSize: "0.85rem" }}>For players 18 and over. The campus map is stylised, not to scale.</p>
-      </div>
-    </div>
+    <main className="ld">
+      <section className="ld-card">
+        <h1>Live your OAU story with real people.</h1>
+        <p className="ld-sub">Pick a look, get dealt a life, and see how far you go from your first lecture to your last.</p>
+        <div className="ld-cta"><button type="button" className="go" onClick={() => setMode("signup")}>Sign up</button><button type="button" onClick={() => setMode("login")}>Log in</button></div>
+        <h2 className="ld-deal-h">You are dealt one of three lives</h2>
+        <ul className="ld-deal">{CLASS_ORDER.map((c, n) => (<li key={c} style={{ "--c": CLASS_INFO[c].color, "--n": n }}><b>{c}</b><span className="num ld-amt">{fmtN(allowanceOf(c) / 1000)}k</span><span className="mut">a week, {ODDS[c]}% of players</span></li>))}</ul>
+        <p className="ld-fine">For players 18 and over. The campus map is stylised, not to scale.</p>
+      </section>
+    </main>
     {checking && <Loader fullscreen label={welcome || "Loading"} />}
     {mode && <AuthModal initialMode={mode} onClose={() => setMode(null)} />}
   </>);

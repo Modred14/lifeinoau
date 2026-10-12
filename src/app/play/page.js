@@ -6,21 +6,24 @@ import { call, naira, notifyError, loggedOut, say } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import dynamic from "next/dynamic";
 import CreateFlow from "@/components/CreateFlow";
+import LifeRoll from "@/components/LifeRoll";
+import HostelPicker from "@/components/HostelPicker";
 import Loader from "@/components/Loader";
-const CharacterViewer = dynamic(() => import("@/components/CharacterViewer"), { ssr: false, loading: () => <div className="stage" style={{ height: 220 }} aria-busy="true" /> });
+import { Icon } from "@/components/Icon";
+import { CLASS_INFO } from "@/lib/classes.js";
+import { SESSION_WEEKS } from "@/lib/engine.js";
+import "./play.css";
+const CharacterViewer = dynamic(() => import("@/components/CharacterViewer"), { ssr: false, loading: () => <div className="stage" style={{ height: "100%" }} aria-busy="true" /> });
 
-const STATS = [["Health", "health"], ["Energy", "energy"], ["Happiness", "happiness"], ["Academics", "academics"], ["Popularity", "popularity"], ["Suspicion", "suspicion"]];
-const ACTIONS = [
-  ["rest", "Rest", "free"],
-  ["hustle", "Safe hustle", "20 energy · earns ₦8k–25k"],
-];
+const STATS = [["Health", "health", "health"], ["Energy", "energy", "energy"], ["Happiness", "happiness", "happy"], ["Academics", "academics", "study"], ["Popularity", "popularity", "social"], ["Suspicion", "suspicion", "eye"]];
+
+function View({ children }) { return <div className="gh-view">{children}</div>; }
 
 export default function Play() {
   const router = useRouter();
   const [view, setView] = useState("loading"), [st, setSt] = useState(null), [meta, setMeta] = useState(null);
   const [busy, setBusy] = useState(false), [reveal, setReveal] = useState(null);
   const shown = useRef(new Set()), pending = useRef(0);
-  const [form, setForm] = useState({ name: "", gender: "", facultyId: "", personalities: [] });
   const [now, setNow] = useState(Date.now());
 
   // Game notifications become persistent info toasts. Once the last one is closed they are marked read.
@@ -37,11 +40,12 @@ export default function Play() {
   const load = useCallback(async () => {
     const s = await call("/api/state");
     if (s.status === 401) return loggedOut(router);
-    if (s.status === 404) { setMeta(await call("/api/meta")); return setView("create"); }
+    if (s.status === 404) { const m = await call("/api/meta"); setMeta(m); return setView((v) => (v === "reveal" ? v : "create")); } // a late reply must never pull the player off the roll
     if (s.failed) { notifyError(s); return setView("error"); }
-    setSt(s); setView(s.character.hostel ? "game" : "hostel"); showNotes(s.notifications);
+    setSt(s); setView((v) => (v === "reveal" ? v : s.character.hostel ? "game" : "hostel")); showNotes(s.notifications);
   }, [router, showNotes]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { window.scrollTo({ top: 0, behavior: "instant" }); }, [view]); // a new screen always starts at its top
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
 
   async function run(path, body, describe) {
@@ -66,40 +70,59 @@ export default function Play() {
     const res = await call("/api/character", payload); setBusy(false);
     if (res.status === 401) return loggedOut(router);
     if (res.failed) return notifyError(res, "We couldn't create your character. Please try again.");
-    toast.success("Character created. Let's see the life you got.");
     setReveal(res); setView("reveal");
   }
 
   if (view === "loading") return <Loader label="Loading your life" />;
-  if (view === "error") return <div className="card"><p className="mut">Your game didn&apos;t load.</p><button onClick={load}>Try again</button></div>;
+  if (view === "error") return <View key={view}><div className="gh-empty"><span className="gh-emptyico"><Icon name="warn" size={28} /></span><h2>Your game didn&apos;t load</h2><p className="mut">Check your connection and try again.</p><button type="button" className="go" onClick={load}>Try again</button></div></View>;
+  if (view === "create") return <View key={view}><CreateFlow meta={meta} busy={busy} onSubmit={create} /></View>;
+  if (view === "reveal") return <View key={view}><LifeRoll result={reveal.class} hostels={reveal.hostels} onContinue={() => { setView("hostel"); load(); }} /></View>;
+  if (view === "hostel") return <View key={view}><HostelPicker cls={st?.character?.class ?? reveal?.class} hostels={st?.hostels ?? reveal?.hostels ?? []} busy={busy} onChoose={(h) => run("/api/character/hostel", { hostel: h }, () => ({ text: `You moved into ${h}. Welcome home.` }))} /></View>;
 
-  if (view === "create") return <CreateFlow meta={meta} busy={busy} onSubmit={create} />;
-
-  if (view === "reveal") { const K = { MAPO: ["#8fc3ff", "Comfortable. Your family covers the basics: N100,000 a week."], LAPO: ["#ff9a4d", "Self-made hits different. N30,000 a week, so every naira counts."], NEPO: ["#f2b84b", "Born into money. N500,000 a week. Do not waste it."] }[reveal.class];
-    return <div className="reveal"><p className="mut" style={{ letterSpacing: "0.12em" }}>YOUR LIFE HAS BEEN DECIDED</p><b style={{ color: K[0] }}>{reveal.class}</b><p style={{ margin: "12px auto" }}>{K[1].replace(/N(\d)/g, "₦$1")}</p><button className="go" onClick={() => { setView("hostel"); load(); }}>Choose where to live</button></div>; }
-
-  if (view === "hostel") { const RENT = { "Off-campus": 6000, Ojaja: 15000 };
-    return (<><h1 style={{ fontSize: "1.8rem" }}>Where will you stay?</h1><p className="mut">Only places open to a {st?.character?.class ?? reveal?.class} student are shown. Rent is paid every game week.</p>
-    <div className="row" style={{ marginTop: 12 }}>{(st?.hostels ?? reveal?.hostels ?? []).map((h) => <button key={h} type="button" className="trait" style={{ minHeight: 88 }} disabled={busy} onClick={() => run("/api/character/hostel", { hostel: h }, () => ({ text: `You moved into ${h}. Welcome home.` }))}><b>{h}</b><span className="mut num">Rent ₦{(RENT[h] ?? 2000).toLocaleString("en-NG")} a week</span></button>)}</div>
-  </>); }
-
-  const c = st.character, a = st.academics, fz = st.floorZero, left = fz ? Math.max(0, new Date(fz.releaseAt) - now) : 0;
+  const c = st.character, a = st.academics, fz = st.floorZero, left = fz ? Math.max(0, new Date(fz.releaseAt) - now) : 0, info = CLASS_INFO[c.class];
   const mm = (ms) => `${Math.floor(ms / 3600000)}h ${String(Math.floor(ms / 60000) % 60).padStart(2, "0")}m ${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}s`;
-  if (c.graduated) return <div className="reveal"><p className="mut">YOU DID IT</p><b></b><h2>{c.classification}</h2><p>Final CGPA {(c.finalCgpaX100 / 100).toFixed(2)} · Cash {naira(st.balanceKobo)}</p></div>;
-  if (c.expelled) return <div className="card"><h2>Your story ends here</h2><p>You were expelled or withdrawn. Final CGPA so far: {a.cgpa ?? "none"}.</p></div>;
-  const stopped = !!fz;
-  return (<>
-    <section className="card" style={{ display: "grid", gap: 16, gridTemplateColumns: "minmax(130px, 190px) 1fr", alignItems: "center" }}>
-      <CharacterViewer look={c.look ?? undefined} gender={c.gender} hint={false} style={{ height: 230 }} />
-      <div><h1 style={{ fontSize: "1.6rem" }}>{c.name}</h1><p className="mut">{c.faculty}</p><p className="mut">{c.class} · {c.hostel}</p><p className="mut">{c.personalities.join(" · ")}</p></div>
-    </section>
-    <div className="card stats">{STATS.map(([n, k]) => <div key={k}><div className="top"><span>{n}</span><span className="mut">{c[k]}</span></div><div className="bar"><i style={{ width: c[k] + "%", ...(k === "suspicion" ? { background: "var(--bad)" } : {}) }} /></div></div>)}</div>
-    {fz && <div className="card"><h2>Floor 0</h2><p>Time left: <b>{mm(left)}</b></p><button className="go" disabled={busy} onClick={() => run("/api/floor0/pay", {}, () => ({ text: "Bail paid. You're free." }))}>Pay the bill ({naira(fz.billKobo)})</button><p className="mut">Or wait. Your sentence ends on its own.</p></div>}
-    <div className="card"><b>Academics</b><p>CGPA: <b>{a.cgpa ?? "–"}</b> {a.standing && <span className="mut">({a.standing})</span>} · {a.weeksLeftInSession} weeks left in this session · Strikes: {c.strikes}</p>
-      {a.nextExamWeek === st.week && !a.satThisWeek ? <><p className="bad"><b>Exam today.</b> Sit it before the week ends.</p><div className="row"><button className="go" disabled={busy || stopped} onClick={() => exam(false)}>Sit honestly</button><button disabled={busy || stopped} onClick={() => exam(true)}>Try to cheat (risky)</button></div></> : <p className="mut">Next exam: week {a.nextExamWeek}.</p>}</div>
-    <div className="card"><b>Actions</b><div className="row" style={{ marginTop: 8 }}>
-      {ACTIONS.map(([id, l, d]) => <button key={id} disabled={busy || stopped} onClick={() => act(id)}>{l}<br /><span className="mut">{d}</span></button>)}
-      <button disabled={busy || stopped} onClick={risky}>Risky hustle<br /><span className="mut">25 energy · big money or DSA</span></button>
-      <button disabled={busy || stopped || st.calledThisWeek} onClick={call_}>Call parent<br /><span className="mut">{st.calledThisWeek ? "done this week" : "once a week"}</span></button></div></div>
-    <button onClick={load}>Refresh</button></>);
+  if (c.graduated) return <View key={view}><div className="gh-end"><span className="gh-endico"><Icon name="forbes" size={34} /></span><h1>You did it</h1><p className="gh-endclass">{c.classification}</p><div className="gh-endstats"><div><span className="mut">Final CGPA</span><b className="num">{(c.finalCgpaX100 / 100).toFixed(2)}</b></div><div><span className="mut">Cash</span><b className="num">{naira(st.balanceKobo)}</b></div></div></div></View>;
+  if (c.expelled) return <View key={view}><div className="gh-end gh-bad"><span className="gh-endico"><Icon name="warn" size={34} /></span><h1>Your story ends here</h1><p className="mut">You were expelled or withdrawn. Final CGPA so far: {a.cgpa ?? "none"}.</p></div></View>;
+  const stopped = !!fz, examToday = a.nextExamWeek === st.week && !a.satThisWeek, sessionDone = Math.min(100, Math.round(((SESSION_WEEKS - a.weeksLeftInSession) / SESSION_WEEKS) * 100));
+  const ACTIONS = [
+    { id: "rest", icon: "moon", name: "Rest", note: "Free. Win back energy.", run: () => act("rest"), off: false },
+    { id: "hustle", icon: "hustle", name: "Safe hustle", note: "20 energy. Earns ₦8k to ₦25k.", run: () => act("hustle"), off: c.energy < 20, why: "Needs 20 energy" },
+    { id: "risky", icon: "dice", name: "Risky hustle", note: "25 energy. Big money, or DSA.", run: risky, off: c.energy < 25, why: "Needs 25 energy", tone: "risk" },
+    { id: "call", icon: "call", name: "Call parent", note: st.calledThisWeek ? "Done for this week." : "Once a week.", run: call_, off: st.calledThisWeek, why: "Done this week", free: true },
+  ];
+  return (<View key={view}>
+    <div className="gh">
+      {fz && (<section className="gh-jail" aria-labelledby="fz-h"><span className="gh-jailico"><Icon name="siren" size={24} /></span><div className="gh-jailtxt"><h2 id="fz-h">You are on Floor 0</h2><p>Time left <b className="num">{mm(left)}</b>. Your sentence ends on its own, or you can pay the bill.</p></div><button type="button" className="go" disabled={busy} onClick={() => run("/api/floor0/pay", {}, () => ({ text: "Bail paid. You're free." }))}>Pay {naira(fz.billKobo)}</button></section>)}
+
+      <section className="gh-hero" style={{ "--cls": info?.color }}>
+        <div className="gh-stage"><CharacterViewer look={c.look ?? undefined} gender={c.gender} hint={false} /></div>
+        <div className="gh-id">
+          <span className="gh-class">{c.class}</span>
+          <h1>{c.name}</h1>
+          <p className="mut">{c.faculty}</p>
+          <ul className="gh-tags"><li><Icon name="hostel" size={15} /> {c.hostel}</li><li><Icon name="faculty" size={15} /> {c.level} level</li>{c.personalities.map((p) => <li key={p}>{p}</li>)}</ul>
+        </div>
+      </section>
+
+      <section className="gh-card" aria-labelledby="vit-h"><h2 id="vit-h">How you are doing</h2>
+        <div className="gh-vitals">{STATS.map(([n, k, ic]) => { const v = c[k], tone = k === "suspicion" ? (v >= 60 ? "risk" : v >= 30 ? "warn" : "ok") : v < 25 ? "low" : "ok";
+          return (<div key={k} className="gh-vital" data-tone={tone}><Icon name={ic} size={20} /><div className="gh-vbody"><div className="gh-vtop"><span>{n}</span><b className="num">{v}</b></div><div className="gh-meter" role="meter" aria-label={n} aria-valuemin={0} aria-valuemax={100} aria-valuenow={v}><i style={{ width: v + "%" }} /></div></div></div>); })}</div>
+      </section>
+
+      <section className="gh-card" aria-labelledby="ac-h">
+        <div className="gh-achead"><div><h2 id="ac-h">Academics</h2><p className="mut">{a.weeksLeftInSession} weeks left in this session</p></div>
+          <div className="gh-cgpa"><b className="num">{a.cgpa ?? "–"}</b><span className="mut">{a.standing ? `CGPA, ${a.standing}` : "CGPA"}</span></div></div>
+        <div className="gh-session" role="progressbar" aria-label="Session progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={sessionDone}><i style={{ width: sessionDone + "%" }} /></div>
+        <div className="gh-strikes"><span className="mut">Strikes</span><span className="gh-pips" aria-label={`${c.strikes} of 5 strikes`}>{Array.from({ length: 5 }, (_, i) => <i key={i} data-on={i < c.strikes ? "true" : undefined} />)}</span><span className="mut">3 means suspension, 5 means expulsion</span></div>
+        {examToday ? (<div className="gh-exam"><div className="gh-examtxt"><Icon name="warn" size={22} /><div><b>Exam today</b><p>Sit it before the week ends.</p></div></div>
+          <div className="gh-examacts"><button type="button" className="go" disabled={busy || stopped} onClick={() => exam(false)}>Sit honestly</button><button type="button" className="gh-risk" disabled={busy || stopped} onClick={() => exam(true)}>Try to cheat</button></div></div>)
+          : <p className="gh-next"><Icon name="timer" size={18} /> Next exam is in week {a.nextExamWeek}.</p>}
+      </section>
+
+      <section className="gh-card" aria-labelledby="do-h"><h2 id="do-h">What will you do?</h2>
+        <div className="gh-actions">{ACTIONS.map((x) => (<button key={x.id} type="button" className="gh-act" data-tone={x.tone} disabled={busy || stopped || x.off} onClick={x.run}>
+          <span className="gh-actico"><Icon name={x.icon} size={22} /></span><b>{x.name}</b><span className="mut">{x.off && x.why && !x.free ? x.why : x.note}</span></button>))}</div>
+      </section>
+    </div>
+  </View>);
 }

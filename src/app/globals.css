@@ -18,6 +18,9 @@
   --danger: #dc2626;
   --danger-text: #ff8080;
   --ring: #3fd08a;
+  --lapo: #ff9a4d;
+  --mapo: #8fc3ff;
+  --nepo: #f2b84b;
   --r-sm: 10px;
   --r-md: 14px;
   --r-lg: 22px;
@@ -501,7 +504,7 @@ input[type="checkbox"] {
 .stage {
   position: relative;
   width: 100%;
-  background: radial-gradient(120% 90% at 50% 0%, #17233b 0%, #0d1321 70%);
+  background: #111a2e; /* flat on purpose: no gradients */
   overflow: hidden;
   border-radius: var(--r-lg);
 }

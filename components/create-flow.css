@@ -1,0 +1,100 @@
+/* components/create-flow.css */
+/* Character creation. Flat colour only: no gradients. Prefixed `cf-`; selectors are scoped under .cf so global button rules can't leak in. */
+
+.cf { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+.cf-stage { position: relative; border-radius: 28px; overflow: hidden; background: #111a2e; border: 1px solid var(--line); height: 42vh; min-height: 300px; max-height: 480px; }
+.cf-stage .stage { position: absolute; inset: 0; height: 100%; border-radius: 0; }
+.cf-caption { position: absolute; left: 14px; top: 14px; z-index: 2; display: grid; gap: 1px; max-width: calc(100% - 28px); padding: 9px 14px; border-radius: 14px; background: rgba(13, 19, 33, 0.86); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); pointer-events: none; }
+.cf-caption b { font: 600 1.05rem/1.2 var(--font-head); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf-caption span { font-size: 0.8rem; }
+@media (min-width: 900px) {
+  .cf { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+  .cf-stage { height: calc(100vh - var(--hud-h) - 56px); max-height: 740px; position: sticky; top: calc(var(--hud-h) + 24px); }
+}
+
+/* progress */
+.cf-steps { list-style: none; margin: 0 0 22px; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.cf-steps li { position: relative; }
+.cf-steps li + li::before { content: ""; position: absolute; top: 17px; right: calc(50% + 24px); width: calc(100% - 48px); height: 2px; background: var(--line); transition: background-color 400ms var(--ease); }
+.cf-steps li[data-state="done"]::before, .cf-steps li[data-state="now"]::before { background: var(--green-text); }
+.cf .cf-steps button { width: 100%; flex-direction: column; gap: 6px; min-height: 64px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 0.85rem; }
+.cf .cf-steps button:hover:not(:disabled) { background: transparent; color: var(--text); }
+.cf .cf-steps button:disabled { opacity: 1; cursor: default; }
+.cf .cf-steps li[data-state="done"] button { cursor: pointer; }
+.cf-dot { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font: 600 0.95rem var(--font-head); border: 2px solid var(--line); background: var(--surface); color: var(--muted); transition: all 320ms var(--ease); }
+.cf-steps li[data-state="now"] .cf-dot { border-color: var(--green-text); color: var(--text); background: var(--raised); }
+.cf-steps li[data-state="done"] .cf-dot { border-color: var(--green-text); background: var(--green); color: #fff; }
+.cf-steps li[data-state="now"] .cf-stepname, .cf-steps li[data-state="done"] .cf-stepname { color: var(--text); font-weight: 500; }
+
+/* step body */
+.cf-body { animation: cf-in 340ms var(--ease) both; }
+.cf-body[data-dir="-1"] { animation-name: cf-in-back; }
+.cf-body h2 { font-size: clamp(1.5rem, 3.4vw, 1.9rem); letter-spacing: -0.02em; margin: 0 0 6px; }
+.cf-body > section > p.mut { margin: 0 0 18px; }
+.cf-field { padding: 18px 0; border-top: 1px solid var(--line); }
+.cf-field:first-of-type { border-top: 0; }
+.cf-body > section > .cf-field:first-of-type { margin-top: 12px; }
+.cf-fieldhead { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.cf-fieldhead h3, .cf-label { margin: 0; font: 600 1rem var(--font-head); }
+.cf-label { display: block; margin-bottom: 10px; }
+
+/* name */
+.cf-namebox { position: relative; }
+.cf-namebox input { min-height: 54px; padding-right: 48px; font-size: 1.05rem; transition: border-color 180ms var(--ease), box-shadow 180ms var(--ease); }
+.cf-namebox input:focus { outline: none; border-color: var(--green-text); box-shadow: 0 0 0 3px rgba(63, 208, 138, 0.28); }
+.cf-namebox[data-state="ok"] input { border-color: rgba(63, 208, 138, 0.75); }
+.cf-namebox[data-state="bad"] input { border-color: var(--danger-text); }
+.cf-namestate { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); display: grid; animation: cf-pop 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.cf-namebox[data-state="ok"] .cf-namestate { color: var(--green-text); } .cf-namebox[data-state="bad"] .cf-namestate { color: var(--danger-text); }
+.cf-field .field-help { display: block; margin-top: 8px; }
+
+/* segmented body picker */
+.cf-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 16px; background: var(--bg); border: 1px solid var(--line); }
+.cf .cf-seg button { min-height: 46px; border: 0; border-radius: 12px; background: transparent; color: var(--muted); font-weight: 500; transition: background-color 220ms var(--ease), color 220ms var(--ease); }
+.cf .cf-seg button:hover:not(:disabled) { background: var(--surface); color: var(--text); }
+.cf .cf-seg button[aria-pressed="true"], .cf .cf-seg button[aria-pressed="true"]:hover:not(:disabled) { background: var(--raised); color: var(--text); box-shadow: inset 0 0 0 1px var(--green-text); }
+
+/* chips and swatches */
+.cf-chips, .cf-swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.cf .cf-chip { min-height: 44px; padding: 8px 16px; border-radius: var(--r-pill); background: var(--surface); transition: background-color 200ms var(--ease), border-color 200ms var(--ease), color 200ms var(--ease); }
+.cf .cf-chip:hover:not(:disabled) { background-color: var(--raised); border-color: rgba(255, 255, 255, 0.24); }
+.cf .cf-chip[aria-pressed="true"], .cf .cf-chip[aria-pressed="true"]:hover:not(:disabled) { background-color: rgba(21, 128, 61, 0.24); border-color: var(--green-text); }
+.cf .cf-swatch { position: relative; width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.14); background: var(--sw); color: #fff; transition: transform 200ms var(--ease), border-color 200ms var(--ease); }
+.cf .cf-swatch:hover:not(:disabled) { background-color: var(--sw); border-color: rgba(255, 255, 255, 0.6); transform: scale(1.06); }
+.cf .cf-swatch svg { opacity: 0; transform: scale(0.4); transition: opacity 180ms var(--ease), transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1); filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.7)); }
+.cf .cf-swatch[aria-pressed="true"], .cf .cf-swatch[aria-pressed="true"]:hover:not(:disabled) { border-color: #fff; box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--green-text); background-color: var(--sw); }
+.cf .cf-swatch[aria-pressed="true"] svg { opacity: 1; transform: scale(1); }
+
+/* traits and faculties: selectable cards */
+.cf-titlerow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.cf-count { padding: 3px 12px; border-radius: var(--r-pill); background: var(--raised); border: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
+.cf-traits { display: grid; gap: 10px; grid-template-columns: 1fr; }
+.cf-faculties { display: grid; gap: 8px; grid-template-columns: 1fr; }
+@media (min-width: 520px) { .cf-traits, .cf-faculties { grid-template-columns: 1fr 1fr; } }
+.cf .cf-trait, .cf .cf-fac { position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 6px; text-align: left; padding: 16px 44px 16px 16px; border-radius: 18px; background: var(--surface); transition: background-color 220ms var(--ease), border-color 220ms var(--ease), transform 150ms var(--ease); }
+.cf .cf-trait { min-height: 150px; } .cf .cf-fac { min-height: 84px; gap: 8px; padding-right: 40px; }
+.cf .cf-trait:hover:not(:disabled), .cf .cf-fac:hover:not(:disabled) { background-color: var(--raised); border-color: rgba(255, 255, 255, 0.24); }
+.cf .cf-trait[aria-pressed="true"], .cf .cf-fac[aria-pressed="true"], .cf .cf-trait[aria-pressed="true"]:hover:not(:disabled), .cf .cf-fac[aria-pressed="true"]:hover:not(:disabled) { background-color: rgba(21, 128, 61, 0.2); border-color: var(--green-text); }
+.cf-trait b, .cf-fac b { font: 600 1.05rem/1.2 var(--font-head); }
+.cf-trait .mut { font-size: 0.88rem; line-height: 1.45; }
+.cf-tico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--raised); color: var(--green-text); transition: background-color 220ms var(--ease), color 220ms var(--ease); }
+.cf-trait[aria-pressed="true"] .cf-tico { background: var(--green); color: #fff; }
+.cf-tick { position: absolute; top: 14px; right: 14px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--field); color: transparent; transition: all 240ms var(--ease); }
+.cf-tick svg { transform: scale(0); transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+[aria-pressed="true"] > .cf-tick { background: var(--green); border-color: var(--green-text); color: #fff; }
+[aria-pressed="true"] > .cf-tick svg { transform: scale(1); }
+.cf-diff { display: inline-flex; align-items: center; gap: 8px; font-size: 0.85rem; }
+.cf-meter { display: inline-flex; gap: 3px; }
+.cf-meter i { width: 14px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.14); }
+.cf-meter[data-n="1"] i:nth-child(-n + 1), .cf-meter[data-n="2"] i:nth-child(-n + 2), .cf-meter[data-n="3"] i { background: var(--gold-text); }
+
+/* actions */
+.cf-bar { position: sticky; bottom: 0; z-index: 5; display: flex; gap: 10px; margin-top: 18px; padding: 12px 0 calc(12px + var(--safe-b)); background: var(--bg); border-top: 1px solid var(--line); }
+.cf .cf-bar button { min-height: 54px; font-size: 1.02rem; }
+.cf .cf-back { flex: 0 0 auto; padding-inline: 20px; background: transparent; }
+.cf .cf-next { flex: 1 1 auto; }
+.cf-fine { margin: 4px 0 0; text-align: center; max-width: none; font-size: 0.85rem; }
+
+@keyframes cf-in { from { opacity: 0; transform: translateX(18px); } }
+@keyframes cf-in-back { from { opacity: 0; transform: translateX(-18px); } }
+@keyframes cf-pop { from { opacity: 0; transform: translateY(-50%) scale(0.3); } }
