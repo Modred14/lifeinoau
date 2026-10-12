@@ -377,3 +377,36 @@ model RoomItem {
 
   @@index([characterId])
 }
+
+enum BillboardStatus {
+  PENDING // reserved, waiting for payment; the hold lapses at holdUntil
+  PAID
+}
+
+// One row per poster spot a player has reserved or bought on the map's ten billboards (board 1..10, slot 1..10).
+// REAL money (naira, in kobo), not in-game cash. The payment itself is wired later: until then a reservation is only ever confirmed by
+// confirmBillboardOrder() in lib/billboards.js. Buying a whole board creates ten rows with scope WHOLE; the poster image lives on the rows that have one.
+model BillboardSlot {
+  id         Int             @id @default(autoincrement())
+  board      Int
+  slot       Int
+  ownerId    String
+  orderId    String
+  scope      String          @default("SLOT") // SLOT | WHOLE
+  status     BillboardStatus @default(PENDING)
+  amountKobo BigInt // price of this one spot
+  orderKobo  BigInt // what the whole order costs (the same on every row of the order)
+  caption    String          @default("")
+  image      Bytes?
+  imageMime  String?
+  hidden     Boolean         @default(false) // an admin can switch a poster off without refunding or deleting it
+  holdUntil  DateTime?
+  paidAt     DateTime?
+  payRef     String?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@unique([board, slot])
+  @@index([ownerId])
+  @@index([orderId])
+}

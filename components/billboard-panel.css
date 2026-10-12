@@ -1,0 +1,27 @@
+/* components/billboard-panel.css: the billboard buy flow inside the map's place card */
+.bbp { display: grid; gap: var(--s3); }
+.bbp-badge { margin: 0; display: inline-flex; align-items: center; gap: 6px; width: fit-content; padding: 3px 10px; border-radius: var(--r-pill); font-size: 0.74rem; font-weight: 600; background: rgba(232, 162, 58, 0.14); color: var(--gold-text); border: 1px solid rgba(232, 162, 58, 0.4); }
+.bbp-now { display: flex; gap: var(--s3); align-items: center; padding: var(--s3); border-radius: var(--r-md); background: var(--bg); border: 1px solid var(--line); min-height: 76px; }
+.bbp-now img { width: 112px; height: 60px; object-fit: contain; background: #0b111c; border-radius: var(--r-sm); flex: none; }
+.bbp-now div { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.bbp-now b { font-size: 0.8rem; color: var(--green-text); }
+.bbp-now span { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bbp-bar { display: block; height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; margin-top: 4px; }
+.bbp-bar i { display: block; height: 100%; background: var(--green-text); transition: width 0.5s linear; }
+.bbp-line { margin: 0; font-size: 0.82rem; }
+.bbp-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.bbp-slot { display: grid; gap: 0; min-height: 48px; padding: 4px 0; justify-items: center; align-content: center; border-radius: var(--r-sm); }
+.bbp-slot b { font-size: 0.95rem; }
+.bbp-slot span { font-size: 0.66rem; opacity: 0.8; }
+.bbp-slot.on { background: var(--green); border-color: var(--green-text); color: #fff; }
+.bbp-slot.mine { border-color: var(--gold-text); }
+.bbp-slot:disabled:not(.mine) { opacity: 0.45; }
+.bbp-actions { margin: 0; }
+.bbp-buy { display: grid; gap: var(--s2); }
+.bbp-buy p { margin: 0; }
+.bbp-pick { display: grid; gap: var(--s2); justify-items: start; }
+.bbp-prev { max-width: 100%; max-height: 120px; border-radius: var(--r-sm); border: 1px solid var(--line); background: #0b111c; object-fit: contain; }
+.bbp-mine h3 { margin: 0 0 var(--s2); font-size: 0.9rem; }
+.bbp-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); padding: 6px 0; border-top: 1px solid var(--line); font-size: 0.85rem; }
+.dock .card.bb { max-height: calc(100vh - var(--nav-h) - var(--hud-h) - 70px); overflow-y: auto; }
+@media (prefers-reduced-motion: reduce) { .bbp-bar i { transition: none; } }

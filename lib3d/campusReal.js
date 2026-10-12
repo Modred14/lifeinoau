@@ -4,12 +4,15 @@
 // Layout, footprints and road shapes come from the supplied OpenStreetMap render. Facades and roofs are generic, NOT photo-verified.
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { buildGround } from "./ground.js";
+import { buildEdges } from "./edges.js";
+import { buildBillboards } from "./billboards3d.js";
 
 export const S = 0.1;   // metres -> scene units
 export const EX = 2;    // visual height exaggeration (buildings only)
-export const MAP_BG = "#a9cbe8"; // the ONE background: sky, horizon and ground are all this flat semi-light blue. Keep .mapwrap .stage in globals.css the same.
+export const MAP_BG = "#a9cbe8"; // sky and horizon (and what shows past the faded rim of the ground). The ground itself is grass and sand (ground.js). Keep .mapwrap .stage in globals.css the same.
 const WALLS = ["#d9ceb4", "#c6b08a", "#d8d8d0", "#aab7c4", "#d3c3a6", "#b98b73", "#e2dccb"];
-const KIND_WALL = { hostel: "#c58b6e", block: "#c58b6e", library: "#cdbb92", hall: "#e4dcc6", faculty: "#d8d2bf", lecture: "#d3cdb9", bank: "#9fb4c8", shop: "#d9a86a", worship: "#e8e4d4", sports: "#b9c9a9", admin: "#d6d0c0" };
+const KIND_WALL = { hostel: "#c58b6e", block: "#c58b6e", library: "#cdbb92", hall: "#e4dcc6", faculty: "#d8d2bf", lecture: "#d3cdb9", bank: "#9fb4c8", shop: "#d9a86a", worship: "#e8e4d4", sports: "#b9c9a9", admin: "#d6d0c0", club: "#5b4a8a", jail: "#8d99a8" };
 const rngOf = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 
 function windowTextures(seed) { // one tile = 4 x 4 windows; some are lit
@@ -35,10 +38,10 @@ function flat(areas, color, y, o = {}) { // flat polygons (roads, parking, pitch
 export function buildRealCampus(data, meta = {}) {
   const root = new THREE.Group(), b = data.bounds, disposables = [];
   const x0 = b.x0 * S, x1 = b.x1 * S, z0 = b.z0 * S, z1 = b.z1 * S;
-  // ---- ground: there is none to draw. MAP_BG is the single flat background all the way to the horizon, so there are no plates,
-  // edges, dark surround or soil block. One transparent plane underneath only catches the buildings' shadows. ----
-  const gx0 = x0 - 120, gx1 = x1 + 120, gz0 = z0 - 120, gz1 = z1 + 420; // extra room to the south for places that lie beyond the screenshot
-  const shade = new THREE.Mesh(new THREE.PlaneGeometry(gx1 - gx0, gz1 - gz0), new THREE.ShadowMaterial({ color: "#1d2c47", opacity: 0.26, depthWrite: false })); shade.rotation.x = -Math.PI / 2; shade.position.set((gx0 + gx1) / 2, 0.01, (gz0 + gz1) / 2); shade.receiveShadow = true; root.add(shade);
+  // ---- ground: patchy grass and sand that fades into the sky-blue at its rim, so the map ends softly (ground.js). Water stays blue. ----
+  const ground = buildGround(data, S); root.add(ground);
+  const rimKeep = data.places.filter((p) => p.x < b.x0 + 60 || p.x > b.x1 - 60 || p.z < b.z0 + 60 || p.z > b.z1 - 160).map((p) => [p.x, p.z, 60]);
+  const edges = buildEdges(data, S, { keepOut: rimKeep }); root.add(edges.group); // roads that run off the map, and a belt of trees along its rim
   for (const m of [flat(data.areas.park, "#5aa064", 0.03, { layer: 2 }), flat(data.areas.sports, "#4c9a68", 0.035, { layer: 2 }), flat(data.areas.wood, "#2f6b3b", 0.04, { layer: 2 }),
     flat(data.areas.pitch, "#2fb98a", 0.06, { layer: 3 }), flat(data.areas.water, "#2f6f95", 0.05, { layer: 3, rough: 0.15, metal: 0.2 }), flat(data.areas.parking, "#46505c", 0.06, { layer: 3 }), flat(data.roads, "#343b46", 0.08, { layer: 4 })]) if (m) root.add(m);
 
@@ -49,7 +52,7 @@ export function buildRealCampus(data, meta = {}) {
   const extrude = (pts, depth, y = 0) => { const shape = new THREE.Shape(pts.map(V)), g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false }); g.rotateX(-Math.PI / 2); if (y) g.translate(0, y, 0); return g; };
   const scaled = (pts, k) => { const [cx, cz] = centroid(pts); return pts.map(([x, z]) => [cx + (x - cx) * k, cz + (z - cz) * k]); };
   data.buildings.forEach((bd, i) => { try {
-    const pl = placeAt.get(bd.id), kind = pl?.kind, col = KIND_WALL[kind] ?? WALLS[i % WALLS.length], roof = kind === "hostel" || kind === "block" ? "#5a4638" : "#3a4452", H = bd.h * S * EX;
+    const pl = placeAt.get(bd.id), kind = pl?.kind, col = bd.wall ?? KIND_WALL[kind] ?? WALLS[i % WALLS.length], roof = bd.roof ?? (kind === "hostel" || kind === "block" ? "#5a4638" : "#3a4452"), H = bd.h * S * EX;
     const parts = pl?.id === "amphitheatre" ? [0.9, 0.7, 0.5].map((k, j) => [scaled(bd.pts, k), 1.5 * S * EX, j * 1.5 * S * EX]) : [[bd.pts, H, 0]]; // stylised tiers; the real seating is not surveyed
     const s0 = vs, c0 = vc;
     for (const [pts, d, y] of parts) { const g = extrude(pts, d, y), [capG, sideG] = g.groups.length >= 2 ? g.groups : [g.groups[0], { start: 0, count: 0 }];
@@ -69,24 +72,35 @@ export function buildRealCampus(data, meta = {}) {
     trees.forEach(([x, z, k], i) => { d.position.set(x * S, 0.5 * k, z * S); d.scale.setScalar(k); d.updateMatrix(); trunk.setMatrixAt(i, d.matrix); d.position.set(x * S, 1.5 * k, z * S); d.updateMatrix(); crown.setMatrixAt(i, d.matrix); crown.setColorAt(i, c.set("#2f6b3b").lerp(new THREE.Color("#4f8f3f"), rnd())); });
     trunk.castShadow = crown.castShadow = true; root.add(trunk, crown); }
 
+  // ---- club neon and the Floor 0 siren (decoration on the game-placed buildings) ----
+  const glow = [];
+  for (const p of data.places) { const bd = p.bid != null ? data.buildings.find((q) => q.id === p.bid) : null; if (!bd) continue;
+    if (bd.neon) { const [cx, cz] = centroid(bd.pts), xs = bd.pts.map((q) => q[0]), zs = bd.pts.map((q) => q[1]), w = (Math.max(...xs) - Math.min(...xs)) * S, d = (Math.max(...zs) - Math.min(...zs)) * S, top = bd.h * S * EX, m = new THREE.MeshBasicMaterial({ color: bd.neon, toneMapped: false });
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(w * 1.02, 0.16, 0.16), m); bar.position.set(cx * S, top + 0.06, (cz * S) + d / 2); const sign = new THREE.Mesh(new THREE.BoxGeometry(w * 0.6, 0.6, 0.1), m); sign.position.set(cx * S, top + 0.6, (cz * S) + d / 2 - 0.1); root.add(bar, sign); }
+    if (p.id === "floor0") { const top = bd.h * S * EX, m = new THREE.MeshBasicMaterial({ color: "#ff3b30", toneMapped: false }), [cx, cz] = centroid(bd.pts), lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 8), m); lamp.position.set(cx * S, top + 0.18, cz * S); root.add(lamp); glow.push(m); } }
+  // ---- billboards: ten boards that cycle their posters ----
+  const bbEntries = data.places.filter((p) => p.kind === "billboard").map((p) => ({ id: p.id, x: p.x * S, z: p.z * S, yaw: p.yaw, board: p.board })), bb = buildBillboards(bbEntries); root.add(bb.group);
+
   // ---- places: label anchors sit above the roof (true or estimated height, times the exaggeration) ----
   const bById = new Map(data.buildings.map((q) => [q.id, q])), anchors = new Map(), places = [], pinMat = new THREE.MeshStandardMaterial({ color: "#f0c05a", emissive: "#6a4a10", emissiveIntensity: 0.6 });
   for (const p of data.places) {
     const bd = p.bid != null ? bById.get(p.bid) : null, x = p.x * S, z = p.z * S; let top, h;
-    if (bd) { h = bd.h; top = h * S * EX; if (p.id === "amphitheatre") top = 4.5 * S * EX; }
+    if (p.kind === "billboard") { h = null; top = bb.height; }
+    else if (bd) { h = bd.h; top = h * S * EX; if (p.id === "amphitheatre") top = 4.5 * S * EX; }
     else { h = null; top = 1.6; const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, top, 6), pinMat), cap = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), pinMat); pole.position.set(x, top / 2, z); cap.position.set(x, top, z); root.add(pole, cap); } // no footprint known: a marker, not an invented building
     const pos = new THREE.Vector3(x, top + 1.2, z); anchors.set(p.id, pos);
-    places.push({ ...meta[p.id], id: p.id, name: p.name, kind: p.kind, tier: p.tier, conf: p.conf, src: p.src, x, z, h, hSrc: bd?.hSrc ?? null, hasFootprint: !!bd, approx: p.conf === "approximate", offmap: !!p.offmap, unnamed: !!p.unnamed, osmLabel: p.osmLabel, pos, radius: bd ? Math.max(3, Math.sqrt(bd.area) * S * 0.7) : 3 });
+    places.push({ ...meta[p.id], id: p.id, name: p.name, kind: p.kind, tier: p.tier, conf: p.conf, src: p.src, x, z, h, hSrc: bd?.hSrc ?? null, hasFootprint: !!bd, approx: p.conf === "approximate" || p.conf === "game", offmap: !!p.offmap, unnamed: !!p.unnamed, osmLabel: p.osmLabel, pos, radius: bd ? Math.max(3, Math.sqrt(bd.area) * S * 0.7) : p.kind === "billboard" ? 5 : 3 });
   }
   const sel = new THREE.Mesh(new THREE.RingGeometry(1, 1.2, 48), new THREE.MeshBasicMaterial({ color: "#3fd08a", transparent: true, opacity: 0.9, side: THREE.DoubleSide })); sel.rotation.x = -Math.PI / 2; sel.visible = false; root.add(sel);
   const setSelected = (id) => { const L = places.find((l) => l.id === id); if (!L) { sel.visible = false; return; } sel.position.set(L.x, 0.2, L.z); sel.scale.setScalar(L.radius); sel.visible = true; };
-  const update = (t) => { if (sel.visible) { sel.material.opacity = 0.65 + Math.sin(t * 3) * 0.25; sel.rotation.z = t * 0.4; } };
+  const update = (t, dt = 0.016) => { bb.update(dt); const k = 0.35 + 0.65 * Math.max(0, Math.sin(t * 5)); glow.forEach((m) => m.color.setRGB(k, k * 0.23, k * 0.19)); if (sel.visible) { sel.material.opacity = 0.65 + Math.sin(t * 3) * 0.25; sel.rotation.z = t * 0.4; } };
 
   /** Which named place is under a raycaster? Returns a place id or null. Only buildings that carry a name answer. */
-  const pick = (ray) => { const hit = ray.intersectObjects([wallMesh, capMesh].filter(Boolean), false)[0]; if (!hit) return null; const isW = hit.object === wallMesh, v = hit.face.a;
+  const pick = (ray) => { const bh = ray.intersectObjects(bb.meshes, false)[0], h0 = ray.intersectObjects([wallMesh, capMesh].filter(Boolean), false)[0]; if (bh && (!h0 || bh.distance <= h0.distance)) return bh.object.userData.placeId; const hit = ray.intersectObjects([wallMesh, capMesh].filter(Boolean), false)[0]; if (!hit) return null; const isW = hit.object === wallMesh, v = hit.face.a;
     const r = ranges.find((q) => (isW ? v >= q.s0 && v < q.s1 : v >= q.c0 && v < q.c1)); return r ? placeAt.get(r.bid)?.id ?? null : null; };
-  const extent = Math.max(x1 - x0, z1 - z0) / 2, dispose = () => { root.traverse((o) => { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : m ? [m] : []).forEach((q) => q.dispose()); }); win.map.dispose(); win.emis.dispose(); };
-  return { root, anchors, places, pick, update, setSelected, dispose, bounds: { x0, x1, z0, z1 }, extent, attribution: data.meta.attribution,
+  const extent = Math.max(x1 - x0, z1 - z0) / 2, dispose = () => { bb.dispose(); edges.dispose(); root.traverse((o) => { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : m ? [m] : []).forEach((q) => q.dispose()); }); win.map.dispose(); win.emis.dispose(); };
+  const setBillboards = (list) => bb.setBoards(list);
+  return { root, anchors, places, pick, update, setSelected, setBillboards, dispose, bounds: { x0, x1, z0, z1 }, extent, attribution: data.meta.attribution,
     camera: { home: { x: 0, z: 8, dist: 210, az: 0.7, pol: 0.95 }, min: 10, max: 520 } };
 }
 

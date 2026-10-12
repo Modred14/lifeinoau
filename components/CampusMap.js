@@ -15,7 +15,7 @@ const labelWidth = (name, tier) => Math.min(190, name.length * (tier === 1 ? 7.4
  * panning. autoRotate is off unless asked for. Every named building carries a label above its roof;
  * labels are real buttons. They thin out with distance and never overlap, and the "Labels" button hides them all.
  */
-export default function CampusMap({ interactive = true, zoomOnly = false, pins = true, autoRotate = false, selectedId = null, onSelect, className = "", style, view = HOME_VIEW }) {
+export default function CampusMap({ interactive = true, zoomOnly = false, pins = true, autoRotate = false, selectedId = null, onSelect, billboards = null, className = "", style, view = HOME_VIEW }) {
   const box = useRef(null), api = useRef(null), sel = useRef(selectedId), cb = useRef(onSelect), [mounts, setMounts] = useState([]), [failed, setFailed] = useState(false), [labels, setLabels] = useState(true);
   sel.current = selectedId; cb.current = onSelect;
   const canZoom = interactive || zoomOnly;
@@ -29,7 +29,7 @@ export default function CampusMap({ interactive = true, zoomOnly = false, pins =
         const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches, host = box.current.querySelector("[data-canvas]");
         stage = createStage(host, { fov: 42, far: 1800, controls: { maxPolarAngle: 1.38, minPolarAngle: 0.35, minDistance: interactive ? 10 : 50, maxDistance: interactive ? 520 : 360, enablePan: interactive, enableRotate: interactive, enableZoom: canZoom, autoRotate: autoRotate && !reduce, autoRotateSpeed: 0.45, screenSpacePanning: false } });
         const light = addRealLighting(stage.scene); campus = buildRealCampus(data, placeMeta(data)); stage.scene.add(campus.root);
-        stage.onFrame((t) => { campus.update(t); light.follow(stage.controls.target); });
+        stage.onFrame((t, dt) => { campus.update(t, dt); light.follow(stage.controls.target); });
         const { x, z, dist, az, pol } = view; stage.controls.target.set(x, 0, z); stage.camera.position.set(x + Math.sin(az) * Math.sin(pol) * dist, Math.cos(pol) * dist, z + Math.cos(az) * Math.sin(pol) * dist); stage.controls.update();
         if (!canZoom) stage.renderer.domElement.style.pointerEvents = "none";
         // click a named building to inspect it (a drag is not a click)
@@ -60,6 +60,8 @@ export default function CampusMap({ interactive = true, zoomOnly = false, pins =
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { const a = api.current; if (!a) return; a.campus.setSelected(selectedId); if (selectedId) { const p = a.campus.anchors.get(selectedId); if (p) a.stage.flyTo(p.x, 0, p.z, 60, 1.0); } }, [selectedId, mounts]);
+
+  useEffect(() => { const a = api.current; if (a && billboards) a.campus.setBillboards(billboards); }, [billboards, mounts]);
 
   const nudge = (o) => api.current?.stage.nudge(o);
   const reset = () => { const v = view; api.current?.stage.flyTo(v.x, 0, v.z, v.dist, v.pol); onSelect?.(null); };

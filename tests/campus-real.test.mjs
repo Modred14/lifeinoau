@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import { LANDMARKS } from "../lib3d/landmarks.js";
 import { listPlaces, placeMeta, trustNote } from "../lib3d/campusData.js";
+import { withExtras } from "../lib3d/mapExtras.js";
 const ok = (l, c) => console.log((c ? "OK  " : "FAIL") + " " + l); let bad = 0; const chk = (l, c) => { if (!c) bad++; ok(l, c); };
 const d = JSON.parse(fs.readFileSync(new URL("../public/data/oau-campus.json", import.meta.url), "utf8")), b = d.bounds;
 const fin = (p) => Array.isArray(p) && p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]);
@@ -40,7 +41,7 @@ chk("places read from Google are marked approximate", d.places.filter((p) => p.s
 chk("places read from the OSM render are never called verified", d.places.filter((p) => p.src === "osm-screenshot").every((p) => p.conf === "named-in-osm-render"));
 
 // stable ids for gameplay: every id the game already had is either on the map or explicitly listed as having no position
-const known = new Set([...ids, ...d.gameOnly.map((x) => x.id)]), lost = LANDMARKS.filter((l) => !known.has(l.id)).map((l) => l.id);
+const dx = withExtras(d), known = new Set([...dx.places.map((p) => p.id), ...dx.gameOnly.map((x) => x.id)]), lost = LANDMARKS.filter((l) => !known.has(l.id)).map((l) => l.id);
 chk(`every existing game place id is still available (missing: ${lost.join(", ") || "none"})`, lost.length === 0);
 chk("game-only places are never given coordinates", d.gameOnly.every((x) => !("x" in x) && !("z" in x) && !ids.includes(x.id)));
 const hostels = ["h_moremi", "h_alumni", "h_mozambique", "h_angola", "h_awo", "h_etf", "h_fajuyi"];

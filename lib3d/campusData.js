@@ -1,14 +1,15 @@
 // lib3d/campusData.js
 // Loads the real-map data and joins it with the game's own place details (blurbs and actions in landmarks.js). Pure helpers: no 3D library.
 import { LANDMARKS, KIND_LABEL } from "./landmarks.js";
+import { withExtras, EXTRA_META } from "./mapExtras.js";
 
 let cache;
-/** Fetches /data/oau-campus.json once. A failed load is not cached, so a retry can succeed. */
-export const loadCampusData = () => (cache ??= fetch("/data/oau-campus.json").then((r) => { if (!r.ok) throw new Error("map data " + r.status); return r.json(); }).catch((e) => { cache = undefined; throw e; }));
+/** Fetches /data/oau-campus.json once and adds the game-only places (Ojaja, Floor 0, clubs, billboards). A failed load is not cached, so a retry can succeed. */
+export const loadCampusData = () => (cache ??= fetch("/data/oau-campus.json").then((r) => { if (!r.ok) throw new Error("map data " + r.status); return r.json(); }).then(withExtras).catch((e) => { cache = undefined; throw e; }));
 
 /** Game details by place id: { blurb, actions, verified }. New real-map places get a plain default blurb. */
 export function placeMeta(data) {
-  const meta = Object.fromEntries(LANDMARKS.map((l) => [l.id, { blurb: l.blurb, actions: l.actions, verified: l.verified }]));
+  const meta = { ...Object.fromEntries(LANDMARKS.map((l) => [l.id, { blurb: l.blurb, actions: l.actions, verified: l.verified }])), ...EXTRA_META };
   for (const p of data.places) if (!meta[p.id]) meta[p.id] = { blurb: `${KIND_LABEL[p.kind] ?? "Place"} on the OAU campus.`, actions: [], verified: false };
   return meta;
 }
@@ -23,6 +24,7 @@ export function listPlaces(data) {
 /** One line telling the player how far to trust a place's position. */
 export function trustNote(p) {
   if (!p.located) return "Not placed on the map yet: no reference showed where this is";
+  if (p.conf === "game") return "Game placement: no map shows where this really is";
   if (p.conf === "approximate") return "Approximate position (read from a Google screenshot)";
   return "Position and name from the OpenStreetMap map";
 }
