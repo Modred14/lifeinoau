@@ -19,3 +19,5 @@ ALTER TABLE "Business" ADD CONSTRAINT business_capital_nonneg CHECK (capital >= 
 ALTER TABLE "Business" ADD CONSTRAINT business_bounds CHECK (level BETWEEN 1 AND 5 AND employees BETWEEN 0 AND 8);
 
 ALTER TABLE "Holding" ADD CONSTRAINT holding_nonneg CHECK ("unitsMicro" >= 0 AND "costKobo" >= 0);
+
+ALTER TABLE "RoomItem" ADD CONSTRAINT roomitem_bounds CHECK (rot BETWEEN 0 AND 3 AND paid >= 0);

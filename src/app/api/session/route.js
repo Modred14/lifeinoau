@@ -11,13 +11,27 @@ export async function GET() {
   try {
     const s = await readSession();
     if (!s) return Response.json({ authenticated: false });
-    if (!(await allowed(db, "session:" + s.userId, 60, 60_000))) return tooMany();
-    const u = await db.user.findUnique({ where: { id: s.userId }, select: { id: true, character: { select: { name: true } } } });
-    if (!u) { await endSession(); return Response.json({ authenticated: false }); } // cookie for a deleted account
+    if (!(await allowed(db, "session:" + s.userId, 60, 60_000)))
+      return tooMany();
+    const u = await db.user.findUnique({
+      where: { id: s.userId },
+      select: { id: true, character: { select: { name: true } } },
+    });
+    if (!u) {
+      await endSession();
+      return Response.json({ authenticated: false });
+    } // cookie for a deleted account
     if (s.stale) await startSession(u.id, s.remember);
-    return Response.json({ authenticated: true, hasCharacter: !!u.character, name: u.character?.name ?? null });
+    return Response.json({
+      authenticated: true,
+      hasCharacter: !!u.character,
+      name: u.character?.name ?? null,
+    });
   } catch (e) {
     console.error(e);
-    return Response.json({ error: "Something went wrong. Try again." }, { status: 500 });
+    return Response.json(
+      { error: "Something went wrong. Try again." },
+      { status: 500 },
+    );
   }
 }
