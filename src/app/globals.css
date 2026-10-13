@@ -748,3 +748,7 @@ input[type="checkbox"] {
   .hud .cash { padding: 0 12px; font-size: 0.98rem; }
 }
 @media (max-width: 480px) { .hud-mid { display: none; } }
+/* the 3D map's controls: a column down the right edge so eight buttons never overflow a phone */
+.stage-ctrls--map { z-index: 20; flex-direction: column; right: 10px; bottom: calc(var(--nav-h) + var(--safe-b) + 14px); }
+.stage-ctrls--map button.on { background: #fff; color: #0d1321; border-color: #fff; }
+.stage-hint { position: absolute; left: 50%; bottom: calc(var(--nav-h) + var(--safe-b) + 14px); transform: translateX(-50%); width: min(92%, 440px); margin: 0; padding: 10px 16px; border-radius: 14px; background: rgba(13, 19, 33, 0.88); color: #eaf0f8; font-size: 0.85rem; line-height: 1.35; text-align: center; z-index: 3; }

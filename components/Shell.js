@@ -30,6 +30,7 @@ export default function Shell({ children }) {
     [loggingOut, setLoggingOut] = useState(false),
     [st, setSt] = useState(null),
     [phone, setPhone] = useState(false),
+    [phoneApp, setPhoneApp] = useState(null),
     [clock, setClock] = useState(null),
     opener = useRef(null),
     firstApp = useRef(null),
@@ -65,19 +66,16 @@ export default function Shell({ children }) {
     return () => clearInterval(t);
   }, []);
   useEffect(() => {
-    if (!phone) return;
-    firstApp.current?.focus();
-    const k = (e) => {
-      if (e.key === "Escape") {
-        setPhone(false);
-        opener.current?.focus();
-      }
-    };
-    document.addEventListener("keydown", k);
-    return () => document.removeEventListener("keydown", k);
+    if (phone) firstApp.current?.focus();
   }, [phone]);
   useEffect(() => {
-    setPhone(false);
+    // old links (/career, /people ...) redirect to /play?app=x: open the phone on that app, then tidy the address bar
+    const app = new URLSearchParams(window.location.search).get("app");
+    if (path === "/play" && app) {
+      setPhoneApp(app);
+      setPhone(true);
+      window.history.replaceState(null, "", "/play");
+    } else setPhone(false);
   }, [path]);
   useEffect(() => {
     // the spacing that clears the bars shrinks to nothing while they are hidden
@@ -200,7 +198,10 @@ export default function Shell({ children }) {
             data-active={phone ? "1" : undefined}
             aria-expanded={phone}
             aria-haspopup="dialog"
-            onClick={() => setPhone(true)}
+            onClick={() => {
+              setPhoneApp(null);
+              setPhone(true);
+            }}
           >
             <Icon name="phone" weight={phone ? "fill" : "regular"} />
             <span>Phone</span>
@@ -211,6 +212,7 @@ export default function Shell({ children }) {
         open={phone && !!st}
         st={st}
         firstApp={firstApp}
+        initialApp={phoneApp}
         loggingOut={loggingOut}
         onLogout={logout}
         onClose={() => {

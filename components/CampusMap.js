@@ -16,7 +16,7 @@ const labelWidth = (name, tier) => Math.min(190, name.length * (tier === 1 ? 7.4
  * labels are real buttons. They thin out with distance and never overlap, and the "Labels" button hides them all.
  */
 export default function CampusMap({ interactive = true, zoomOnly = false, pins = true, autoRotate = false, selectedId = null, onSelect, billboards = null, className = "", style, view = HOME_VIEW }) {
-  const box = useRef(null), api = useRef(null), noFly = useRef(false), sel = useRef(selectedId), cb = useRef(onSelect), [mounts, setMounts] = useState([]), [failed, setFailed] = useState(false), [labels, setLabels] = useState(true);
+  const box = useRef(null), api = useRef(null), noFly = useRef(false), sel = useRef(selectedId), cb = useRef(onSelect), [mounts, setMounts] = useState([]), [failed, setFailed] = useState(false), [labels, setLabels] = useState(true), [look, setLook] = useState(false), [hint, setHint] = useState(interactive);
   sel.current = selectedId; cb.current = onSelect;
   const canZoom = interactive || zoomOnly, hold = () => { noFly.current = true; setTimeout(() => { noFly.current = false; }, 400); }; // a tap on the map shouldn't re-centre it
 
@@ -27,7 +27,7 @@ export default function CampusMap({ interactive = true, zoomOnly = false, pins =
         const [{ createStage }, { buildRealCampus, addRealLighting }, { CSS2DRenderer, CSS2DObject }, data] = await Promise.all([import("../lib3d/stage.js"), import("../lib3d/campusReal.js"), import("three/addons/renderers/CSS2DRenderer.js"), loadCampusData()]);
         if (!alive) return;
         const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches, host = box.current.querySelector("[data-canvas]");
-        stage = createStage(host, { fov: 42, far: 1800, controls: { maxPolarAngle: 1.38, minPolarAngle: 0.35, minDistance: interactive ? 10 : 50, maxDistance: interactive ? 520 : 360, enablePan: interactive, enableRotate: interactive, enableZoom: canZoom, autoRotate: autoRotate && !reduce, autoRotateSpeed: 0.45, screenSpacePanning: false, zoomToCursor: interactive } });
+        stage = createStage(host, { fov: 42, far: 1800, controls: { maxPolarAngle: 1.38, minPolarAngle: interactive ? 0.08 : 0.35, minDistance: interactive ? 6 : 50, maxDistance: interactive ? 520 : 360, enablePan: interactive, enableRotate: interactive, enableZoom: canZoom, autoRotate: autoRotate && !reduce, autoRotateSpeed: 0.45, screenSpacePanning: false, zoomToCursor: interactive } });
         const light = addRealLighting(stage.scene); campus = buildRealCampus(data, placeMeta(data)); stage.scene.add(campus.root);
         stage.onFrame((t, dt) => { campus.update(t, dt); light.follow(stage.controls.target); });
         const { x, z, dist, az, pol } = view; stage.controls.target.set(x, 0, z); stage.camera.position.set(x + Math.sin(az) * Math.sin(pol) * dist, Math.cos(pol) * dist, z + Math.cos(az) * Math.sin(pol) * dist); stage.controls.update();
@@ -41,7 +41,9 @@ export default function CampusMap({ interactive = true, zoomOnly = false, pins =
         if (interactive) { const el = stage.renderer.domElement, ray = new stage.THREE.Raycaster(), ndc = new stage.THREE.Vector2(); let d0 = null;
           const down = (e) => { d0 = [e.clientX, e.clientY, performance.now()]; };
           const up = (e) => { if (!d0 || Math.hypot(e.clientX - d0[0], e.clientY - d0[1]) > 5 || performance.now() - d0[2] > 500) return; const r = el.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, stage.camera); const id = campus.pick(ray); if (id) { hold(); cb.current?.(id); } };
-          el.addEventListener("pointerdown", down); el.addEventListener("pointerup", up); off.push(() => { el.removeEventListener("pointerdown", down); el.removeEventListener("pointerup", up); }); }
+          const plane = new stage.THREE.Plane(new stage.THREE.Vector3(0, 1, 0), 0), at = new stage.THREE.Vector3();
+          const zoomIn = (e) => { const r = el.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, stage.camera); if (!ray.ray.intersectPlane(plane, at)) return; const d = stage.camera.position.distanceTo(stage.controls.target); stage.flyTo(at.x, 0, at.z, Math.max(stage.controls.minDistance + 10, d * 0.45), null); }; // double-click or double-tap: glide in on that spot
+          el.addEventListener("pointerdown", down); el.addEventListener("pointerup", up); el.addEventListener("dblclick", zoomIn); off.push(() => { el.removeEventListener("pointerdown", down); el.removeEventListener("pointerup", up); el.removeEventListener("dblclick", zoomIn); }); }
         // labels: HTML buttons that follow each building's roof
         if (pins) {
           lab = new CSS2DRenderer(); lab.domElement.style.cssText = "position:absolute;inset:0;pointer-events:none;overflow:hidden"; host.appendChild(lab.domElement);
@@ -68,6 +70,9 @@ export default function CampusMap({ interactive = true, zoomOnly = false, pins =
 
   useEffect(() => { const a = api.current; if (a && billboards) a.campus.setBillboards(billboards); }, [billboards, mounts]);
 
+  // "Look around" turns one-finger / left-button drag into orbit + tilt (to inspect a building in 3D); off, it slides the map. Two fingers or right-drag always turn and tilt.
+  useEffect(() => { const c = api.current?.stage.controls; if (!c || !interactive) return; const T = api.current.THREE; c.mouseButtons = { LEFT: look ? T.MOUSE.ROTATE : T.MOUSE.PAN, MIDDLE: T.MOUSE.DOLLY, RIGHT: look ? T.MOUSE.PAN : T.MOUSE.ROTATE }; c.touches = { ONE: look ? T.TOUCH.ROTATE : T.TOUCH.PAN, TWO: T.TOUCH.DOLLY_ROTATE }; }, [look, mounts]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!hint) return; const t = setTimeout(() => setHint(false), 7000); return () => clearTimeout(t); }, [hint]);
   const nudge = (o) => api.current?.stage.nudge(o);
   const reset = () => { const v = view; api.current?.stage.flyTo(v.x, 0, v.z, v.dist, v.pol); onSelect?.(null); };
   const onKey = (e) => { const k = e.key; if (k === "ArrowLeft") nudge(e.shiftKey ? { az: -0.25 } : { panX: -0.12 }); else if (k === "ArrowRight") nudge(e.shiftKey ? { az: 0.25 } : { panX: 0.12 }); else if (k === "ArrowUp") nudge(e.shiftKey ? { pol: -0.12 } : { panZ: 0.12 }); else if (k === "ArrowDown") nudge(e.shiftKey ? { pol: 0.12 } : { panZ: -0.12 }); else if (k === "+" || k === "=") nudge({ zoom: 0.85 }); else if (k === "-") nudge({ zoom: 1.18 }); else if (k === "Home") reset(); else return; e.preventDefault(); };
@@ -83,7 +88,10 @@ export default function CampusMap({ interactive = true, zoomOnly = false, pins =
           <button type="button" aria-label="Zoom out" onClick={() => nudge({ zoom: 1.25 })}><Icon name="minus" /></button>
         </div>)}
       {interactive && !failed && (<>
-        <div className="stage-ctrls">
+        <div className="stage-ctrls stage-ctrls--map">
+          <button type="button" aria-label={look ? "Look around is on: drag to orbit and tilt. Tap to go back to moving the map" : "Look around: drag to orbit and tilt, to see a building in 3D"} title="Look around in 3D" aria-pressed={look} className={look ? "on" : ""} onClick={() => { setLook((v) => !v); setHint(false); }}><Icon name={look ? "cube" : "move"} /></button>
+          <button type="button" aria-label="Tilt up, towards a top-down view" onClick={() => nudge({ pol: -0.16 })}><Icon name="up" /></button>
+          <button type="button" aria-label="Tilt down, towards a street-level view" onClick={() => nudge({ pol: 0.16 })}><Icon name="down" /></button>
           <button type="button" aria-label={labels ? "Hide building labels" : "Show building labels"} aria-pressed={labels} onClick={() => setLabels((v) => !v)}><Icon name={labels ? "eye" : "eyeOff"} /></button>
           <button type="button" aria-label="Rotate left" onClick={() => nudge({ az: -0.5 })}><Icon name="rotateLeft" /></button>
           <button type="button" aria-label="Rotate right" onClick={() => nudge({ az: 0.5 })}><Icon name="rotateRight" /></button>
@@ -91,6 +99,7 @@ export default function CampusMap({ interactive = true, zoomOnly = false, pins =
           <button type="button" aria-label="Zoom out" onClick={() => nudge({ zoom: 1.25 })}><Icon name="minus" /></button>
           <button type="button" aria-label="Reset the view" onClick={reset}><Icon name="reset" /></button>
         </div>
+        {hint && <p className="stage-hint" role="status" onClick={() => setHint(false)}>Drag to move · pinch to zoom · two fingers to turn and tilt · double-tap to zoom in</p>}
         <p className="stage-credit">Map data © OpenStreetMap contributors</p>
       </>)}
       {mounts.map(({ id, el, L }) => createPortal(

@@ -1,5 +1,6 @@
+"use client";{/* <b className="num">{fmtN(d.price)}</b> */}
 // components/BuySheet.js
-"use client";
+
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "./Icon";
 import { CATEGORIES, ITEMS, ITEM_KEYS, inShop } from "@/lib/furniture.js";
@@ -151,17 +152,10 @@ export default function BuySheet({
                   type="button"
                   className="go bs-buy"
                   disabled={busy || !can}
+                  aria-label={can ? `Buy ${d.name} for ${fmtN(d.price)}` : `${d.name}, ${fmtN(d.price)}. You need ${fmtN(need)} more to buy it`}
                   onClick={() => onBuy(k)}
                 >
-                  {can ? (
-                    <>
-                      Buy <b className="num">{fmtN(d.price)}</b>
-                    </>
-                  ) : (
-                    <>
-                      Need <b className="num">{fmtN(need)}</b> more
-                    </>
-                  )}
+                  <b className="num">{fmtN(d.price)}</b>
                 </button>
               </article>
             );
