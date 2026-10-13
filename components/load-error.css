@@ -1,0 +1,19 @@
+/* components/load-error.css */
+/* In-page "didn't load" card with Try again + Log out. Everything is prefixed `le-`. */
+/* Centered in the space below the header, with space on all sides. */
+.le { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; box-sizing: border-box; position: fixed; top: calc(var(--hud-h) + 16px); bottom: calc(var(--safe-b) + 16px); left: 0; right: 0; margin: auto; height: fit-content; max-height: calc(100dvh - var(--hud-h) - var(--safe-b) - 32px); overflow: auto; width: min(560px, calc(100% - 2 * clamp(16px, 4vw, 48px))); padding: 40px 20px 32px; border-radius: 28px; border: 1px solid var(--line); background: var(--surface);
+  background-image: radial-gradient(60% 70% at 50% 0%, rgba(251, 173, 1, 0.07), transparent 70%); animation: le-in 420ms var(--ease) both; }
+.le-logo { overflow: visible; margin-bottom: 10px; }
+.le-sun { opacity: 0.4; filter: saturate(0.6); }
+.le-cloud { fill: #3a4a6d; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.35)); animation: le-drift 1s var(--ease) 150ms both; }
+.le h2 { margin: 0; font-size: 1.35rem; }
+.le-copy { margin: 0 0 14px; color: var(--muted); }
+.le-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+.le-actions button { min-width: 160px; min-height: 48px; }
+.le-out:hover:not(:disabled) { border-color: rgba(255, 138, 138, 0.5); background: rgba(220, 38, 38, 0.1); color: #ffb0b0; }
+.le-actions button:focus-visible { outline: 3px solid var(--ring); outline-offset: 3px; }
+.le-problem { margin: 12px 0 0; padding: 8px 12px; border-radius: 10px; font-size: 0.9rem; color: var(--danger-text); background: rgba(220, 38, 38, 0.1); border: 1px solid rgba(220, 38, 38, 0.3); }
+@keyframes le-in { from { opacity: 0; transform: translateY(10px); } }
+@keyframes le-drift { from { transform: translateX(-70px); opacity: 0; } 40% { opacity: 1; } to { transform: none; opacity: 1; } }
+@media (max-width: 480px) { .le-actions { flex-direction: column; width: 100%; } .le-actions button { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { .le, .le-cloud { animation: none !important; } }

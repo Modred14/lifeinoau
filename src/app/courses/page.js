@@ -1,5 +1,6 @@
 // src/app/courses/page.js
 "use client";
+import LoadError from "@/components/LoadError";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { call, notifyError, loggedOut } from "@/lib/client";
@@ -63,10 +64,7 @@ export default function Courses() {
   }
   if (!d)
     return loadFailed ? (
-      <div className="card">
-        <p className="mut">This page didn&apos;t load.</p>
-        <button onClick={load}>Try again</button>
-      </div>
+      <LoadError onRetry={load} />
     ) : (
       <p className="mut">Loading...</p>
     );

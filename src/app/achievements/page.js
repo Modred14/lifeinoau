@@ -1,5 +1,6 @@
 // src/app/achievements/page.js
 "use client";
+import LoadError from "@/components/LoadError";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { call, notifyError, loggedOut } from "@/lib/client";
@@ -30,17 +31,13 @@ export default function Achievements() {
         </a>
       </div>
       {failed && (
-        <div className="card">
-          <p className="mut">Your achievements didn&apos;t load.</p>
-          <button
-            onClick={() => {
-              setFailed(false);
-              setTries((t) => t + 1);
-            }}
-          >
-            Try again
-          </button>
-        </div>
+        <LoadError
+          title="Your achievements didn't load"
+          onRetry={() => {
+            setFailed(false);
+            setTries((t) => t + 1);
+          }}
+        />
       )}
       {list && (
         <p className="mut">

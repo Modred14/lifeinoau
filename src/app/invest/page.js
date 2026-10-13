@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { call, naira, notifyError, loggedOut } from "@/lib/client";
 import { toast } from "@/lib/toast";
+import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
 
 const RISK = { LOW: "var(--ok)", MEDIUM: "var(--acc)", HIGH: "var(--bad)" };
@@ -79,10 +80,7 @@ export default function Invest() {
   }
   if (!d)
     return loadFailed ? (
-      <div className="card">
-        <p className="mut">This page didn&apos;t load.</p>
-        <button onClick={load}>Try again</button>
-      </div>
+      <LoadError onRetry={load} />
     ) : (
       <Loader label="Loading markets" />
     );

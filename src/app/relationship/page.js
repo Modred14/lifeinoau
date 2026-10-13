@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { call, notifyError, loggedOut } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { confirmAction } from "@/lib/confirm";
+import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
 
 const GIFTS = [
@@ -47,10 +48,7 @@ export default function Relationship() {
   const act = (action, extra) => go("/api/relationship", { action, ...extra });
   if (!d)
     return loadFailed ? (
-      <div className="card">
-        <p className="mut">This page didn&apos;t load.</p>
-        <button onClick={load}>Try again</button>
-      </div>
+      <LoadError onRetry={load} />
     ) : (
       <Loader label="Loading" />
     );

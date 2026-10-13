@@ -6,13 +6,7 @@ import { useRouter } from "next/navigation";
 import { call } from "@/lib/client";
 import AuthModal from "@/components/AuthModal";
 import Loader from "@/components/Loader";
-import {
-  CLASS_ORDER,
-  CLASS_INFO,
-  ODDS,
-  allowanceOf,
-  fmtN,
-} from "@/lib/classes.js";
+import Logo from "@/components/Logo";
 import "./landing.css";
 
 const CampusMap = dynamic(() => import("@/components/CampusMap"), {
@@ -21,8 +15,7 @@ const CampusMap = dynamic(() => import("@/components/CampusMap"), {
 
 export default function Home() {
   const router = useRouter();
-  const [mode, setMode] = useState(null),
-    [news, setNews] = useState(null);
+  const [mode, setMode] = useState(null);
   // Returning player? The login cookie is remembered, so skip the landing page and go straight to the game.
   const [checking, setChecking] = useState(true),
     [welcome, setWelcome] = useState("");
@@ -40,43 +33,22 @@ export default function Home() {
       on = false;
     };
   }, [router]);
-  useEffect(() => {
-    call("/api/meta").then((r) => {
-      if (!r.failed) setNews(r);
-    });
-  }, []);
 
   return (
     <>
       <div className="mapwrap">
         <CampusMap
           interactive={false}
-          zoomOnly
           pins={false}
           view={{ x: 0, z: 8, dist: 185, az: 0.55, pol: 1.0 }}
         />
       </div>
-      <header className="hud">
-        <span className="brand">
+      <div className="ld-brand">
+        <Logo size={40} />
+        <span>
           life<i>in</i>oau
         </span>
-        {news && (
-          <>
-            <span className="sep" aria-hidden="true" />
-            <span className="meta num">
-              Game week {news.week} · {news.headline}
-            </span>
-          </>
-        )}
-        <span className="grow" />
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => setMode("login")}
-        >
-          Log in
-        </button>
-      </header>
+      </div>
       <main className="ld">
         <section className="ld-card">
           <h1>Live your OAU story with real people.</h1>
@@ -96,18 +68,7 @@ export default function Home() {
               Log in
             </button>
           </div>
-          <h2 className="ld-deal-h">You are dealt one of three lives</h2>
-          <ul className="ld-deal">
-            {CLASS_ORDER.map((c, n) => (
-              <li key={c} style={{ "--c": CLASS_INFO[c].color, "--n": n }}>
-                <b>{c}</b>
-                <span className="num ld-amt">
-                  {fmtN(allowanceOf(c) / 1000)}k
-                </span>
-                <span className="mut">a week, {ODDS[c]}% of players</span>
-              </li>
-            ))}
-          </ul>
+
           <p className="ld-fine">
             For players 18 and over. The campus map is stylised, not to scale.
           </p>

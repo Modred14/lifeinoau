@@ -352,7 +352,7 @@ input[type="checkbox"] {
   border: 1px solid rgba(255, 255, 255, 0.11); border-radius: var(--r-pill); box-shadow: 0 14px 34px -18px rgba(0, 0, 0, 0.7);
 }
 .hud .brand { display: inline-flex; align-items: center; gap: 8px; font: 700 1.1rem var(--font-head); letter-spacing: -0.015em; }
-.hud .brand .crown { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: #17803f; color: #fff; }
+.hud .brand .crown { display: grid; place-items: center; line-height: 0; }
 .hud .brand i { color: var(--green-text); font-style: normal; }
 .hud .sep { width: 1px; height: 22px; background: var(--line); }
 .hud .grow { flex: 1; }

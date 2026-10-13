@@ -7,6 +7,7 @@ import { toast } from "@/lib/toast";
 import CreateFlow from "@/components/CreateFlow";
 import LifeRoll from "@/components/LifeRoll";
 import HostelPicker from "@/components/HostelPicker";
+import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
 import { Icon } from "@/components/Icon";
 import GameHome from "@/components/GameHome";
@@ -144,20 +145,11 @@ export default function Play() {
     setView("reveal");
   }
 
-  if (view === "loading") return <Loader label="Loading your life" />;
+ if (view === "loading") return <Loader fullscreen label="Loading your life" />;
   if (view === "error")
     return (
       <View key={view}>
-        <div className="gh-empty">
-          <span className="gh-emptyico">
-            <Icon name="warn" size={28} />
-          </span>
-          <h2>Your game didn&apos;t load</h2>
-          <p className="mut">Check your connection and try again.</p>
-          <button type="button" className="go" onClick={load}>
-            Try again
-          </button>
-        </div>
+        <LoadError title="Your game didn't load" onRetry={load} />
       </View>
     );
   if (view === "create")

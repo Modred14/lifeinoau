@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { call, naira, notifyError, loggedOut } from "@/lib/client";
+import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
 
 const TABS = [
@@ -61,10 +62,10 @@ export default function Boards() {
         ))}
       </div>
       {failed && (
-        <div className="card">
-          <p className="mut">This board didn&apos;t load.</p>
-          <button onClick={() => setTries((t) => t + 1)}>Try again</button>
-        </div>
+        <LoadError
+          title="This board didn't load"
+          onRetry={() => setTries((t) => t + 1)}
+        />
       )}
       {!b && !failed && <Loader label="Loading leaderboards" />}
       {b?.unavailable && (

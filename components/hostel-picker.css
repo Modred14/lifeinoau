@@ -1,5 +1,6 @@
 /* components/hostel-picker.css */
-.hp { padding-bottom: 8px; }
+/* page frame: starts below the header and has space on the left and right. The bottom space comes from .hp-cta. */
+.hp { box-sizing: border-box; max-width: 1100px; margin-inline: auto; padding: calc(var(--hud-h) + 24px) clamp(16px, 4vw, 48px) 0; }
 .hp-head { margin: 4px 0 22px; }
 .hp-head h1 { font-size: clamp(1.9rem, 4.6vw, 2.7rem); letter-spacing: -0.025em; }
 .hp-head p { margin: 8px 0 0; max-width: 56ch; font-size: 1rem; line-height: 1.55; }
@@ -25,7 +26,8 @@
 .hp-tick svg { transform: scale(0); transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1); }
 .hp-card[aria-checked="true"] .hp-tick { background: var(--green); border-color: var(--green-text); color: #fff; }
 .hp-card[aria-checked="true"] .hp-tick svg { transform: scale(1); }
-.hp-cta { position: sticky; bottom: 0; z-index: 5; display: flex; justify-content: center; margin-top: 20px; padding: 12px 0 calc(12px + var(--safe-b)); background: var(--bg); border-top: 1px solid var(--line); }
+/* actions: sticky bar with space under the button */
+.hp-cta { position: sticky; bottom: 0; z-index: 5; display: flex; justify-content: center; margin-top: 20px; padding: 14px 0 calc(24px + var(--safe-b)); background: var(--bg); border-top: 1px solid var(--line); }
 .hp-cta button { width: 100%; max-width: 420px; min-height: 54px; font-size: 1.02rem; }
 @keyframes hp-in { from { opacity: 0; transform: translateY(14px); } }
 @keyframes hp-grow { from { transform: scaleX(0); } }

@@ -1,7 +1,8 @@
 /* components/create-flow.css */
 /* Character creation. Flat colour only: no gradients. Prefixed `cf-`; selectors are scoped under .cf so global button rules can't leak in. */
 
-.cf { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+/* page frame: starts below the header and has space on the left and right. The bottom space comes from .cf-bar. */
+.cf { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); box-sizing: border-box; max-width: 1280px; margin-inline: auto; padding: calc(var(--hud-h) + 24px) clamp(16px, 4vw, 48px) 0; }
 .cf-stage { position: relative; border-radius: 28px; overflow: hidden; background: #111a2e; border: 1px solid var(--line); height: 42vh; min-height: 300px; max-height: 480px; }
 .cf-stage .stage { position: absolute; inset: 0; height: 100%; border-radius: 0; }
 .cf-caption { position: absolute; left: 14px; top: 14px; z-index: 2; display: grid; gap: 1px; max-width: calc(100% - 28px); padding: 9px 14px; border-radius: 14px; background: rgba(13, 19, 33, 0.86); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); pointer-events: none; }
@@ -9,7 +10,7 @@
 .cf-caption span { font-size: 0.8rem; }
 @media (min-width: 900px) {
   .cf { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 28px; align-items: start; }
-  .cf-stage { height: calc(100vh - var(--hud-h) - 56px); max-height: 740px; position: sticky; top: calc(var(--hud-h) + 24px); }
+  .cf-stage { height: calc(100dvh - var(--hud-h) - 72px); max-height: 740px; position: sticky; top: calc(var(--hud-h) + 24px); }
 }
 
 /* progress */
@@ -88,12 +89,12 @@
 .cf-meter i { width: 14px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.14); }
 .cf-meter[data-n="1"] i:nth-child(-n + 1), .cf-meter[data-n="2"] i:nth-child(-n + 2), .cf-meter[data-n="3"] i { background: var(--gold-text); }
 
-/* actions */
-.cf-bar { position: sticky; bottom: 0; z-index: 5; display: flex; gap: 10px; margin-top: 18px; padding: 12px 0 calc(12px + var(--safe-b)); background: var(--bg); border-top: 1px solid var(--line); }
+/* actions: sticky bar with space under the button */
+.cf-bar { position: sticky; bottom: 0; z-index: 5; display: flex; gap: 10px; margin-top: 18px; padding: 14px 0 calc(24px + var(--safe-b)); background: var(--bg); border-top: 1px solid var(--line); }
 .cf .cf-bar button { min-height: 54px; font-size: 1.02rem; }
 .cf .cf-back { flex: 0 0 auto; padding-inline: 20px; background: transparent; }
 .cf .cf-next { flex: 1 1 auto; }
-.cf-fine { margin: 4px 0 0; text-align: center; max-width: none; font-size: 0.85rem; }
+.cf-fine { margin: 0 0 24px; text-align: center; max-width: none; font-size: 0.85rem; }
 
 @keyframes cf-in { from { opacity: 0; transform: translateX(18px); } }
 @keyframes cf-in-back { from { opacity: 0; transform: translateX(-18px); } }

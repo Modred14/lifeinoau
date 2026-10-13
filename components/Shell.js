@@ -1,5 +1,6 @@
 // components/Shell.js
 "use client";
+import Logo from "./Logo";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -111,7 +112,7 @@ export default function Shell({ children }) {
           onClick={() => setPlayMode("home")}
         >
           <span className="crown" aria-hidden="true">
-            <Icon name="hall" size={18} weight="fill" />
+            <Logo size={28} />
           </span>
           <span>
             life<i>in</i>oau

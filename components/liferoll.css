@@ -1,14 +1,15 @@
 /* components/liferoll.css */
 /* The class roll. Flat colour only: no gradients. Each class sets --cls (LAPO orange, MAPO sky, NEPO gold). */
 
-.lr { --rh: clamp(76px, 20vw, 108px); --cls: var(--gold-text); padding-bottom: 8px; }
+/* page frame: starts below the header and has space on the left and right. The bottom space comes from .lr-cta. */
+.lr { --rh: clamp(76px, 20vw, 108px); --cls: var(--gold-text); box-sizing: border-box; max-width: 1200px; margin-inline: auto; padding: calc(var(--hud-h) + 24px) clamp(16px, 4vw, 48px) 0; }
 .lr-head { margin: 4px 0 20px; }
 .lr-head h1 { font-size: clamp(1.9rem, 4.6vw, 2.7rem); letter-spacing: -0.025em; animation: lr-swap 360ms var(--ease) both; }
 .lr-head p { margin: 6px 0 0; font-size: 1rem; }
 .lr[data-phase="landed"] .lr-head h1, .lr[data-phase="landed"] .lr-head p { animation: lr-swap 360ms var(--ease) both; }
 
 .lr-grid { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); align-items: start; }
-@media (min-width: 880px) { .lr-grid { grid-template-columns: minmax(340px, 420px) minmax(0, 1fr); gap: 28px; } .lr-machine { position: sticky; top: calc(var(--hud-h) + 20px); } }
+@media (min-width: 880px) { .lr-grid { grid-template-columns: minmax(340px, 420px) minmax(0, 1fr); gap: 28px; } .lr-machine { position: sticky; top: calc(var(--hud-h) + 24px); } }
 
 /* machine */
 .lr-machine { padding: 18px 18px 16px; border-radius: 28px; background: var(--surface); border: 1px solid var(--line); transition: border-color 420ms var(--ease); }
@@ -65,8 +66,8 @@
 .lr-chips em.lr-later { background: transparent; border-style: dashed; color: var(--muted); }
 .lr-note { margin: 14px 0 0; max-width: none; padding: 12px 14px; border-radius: var(--r-md); background: var(--raised); color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
 
-/* actions */
-.lr-cta { position: sticky; bottom: 0; z-index: 5; display: flex; justify-content: center; margin-top: 22px; padding: 12px 0 calc(12px + var(--safe-b)); background: var(--bg); border-top: 1px solid var(--line); }
+/* actions: sticky bar with space under the button */
+.lr-cta { position: sticky; bottom: 0; z-index: 5; display: flex; justify-content: center; margin-top: 22px; padding: 14px 0 calc(24px + var(--safe-b)); background: var(--bg); border-top: 1px solid var(--line); }
 .lr-cta button { width: 100%; max-width: 420px; min-height: 54px; font-size: 1.02rem; }
 .lr-cta .lr-go { animation: lr-rise 420ms var(--ease) 300ms both; }
 .lr-cta .lr-skip { border-color: var(--line); color: var(--muted); }

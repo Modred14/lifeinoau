@@ -161,34 +161,7 @@ export default function LifeRoll({ result, hostels = [], onContinue }) {
           <p className="lr-status" role="status" aria-live="polite">
             {phase === "landed" ? `You are ${result}` : "Rolling…"}
           </p>
-          <div className="lr-odds">
-            <div className="lr-oddsbar" aria-hidden="true">
-              {CLASS_ORDER.map((c) => (
-                <i
-                  key={c}
-                  data-c={c}
-                  data-on={
-                    phase === "landed" && c === result ? "true" : undefined
-                  }
-                  style={{ flexGrow: ODDS[c], "--c": CLASS_INFO[c].color }}
-                />
-              ))}
-            </div>
-            <ul className="lr-oddslist">
-              {CLASS_ORDER.map((c) => (
-                <li
-                  key={c}
-                  data-on={
-                    phase === "landed" && c === result ? "true" : undefined
-                  }
-                  style={{ "--c": CLASS_INFO[c].color }}
-                >
-                  <span>{c}</span>
-                  <b className="num">{ODDS[c]}%</b>
-                </li>
-              ))}
-            </ul>
-          </div>
+       
         </section>
 
         <section

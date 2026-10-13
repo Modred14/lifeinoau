@@ -1,0 +1,64 @@
+/* components/error-screen.css */
+/* Full-screen error page. Same dark surface, green and gold as the rest of the site. Everything is prefixed `er-`.
+   Also used by global-error.js, where the main stylesheet is imported on its own, so the fallbacks below keep it readable. */
+
+/* no site header while the error page is showing (ErrorScreen sets data-bare on <body>) */
+body[data-bare] .hud { display: none !important; }
+body[data-bare] { --hud-h: 0px; }
+
+/* the message sits in the middle of the screen, on phones too. margin:auto on the card keeps it reachable when it is taller than the screen. */
+.er { position: fixed; inset: 0; z-index: 80; display: grid; justify-items: center; padding: max(24px, var(--safe-t, 0px)) clamp(16px, 4vw, 48px) max(24px, var(--safe-b, 0px)); overflow-y: auto;
+  background: var(--bg, #0d1321); color: var(--text, #eaf0f8); text-align: center; }
+.er-sky { position: fixed; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(50% 38% at 50% 28%, rgba(251, 173, 1, 0.09), transparent 70%),
+    radial-gradient(70% 40% at 50% 108%, rgba(21, 128, 61, 0.2), transparent 70%); }
+
+.er-card { position: relative; width: min(100%, 520px); margin: auto; display: flex; flex-direction: column; align-items: center; padding: 8px 0 24px; animation: er-in 600ms var(--ease, ease) both; }
+
+/* the logo, with its sun dimmed and a cloud drifting across it */
+.er-art { position: relative; display: grid; place-items: center; margin-bottom: 26px; }
+.er-halo { position: absolute; width: 300px; height: 300px; border-radius: 50%; background: radial-gradient(circle, rgba(242, 246, 255, 0.07), transparent 68%); }
+.er-logo { position: relative; overflow: visible; max-width: 78vw; height: auto; animation: er-bob 6s ease-in-out infinite; }
+.er-sun { opacity: 0.4; filter: saturate(0.6); animation: er-sun 600ms ease 300ms both; }
+.er-cloud { fill: #3a4a6d; animation: er-drift 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) 200ms both; }
+.er-cloud ellipse, .er-cloud circle { stroke: none; }
+.er-cloud { paint-order: fill; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.35)); }
+
+.er-chip { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 14px; padding: 6px 12px; border-radius: 999px; font-size: 0.8rem; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--gold-text, #f2b84b); background: rgba(242, 184, 75, 0.09); border: 1px solid rgba(242, 184, 75, 0.22); }
+.er-chip i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: er-pulse 2s ease-in-out infinite; }
+
+.er h1 { margin: 0 0 12px; font-family: var(--font-head, system-ui, sans-serif); font-weight: 600; font-size: clamp(1.7rem, 5.4vw, 2.4rem); line-height: 1.15; letter-spacing: -0.015em; text-wrap: balance; }
+.er-copy { margin: 0 auto 28px; max-width: 40ch; color: var(--muted, #9aa8bc); font-size: 1.02rem; line-height: 1.55; }
+
+.er-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; width: 100%; }
+.er-actions button { min-width: 168px; min-height: 52px; padding: 12px 22px; font-size: 1.02rem; border-radius: 16px; }
+.er-try { box-shadow: 0 12px 28px -14px rgba(21, 128, 61, 0.9), 0 1px 0 rgba(255, 255, 255, 0.18) inset; }
+.er-try:hover:not(:disabled) { transform: translateY(-1px); }
+.er-out { color: var(--text, #eaf0f8); border-color: rgba(255, 255, 255, 0.16); }
+.er-out:hover:not(:disabled) { border-color: rgba(255, 138, 138, 0.5); background: rgba(220, 38, 38, 0.1); color: #ffb0b0; }
+.er-actions button:focus-visible { outline: 3px solid var(--ring, #3fd08a); outline-offset: 3px; }
+.er-spin { display: inline-flex; animation: er-rot 0.9s linear infinite; }
+
+.er-problem { margin: 18px 0 0; padding: 10px 14px; border-radius: 12px; font-size: 0.92rem; color: var(--danger-text, #ff8080); background: rgba(220, 38, 38, 0.1); border: 1px solid rgba(220, 38, 38, 0.3); }
+.er-ref { margin: 22px 0 0; font-size: 0.8rem; color: var(--muted, #9aa8bc); opacity: 0.8; }
+.er-ref code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; padding: 2px 6px; border-radius: 6px; background: rgba(255, 255, 255, 0.06); user-select: all; }
+.er-brand { position: absolute; bottom: max(18px, var(--safe-b, 0px)); left: 0; right: 0; margin: 0 auto; font: 700 1rem var(--font-head, system-ui, sans-serif); letter-spacing: -0.015em; color: var(--muted, #9aa8bc); opacity: 0.7; }
+.er-brand i { color: var(--green-text, #3fd08a); font-style: normal; }
+
+@keyframes er-in { from { opacity: 0; transform: translateY(14px); } }
+@keyframes er-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes er-drift { from { transform: translateX(-90px); opacity: 0; } 40% { opacity: 1; } to { transform: none; opacity: 1; } }
+@keyframes er-sun { from { opacity: 1; filter: none; } }
+@keyframes er-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes er-rot { to { transform: rotate(360deg); } }
+
+@media (max-width: 480px) {
+  .er-actions { flex-direction: column; }
+  .er-actions button { width: 100%; }
+}
+@media (max-height: 640px) { .er-brand { display: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .er-card, .er-logo, .er-cloud, .er-sun, .er-chip i, .er-spin { animation: none !important; }
+}
