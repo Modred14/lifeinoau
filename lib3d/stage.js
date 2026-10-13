@@ -17,7 +17,10 @@ export function createStage(container, opts = {}) {
   const io = new IntersectionObserver(([e]) => { visible = e.isIntersecting; }); io.observe(container);
   const tick = () => { if (!alive) return; raf = requestAnimationFrame(tick); if (!visible || document.hidden) return; const now = performance.now(), raw = (now - last) / 1000; last = now; elapsed += raw; const dt = Math.min(raw, 0.1), t = elapsed; cbs.forEach((f) => f(t, dt)); if (fly) stepFly(dt); controls.update(); renderer.render(scene, camera); after.forEach((f) => f(t, dt)); };
   // button / keyboard alternatives to dragging: rotate, tilt and zoom by a step
-  const nudge = ({ az = 0, pol = 0, zoom = 1 } = {}) => { const off = camera.position.clone().sub(controls.target), sp = new THREE.Spherical().setFromVector3(off);
+  const nudge = ({ az = 0, pol = 0, zoom = 1, panX = 0, panZ = 0 } = {}) => { if (panX || panZ) { // slide the map along the ground: panX right, panZ forward (a fraction of the view distance), whichever way the camera is turned
+      const fwd = controls.target.clone().sub(camera.position).setY(0).normalize(), right = new THREE.Vector3(-fwd.z, 0, fwd.x), d = camera.position.distanceTo(controls.target), mv = right.multiplyScalar(panX * d).add(fwd.multiplyScalar(panZ * d));
+      controls.target.add(mv); camera.position.add(mv); controls.update(); return; }
+    const off = camera.position.clone().sub(controls.target), sp = new THREE.Spherical().setFromVector3(off);
     sp.theta += az; sp.phi = Math.min(controls.maxPolarAngle, Math.max(controls.minPolarAngle, sp.phi + pol)); sp.radius = Math.min(controls.maxDistance, Math.max(controls.minDistance, sp.radius * zoom));
     camera.position.copy(controls.target).add(off.setFromSpherical(sp)); controls.update(); };
   // smooth camera move to look at a point from a given distance

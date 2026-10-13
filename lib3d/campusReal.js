@@ -7,6 +7,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { buildGround } from "./ground.js";
 import { buildEdges } from "./edges.js";
 import { buildBillboards } from "./billboards3d.js";
+import { buildGrounds } from "./grounds.js";
 
 export const S = 0.1;   // metres -> scene units
 export const EX = 2;    // visual height exaggeration (buildings only)
@@ -63,6 +64,9 @@ export function buildRealCampus(data, meta = {}) {
   const wallMesh = sides.length ? new THREE.Mesh(mergeGeometries(sides), new THREE.MeshStandardMaterial({ vertexColors: true, map: win.map, emissive: 0xffffff, emissiveMap: win.emis, emissiveIntensity: 0.18, roughness: 0.8 })) : null;
   const capMesh = caps.length ? new THREE.Mesh(mergeGeometries(caps), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 })) : null;
   for (const m of [wallMesh, capMesh]) if (m) { m.castShadow = m.receiveShadow = true; root.add(m); } sides.forEach((g) => g.dispose()); caps.forEach((g) => g.dispose());
+
+  // ---- the Motion Ground and the Religious Ground (game placements in clear space; mapExtras.js) ----
+  if (data.grounds) root.add(buildGrounds(data.grounds, { S, EX }));
 
   // ---- trees: only inside the wooded area the map actually shows ----
   const rnd = rngOf(7), trees = [];

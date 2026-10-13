@@ -22,8 +22,26 @@ export const BILLBOARDS = [
   ["Alumni Road", -560, -260], ["Halls Row", -780, 120], ["Fajuyi Crossing", -400, 330], ["Ede Road Banks", 20, 560], ["Nightlife Strip", -183.8, 823.2],
 ].map(([where, x, z], i) => ({ id: "bb_" + (i + 1), n: i + 1, where, name: `Billboard ${i + 1} · ${where}`, x, z, yaw: 0.7 + (i % 3 - 1) * 0.35 }));
 
+/**
+ * Two open grounds the real-map render does not draw, placed in clear space (checked against every building, lake, wood and pitch in the data):
+ *  - Motion Ground: the open event field in the gap between the Amphitheatre and the Senate Building.
+ *  - Religious Ground: a walled compound just north of the Main Bowl, with four churches. The church names are generic game placements, not surveyed.
+ * Rectangles are in the same metre grid as the data (x east, z south).
+ */
+export const CHURCHES = [
+  { id: "church_catholic", name: "Catholic Chapel", x: -43, z: 187, w: 14, d: 20, h: 8, roof: "#8a3b2f", tower: 13 },
+  { id: "church_anglican", name: "Anglican Chapel", x: -19, z: 187, w: 14, d: 20, h: 7.5, roof: "#4a5d73", tower: 11 },
+  { id: "church_pentecostal", name: "Pentecostal Church", x: -43, z: 218, w: 14, d: 20, h: 8, roof: "#2f5d4a", tower: 10 },
+  { id: "church_baptist", name: "Baptist Church", x: -19, z: 218, w: 14, d: 20, h: 7, roof: "#6b4a35", tower: 10 },
+];
+export const GROUNDS = {
+  motion: { id: "motion_ground", name: "Motion Ground", x0: 28, x1: 94, z0: -2, z1: 38 },
+  religious: { id: "religious_ground", name: "Religious Ground", x0: -54, x1: -8, z0: 164, z1: 236, gate: -31, churches: CHURCHES },
+};
+
 // Buildings made for the places that have no footprint on the real map. w x d metres around the centre, h metres tall.
 const BUILDINGS = [
+  ...CHURCHES.map((c) => ({ id: c.id, name: c.name, kind: "worship", tier: 3, x: c.x, z: c.z, w: c.w, d: c.d, h: c.h, wall: "#efe9d8", roof: c.roof })),
   { id: "h_ojaja", name: "Ojaja", kind: "hostel", tier: 1, x: -628, z: 1030, w: 60, d: 26, h: 16, shape: "L", wall: "#e9e2d0", roof: "#6b5a46" },
   { id: "h_akintola", name: "Akintola Hall", kind: "hostel", tier: 1, x: 1000, z: -230, w: 52, d: 22, h: 12 },
   { id: "h_pg", name: "Murtala Muhammed Postgraduate Hall", kind: "hostel", tier: 1, x: -740, z: -20, w: 48, d: 20, h: 11 },
@@ -35,6 +53,9 @@ const BUILDINGS = [
 
 /** What a player is told about the places added by this file (the real-map places keep their blurbs in landmarks.js). */
 export const EXTRA_META = {
+  motion_ground: { blurb: "The open field between the Amphitheatre and the Senate Building. Concerts, rallies, big evenings and the odd football match all end up here.", actions: [{ label: "This week's parties", href: "/parties" }], verified: false },
+  religious_ground: { blurb: "A quiet walled ground just before the Main Bowl, with a church for each fellowship. Come for a service, or just for the calm.", actions: [], verified: false },
+  ...Object.fromEntries(CHURCHES.map((c) => [c.id, { blurb: `${c.name}, in the Religious Ground before the Main Bowl. Services, choir practice and fellowship.`, actions: [], verified: false }])),
   floor0: { blurb: "Where the DSA takes you when you get caught. You can wait out the time, or pay the bill to walk out early.", actions: [{ label: "Go to Floor 0", href: "/play" }], verified: false },
   ...Object.fromEntries(BILLBOARDS.map((b) => [b.id, { blurb: `A billboard at ${b.where}. Ten poster spots, each shown for ${BILLBOARD.SECONDS} seconds in turn.`, actions: [], verified: false }])),
 };
@@ -58,9 +79,10 @@ export function withExtras(data) {
     places.push({ id: e.id, name: e.name, kind: e.kind, tier: e.tier, src: "game-placement", conf: "game", x: e.x, z: e.z, bid: next, snapPx: 0 });
     next++;
   }
+  for (const g of Object.values(GROUNDS)) if (!places.some((p) => p.id === g.id)) places.push({ id: g.id, name: g.name, kind: g.id === "motion_ground" ? "sports" : "worship", tier: 2, src: "game-placement", conf: "game", x: +((g.x0 + g.x1) / 2).toFixed(1), z: +((g.z0 + g.z1) / 2).toFixed(1), bid: null, snapPx: 0 });
   for (const b of BILLBOARDS) if (!places.some((p) => p.id === b.id)) places.push({ id: b.id, name: b.name, kind: "billboard", tier: 2, src: "game-placement", conf: "game", x: b.x, z: b.z, bid: null, snapPx: 0, board: b.n, yaw: b.yaw });
   // The map shows one unnamed medical building exactly where the game puts the Health Centre (between Alumni Hall and Awolowo Hall), so it takes that name.
   const mi = places.findIndex((p) => p.id === "medical_unnamed"); if (mi >= 0 && !places.some((p) => p.id === "health_centre")) places[mi] = { ...places[mi], id: "health_centre", name: "Health Centre", unnamed: false, conf: "game" };
   const have = new Set(places.map((p) => p.id));
-  return { ...data, buildings, places, gameOnly: data.gameOnly.filter((g) => !have.has(g.id)), extrasAdded: true };
+  return { ...data, grounds: GROUNDS, buildings, places, gameOnly: data.gameOnly.filter((g) => !have.has(g.id)), extrasAdded: true };
 }

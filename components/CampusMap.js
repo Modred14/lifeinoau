@@ -16,38 +16,41 @@ const labelWidth = (name, tier) => Math.min(190, name.length * (tier === 1 ? 7.4
  * labels are real buttons. They thin out with distance and never overlap, and the "Labels" button hides them all.
  */
 export default function CampusMap({ interactive = true, zoomOnly = false, pins = true, autoRotate = false, selectedId = null, onSelect, billboards = null, className = "", style, view = HOME_VIEW }) {
-  const box = useRef(null), api = useRef(null), sel = useRef(selectedId), cb = useRef(onSelect), [mounts, setMounts] = useState([]), [failed, setFailed] = useState(false), [labels, setLabels] = useState(true);
+  const box = useRef(null), api = useRef(null), noFly = useRef(false), sel = useRef(selectedId), cb = useRef(onSelect), [mounts, setMounts] = useState([]), [failed, setFailed] = useState(false), [labels, setLabels] = useState(true);
   sel.current = selectedId; cb.current = onSelect;
-  const canZoom = interactive || zoomOnly;
+  const canZoom = interactive || zoomOnly, hold = () => { noFly.current = true; setTimeout(() => { noFly.current = false; }, 400); }; // a tap on the map shouldn't re-centre it
 
   useEffect(() => {
-    const root = box.current; // React nulls box.current as soon as the component unmounts, before this effect's cleanup runs, so keep our own reference
-    if (!root) return;
     let alive = true, stage = null, campus = null, lab = null, ro = null, off = [];
     (async () => {
       try {
         const [{ createStage }, { buildRealCampus, addRealLighting }, { CSS2DRenderer, CSS2DObject }, data] = await Promise.all([import("../lib3d/stage.js"), import("../lib3d/campusReal.js"), import("three/addons/renderers/CSS2DRenderer.js"), loadCampusData()]);
         if (!alive) return;
-        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches, host = root.querySelector("[data-canvas]");
-        stage = createStage(host, { fov: 42, far: 1800, controls: { maxPolarAngle: 1.38, minPolarAngle: 0.35, minDistance: interactive ? 10 : 50, maxDistance: interactive ? 520 : 360, enablePan: interactive, enableRotate: interactive, enableZoom: canZoom, autoRotate: autoRotate && !reduce, autoRotateSpeed: 0.45, screenSpacePanning: false } });
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches, host = box.current.querySelector("[data-canvas]");
+        stage = createStage(host, { fov: 42, far: 1800, controls: { maxPolarAngle: 1.38, minPolarAngle: 0.35, minDistance: interactive ? 10 : 50, maxDistance: interactive ? 520 : 360, enablePan: interactive, enableRotate: interactive, enableZoom: canZoom, autoRotate: autoRotate && !reduce, autoRotateSpeed: 0.45, screenSpacePanning: false, zoomToCursor: interactive } });
         const light = addRealLighting(stage.scene); campus = buildRealCampus(data, placeMeta(data)); stage.scene.add(campus.root);
         stage.onFrame((t, dt) => { campus.update(t, dt); light.follow(stage.controls.target); });
         const { x, z, dist, az, pol } = view; stage.controls.target.set(x, 0, z); stage.camera.position.set(x + Math.sin(az) * Math.sin(pol) * dist, Math.cos(pol) * dist, z + Math.cos(az) * Math.sin(pol) * dist); stage.controls.update();
+        if (interactive) { // drag = slide the map under your hand (like any map app); right-drag or two fingers twisting still turn it. The map can't be dragged off the campus.
+          const T = stage.THREE, c = stage.controls, cam = stage.camera, bd = campus.bounds, pad = 40;
+          c.mouseButtons = { LEFT: T.MOUSE.PAN, MIDDLE: T.MOUSE.DOLLY, RIGHT: T.MOUSE.ROTATE }; c.touches = { ONE: T.TOUCH.PAN, TWO: T.TOUCH.DOLLY_ROTATE };
+          const keep = () => { const x = Math.min(bd.x1 + pad, Math.max(bd.x0 - pad, c.target.x)), z = Math.min(bd.z1 + pad, Math.max(bd.z0 - pad, c.target.z)), dx = x - c.target.x, dz = z - c.target.z; if (dx || dz) { c.target.x += dx; c.target.z += dz; cam.position.x += dx; cam.position.z += dz; } };
+          c.addEventListener("change", keep); off.push(() => c.removeEventListener("change", keep)); }
         if (!canZoom) stage.renderer.domElement.style.pointerEvents = "none";
         // click a named building to inspect it (a drag is not a click)
         if (interactive) { const el = stage.renderer.domElement, ray = new stage.THREE.Raycaster(), ndc = new stage.THREE.Vector2(); let d0 = null;
           const down = (e) => { d0 = [e.clientX, e.clientY, performance.now()]; };
-          const up = (e) => { if (!d0 || Math.hypot(e.clientX - d0[0], e.clientY - d0[1]) > 5 || performance.now() - d0[2] > 500) return; const r = el.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, stage.camera); const id = campus.pick(ray); if (id) cb.current?.(id); };
+          const up = (e) => { if (!d0 || Math.hypot(e.clientX - d0[0], e.clientY - d0[1]) > 5 || performance.now() - d0[2] > 500) return; const r = el.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, stage.camera); const id = campus.pick(ray); if (id) { hold(); cb.current?.(id); } };
           el.addEventListener("pointerdown", down); el.addEventListener("pointerup", up); off.push(() => { el.removeEventListener("pointerdown", down); el.removeEventListener("pointerup", up); }); }
         // labels: HTML buttons that follow each building's roof
         if (pins) {
           lab = new CSS2DRenderer(); lab.domElement.style.cssText = "position:absolute;inset:0;pointer-events:none;overflow:hidden"; host.appendChild(lab.domElement);
           const list = campus.places.map((L) => { const el = document.createElement("div"); el.style.pointerEvents = "auto"; const o = new CSS2DObject(el); o.position.copy(L.pos); stage.scene.add(o); return { id: L.id, el, L, w: labelWidth(L.name, L.tier) }; });
           list.sort((a, b) => a.L.tier - b.L.tier); setMounts(list.map(({ id, el }) => ({ id, el, L: campus.places.find((p) => p.id === id) })));
-          const size = () => { if (alive) lab.setSize(root.clientWidth, root.clientHeight); }; size(); ro = new ResizeObserver(size); ro.observe(root);
+          const size = () => lab.setSize(box.current.clientWidth, box.current.clientHeight); size(); ro = new ResizeObserver(size); ro.observe(box.current);
           const v = new stage.THREE.Vector3(); let frame = 0;
-          const declutter = () => { if (!alive) return; // nearest-first by tier: show a label only if it is on screen, near enough for its tier, and clear of the ones already shown
-            const w = root.clientWidth, h = root.clientHeight, dist = stage.camera.position.distanceTo(stage.controls.target), maxTier = root.dataset.labels === "off" ? 0 : dist > 300 ? 1 : dist > 120 ? 2 : 3, taken = [];
+          const declutter = () => { // nearest-first by tier: show a label only if it is on screen, near enough for its tier, and clear of the ones already shown
+            const w = box.current.clientWidth, h = box.current.clientHeight, dist = stage.camera.position.distanceTo(stage.controls.target), maxTier = box.current.dataset.labels === "off" ? 0 : dist > 300 ? 1 : dist > 120 ? 2 : 3, taken = [];
             for (const it of list) { const isSel = it.id === sel.current; let show = isSel || it.L.tier <= maxTier;
               v.copy(it.L.pos).project(stage.camera); if (v.z > 1 || Math.abs(v.x) > 1.08 || Math.abs(v.y) > 1.08) show = false;
               if (show) { const sx = (v.x * 0.5 + 0.5) * w, sy = (-v.y * 0.5 + 0.5) * h, r = [sx - it.w / 2, sy - 20, sx + it.w / 2, sy + 4]; if (!isSel && taken.some((t) => r[0] < t[2] && r[2] > t[0] && r[1] < t[3] && r[3] > t[1])) show = false; else taken.push(r); }
@@ -55,23 +58,23 @@ export default function CampusMap({ interactive = true, zoomOnly = false, pins =
           stage.onAfterRender(() => { lab.render(stage.scene, stage.camera); if (frame++ % 3 === 0) declutter(); });
         }
         api.current = { stage, campus, view, THREE: stage.THREE };
-        root.dataset.ready = "1";
+        box.current.dataset.ready = "1";
       } catch (e) { console.error("3D map unavailable", e); if (alive) setFailed(true); }
     })();
     return () => { alive = false; off.forEach((f) => f()); ro?.disconnect(); campus?.dispose(); lab?.domElement.remove(); stage?.dispose(); api.current = null; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { const a = api.current; if (!a) return; a.campus.setSelected(selectedId); if (selectedId) { const p = a.campus.anchors.get(selectedId); if (p) a.stage.flyTo(p.x, 0, p.z, 60, 1.0); } }, [selectedId, mounts]);
+  useEffect(() => { const a = api.current; if (!a) return; a.campus.setSelected(selectedId); if (selectedId && !noFly.current) { const p = a.campus.anchors.get(selectedId); if (p) a.stage.flyTo(p.x, 0, p.z, 60, 1.0); } noFly.current = false; }, [selectedId, mounts]);
 
   useEffect(() => { const a = api.current; if (a && billboards) a.campus.setBillboards(billboards); }, [billboards, mounts]);
 
   const nudge = (o) => api.current?.stage.nudge(o);
   const reset = () => { const v = view; api.current?.stage.flyTo(v.x, 0, v.z, v.dist, v.pol); onSelect?.(null); };
-  const onKey = (e) => { const k = e.key; if (k === "ArrowLeft") nudge({ az: -0.25 }); else if (k === "ArrowRight") nudge({ az: 0.25 }); else if (k === "ArrowUp") nudge({ pol: -0.12 }); else if (k === "ArrowDown") nudge({ pol: 0.12 }); else if (k === "+" || k === "=") nudge({ zoom: 0.85 }); else if (k === "-") nudge({ zoom: 1.18 }); else if (k === "Home") reset(); else return; e.preventDefault(); };
+  const onKey = (e) => { const k = e.key; if (k === "ArrowLeft") nudge(e.shiftKey ? { az: -0.25 } : { panX: -0.12 }); else if (k === "ArrowRight") nudge(e.shiftKey ? { az: 0.25 } : { panX: 0.12 }); else if (k === "ArrowUp") nudge(e.shiftKey ? { pol: -0.12 } : { panZ: 0.12 }); else if (k === "ArrowDown") nudge(e.shiftKey ? { pol: 0.12 } : { panZ: -0.12 }); else if (k === "+" || k === "=") nudge({ zoom: 0.85 }); else if (k === "-") nudge({ zoom: 1.18 }); else if (k === "Home") reset(); else return; e.preventDefault(); };
 
   return (
     <div ref={box} className={"stage " + className} style={style} tabIndex={interactive ? 0 : -1} role={interactive ? "group" : "img"} data-labels={labels ? "on" : "off"} onKeyDown={interactive ? onKey : undefined}
-      aria-label={interactive ? "Interactive 3D map of the OAU campus. Drag to rotate, pinch or scroll to zoom. Arrow keys rotate, plus and minus zoom, Home resets. Every place is also listed under Places." : zoomOnly ? "A 3D view of the OAU campus. Scroll, pinch or use the zoom buttons to zoom in and out." : "A 3D view of the OAU campus."}>
+      aria-label={interactive ? "Interactive 3D map of the OAU campus. Drag to slide the map, pinch or scroll to zoom, right-drag to turn it. Arrow keys slide the map, shift and arrow keys turn it, plus and minus zoom, Home resets. Every place is also listed under Places." : zoomOnly ? "A 3D view of the OAU campus. Scroll, pinch or use the zoom buttons to zoom in and out." : "A 3D view of the OAU campus."}>
       <div data-canvas style={{ position: "absolute", inset: 0 }} />
       {failed && <p className="mut" style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", textAlign: "center", padding: 24 }}>The 3D map could not start on this device. You can still use Places to see everything.</p>}
       {zoomOnly && !interactive && !failed && (
@@ -91,7 +94,7 @@ export default function CampusMap({ interactive = true, zoomOnly = false, pins =
         <p className="stage-credit">Map data © OpenStreetMap contributors</p>
       </>)}
       {mounts.map(({ id, el, L }) => createPortal(
-        <button type="button" className="bl" data-kind={L.kind} data-tier={L.tier} data-approx={L.approx ? "true" : "false"} aria-pressed={selectedId === id} aria-label={L.name + (L.approx ? " (approximate position)" : "")} onClick={() => onSelect?.(id)}>
+        <button type="button" className="bl" data-kind={L.kind} data-tier={L.tier} data-approx={L.approx ? "true" : "false"} aria-pressed={selectedId === id} aria-label={L.name + (L.approx ? " (approximate position)" : "")} onClick={() => { hold(); onSelect?.(id); }}>
           <Icon name={ICON_OF[L.kind] ?? "town"} size={L.tier === 1 ? 16 : 13} /><span>{L.name}</span></button>, el, id))}
     </div>
   );
