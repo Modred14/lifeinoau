@@ -6,7 +6,7 @@ import { allowed, tooMany } from "@/lib/ratelimit";
 import { GameError } from "@/lib/gameService";
 import { listBillboards, reserveBillboard, confirmBillboardOrder, setPoster, cancelBillboardOrder, testPaymentsAllowed } from "@/lib/billboards";
 export const dynamic = "force-dynamic"; // never cache API responses
-const db = (globalThis.db ??= new PrismaClient());
+const db = (globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } }));
 const fail = (e) => { if (e instanceof GameError) return Response.json({ error: e.message }, { status: e.status }); console.error(e); return Response.json({ error: "Something went wrong. Try again." }, { status: 500 }); };
 
 export async function GET() {

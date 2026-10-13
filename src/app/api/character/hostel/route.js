@@ -4,7 +4,7 @@ import { getUserId } from "@/lib/auth";
 import { allowed, tooMany } from "@/lib/ratelimit";
 import { allowedHostels } from "@/lib/rules";
 export const dynamic = "force-dynamic"; // never cache API responses
-const db = (globalThis.db ??= new PrismaClient());
+const db = (globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } }));
 // Step 2 of 2: choose a hostel after the reveal. Allowed only once, validated against the saved class.
 export async function POST(req) {
   const userId = await getUserId();

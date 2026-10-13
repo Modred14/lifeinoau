@@ -5,7 +5,9 @@
 /* page-level loader: centered in the space below the header, with space on the sides and bottom. The fullscreen, small and inline variants override the padding. */
 .lo { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; box-sizing: border-box; padding: calc(var(--hud-h) + 16px) clamp(16px, 4vw, 48px) calc(var(--safe-b) + 16px); min-height: 100dvh; color: var(--muted); text-align: center;
   animation: lo-in 320ms var(--ease) 180ms both; }
-.lo-full { position: fixed; inset: 0; z-index: 70; min-height: 100dvh; padding: 0; background: var(--bg); overflow: hidden; animation: lo-fade 240ms var(--ease) both; }
+.lo-full { position: fixed; inset: 0; z-index: 70; min-height: 100dvh; padding: 0; background: var(--bg); overflow: hidden; animation: lo-fade 240ms var(--ease) 200ms both; } /* the 200ms delay means a fast page change never flashes the loader */
+/* a second loader that appears right after the first (route loader, then the page's own) carries on where the first stopped: no fade, no redraw (Loader.js sets this and --skip) */
+.lo-full[data-resume] { animation: none; }
 .lo-full::before { content: ""; position: absolute; inset: 0; pointer-events: none;
   background: radial-gradient(60% 45% at 50% 100%, rgba(21, 128, 61, 0.16), transparent 70%), radial-gradient(40% 30% at 50% 38%, rgba(251, 173, 1, 0.07), transparent 70%); }
 .lo-glow { position: absolute; width: min(64vw, 420px); aspect-ratio: 1; border-radius: 50%; border: 1px solid rgba(242, 246, 255, 0.06); pointer-events: none; }
@@ -13,13 +15,13 @@
 /* ---- the logo forming ---- */
 .lf { position: relative; display: block; flex: none; overflow: visible; max-width: 80vw; height: auto; }
 .lf-g path { fill: #f2f6ff; fill-opacity: 0; fill-rule: evenodd; stroke: #f2f6ff; stroke-width: 5; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1;
-  animation: lf-draw 0.95s var(--ease) var(--d) both, lf-fill 0.55s ease calc(var(--d) + 0.6s) both; }
+  animation: lf-draw 0.95s var(--ease) calc(var(--d) - var(--skip, 0s)) both, lf-fill 0.55s ease calc(var(--d) + 0.6s - var(--skip, 0s)) both; }
 .lf-tower, .lf-road, .lf-birds { transform-box: fill-box; transform-origin: 50% 100%; }
-.lf-tower { animation: lf-rise 0.9s var(--ease) var(--d) both; }
-.lf-road { animation: lf-rise 0.8s var(--ease) var(--d) both; --y: 14px; }
-.lf-birds { animation: lf-drift 0.9s var(--ease) var(--d) both; }
-.lf-sunwrap { transform-box: fill-box; transform-origin: 50% 50%; animation: lf-sunrise 1.1s cubic-bezier(0.2, 0.9, 0.25, 1) var(--d) both; }
-.lf-sunwrap circle { fill: #fbad01; animation: lf-glow 2.6s ease-in-out 2.8s infinite; }
+.lf-tower { animation: lf-rise 0.9s var(--ease) calc(var(--d) - var(--skip, 0s)) both; }
+.lf-road { animation: lf-rise 0.8s var(--ease) calc(var(--d) - var(--skip, 0s)) both; --y: 14px; }
+.lf-birds { animation: lf-drift 0.9s var(--ease) calc(var(--d) - var(--skip, 0s)) both; }
+.lf-sunwrap { transform-box: fill-box; transform-origin: 50% 50%; animation: lf-sunrise 1.1s cubic-bezier(0.2, 0.9, 0.25, 1) calc(var(--d) - var(--skip, 0s)) both; }
+.lf-sunwrap circle { fill: #fbad01; animation: lf-glow 2.6s ease-in-out calc(2.8s - var(--skip, 0s)) infinite; }
 
 .lo-label { font-family: var(--font-head); font-size: 1rem; letter-spacing: 0.01em; color: var(--text); }
 .lo-dots i { font-style: normal; animation: lo-dot 1.2s infinite both; }

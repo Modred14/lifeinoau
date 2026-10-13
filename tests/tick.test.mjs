@@ -76,6 +76,7 @@ function run(name, char, results, daysAgo, PEND = [], BIZ = []) {
         startedAt: new Date(Date.now() - daysAgo * 864e5),
       }),
     },
+    character: tx.character, // catchUp's fast path reads the character outside the transaction
     $transaction: async (f) => f(tx),
   };
   const cap0 = BIZ.map((b) => b.capital);

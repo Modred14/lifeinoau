@@ -7,7 +7,7 @@ import { drawClass, lifestyle } from "@/lib/rng";
 import { PERSONALITIES, allowedHostels, startingTransport } from "@/lib/rules";
 import { cleanLook } from "@/lib/look";
 export const dynamic = "force-dynamic"; // never cache API responses
-const db = (globalThis.db ??= new PrismaClient());
+const db = (globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } }));
 const bad = (m, s = 400) => Response.json({ error: m }, { status: s });
 
 // Step 1 of 2 (hostel is chosen after the class reveal). Client sends only choices. The server decides class, stats and money.

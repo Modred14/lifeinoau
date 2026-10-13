@@ -129,8 +129,7 @@ export default function BuySheet({
             ))}
           {list.map((k) => {
             const d = ITEMS[k],
-              can = bal >= BigInt(d.price),
-              need = BigInt(d.price) - bal;
+              can = bal >= BigInt(d.price);
             return (
               <article key={k} className="bs-card" data-poor={can ? "0" : "1"}>
                 {owned[k] > 0 && (
@@ -151,17 +150,14 @@ export default function BuySheet({
                   type="button"
                   className="go bs-buy"
                   disabled={busy || !can}
+                  aria-label={
+                    can
+                      ? `Buy ${d.name} for ${fmtN(d.price)}`
+                      : `${d.name} costs ${fmtN(d.price)}. You can't afford it yet.`
+                  }
                   onClick={() => onBuy(k)}
                 >
-                  {can ? (
-                    <>
-                      Buy <b className="num">{fmtN(d.price)}</b>
-                    </>
-                  ) : (
-                    <>
-                      Need <b className="num">{fmtN(need)}</b> more
-                    </>
-                  )}
+                  <b className="num">{fmtN(d.price)}</b>
                 </button>
               </article>
             );

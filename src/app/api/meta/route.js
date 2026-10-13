@@ -6,7 +6,7 @@ import { currentWeek } from "@/lib/clock";
 import { FACULTIES } from "@/lib/faculties";
 import { marketNews } from "@/lib/market";
 export const dynamic = "force-dynamic"; // never cache API responses
-const db = (globalThis.db ??= new PrismaClient());
+const db = (globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } }));
 export async function GET(req) {
   if (!(await allowed(db, "meta:" + ipOf(req), 60, 60_000))) return tooMany();
   // Sign-up must always offer every faculty, even if the database was seeded with an older list: add any that are missing.

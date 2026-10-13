@@ -4,7 +4,7 @@ import { getUserId } from "@/lib/auth";
 import { allowed, tooMany } from "@/lib/ratelimit";
 import { getProfile, GameError } from "@/lib/gameService";
 export const dynamic = "force-dynamic"; // never cache API responses
-const db = (globalThis.db ??= new PrismaClient());
+const db = (globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } }));
 const json = async (req) => req.json().catch(() => ({}));
 export async function GET(req) {
   const uid = await getUserId();

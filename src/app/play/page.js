@@ -1,6 +1,6 @@
 // src/app/play/page.js
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { call, naira, notifyError, loggedOut, say } from "@/lib/client";
 import { toast } from "@/lib/toast";
@@ -11,7 +11,7 @@ import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
 import { Icon } from "@/components/Icon";
 import GameHome from "@/components/GameHome";
-import { refreshShell } from "@/lib/ui";
+import { refreshShell, setBare, isBooted, markBooted } from "@/lib/ui";
 import "./play.css";
 
 function View({ children }) {
@@ -78,6 +78,13 @@ export default function Play() {
   useEffect(() => {
     load();
   }, [load]);
+  // The top bar and bottom nav stay hidden until the game home shows for the first time (loading, error, create, roll, hostel).
+  // useLayoutEffect so they never flash in before this runs.
+  useLayoutEffect(() => {
+    if (view === "game") markBooted();
+    setBare(view !== "game" && !isBooted());
+    return () => setBare(false);
+  }, [view]);
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [view]); // a new screen always starts at its top

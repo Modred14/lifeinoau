@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { call, naira, notifyError } from "@/lib/client";
-import { setPlayMode, usePlayMode } from "@/lib/ui";
+import { setPlayMode, usePlayMode, useBare, resetBoot } from "@/lib/ui";
 import { Icon } from "./Icon";
 import Phone from "./Phone";
 import { toast } from "@/lib/toast";
@@ -26,6 +26,7 @@ export default function Shell({ children }) {
   const path = usePathname(),
     router = useRouter(),
     mode = usePlayMode(),
+    bareUi = useBare(),
     [loggingOut, setLoggingOut] = useState(false),
     [st, setSt] = useState(null),
     [phone, setPhone] = useState(false),
@@ -34,7 +35,8 @@ export default function Shell({ children }) {
     firstApp = useRef(null),
     failing = useRef(false);
   const bare = path === "/",
-    full = path === "/map" || path === "/play";
+    full = path === "/map" || path === "/play",
+    hideBars = path === "/play" && bareUi; // no top bar or bottom nav while the game loads or the player is creating a character
   const load = useCallback(async () => {
     const r = await call("/api/state");
     // 401/404 are normal (logged out / no character yet). Anything else: say so once per outage, not every poll.
@@ -77,6 +79,17 @@ export default function Shell({ children }) {
   useEffect(() => {
     setPhone(false);
   }, [path]);
+  useEffect(() => {
+    // the spacing that clears the bars shrinks to nothing while they are hidden
+    if (!hideBars) return;
+    const b = document.body;
+    b.style.setProperty("--hud-h", "0px");
+    b.style.setProperty("--nav-h", "0px");
+    return () => {
+      b.style.removeProperty("--hud-h");
+      b.style.removeProperty("--nav-h");
+    };
+  }, [hideBars]);
   async function logout() {
     if (loggingOut) return;
     setLoggingOut(true);
@@ -86,6 +99,7 @@ export default function Shell({ children }) {
       return notifyError(r, "We couldn't log you out. Please try again.");
     setPhone(false);
     setSt(null);
+    resetBoot();
     toast.info("You're logged out. See you soon.", { id: "session" });
     router.push("/");
   }
@@ -104,6 +118,7 @@ export default function Shell({ children }) {
   };
   return (
     <>
+      {!hideBars && (
       <header className="hud">
         <Link
           href={st ? "/play" : "/"}
@@ -144,12 +159,13 @@ export default function Shell({ children }) {
           </span>
         )}
       </header>
+      )}
       {full ? (
         children
       ) : (
         <main className={"page" + (creating ? " wide" : "")}>{children}</main>
       )}
-      {st && (
+      {st && !hideBars && (
         <nav className="nav" aria-label="Main">
           <Link
             href="/play"

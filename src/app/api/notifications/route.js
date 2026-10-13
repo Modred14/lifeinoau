@@ -4,7 +4,7 @@ import { getUserId } from "@/lib/auth";
 import { allowed, tooMany } from "@/lib/ratelimit";
 import { markAllRead } from "@/lib/notifications";
 export const dynamic = "force-dynamic"; // never cache API responses
-const db = (globalThis.db ??= new PrismaClient());
+const db = (globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } }));
 export async function POST() {
   const uid = await getUserId();
   if (!uid) return Response.json({ error: "Please log in." }, { status: 401 });

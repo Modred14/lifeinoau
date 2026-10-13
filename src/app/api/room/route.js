@@ -11,7 +11,7 @@ import {
   sellItem,
 } from "@/lib/roomService";
 export const dynamic = "force-dynamic"; // never cache API responses
-const db = (globalThis.db ??= new PrismaClient());
+const db = (globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } }));
 const json = async (req) => req.json().catch(() => ({}));
 const fail = (e) => {
   if (e instanceof GameError)

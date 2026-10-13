@@ -21,12 +21,14 @@ export default function CampusMap({ interactive = true, zoomOnly = false, pins =
   const canZoom = interactive || zoomOnly;
 
   useEffect(() => {
+    const root = box.current; // React nulls box.current as soon as the component unmounts, before this effect's cleanup runs, so keep our own reference
+    if (!root) return;
     let alive = true, stage = null, campus = null, lab = null, ro = null, off = [];
     (async () => {
       try {
         const [{ createStage }, { buildRealCampus, addRealLighting }, { CSS2DRenderer, CSS2DObject }, data] = await Promise.all([import("../lib3d/stage.js"), import("../lib3d/campusReal.js"), import("three/addons/renderers/CSS2DRenderer.js"), loadCampusData()]);
         if (!alive) return;
-        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches, host = box.current.querySelector("[data-canvas]");
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches, host = root.querySelector("[data-canvas]");
         stage = createStage(host, { fov: 42, far: 1800, controls: { maxPolarAngle: 1.38, minPolarAngle: 0.35, minDistance: interactive ? 10 : 50, maxDistance: interactive ? 520 : 360, enablePan: interactive, enableRotate: interactive, enableZoom: canZoom, autoRotate: autoRotate && !reduce, autoRotateSpeed: 0.45, screenSpacePanning: false } });
         const light = addRealLighting(stage.scene); campus = buildRealCampus(data, placeMeta(data)); stage.scene.add(campus.root);
         stage.onFrame((t, dt) => { campus.update(t, dt); light.follow(stage.controls.target); });
@@ -42,10 +44,10 @@ export default function CampusMap({ interactive = true, zoomOnly = false, pins =
           lab = new CSS2DRenderer(); lab.domElement.style.cssText = "position:absolute;inset:0;pointer-events:none;overflow:hidden"; host.appendChild(lab.domElement);
           const list = campus.places.map((L) => { const el = document.createElement("div"); el.style.pointerEvents = "auto"; const o = new CSS2DObject(el); o.position.copy(L.pos); stage.scene.add(o); return { id: L.id, el, L, w: labelWidth(L.name, L.tier) }; });
           list.sort((a, b) => a.L.tier - b.L.tier); setMounts(list.map(({ id, el }) => ({ id, el, L: campus.places.find((p) => p.id === id) })));
-          const size = () => lab.setSize(box.current.clientWidth, box.current.clientHeight); size(); ro = new ResizeObserver(size); ro.observe(box.current);
+          const size = () => { if (alive) lab.setSize(root.clientWidth, root.clientHeight); }; size(); ro = new ResizeObserver(size); ro.observe(root);
           const v = new stage.THREE.Vector3(); let frame = 0;
-          const declutter = () => { // nearest-first by tier: show a label only if it is on screen, near enough for its tier, and clear of the ones already shown
-            const w = box.current.clientWidth, h = box.current.clientHeight, dist = stage.camera.position.distanceTo(stage.controls.target), maxTier = box.current.dataset.labels === "off" ? 0 : dist > 300 ? 1 : dist > 120 ? 2 : 3, taken = [];
+          const declutter = () => { if (!alive) return; // nearest-first by tier: show a label only if it is on screen, near enough for its tier, and clear of the ones already shown
+            const w = root.clientWidth, h = root.clientHeight, dist = stage.camera.position.distanceTo(stage.controls.target), maxTier = root.dataset.labels === "off" ? 0 : dist > 300 ? 1 : dist > 120 ? 2 : 3, taken = [];
             for (const it of list) { const isSel = it.id === sel.current; let show = isSel || it.L.tier <= maxTier;
               v.copy(it.L.pos).project(stage.camera); if (v.z > 1 || Math.abs(v.x) > 1.08 || Math.abs(v.y) > 1.08) show = false;
               if (show) { const sx = (v.x * 0.5 + 0.5) * w, sy = (-v.y * 0.5 + 0.5) * h, r = [sx - it.w / 2, sy - 20, sx + it.w / 2, sy + 4]; if (!isSel && taken.some((t) => r[0] < t[2] && r[2] > t[0] && r[1] < t[3] && r[3] > t[1])) show = false; else taken.push(r); }
@@ -53,7 +55,7 @@ export default function CampusMap({ interactive = true, zoomOnly = false, pins =
           stage.onAfterRender(() => { lab.render(stage.scene, stage.camera); if (frame++ % 3 === 0) declutter(); });
         }
         api.current = { stage, campus, view, THREE: stage.THREE };
-        box.current.dataset.ready = "1";
+        root.dataset.ready = "1";
       } catch (e) { console.error("3D map unavailable", e); if (alive) setFailed(true); }
     })();
     return () => { alive = false; off.forEach((f) => f()); ro?.disconnect(); campus?.dispose(); lab?.domElement.remove(); stage?.dispose(); api.current = null; };

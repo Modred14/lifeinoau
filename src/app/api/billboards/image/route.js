@@ -4,7 +4,7 @@ import { PrismaClient } from "@prisma/client";
 import { GameError } from "@/lib/gameService";
 import { posterImage } from "@/lib/billboards";
 export const dynamic = "force-dynamic";
-const db = (globalThis.db ??= new PrismaClient());
+const db = (globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } }));
 export async function GET(req) {
   const u = new URL(req.url).searchParams;
   try {

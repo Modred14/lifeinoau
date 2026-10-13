@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { hash, startSession } from "@/lib/auth";
 import { allowed, tooMany, ipOf } from "@/lib/ratelimit";
 export const dynamic = "force-dynamic"; // never cache API responses
-const db = (globalThis.db ??= new PrismaClient());
+const db = (globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } }));
 export async function POST(req) {
   if (!(await allowed(db, "signup:" + ipOf(req), 5, 3_600_000)))
     return tooMany();
