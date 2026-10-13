@@ -236,10 +236,10 @@ function Package({ pkg, info }) {
         <Row i={n++} icon="wallet" label="Allowance every game week">
           <b className="num lr-big">{fmtN(pkg.allowance)}</b>
         </Row>
-        <Row i={n++} icon="hostel" label="Rent every game week">
+        <Row i={n++} icon="hostel" label="Rent each session (paid weekly)">
           <span className="num">{range(pkg.rentMin, pkg.rentMax)}</span>
         </Row>
-        <Row i={n++} icon="coins" label="What you keep after rent">
+        <Row i={n++} icon="coins" label="What you keep each week after rent">
           <span className="num">{range(pkg.keepMin, pkg.keepMax)}</span>
         </Row>
         <Row i={n++} icon="gift" label="When you call your parent">

@@ -68,6 +68,30 @@ function deskTop(g, top = WOOD_L) {
 }
 
 const BUILD = {
+  // school-hostel bunk: bare iron frame, thin worn mattresses, a ladder. Nothing stylish.
+  iron_bunk: (g) => {
+    const IRON = "#4b5058", RUST = "#7a5a46", D = 1.92, W = 0.92;
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { box(g, [0.06, 1.85, 0.06], [sx * (W / 2 - 0.03), 0, sz * (D / 2 - 0.03)], IRON, { metalness: 0.4 }); }
+    for (const y of [0.3, 1.1]) {
+      box(g, [W - 0.02, 0.04, D - 0.02], [0, y, 0], IRON, { metalness: 0.4 });                              // iron deck
+      box(g, [W - 0.12, 0.11, D - 0.16], [0, y + 0.04, 0.02], y < 1 ? "#8b8f98" : "#7d746b", { roughness: 1 }); // thin mattress, faded
+      box(g, [0.5, 0.07, 0.3], [0, y + 0.15, -D / 2 + 0.3], "#c9c4b6", { roughness: 1 });                      // flat pillow
+      for (const s of [-1, 1]) box(g, [0.035, 0.1, D - 0.1], [s * (W / 2 - 0.03), y + 0.02, 0], IRON);         // side rails
+    }
+    box(g, [W, 0.3, 0.04], [0, 1.55, -D / 2 + 0.03], IRON); box(g, [W, 0.3, 0.04], [0, 1.55, D / 2 - 0.03], IRON);  // top end rails
+    for (let i = 0; i < 4; i++) box(g, [0.04, 0.04, 0.3], [W / 2 + 0.01, 0.25 + i * 0.28, D / 2 - 0.35], RUST);       // ladder rungs on the side
+    for (const s of [-1, 1]) box(g, [0.03, 1.1, 0.03], [W / 2 + 0.01 + 0, 0.1, D / 2 - 0.2 + s * 0.17], RUST);
+  },
+  // the room's own toilet, basin and shower corner
+  ensuite: (g) => {
+    box(g, [1.88, 0.03, 0.86], [0, 0, 0], "#c9d3d9", { roughness: 0.5 });                                                  // tiled floor
+    box(g, [0.4, 0.22, 0.5], [-0.55, 0.03, 0.02], WHITE, { roughness: 0.3 }); box(g, [0.36, 0.06, 0.4], [-0.55, 0.25, 0.04], "#eef2f4", { roughness: 0.3 }); // toilet base and seat
+    box(g, [0.38, 0.4, 0.16], [-0.55, 0.25, -0.3], WHITE, { roughness: 0.3 });                                            // cistern
+    cyl(g, [0.04, 0.06, 0.7], [0.1, 0.03, -0.3], WHITE); box(g, [0.42, 0.1, 0.34], [0.1, 0.73, -0.22], WHITE, { roughness: 0.3 }); cyl(g, [0.015, 0.015, 0.14], [0.1, 0.83, -0.34], STEEL); // pedestal basin and tap
+    box(g, [0.62, 0.05, 0.62], [0.62, 0.03, 0.12], "#aab6bf", { roughness: 0.4 });                                          // shower tray
+    box(g, [0.03, 1.9, 0.03], [0.93, 0.05, 0.4], STEEL); box(g, [0.03, 0.03, 0.62], [0.93, 1.95, 0.1], STEEL); box(g, [0.02, 1.7, 0.6], [0.93, 0.2, 0.1], "#7fb7d8", { transparent: true, opacity: 0.55 }); // curtain
+    cyl(g, [0.05, 0.05, 0.02], [0.62, 1.9, -0.18], STEEL);
+  },
   single_bed: (g) => bed(g, false, "#5b6bd6"),
   double_bed: (g) => bed(g, true, "#c2455a"),
   wardrobe: (g) => {

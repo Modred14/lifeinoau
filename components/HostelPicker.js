@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Icon } from "./Icon";
 import { CLASS_INFO, allowanceOf, fmtN } from "@/lib/classes.js";
-import { rentOf } from "@/lib/rules.js";
+import { sessionRentOf, occupancyText, isSchoolHostel, SESSION_WEEKS } from "@/lib/rules.js";
 import "./hostel-picker.css";
 
 /** Choose where to live. Picking only selects; the move happens when the player confirms, because it can't be changed yet. */
@@ -11,8 +11,8 @@ export default function HostelPicker({ cls, hostels = [], busy, onChoose }) {
   const [pick, setPick] = useState(""),
     allowance = allowanceOf(cls),
     info = CLASS_INFO[cls];
-  const list = [...hostels].sort((a, b) => rentOf(a) - rentOf(b)),
-    rents = list.map(rentOf);
+  const list = [...hostels].sort((a, b) => sessionRentOf(a) - sessionRentOf(b)),
+    rents = list.map(sessionRentOf);
   // Only call out the cheapest or priciest place when exactly one of them is, otherwise the tag means nothing.
   const only = (v) =>
       list.length > 1 && rents.filter((r) => r === v).length === 1 ? v : null,
@@ -20,20 +20,27 @@ export default function HostelPicker({ cls, hostels = [], busy, onChoose }) {
     priciest = only(rents[rents.length - 1]);
   const kind = (h) =>
     h === "Off-campus" ? "Off campus" : h === "Ojaja" ? "" : "On campus";
+  // what the room is like, in one line
+  const about = (h) =>
+    isSchoolHostel(h)
+      ? "Iron double bunks and wardrobes. No kitchen, no TV, and the room gets rough fast."
+      : h === "Ojaja"
+        ? "Single beds, wardrobes, your own kitchen and toilet. No TV. Kept clean."
+        : "Single beds, wardrobes, your own kitchen and toilet, and a TV. Kept clean.";
   return (
     <div className="hp" style={{ "--cls": info?.color }}>
       <header className="hp-head">
         <h1>Where will you stay?</h1>
         <p className="mut">
           These are the places open to a <b className="hp-cls">{cls}</b>{" "}
-          student. Rent comes out of your allowance every game week. Moving
+          student. Rent is priced per session ({SESSION_WEEKS} game weeks) and comes out of your allowance in weekly instalments. Moving
           later isn't available yet, so choose with care.
         </p>
       </header>
       <div className="hp-grid" role="radiogroup" aria-label="Hostel">
         {list.map((h, i) => {
-          const rent = rentOf(h),
-            share = Math.max(1, Math.round((rent / allowance) * 100)),
+          const rent = sessionRentOf(h),
+            share = Math.max(1, Math.round((rent / (allowance * SESSION_WEEKS)) * 100)),
             on = pick === h;
           return (
             <button
@@ -61,13 +68,16 @@ export default function HostelPicker({ cls, hostels = [], busy, onChoose }) {
               <b className="hp-name">{h}</b>
               <span className="hp-rent">
                 <b className="num">{fmtN(rent)}</b>{" "}
-                <span className="mut">a week</span>
+                <span className="mut">a session</span>
+              </span>
+              <span className="mut hp-about">
+                <b>{occupancyText(h)}.</b> {about(h)}
               </span>
               <span className="hp-share">
                 <span className="hp-bar" aria-hidden="true">
                   <i style={{ width: Math.min(100, share) + "%" }} />
                 </span>
-                <span className="mut num">{share}% of your allowance</span>
+                <span className="mut num">{share}% of a session's allowance</span>
               </span>
               <span className="hp-tick" aria-hidden="true">
                 <Icon name="check" size={14} weight="bold" />

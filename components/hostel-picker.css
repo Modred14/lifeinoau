@@ -31,3 +31,5 @@
 .hp-cta button { width: 100%; max-width: 420px; min-height: 54px; font-size: 1.02rem; }
 @keyframes hp-in { from { opacity: 0; transform: translateY(14px); } }
 @keyframes hp-grow { from { transform: scaleX(0); } }
+.hp-about { font-size: 0.82rem; line-height: 1.35; margin-top: 6px; text-align: left; }
+.hp-about b { color: var(--text, inherit); font-weight: 600; }

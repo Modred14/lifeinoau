@@ -406,6 +406,8 @@ export function createRoomScene(container, cb = {}) {
       dispose(c);
     }
     theme = THEMES[room.theme] ?? THEMES.sage;
+    const grime = room.grime ?? 0, dirty = (hex, k, to) => "#" + new THREE.Color(hex).lerp(new THREE.Color(to), k).getHexString();
+    if (grime > 0.05) theme = { ...theme, wall: dirty(theme.wall, grime * 0.4, "#6e6552"), floorA: dirty(theme.floorA, grime * 0.3, "#4f483d"), floorB: dirty(theme.floorB, grime * 0.3, "#4f483d") }; // paint dulls and floors darken
     W = room.w;
     D = room.d;
     const R = Math.hypot(W, D) / 2 + 0.9;
@@ -444,6 +446,16 @@ export function createRoomScene(container, cb = {}) {
     floor.position.y = -0.17;
     floor.receiveShadow = true;
     world.add(floor);
+    // a rough room: floor stains, litter and a bin bag, more of each the rougher it is
+    if (grime > 0.2) {
+      let seed = Math.round(W * 131 + D * 17), rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+      const at = (m) => [(rnd() - 0.5) * (W - 0.8), (rnd() - 0.5) * (D - 0.8)];
+      for (let i = 0, n = Math.round(grime * 14); i < n; i++) { const [x, z] = at(), s = new THREE.Mesh(new THREE.CircleGeometry(0.15 + rnd() * 0.4, 14), new THREE.MeshBasicMaterial({ color: "#2f261b", transparent: true, opacity: 0.18 + rnd() * 0.22, depthWrite: false })); s.rotation.x = -Math.PI / 2; s.position.set(x, 0.012, z); world.add(s); }
+      for (let i = 0, n = Math.round(grime * 16); i < n; i++) { const [x, z] = at(), k = i % 3, c = ["#e9e5d8", "#3c8f5a", "#4a78c8"][k],
+          m = k === 0 ? new THREE.Mesh(new THREE.IcosahedronGeometry(0.05 + rnd() * 0.03, 0), mat(c, { roughness: 1 })) : k === 1 ? new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 0.22, 8), mat(c, { roughness: 0.4 })) : new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.01, 0.09), mat(c, { roughness: 0.8 }));
+        m.position.set(x, k === 1 ? 0.03 : 0.04, z); if (k === 1) m.rotation.z = Math.PI / 2; m.rotation.y = rnd() * 6; m.castShadow = true; world.add(m); }
+      if (grime > 0.55) { const bag = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 10), mat("#1d2026", { roughness: 0.5 })); bag.scale.set(1, 0.85, 0.9); bag.position.set(W / 2 - 0.55, 0.24, -D / 2 + 0.5); bag.castShadow = true; world.add(bag); const knot = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 6), mat("#1d2026")); knot.position.set(W / 2 - 0.55, 0.55, -D / 2 + 0.5); world.add(knot); }
+    }
     // walls: each is a group standing on the floor edge, local +z points into the room
     const defs = {
       N: [0, -D / 2, 0, W + 0.48],
@@ -1045,7 +1057,7 @@ export function createRoomScene(container, cb = {}) {
   }
   function setRoom(r) {
     const changed =
-      !room || room.w !== r.w || room.d !== r.d || room.theme !== r.theme;
+      !room || room.w !== r.w || room.d !== r.d || room.theme !== r.theme || (room.grime ?? 0) !== (r.grime ?? 0);
     room = r;
     if (changed) {
       buildRoom();

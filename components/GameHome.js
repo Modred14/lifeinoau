@@ -481,7 +481,7 @@ export default function GameHome({
       {!buying && (
         <div className="gx-room-tag">
           <Icon name="hostel" size={16} />
-          {c.hostel} · {room.w}×{room.d} room<i>Room score {score}</i>
+          {c.hostel} · {room.occupants ? `${room.occupants} in the room` : `${room.w}×${room.d} room`}<i>Room score {score}</i>
           <span className="gx-mood" title="Mood">
             <Icon name={mood[1]} size={16} />
             {mood[0]}

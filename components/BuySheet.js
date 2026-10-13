@@ -2,7 +2,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "./Icon";
-import { CATEGORIES, ITEMS, ITEM_KEYS } from "@/lib/furniture.js";
+import { CATEGORIES, ITEMS, ITEM_KEYS, inShop } from "@/lib/furniture.js";
 import { fmtN } from "@/lib/classes.js";
 
 /** Picture of a piece of furniture, rendered once by the 3D engine. Shows a soft placeholder until it is ready. */
@@ -56,7 +56,7 @@ export default function BuySheet({
     list =
       tab === "storage"
         ? []
-        : ITEM_KEYS.filter((k) => ITEMS[k].cat === tab).sort(
+        : ITEM_KEYS.filter((k) => inShop(k) && ITEMS[k].cat === tab).sort(
             (a, b) => ITEMS[a].price - ITEMS[b].price,
           );
   return (
@@ -129,7 +129,8 @@ export default function BuySheet({
             ))}
           {list.map((k) => {
             const d = ITEMS[k],
-              can = bal >= BigInt(d.price);
+              can = bal >= BigInt(d.price),
+              need = BigInt(d.price) - bal;
             return (
               <article key={k} className="bs-card" data-poor={can ? "0" : "1"}>
                 {owned[k] > 0 && (
@@ -150,14 +151,17 @@ export default function BuySheet({
                   type="button"
                   className="go bs-buy"
                   disabled={busy || !can}
-                  aria-label={
-                    can
-                      ? `Buy ${d.name} for ${fmtN(d.price)}`
-                      : `${d.name} costs ${fmtN(d.price)}. You can't afford it yet.`
-                  }
                   onClick={() => onBuy(k)}
                 >
-                  <b className="num">{fmtN(d.price)}</b>
+                  {can ? (
+                    <>
+                      Buy <b className="num">{fmtN(d.price)}</b>
+                    </>
+                  ) : (
+                    <>
+                      Need <b className="num">{fmtN(need)}</b> more
+                    </>
+                  )}
                 </button>
               </article>
             );
