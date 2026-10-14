@@ -1,6 +1,7 @@
 // components/apps/MessagesApp.js: the Messages app. Inbox, chat, player profile and send-money, all inside the phone.
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { playSound } from "@/lib/sound";
 import { useRouter } from "next/navigation";
 import { call, naira, notifyError, loggedOut } from "@/lib/client";
 import { toast } from "@/lib/toast";
@@ -44,7 +45,8 @@ export default function MessagesApp({ onHome, onUnread }) {
     [filter, setFilter] = useState("all");
   const searchBox = useRef(null);
   const scroller = useRef(null),
-    whoRef = useRef(null);
+    whoRef = useRef(null),
+    seen = useRef(0); // how many messages the open chat had last time we looked (0 = not loaded yet)
   whoRef.current = who;
   const fail = useCallback((r) => (r.status === 401 ? loggedOut(router) : notifyError(r, "Something went wrong. Please try again.")), [router]);
 
@@ -72,7 +74,11 @@ export default function MessagesApp({ onHome, onUnread }) {
   const loadThread = useCallback(async (name) => {
     const m = await call("/api/messages?with=" + encodeURIComponent(name));
     if (whoRef.current !== name) return;
-    m.failed ? fail(m) : setThread(m.messages);
+    if (m.failed) return fail(m);
+    const last = m.messages[m.messages.length - 1];
+    if (seen.current && m.messages.length > seen.current && last && !last.mine) playSound("receive"); // a reply came in
+    seen.current = m.messages.length;
+    setThread(m.messages);
   }, [fail]);
   // while a chat is open, new messages arrive without a refresh
   useEffect(() => {
@@ -86,6 +92,7 @@ export default function MessagesApp({ onHome, onUnread }) {
   }, [thread, who]);
 
   async function open(name) {
+    seen.current = 0;
     setWho(name);
     setThread(null);
     setProf(null);
@@ -116,6 +123,7 @@ export default function MessagesApp({ onHome, onUnread }) {
     const body = text.trim();
     if (!body || busy) return;
     setText("");
+    playSound("send");
     setThread((t) => [...(t ?? []), { mine: true, body, at: new Date().toISOString(), pending: true }]);
     const r = await call("/api/messages", { to: who, body });
     if (r.failed) {
@@ -173,7 +181,7 @@ export default function MessagesApp({ onHome, onUnread }) {
         </div>
         <form className="ms-compose" onSubmit={send}>
           <input type="text" maxLength={500} placeholder="Message" aria-label={`Message ${who}`} value={text} onChange={(e) => setText(e.target.value)} enterKeyHint="send" />
-          <button type="submit" className="ms-send" disabled={!text.trim()} aria-label="Send"><Icon name="next" size={20} weight="bold" /></button>
+          <button type="submit" className="ms-send" data-sound="none" disabled={!text.trim()} aria-label="Send"><Icon name="next" size={20} weight="bold" /></button>
         </form>
 
         {sheet && (

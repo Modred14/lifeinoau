@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { ICON_OF } from "../lib3d/landmarks.js";
 import { loadCampusData, placeMeta } from "../lib3d/campusData.js";
 import { Icon } from "./Icon";
+import { playSound } from "@/lib/sound";
 
 const HOME_VIEW = { x: 0, z: 8, dist: 210, az: 0.7, pol: 0.95 };
 const labelWidth = (name, tier) => Math.min(190, name.length * (tier === 1 ? 7.4 : 6.4) + 26);
@@ -40,7 +41,7 @@ export default function CampusMap({ interactive = true, zoomOnly = false, pins =
         // click a named building to inspect it (a drag is not a click)
         if (interactive) { const el = stage.renderer.domElement, ray = new stage.THREE.Raycaster(), ndc = new stage.THREE.Vector2(); let d0 = null;
           const down = (e) => { d0 = [e.clientX, e.clientY, performance.now()]; };
-          const up = (e) => { if (!d0 || Math.hypot(e.clientX - d0[0], e.clientY - d0[1]) > 5 || performance.now() - d0[2] > 500) return; const r = el.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, stage.camera); const id = campus.pick(ray); if (id) { hold(); cb.current?.(id); } };
+          const up = (e) => { if (!d0 || Math.hypot(e.clientX - d0[0], e.clientY - d0[1]) > 5 || performance.now() - d0[2] > 500) return; const r = el.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, stage.camera); const id = campus.pick(ray); if (id) { hold(); playSound("tap"); cb.current?.(id); } };
           const plane = new stage.THREE.Plane(new stage.THREE.Vector3(0, 1, 0), 0), at = new stage.THREE.Vector3();
           const zoomIn = (e) => { const r = el.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, stage.camera); if (!ray.ray.intersectPlane(plane, at)) return; const d = stage.camera.position.distanceTo(stage.controls.target); stage.flyTo(at.x, 0, at.z, Math.max(stage.controls.minDistance + 10, d * 0.45), null); }; // double-click or double-tap: glide in on that spot
           el.addEventListener("pointerdown", down); el.addEventListener("pointerup", up); el.addEventListener("dblclick", zoomIn); off.push(() => { el.removeEventListener("pointerdown", down); el.removeEventListener("pointerup", up); el.removeEventListener("dblclick", zoomIn); }); }

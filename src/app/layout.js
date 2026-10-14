@@ -4,6 +4,7 @@ import { Outfit, Work_Sans } from "next/font/google";
 import Shell from "@/components/Shell";
 import Toaster from "@/components/Toaster";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import SoundEngine from "@/components/SoundEngine";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -89,6 +90,7 @@ export default function RootLayout({ children }) {
         <Shell>{children}</Shell>
         <Toaster />
         <ConfirmDialog />
+        <SoundEngine />
       </body>
     </html>
   );

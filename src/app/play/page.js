@@ -51,6 +51,7 @@ export default function Play() {
     groups.forEach((n) =>
       toast.info(n.body, {
         id: "note-" + n.id,
+        sound: "notify",
         persistent: true,
         onDismiss: closed,
       }),
@@ -111,6 +112,7 @@ export default function Play() {
         action === "rest"
           ? "You rested and feel better."
           : "Safe hustle done. Cash added.",
+      sound: action === "rest" ? undefined : "coin",
     }));
   const risky = () =>
     run("/api/risky", { requestId: crypto.randomUUID() }, (r) =>
@@ -120,7 +122,7 @@ export default function Play() {
             text: `DSA HAS CAUGHT YOU. They seized ${naira(r.seizedKobo)}.${r.expelled ? " You have been expelled." : r.suspended ? " You are suspended for 2 weeks." : ""}`,
           }
         : BigInt(r.earnedKobo) > 0n
-          ? { text: `The hustle paid ${naira(r.earnedKobo)}. DSA is watching.` }
+          ? { text: `The hustle paid ${naira(r.earnedKobo)}. DSA is watching.`, sound: "coin" }
           : { info: true, text: "The hustle went nowhere." },
     );
   const exam = (cheat) =>
@@ -136,6 +138,7 @@ export default function Play() {
         BigInt(r.gift) > 0n
           ? `Your parent sent you ${naira(r.gift)}.`
           : "Your parent was glad to hear from you.",
+      sound: BigInt(r.gift) > 0n ? "coin" : undefined,
     }));
 
   async function create(payload) {
@@ -285,7 +288,7 @@ export default function Play() {
       actions={ACTIONS}
       exam={exam}
       bail={() =>
-        run("/api/floor0/pay", {}, () => ({ text: "Bail paid. You're free." }))
+        run("/api/floor0/pay", {}, () => ({ text: "Bail paid. You're free.", sound: "coin" }))
       }
     />
   );

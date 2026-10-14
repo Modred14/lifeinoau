@@ -8,6 +8,7 @@ import { call, naira, notifyError } from "@/lib/client";
 import { setPlayMode, usePlayMode, useBare, resetBoot } from "@/lib/ui";
 import { Icon } from "./Icon";
 import Phone from "./Phone";
+import SoundToggle from "./SoundToggle";
 import { toast } from "@/lib/toast";
 
 const moodOf = (h) =>
@@ -101,7 +102,13 @@ export default function Shell({ children }) {
     toast.info("You're logged out. See you soon.", { id: "session" });
     router.push("/");
   }
-  if (bare) return children;
+  if (bare)
+    return (
+      <>
+        {children}
+        <SoundToggle />
+      </>
+    );
   const creating = path === "/play" && !st,
     onPlay = path === "/play" && !!st,
     buying = onPlay && mode === "buy",
@@ -195,6 +202,7 @@ export default function Shell({ children }) {
           <button
             type="button"
             ref={opener}
+            data-sound="none"
             data-active={phone ? "1" : undefined}
             aria-expanded={phone}
             aria-haspopup="dialog"
@@ -208,6 +216,7 @@ export default function Shell({ children }) {
           </button>
         </nav>
       )}
+      {(!st || hideBars) && <SoundToggle />}
       <Phone
         open={phone && !!st}
         st={st}

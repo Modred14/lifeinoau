@@ -1,0 +1,24 @@
+/* components/sound-toggle.css: the floating mute button. Sits above the page, below dialogs and the loader. */
+.sndt {
+  position: fixed;
+  z-index: 40;
+  top: calc(var(--safe-t) + 12px);
+  right: max(12px, env(safe-area-inset-right, 0px));
+  width: 44px;
+  height: 44px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(13, 19, 33, 0.72);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 6px 18px -8px #000a;
+}
+.sndt:hover:not(:disabled) {
+  background-color: rgba(34, 48, 82, 0.85);
+}
+.sndt[aria-pressed="true"] {
+  color: var(--muted);
+}

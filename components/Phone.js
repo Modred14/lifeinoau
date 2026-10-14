@@ -1,9 +1,10 @@
 // components/Phone.js
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import { naira, call } from "@/lib/client";
 import { CLASS_INFO } from "@/lib/classes.js";
+import { playSound } from "@/lib/sound";
 import MessagesApp from "./apps/MessagesApp";
 import CareerApp from "./apps/CareerApp";
 import CoursesApp from "./apps/CoursesApp";
@@ -12,6 +13,7 @@ import RelationshipApp from "./apps/RelationshipApp";
 import PartiesApp from "./apps/PartiesApp";
 import LeaderboardsApp from "./apps/LeaderboardsApp";
 import AchievementsApp from "./apps/AchievementsApp";
+import SettingsApp from "./apps/SettingsApp";
 import "./phone.css";
 
 /** Every app opens inside the handset. `own` apps draw their own header (Messages has a chat bar). */
@@ -24,9 +26,10 @@ const APPS = {
   parties: { name: "Parties", icon: "party", tone: "violet", C: PartiesApp },
   forbes: { name: "Forbes", icon: "forbes", tone: "amber", C: LeaderboardsApp },
   awards: { name: "Awards", icon: "medal", tone: "orange", C: AchievementsApp },
+  settings: { name: "Settings", icon: "gear", tone: "graphite", C: SettingsApp },
 };
 export const PHONE_APPS = Object.keys(APPS);
-const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "forbes", "awards"];
+const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "forbes", "awards", "settings"];
 
 const day = (d) => d.toLocaleDateString("en-NG", { weekday: "long", day: "numeric", month: "long" });
 const clock = (d) =>
@@ -35,9 +38,9 @@ const clock = (d) =>
     .replace(/\s?(am|pm)/i, (m) => m.trim().toUpperCase())
     .replace(/^(\d+:\d+)(AM|PM)$/, "$1");
 
-function Tile({ name, icon, tone, onClick, badge, first }) {
+function Tile({ name, icon, tone, onClick, badge, first, sound }) {
   return (
-    <button type="button" className="ph-app" ref={first} onClick={onClick} aria-label={badge ? `${name}, ${badge} unread` : name}>
+    <button type="button" className="ph-app" ref={first} data-sound={sound} onClick={onClick} aria-label={badge ? `${name}, ${badge} unread` : name}>
       <span className="ph-ico" data-tone={tone}>
         <Icon name={icon} size={28} weight="fill" />
         {badge ? <i className="ph-badge">{badge > 9 ? "9+" : badge}</i> : null}
@@ -52,7 +55,14 @@ export default function Phone({ open, onClose, st, firstApp, initialApp, onShop,
   const [now, setNow] = useState(() => new Date());
   const [app, setApp] = useState(null);
   const [unread, setUnread] = useState(0);
+  const wasOpen = useRef(false),
+    lastUnread = useRef(null);
 
+  useEffect(() => {
+    // the handset slides up and away with a sound, whichever way it was opened or closed
+    if (open !== wasOpen.current) playSound(open ? "open" : "close");
+    wasOpen.current = open;
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     setApp(APPS[initialApp] ? initialApp : null);
@@ -65,7 +75,11 @@ export default function Phone({ open, onClose, st, firstApp, initialApp, onShop,
     let on = true;
     const load = async () => {
       const r = await call("/api/messages");
-      if (on && !r.failed) setUnread(r.conversations.reduce((s, c) => s + c.unread, 0));
+      if (!on || r.failed) return;
+      const n = r.conversations.reduce((s, c) => s + c.unread, 0);
+      if (lastUnread.current !== null && n > lastUnread.current) playSound("receive");
+      lastUnread.current = n;
+      setUnread(n);
     };
     load();
     const t = setInterval(load, 30000);
@@ -112,7 +126,7 @@ export default function Phone({ open, onClose, st, firstApp, initialApp, onShop,
                 {GRID.map((id, k) => (
                   <Tile key={id} {...APPS[id]} badge={id === "messages" ? unread : 0} first={k === 0 ? firstApp : undefined} onClick={() => setApp(id)} />
                 ))}
-                <Tile name="Shop" icon="bag" tone="mint" onClick={onShop} />
+                <Tile name="Shop" icon="bag" tone="mint" sound="none" onClick={onShop} />
                 <Tile name={loggingOut ? "Leaving…" : "Log out"} icon="logout" tone="slate" onClick={onLogout} />
               </div>
             </div>
@@ -135,11 +149,11 @@ export default function Phone({ open, onClose, st, firstApp, initialApp, onShop,
             </section>
           )}
 
-          <button type="button" className="ph-home" onClick={() => (app ? home() : onClose())} aria-label={app ? "Go to home screen" : "Close phone"}>
+          <button type="button" className="ph-home" data-sound={app ? "home" : "none"} onClick={() => (app ? home() : onClose())} aria-label={app ? "Go to home screen" : "Close phone"}>
             <i />
           </button>
         </div>
-        <button type="button" className="ph-close" onClick={onClose} aria-label="Close phone">
+        <button type="button" className="ph-close" data-sound="none" onClick={onClose} aria-label="Close phone">
           <Icon name="close" size={18} />
           Close
         </button>

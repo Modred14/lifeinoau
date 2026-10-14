@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { call, naira, notifyError, loggedOut } from "@/lib/client";
 import { toast } from "@/lib/toast";
+import { playSound } from "@/lib/sound";
 import { confirmAction } from "@/lib/confirm";
 import { refreshShell, usePlayMode, setPlayMode } from "@/lib/ui";
 import { ITEMS, roomScore, sellKobo } from "@/lib/furniture.js";
@@ -142,6 +143,7 @@ export default function GameHome({
       r.placed
         ? `${d.name} is in your room.`
         : `${d.name} bought. Your room is full, so it is in storage.`,
+      { sound: "coin" },
     );
     if (r.placed && r.boughtId) setSelected(r.boughtId);
   };
@@ -170,10 +172,11 @@ export default function GameHome({
       return;
     setSelected(null);
     const r = await send({ action: "sell", id: sel.id });
-    if (r) toast.success(`Sold ${d.name} for ${naira(r.soldKobo)}.`);
+    if (r) toast.success(`Sold ${d.name} for ${naira(r.soldKobo)}.`, { sound: "coin" });
   };
   const onMove = useCallback(
     (id, p) => {
+      playSound("place"); // the piece lands where you dropped it
       send(
         { action: "place", id, x: p.x, z: p.z, rot: p.rot },
         { quiet: true },

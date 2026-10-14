@@ -2,6 +2,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./Icon";
+import { playReel, playSound } from "@/lib/sound";
 import {
   CLASS_INFO,
   CLASS_ORDER,
@@ -28,7 +29,9 @@ export default function LifeRoll({ result, hostels = [], onContinue }) {
   const [phase, setPhase] = useState("waiting"); // waiting, spinning, landed
   const win = useRef(null),
     strip = useRef(null),
-    anims = useRef([]);
+    anims = useRef([]),
+    stopReel = useRef(null),
+    landed = useRef(false);
   const idx = CLASS_ORDER.indexOf(result),
     target = CLASS_ORDER.length + idx,
     start = CLASS_ORDER.length * (REPEATS - 2) + 1;
@@ -36,6 +39,12 @@ export default function LifeRoll({ result, hostels = [], onContinue }) {
     pkg = useMemo(() => classPackage(result, hostels), [result, hostels]);
 
   const land = useCallback(() => {
+    stopReel.current?.();
+    stopReel.current = null;
+    if (!landed.current) {
+      landed.current = true;
+      playSound("reveal");
+    }
     setPhase((p) => {
       if (p === "landed") return p;
       try {
@@ -62,6 +71,7 @@ export default function LifeRoll({ result, hostels = [], onContinue }) {
     const go = setTimeout(() => {
       if (!alive) return;
       setPhase("spinning");
+      stopReel.current = playReel(ROLL_MS);
       const move = el.animate(
         [
           {
@@ -104,6 +114,7 @@ export default function LifeRoll({ result, hostels = [], onContinue }) {
     return () => {
       alive = false;
       clearTimeout(go);
+      stopReel.current?.();
       anims.current.forEach((a) => a.cancel());
     };
   }, [start, target, land]);
