@@ -1,51 +1,48 @@
 // components/apps/PartiesApp.js: lives inside the phone (see components/Phone.js)
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { call, naira, notifyError, loggedOut } from "@/lib/client";
+import { useEffect } from "react";
+import { call, naira } from "@/lib/client";
 import { toast } from "@/lib/toast";
+import { game, run, cash, canAfford, useResource } from "@/lib/gameStore";
 import Loader from "@/components/Loader";
 
 export default function Parties() {
-  const router = useRouter(),
-    [d, setD] = useState(null),
-    [busy, setBusy] = useState(""),
-    outage = useRef(false);
-  const load = useCallback(async () => {
-    const r = await call("/api/parties");
-    if (r.status === 401) return loggedOut(router);
-    if (r.failed) {
-      if (!outage.current) {
-        outage.current = true;
-        notifyError(r);
-      }
-      return;
-    } // this screen polls: tell the player once per outage
-    outage.current = false;
-    setD(r);
-  }, [router]);
+  const { d, store, router } = useResource("/api/parties");
   useEffect(() => {
-    load();
-    const t = setInterval(load, 20000);
+    // attendance changes as others buy tickets: look again every 20 seconds, but only while the tab is on screen
+    const t = setInterval(() => !document.hidden && store.refresh(), 20000);
     return () => clearInterval(t);
-  }, [load]); // attendance changes as others buy tickets
+  }, [store]);
 
-  async function go(venue) {
-    if (busy) return;
-    setBusy(venue);
-    const r = await call("/api/parties", {
-      venue,
-      requestId: crypto.randomUUID(),
+  // Buying a ticket shows at once (the card flips to "You're going", attendance goes up, your cash drops) and is undone if refused,
+  // for example when the last ticket was sold a moment earlier. What happens on the night is random, so that part shows when the server answers.
+  function go(venue) {
+    const p = d.parties.find((x) => x.venue === venue);
+    if (!canAfford(p.priceKobo)) return toast.error("You cannot afford the ticket.");
+    return run({
+      key: "party:" + venue,
+      router,
+      ok: `Ticket bought. You're going to ${venue}.`,
+      request: () =>
+        call("/api/parties", { venue, requestId: crypto.randomUUID() }),
+      effects: [
+        {
+          store,
+          patch: (x) => ({
+            ...x,
+            wentOut: true,
+            parties: x.parties.map((q) =>
+              q.venue === venue ? { ...q, going: true, attendees: q.attendees + 1 } : q,
+            ),
+          }),
+        },
+        { store: game, patch: cash(-BigInt(p.priceKobo)) },
+      ],
+      then: (r) =>
+        toast.success(
+          `${r.title}${r.note ? " " + r.note : ""}${BigInt(r.extraKobo) > 0n ? ` It cost you ${naira(r.extraKobo)} extra.` : ""}`,
+        ),
     });
-    setBusy("");
-    if (r.status === 401) return loggedOut(router);
-    if (r.failed) notifyError(r);
-    else if (r.duplicate) toast.info("Already done.");
-    else
-      toast.success(
-        `${r.title}${r.note ? " " + r.note : ""}${BigInt(r.extraKobo) > 0n ? ` It cost you ${naira(r.extraKobo)} extra.` : ""}`,
-      );
-    load();
   }
   return (
     <>
@@ -90,7 +87,7 @@ export default function Parties() {
             <button
               className="go"
               style={{ width: "100%", marginTop: 10 }}
-              disabled={!!busy || d.wentOut || full}
+              disabled={d.wentOut || full}
               onClick={() => go(p.venue)}
             >
               {p.going
@@ -99,9 +96,7 @@ export default function Parties() {
                   ? "Sold out"
                   : d.wentOut
                     ? "You already went out this week"
-                    : busy === p.venue
-                      ? "Getting in..."
-                      : "Buy ticket and go"}
+                    : "Buy ticket and go"}
             </button>
           </div>
         );

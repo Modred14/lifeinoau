@@ -1,9 +1,9 @@
 // components/apps/CareerApp.js: lives inside the phone (see components/Phone.js)
 "use client";
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { call, naira, notifyError, loggedOut } from "@/lib/client";
+import { useState } from "react";
+import { call, naira } from "@/lib/client";
 import { toast } from "@/lib/toast";
+import { game, run, cash, bump, canAfford, useResource } from "@/lib/gameStore";
 import { confirmAction } from "@/lib/confirm";
 import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
@@ -11,48 +11,114 @@ import Loader from "@/components/Loader";
 const k = (n) => "₦" + n.toLocaleString("en-NG");
 
 export default function Career() {
-  const router = useRouter(),
-    [d, setD] = useState(null),
-    [loadFailed, setLoadFailed] = useState(false),
-    [busy, setBusy] = useState(false),
-    [tab, setTab] = useState("jobs");
+  // Kept between visits: reopening is instant and refreshes quietly. Everything you do here shows at once and is undone if refused.
+  const { d, store, load, loadFailed, router } = useResource("/api/career");
+  const [tab, setTab] = useState("jobs");
   const [form, setForm] = useState({ type: "", name: "" }),
     [amt, setAmt] = useState({});
-  const load = useCallback(async () => {
-    const r = await call("/api/career");
-    if (r.status === 401) return loggedOut(router);
-    if (r.failed) {
-      notifyError(r);
-      setLoadFailed(true);
-      return;
-    }
-    setLoadFailed(false);
-    setD(r);
-  }, [router]);
-  useEffect(() => {
-    load();
-  }, [load]);
 
-  async function go(path, body, ok) {
-    if (busy) return;
-    setBusy(true);
-    const r = await call(path, { ...body, requestId: crypto.randomUUID() });
-    setBusy(false);
-    if (r.status === 401) return loggedOut(router);
-    if (r.failed) notifyError(r);
-    else if (r.duplicate) toast.info("Already done.");
-    else
-      toast.success(
-        r.note ??
-          (r.paidKobo
-            ? `Shift done. You earned ${naira(r.paidKobo)}.${r.levelUp ? ` You reached job level ${r.levelUp}!` : ""}`
-            : (ok ?? "Done.")),
-      );
-    load();
-  }
-  const job = (action, extra) => go("/api/career/job", { action, ...extra });
-  const biz = (action, id, extra) =>
-    go("/api/career/business", { action, id, ...extra });
+  // fx = { local: change to this screen, me: change to your stats / cash, ok: message shown at once, okLate: message when the server answers }
+  const go = (path, body, fx = {}) =>
+    run({
+      key: `${path}:${body.action}:${body.id ?? body.job ?? ""}`,
+      router,
+      ok: fx.ok,
+      okLate: fx.okLate ?? ((r) => r.note ?? "Done."),
+      request: () => call(path, { ...body, requestId: crypto.randomUUID() }),
+      effects: [
+        fx.local && { store, patch: fx.local },
+        fx.me && { store: game, patch: fx.me },
+      ],
+      after: fx.after,
+    });
+  const patchBiz = (id, change) => (x) => ({
+    ...x,
+    businesses: x.businesses.map((b) => (b.id === id ? { ...b, ...change(b) } : b)),
+  });
+  const job = (action, extra) => {
+    const j = d.job;
+    if (action === "work") {
+      if (game.get() && game.get().character.energy < j.energy)
+        return toast.error("You are too tired for a shift.");
+      return go("/api/career/job", { action }, {
+        local: (x) => ({
+          ...x,
+          job: {
+            ...x.job,
+            xp: x.job.xp + 1,
+            level: Math.min(10, Math.floor((x.job.xp + 1) / 5)),
+            shiftsToNext: x.job.shiftsToNext <= 1 ? 5 : x.job.shiftsToNext - 1,
+            shiftsThisWeek: x.job.shiftsThisWeek + 1,
+          },
+        }),
+        me: bump({ energy: -j.energy }), // the pay is random: it is added the moment the server says how much
+        after: (r) => [{ store: game, patch: cash(r.paidKobo ?? 0) }],
+        okLate: (r) =>
+          `Shift done. You earned ${naira(r.paidKobo)}.${r.levelUp ? ` You reached job level ${r.levelUp}!` : ""}`,
+      });
+    }
+    if (action === "quit")
+      return go("/api/career/job", { action }, {
+        ok: "You quit your job.",
+        local: (x) => ({ ...x, job: null }),
+      });
+    const x = d.jobs.find((y) => y.key === extra.job),
+      same = j?.key === x.key;
+    return go("/api/career/job", { action, ...extra }, {
+      ok: `You are now a ${x.title}.`,
+      local: (v) => {
+        const xp = same ? v.job.xp : 0;
+        return {
+          ...v,
+          job: {
+            key: x.key, title: x.title, xp, level: Math.min(10, Math.floor(xp / 5)),
+            shiftsToNext: 5 - (xp % 5), shiftsThisWeek: v.job?.shiftsThisWeek ?? 0,
+            maxShifts: v.job?.maxShifts ?? 5, energy: x.energy,
+          },
+        };
+      },
+    });
+  };
+  const biz = (action, id, extra = {}) => {
+    const b = d.businesses.find((y) => y.id === id),
+      n = BigInt(Math.max(0, Number(extra.amountNaira) || 0)) * 100n;
+    const base = { action, id, ...extra };
+    switch (action) {
+      case "hire":
+        return go("/api/career/business", base, {
+          local: patchBiz(id, (y) => ({ employees: Math.min(y.maxEmployees, y.employees + 1) })),
+        });
+      case "fire":
+        return go("/api/career/business", base, {
+          local: patchBiz(id, (y) => ({ employees: Math.max(0, y.employees - 1) })),
+        });
+      case "capital":
+        if (!canAfford(n)) return toast.error("You cannot afford that.");
+        return go("/api/career/business", base, {
+          local: patchBiz(id, (y) => ({ capitalKobo: (BigInt(y.capitalKobo) + n).toString() })),
+          me: cash(-n),
+        });
+      case "withdraw":
+        return go("/api/career/business", base, {
+          local: patchBiz(id, (y) => ({ capitalKobo: (BigInt(y.capitalKobo) - n).toString() })),
+          me: cash(n),
+        });
+      case "upgrade":
+        return go("/api/career/business", base, {
+          local: patchBiz(id, (y) => ({
+            level: y.level + 1,
+            capitalKobo: (BigInt(y.capitalKobo) - BigInt(y.upgradeCostKobo ?? 0)).toString(),
+          })),
+        });
+      case "close":
+        return go("/api/career/business", base, {
+          local: (x) => ({ ...x, businesses: x.businesses.filter((y) => y.id !== id) }),
+          me: cash(BigInt(b.capitalKobo)),
+        });
+      default: // starting a business: the server picks its id, so it appears when the server answers
+        return go("/api/career/business", base);
+    }
+  };
   if (!d)
     return loadFailed ? (
       <LoadError onRetry={load} />
@@ -103,13 +169,12 @@ export default function Career() {
               <div className="row">
                 <button
                   className="go"
-                  disabled={busy || j.shiftsThisWeek >= j.maxShifts}
+                  disabled={j.shiftsThisWeek >= j.maxShifts}
                   onClick={() => job("work")}
                 >
                   Work a shift
                 </button>
                 <button
-                  disabled={busy}
                   onClick={async () => {
                     if (
                       await confirmAction({
@@ -141,7 +206,7 @@ export default function Career() {
                   </span>
                 </span>
                 <button
-                  disabled={busy || !!x.locked || j?.key === x.key}
+                  disabled={!!x.locked || j?.key === x.key}
                   onClick={() => job("pick", { job: x.key })}
                 >
                   {j?.key === x.key ? "Current" : "Take"}
@@ -186,16 +251,16 @@ export default function Career() {
                   </p>
                 )}
                 <div className="row">
-                  <button disabled={busy} onClick={() => biz("hire", b.id)}>
+                  <button onClick={() => biz("hire", b.id)}>
                     Hire
                     <br />
                     <span className="mut">more sales, more wages</span>
                   </button>
-                  <button disabled={busy} onClick={() => biz("fire", b.id)}>
+                  <button onClick={() => biz("fire", b.id)}>
                     Let one go
                   </button>
                   <button
-                    disabled={busy || !b.upgradeCostKobo}
+                    disabled={!b.upgradeCostKobo}
                     onClick={() => biz("upgrade", b.id)}
                   >
                     Upgrade
@@ -221,7 +286,7 @@ export default function Career() {
                     }
                   />
                   <button
-                    disabled={busy || !amt[b.id]}
+                    disabled={!amt[b.id]}
                     onClick={() =>
                       biz("capital", b.id, { amountNaira: Number(amt[b.id]) })
                     }
@@ -229,7 +294,7 @@ export default function Career() {
                     Add capital
                   </button>
                   <button
-                    disabled={busy || !amt[b.id]}
+                    disabled={!amt[b.id]}
                     onClick={() =>
                       biz("withdraw", b.id, { amountNaira: Number(amt[b.id]) })
                     }
@@ -242,7 +307,6 @@ export default function Career() {
                   need a bigger cushion.
                 </p>
                 <button
-                  disabled={busy}
                   onClick={async () => {
                     if (
                       await confirmAction({
@@ -293,7 +357,7 @@ export default function Career() {
               <button
                 className="go"
                 style={{ width: "100%", marginTop: 8 }}
-                disabled={busy || !form.type || form.name.trim().length < 3}
+                disabled={!form.type || form.name.trim().length < 3}
                 onClick={() =>
                   biz("start", undefined, {
                     type: form.type,

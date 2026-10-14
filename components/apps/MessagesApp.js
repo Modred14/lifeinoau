@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { call, naira, notifyError, loggedOut } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { askText } from "@/lib/confirm";
+import { game, run, cash, canAfford } from "@/lib/gameStore";
 import { Icon } from "../Icon";
 
 const initials = (n = "") => n.replace(/[^a-z0-9]/gi, "").slice(0, 2).toUpperCase() || "?";
@@ -133,11 +134,22 @@ export default function MessagesApp({ onHome, onUnread }) {
     loadThread(who);
   }
   const fee = Number.isInteger(Number(amt)) && Number(amt) > 0 ? Math.floor(Number(amt) * 0.02) : 0;
-  const pay = (e) => {
+  // Sending money shows at once: the sheet closes, your cash drops (amount plus the 2% fee) and the message appears.
+  // If the server refuses, the cash comes back and the sheet reopens with what you typed.
+  const pay = async (e) => {
     e.preventDefault();
-    act("/api/transfer", { to: who, amountNaira: Number(amt), memo: note, requestId: crypto.randomUUID() },
-      (r) => `Sent ${naira(r.sentKobo)} (fee ${naira(r.feeKobo)}).`,
-      () => { setAmt(""); setNote(""); setSheet(null); window.dispatchEvent(new Event("game:refresh")); });
+    const n = Number(amt), memo = note, to = who;
+    if (!Number.isInteger(n) || n < 100 || n > 5_000_000) return toast.error("Send a whole amount between ₦100 and ₦5,000,000.");
+    const kobo = BigInt(n) * 100n, feeKobo = (kobo * 2n) / 100n;
+    if (!canAfford(kobo + feeKobo)) return toast.error("You cannot afford that. The 2% fee is added on top.");
+    setAmt(""); setNote(""); setSheet(null);
+    const r = await run({
+      key: "pay", router,
+      ok: `Sent ${naira(kobo.toString())} (fee ${naira(feeKobo.toString())}).`,
+      request: () => call("/api/transfer", { to, amountNaira: n, memo, requestId: crypto.randomUUID() }),
+      effects: [{ store: game, patch: cash(-(kobo + feeKobo)) }],
+    });
+    if (r.failed && !r.skipped) { setAmt(String(n)); setNote(memo); setSheet("pay"); }
   };
   async function report() {
     const reason = await askText({

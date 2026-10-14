@@ -1,10 +1,10 @@
 // components/apps/InvestApp.js: lives inside the phone (see components/Phone.js)
 "use client";
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { call, naira, notifyError, loggedOut } from "@/lib/client";
+import { useState } from "react";
+import { call, naira } from "@/lib/client";
 import { Icon } from "../Icon";
 import { toast } from "@/lib/toast";
+import { game, run, cash, canAfford, useResource } from "@/lib/gameStore";
 import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
 
@@ -45,39 +45,69 @@ function Spark({ data, label }) {
 }
 
 export default function Invest() {
-  const router = useRouter(),
-    [d, setD] = useState(null),
-    [loadFailed, setLoadFailed] = useState(false),
-    [busy, setBusy] = useState(false),
-    [amt, setAmt] = useState({});
-  const load = useCallback(async () => {
-    const r = await call("/api/invest");
-    if (r.status === 401) return loggedOut(router);
-    if (r.failed) {
-      notifyError(r);
-      setLoadFailed(true);
-      return;
-    }
-    setLoadFailed(false);
-    setD(r);
-  }, [router]);
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Kept between visits: reopening is instant and refreshes quietly.
+  const { d, store, load, loadFailed, router } = useResource("/api/invest");
+  const [amt, setAmt] = useState({});
+  const NGN = (k) => (k / 100n).toLocaleString("en-NG");
 
-  async function go(body) {
-    if (busy) return;
-    setBusy(true);
-    const r = await call("/api/invest", {
-      ...body,
-      requestId: crypto.randomUUID(),
+  // Buying and selling show at once (your holdings, your cash, the invested total) using the same fee and penalty maths as the server,
+  // and are undone if the server refuses. The prices only change once a game week, so nothing here depends on luck.
+  function go(body) {
+    const P = d.products.find((p) => p.key === body.product),
+      h = d.holdings.find((x) => x.product === body.product),
+      fee = BigInt(d.feePercent);
+    let local, me, ok;
+    if (body.action === "buy") {
+      const amount = BigInt(body.amountNaira) * 100n,
+        f = (amount * fee) / 100n;
+      if (!canAfford(amount + f))
+        return toast.error("You cannot afford that (the 1% fee is added on top).");
+      ok = `Bought ${P.name}. Fee ₦${NGN(f)}.`;
+      me = cash(-(amount + f));
+      local = (x) => {
+        const old = x.holdings.find((y) => y.product === body.product);
+        return {
+          ...x,
+          investedKobo: (BigInt(x.investedKobo) + amount).toString(),
+          holdings: old
+            ? x.holdings.map((y) =>
+                y.product !== body.product ? y : {
+                  ...y,
+                  valueKobo: (BigInt(y.valueKobo) + amount).toString(),
+                  costKobo: (BigInt(y.costKobo) + amount).toString(),
+                  lockedWeeks: P.lock,
+                })
+            : [...x.holdings, { product: body.product, name: P.name, valueKobo: amount.toString(), costKobo: amount.toString(), pnlKobo: "0", lockedWeeks: P.lock }],
+        };
+      };
+    } else {
+      const pc = BigInt(body.percent),
+        value = (BigInt(h.valueKobo) * pc) / 100n,
+        early = h.lockedWeeks > 0,
+        penalty = early ? (value * BigInt(d.earlyPenaltyPercent)) / 100n : 0n,
+        net = value - penalty - (value * fee) / 100n;
+      ok = `Sold. You received ₦${NGN(net)}${early ? ` after a ${d.earlyPenaltyPercent}% early-sale penalty` : ""}.`;
+      me = net > 0n ? cash(net) : null;
+      local = (x) => ({
+        ...x,
+        investedKobo: (BigInt(x.investedKobo) - value).toString(),
+        holdings:
+          pc === 100n
+            ? x.holdings.filter((y) => y.product !== body.product)
+            : x.holdings.map((y) => {
+                if (y.product !== body.product) return y;
+                const v = BigInt(y.valueKobo) - value, c = BigInt(y.costKobo) - (BigInt(y.costKobo) * pc) / 100n;
+                return { ...y, valueKobo: v.toString(), costKobo: c.toString(), pnlKobo: (v - c).toString() };
+              }),
+      });
+    }
+    return run({
+      key: `invest:${body.action}:${body.product}`,
+      router,
+      ok,
+      request: () => call("/api/invest", { ...body, requestId: crypto.randomUUID() }),
+      effects: [{ store, patch: local }, me && { store: game, patch: me }],
     });
-    setBusy(false);
-    if (r.status === 401) return loggedOut(router);
-    if (r.failed) notifyError(r);
-    else if (r.duplicate) toast.info("Already done.");
-    else toast.success(r.note ?? "Done.");
-    load();
   }
   if (!d)
     return loadFailed ? (
@@ -138,7 +168,6 @@ export default function Invest() {
                   {[25, 50, 100].map((p) => (
                     <button
                       key={p}
-                      disabled={busy}
                       onClick={() =>
                         go({ action: "sell", product: h.product, percent: p })
                       }
@@ -206,14 +235,12 @@ export default function Invest() {
             />
             <button
               className="go"
-              disabled={busy || Number(amt[p.key] ?? 0) < 1000}
-              onClick={() =>
-                go({
-                  action: "buy",
-                  product: p.key,
-                  amountNaira: Number(amt[p.key]),
-                }).then(() => setAmt({ ...amt, [p.key]: "" }))
-              }
+              disabled={Number(amt[p.key] ?? 0) < 1000}
+              onClick={() => {
+                const n = Number(amt[p.key]);
+                setAmt({ ...amt, [p.key]: "" }); // the box clears at once, like the rest of the screen
+                go({ action: "buy", product: p.key, amountNaira: n });
+              }}
             >
               Buy
             </button>

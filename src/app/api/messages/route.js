@@ -1,8 +1,8 @@
-// app/api/messages/route.js
+// src/app/api/messages/route.js
 import { PrismaClient } from "@prisma/client";
 import { getUserId } from "@/lib/auth";
 import { allowed, tooMany } from "@/lib/ratelimit";
-import { getMessages, sendMessage, GameError } from "@/lib/gameService";
+import { getMessages, sendMessage, unreadCount, GameError } from "@/lib/gameService";
 export const dynamic = "force-dynamic"; // never cache API responses
 const db = (globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } }));
 const json = async (req) => req.json().catch(() => ({}));
@@ -12,6 +12,7 @@ export async function GET(req) {
   if (!(await allowed(db, "msg:" + uid, 120, 60_000))) return tooMany();
   try {
     const u = new URL(req.url).searchParams;
+    if (u.get("unread")) return Response.json(await unreadCount(db, uid)); // the phone badge only needs a number
     return Response.json(await getMessages(db, uid, u.get("with")));
   } catch (e) {
     if (e instanceof GameError)

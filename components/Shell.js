@@ -10,6 +10,7 @@ import { Icon } from "./Icon";
 import Phone from "./Phone";
 import SoundToggle from "./SoundToggle";
 import { toast } from "@/lib/toast";
+import { game, useGame } from "@/lib/gameStore";
 
 const moodOf = (h) =>
   h >= 80
@@ -29,7 +30,8 @@ export default function Shell({ children }) {
     mode = usePlayMode(),
     bareUi = useBare(),
     [loggingOut, setLoggingOut] = useState(false),
-    [st, setSt] = useState(null),
+    g = useGame(), // one copy of the player's state, shared with the home screen: a change made anywhere shows here at once
+    st = g?.character?.hostel ? g : null,
     [phone, setPhone] = useState(false),
     [phoneApp, setPhoneApp] = useState(null),
     [clock, setClock] = useState(null),
@@ -40,7 +42,7 @@ export default function Shell({ children }) {
     full = path === "/map" || path === "/play",
     hideBars = path === "/play" && bareUi; // no top bar or bottom nav while the game loads or the player is creating a character
   const load = useCallback(async () => {
-    const r = await call("/api/state");
+    const r = await game.refresh(); // one request at a time, however many parts of the app ask at once
     // 401/404 are normal (logged out / no character yet). Anything else: say so once per outage, not every poll.
     if (r.failed && r.status !== 401 && r.status !== 404) {
       if (!failing.current) {
@@ -48,17 +50,20 @@ export default function Shell({ children }) {
         notifyError(r, "We couldn't refresh your game. Check your connection.");
       }
     } else failing.current = false;
-    setSt(r.failed || !r.character?.hostel ? null : r);
   }, []);
   useEffect(() => {
     if (bare) return;
     load();
-    const t = setInterval(load, 60000);
+    // Quietly re-check every minute, but only while the tab is on screen: a hidden tab costs the server nothing.
+    const t = setInterval(() => !document.hidden && load(), 60000);
     const f = () => load();
+    const v = () => !document.hidden && load();
     window.addEventListener("game:refresh", f);
+    document.addEventListener("visibilitychange", v);
     return () => {
       clearInterval(t);
       window.removeEventListener("game:refresh", f);
+      document.removeEventListener("visibilitychange", v);
     };
   }, [bare, path, load]);
   useEffect(() => {
@@ -97,8 +102,7 @@ export default function Shell({ children }) {
     if (r.failed)
       return notifyError(r, "We couldn't log you out. Please try again.");
     setPhone(false);
-    setSt(null);
-    resetBoot();
+    resetBoot(); // the stored game state was already cleared when the logout request succeeded
     toast.info("You're logged out. See you soon.", { id: "session" });
     router.push("/");
   }

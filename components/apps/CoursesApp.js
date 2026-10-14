@@ -1,10 +1,8 @@
 // components/apps/CoursesApp.js: lives inside the phone (see components/Phone.js)
 "use client";
 import LoadError from "@/components/LoadError";
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { call, notifyError, loggedOut } from "@/lib/client";
-import { toast } from "@/lib/toast";
+import { call } from "@/lib/client";
+import { game, run, bump, useResource } from "@/lib/gameStore";
 
 function Meter({ label, pct, color }) {
   return (
@@ -28,39 +26,57 @@ function Meter({ label, pct, color }) {
 }
 
 export default function Courses() {
-  const router = useRouter(),
-    [d, setD] = useState(null),
-    [loadFailed, setLoadFailed] = useState(false),
-    [busy, setBusy] = useState(false);
-  const load = useCallback(async () => {
-    const r = await call("/api/courses");
-    if (r.status === 401) return loggedOut(router);
-    if (r.failed) {
-      notifyError(r);
-      setLoadFailed(true);
-      return;
-    }
-    setLoadFailed(false);
-    setD(r);
-  }, [router]);
-  useEffect(() => {
-    load();
-  }, [load]);
+  // The courses are kept between visits, so reopening this screen is instant and it refreshes quietly behind you.
+  const { d, store, load, loadFailed, router } = useResource("/api/courses");
 
-  async function act(action, code) {
-    if (busy) return;
-    setBusy(true);
-    const r = await call("/api/courses", {
-      action,
-      code,
-      requestId: crypto.randomUUID(),
+  // Attending or studying shows at once (the meter, the "done this week" label, your energy) and is undone if the server refuses.
+  function act(action, code) {
+    const cost = d.costs[action],
+      c = d.courses.find((x) => x.code === code);
+    return run({
+      key: `course:${action}:${code}`,
+      router,
+      ok:
+        action === "attend"
+          ? `You sat through ${c.lecturer.name}'s lecture in ${code}.`
+          : `You studied ${code}.`,
+      request: () =>
+        call("/api/courses", { action, code, requestId: crypto.randomUUID() }),
+      effects: [
+        {
+          store,
+          patch: (x) => ({
+            ...x,
+            energy: Math.max(0, x.energy - cost),
+            courses: x.courses.map((y) =>
+              y.code !== code
+                ? y
+                : action === "attend"
+                  ? {
+                      ...y,
+                      attended: y.attended + 1,
+                      prep: Math.min(100, y.prep + 3),
+                      attendedThisWeek: true,
+                      attendancePct: Math.round(
+                        Math.min(1, (y.attended + 1) / Math.max(1, x.weeksElapsed)) * 100,
+                      ),
+                    }
+                  : {
+                      ...y,
+                      prep: Math.min(100, y.prep + 10),
+                      studiedThisWeek: true,
+                    },
+            ),
+          }),
+        },
+        {
+          store: game,
+          patch: bump(
+            action === "study" ? { energy: -cost, happiness: -2 } : { energy: -cost },
+          ),
+        },
+      ],
     });
-    setBusy(false);
-    if (r.status === 401) return loggedOut(router);
-    if (r.failed) notifyError(r);
-    else if (r.duplicate) toast.info("Already done.");
-    else toast.success(r.note ?? "Done.");
-    load();
   }
   if (!d)
     return loadFailed ? (
@@ -112,7 +128,7 @@ export default function Courses() {
           <Meter label="Preparation" pct={c.prep} color="var(--gold-text)" />
           <div className="row" style={{ marginTop: 10 }}>
             <button
-              disabled={busy || c.attendedThisWeek || d.energy < d.costs.attend}
+              disabled={c.attendedThisWeek || d.energy < d.costs.attend}
               onClick={() => act("attend", c.code)}
             >
               Attend lecture
@@ -124,7 +140,7 @@ export default function Courses() {
               </span>
             </button>
             <button
-              disabled={busy || c.studiedThisWeek || d.energy < d.costs.study}
+              disabled={c.studiedThisWeek || d.energy < d.costs.study}
               onClick={() => act("study", c.code)}
             >
               Study

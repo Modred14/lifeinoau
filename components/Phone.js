@@ -74,17 +74,17 @@ export default function Phone({ open, onClose, st, firstApp, initialApp, onShop,
     if (!open || !st) return;
     let on = true;
     const load = async () => {
-      const r = await call("/api/messages");
+      const r = await call("/api/messages?unread=1"); // just a number: the old call downloaded the whole inbox every 30 seconds
       if (!on || r.failed) return;
-      const n = r.conversations.reduce((s, c) => s + c.unread, 0);
+      const n = r.unread ?? 0;
       if (lastUnread.current !== null && n > lastUnread.current) playSound("receive");
       lastUnread.current = n;
       setUnread(n);
     };
     load();
-    const t = setInterval(load, 30000);
+    const t = setInterval(() => !document.hidden && load(), 30000);
     return () => { on = false; clearInterval(t); };
-  }, [open, st]);
+  }, [open, !!st]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!open) return;
     const k = (e) => {

@@ -8,9 +8,10 @@ import { call, naira, notifyError, loggedOut } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { playSound } from "@/lib/sound";
 import { confirmAction } from "@/lib/confirm";
-import { refreshShell, usePlayMode, setPlayMode } from "@/lib/ui";
-import { ITEMS, roomScore, sellKobo } from "@/lib/furniture.js";
-import { roomFor } from "@/lib/room.js";
+import { usePlayMode, setPlayMode } from "@/lib/ui";
+import { game, roomStore, useStore, begin, finish, cash, canAfford } from "@/lib/gameStore";
+import { ITEMS, MAX_ITEMS, roomScore, sellKobo, priceKobo } from "@/lib/furniture.js";
+import { roomFor, autoPlace } from "@/lib/room.js";
 import { fmtN } from "@/lib/classes.js";
 import { Icon } from "./Icon";
 import BuySheet from "./BuySheet";
@@ -49,7 +50,6 @@ export default function GameHome({
   st,
   now,
   busy,
-  reload,
   actions,
   exam,
   bail,
@@ -61,20 +61,21 @@ export default function GameHome({
     fz = st.floorZero,
     mode = usePlayMode(),
     buying = mode === "buy";
-  const [rd, setRd] = useState(null),
+  // The room is kept in a shared store: coming back to the home screen shows it at once and refreshes it quietly.
+  const rd = useStore(roomStore),
     [selected, setSelected] = useState(null),
-    [roomBusy, setRoomBusy] = useState(false),
     [collapsed, setCollapsed] = useState(false),
     [needsOpen, setNeedsOpen] = useState(false);
   const api = useRef(null),
-    pending = useRef(0),
-    chain = useRef(Promise.resolve());
+    queue = useRef(Promise.resolve()),
+    ids = useRef(new Map()); // temporary id of an item that was just bought -> its real id once the server has answered
+  const real = (id) => ids.current.get(String(id)) ?? id;
   const room = useMemo(
     () => rd?.room ?? roomFor(c.hostel),
     [rd?.room, c.hostel],
   ); // eslint-disable-line react-hooks/exhaustive-deps
   const items = rd?.items ?? [];
-  const failRoom = useCallback(
+  const fail = useCallback(
     (r) =>
       r.status === 401
         ? loggedOut(router)
@@ -83,10 +84,9 @@ export default function GameHome({
   );
 
   const loadRoom = useCallback(async () => {
-    const r = await call("/api/room");
-    if (r.failed) failRoom(r);
-    else setRd(r);
-  }, [failRoom]);
+    const r = await roomStore.refresh();
+    if (r.failed && (r.status === 401 || !roomStore.get())) fail(r);
+  }, [fail]);
   useEffect(() => {
     loadRoom();
   }, [loadRoom]);
@@ -95,34 +95,36 @@ export default function GameHome({
     if (!buying) setSelected(null);
   }, [buying]);
 
-  // Everything that changes the room goes through one queue, so quick drags never overlap.
+  // Every change to the room goes through here. It shows on screen at ONCE; its request then runs in order behind the previous
+  // ones (so quick drags never overlap). If the server refuses, only that change is taken back and the reason is shown.
+  // `body` is a function so a just-bought item's temporary id can be swapped for its real one when the request actually runs.
   const send = useCallback(
-    (body, { quiet = false } = {}) => {
-      pending.current++;
-      if (!quiet) setRoomBusy(true);
-      const run = async () => {
-        const r = await call("/api/room", body);
-        pending.current--;
-        if (pending.current === 0) setRoomBusy(false);
-        if (r.failed) {
-          failRoom(r);
-          if (pending.current === 0) await loadRoom();
+    (body, { room: patch, cash: delta }) => {
+      const handles = begin([
+        { store: roomStore, patch, settle: (res) => res }, // the server's answer is the whole room: use it as is
+        delta ? { store: game, patch: cash(delta) } : null, // the top bar's cash moves too
+      ]);
+      const go = async () => finish(handles, await call("/api/room", body()));
+      const p = queue.current.then(go, go);
+      queue.current = p.catch(() => {});
+      return p.then((res) => {
+        if (res.failed) {
+          fail(res);
           return null;
         }
-        if (pending.current === 0) setRd(r);
-        refreshShell();
-        reload?.();
-        return r;
-      };
-      const p = chain.current.then(run, run);
-      chain.current = p.catch(() => {});
-      return p;
+        return res;
+      });
     },
-    [failRoom, loadRoom, reload],
+    [fail],
   );
+  const patchItem = (id, change) => (v) => ({
+    ...v,
+    items: v.items.map((i) => (String(i.id) === String(id) ? { ...i, ...change } : i)),
+  });
 
   const buy = async (key) => {
-    const d = ITEMS[key];
+    const d = ITEMS[key],
+      price = priceKobo(key);
     if (
       d.price >= 100_000 &&
       !(await confirmAction({
@@ -132,35 +134,74 @@ export default function GameHome({
       }))
     )
       return;
-    const r = await send({
-      action: "buy",
-      key,
-      requestId: crypto.randomUUID(),
-    });
-    if (!r) return;
-    if (r.duplicate) return toast.info("That was already bought.");
-    toast.success(
-      r.placed
+    if (items.length >= MAX_ITEMS)
+      return toast.error("Your storage is full. Sell something first.");
+    if (!canAfford(price)) return toast.error("You cannot afford that.");
+    const requestId = crypto.randomUUID(),
+      tmp = "tmp-" + requestId,
+      spot = rd?.room ? autoPlace(rd.room, items, key) : null; // same function the server uses, so it lands where the server will put it
+    const tid = toast.success(
+      spot
         ? `${d.name} is in your room.`
         : `${d.name} bought. Your room is full, so it is in storage.`,
       { sound: "coin" },
     );
-    if (r.placed && r.boughtId) setSelected(r.boughtId);
+    if (spot) setSelected(tmp);
+    const r = await send(() => ({ action: "buy", key, requestId }), {
+      cash: -price,
+      room: (v) => ({
+        ...v,
+        balanceKobo: (BigInt(v.balanceKobo) - price).toString(),
+        items: [
+          ...v.items,
+          { id: tmp, key, placed: !!spot, x: spot?.x ?? null, z: spot?.z ?? null, rot: spot?.rot ?? 0, paidKobo: price.toString() },
+        ],
+      }),
+    });
+    if (!r) {
+      toast.dismiss(tid); // refused: the item is gone again and the message is taken back
+      return setSelected((s) => (s === tmp ? null : s));
+    }
+    if (r.duplicate) {
+      toast.dismiss(tid);
+      return toast.info("That was already bought.");
+    }
+    if (r.boughtId) {
+      ids.current.set(tmp, String(r.boughtId));
+      setSelected((s) => (s === tmp ? String(r.boughtId) : s));
+    }
   };
   const place = async (id) => {
-    const r = await send({ action: "place", id });
-    if (r) setSelected(String(id));
+    const it = items.find((i) => String(i.id) === String(id));
+    if (!it) return;
+    const spot = rd?.room
+      ? autoPlace(rd.room, items.filter((i) => i !== it), it.key)
+      : null;
+    if (rd?.room && !spot)
+      return toast.error("There is no space left in your room.");
+    setSelected(String(id));
+    const r = await send(() => ({ action: "place", id: real(id) }), {
+      room: spot
+        ? patchItem(id, { placed: true, x: spot.x, z: spot.z, rot: spot.rot })
+        : (v) => v,
+    });
+    if (!r) setSelected((s) => (s === String(id) ? null : s));
   };
   const sel = items.find((i) => String(i.id) === selected) ?? null;
   const store = async () => {
     if (!sel) return;
+    const id = sel.id;
     setSelected(null);
-    await send({ action: "store", id: sel.id });
+    await send(() => ({ action: "store", id: real(id) }), {
+      room: patchItem(id, { placed: false, x: null, z: null, rot: 0 }),
+    });
   };
   const sell = async () => {
     if (!sel) return;
-    const back = sellKobo(sel.paidKobo) / 100n,
-      d = ITEMS[sel.key];
+    const backKobo = sellKobo(sel.paidKobo),
+      back = backKobo / 100n,
+      d = ITEMS[sel.key],
+      id = sel.id;
     if (
       !(await confirmAction({
         title: `Sell ${d.name}?`,
@@ -171,18 +212,25 @@ export default function GameHome({
     )
       return;
     setSelected(null);
-    const r = await send({ action: "sell", id: sel.id });
-    if (r) toast.success(`Sold ${d.name} for ${naira(r.soldKobo)}.`, { sound: "coin" });
+    const tid = toast.success(`Sold ${d.name} for ${naira(backKobo.toString())}.`, { sound: "coin" });
+    const r = await send(() => ({ action: "sell", id: real(id) }), {
+      cash: backKobo,
+      room: (v) => ({
+        ...v,
+        balanceKobo: (BigInt(v.balanceKobo) + backKobo).toString(),
+        items: v.items.filter((i) => String(i.id) !== String(id)),
+      }),
+    });
+    if (!r) toast.dismiss(tid);
   };
   const onMove = useCallback(
     (id, p) => {
       playSound("place"); // the piece lands where you dropped it
-      send(
-        { action: "place", id, x: p.x, z: p.z, rot: p.rot },
-        { quiet: true },
-      );
+      send(() => ({ action: "place", id: real(id), x: p.x, z: p.z, rot: p.rot }), {
+        room: patchItem(id, { placed: true, x: p.x, z: p.z, rot: p.rot }),
+      });
     },
-    [send],
+    [send], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const tool = sel && {
@@ -495,7 +543,7 @@ export default function GameHome({
         <BuySheet
           items={items}
           balanceKobo={rd?.balanceKobo ?? st.balanceKobo}
-          busy={roomBusy || busy}
+          busy={busy}
           onBuy={buy}
           onPlace={place}
           collapsed={collapsed}
