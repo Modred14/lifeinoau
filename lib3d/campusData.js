@@ -4,7 +4,7 @@ import { LANDMARKS, KIND_LABEL } from "./landmarks.js";
 import { withExtras, EXTRA_META } from "./mapExtras.js";
 
 let cache;
-/** Fetches /data/oau-campus.json once and adds the game-only places (Ojaja, Floor 0, clubs, billboards). A failed load is not cached, so a retry can succeed. */
+/** Fetches /data/oau-campus.json once and adds the game-only places (Ojaja, Floor O, clubs, billboards). A failed load is not cached, so a retry can succeed. */
 export const loadCampusData = () => (cache ??= fetch("/data/oau-campus.json").then((r) => { if (!r.ok) throw new Error("map data " + r.status); return r.json(); }).then(withExtras).catch((e) => { cache = undefined; throw e; }));
 
 /** Game details by place id: { blurb, actions, verified }. New real-map places get a plain default blurb. */

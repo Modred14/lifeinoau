@@ -339,7 +339,7 @@
   color: var(--danger-text);
 }
 
-/* floor 0 */
+/* floor O */
 .gh-jail {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

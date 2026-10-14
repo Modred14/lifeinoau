@@ -118,7 +118,7 @@ oau-life-backend/
 | URL | File | What it is |
 |---|---|---|
 | `/` | `app/page.js` | Landing, sign up (18+ checkbox), log in |
-| `/play` | `app/play/page.js` | Main game: create character, class reveal, hostel, stats, actions, exams, Floor 0 |
+| `/play` | `app/play/page.js` | Main game: create character, class reveal, hostel, stats, actions, exams, Floor O |
 | `/people` | `app/people/page.js` | Search players, profiles, messages, send money, block/report |
 | `/parties` | `app/parties/page.js` | Weekly parties at 0203, Royal Divas, Quantum |
 | `/relationship` | `app/relationship/page.js` | NPC love interests, dates, pregnancy decisions |
@@ -143,7 +143,7 @@ oau-life-backend/
 | `/api/parent/call` | POST | `app/api/parent/call/route.js` | Call parent (once per game week) |
 | `/api/risky` | POST | `app/api/risky/route.js` | Risky hustle (DSA risk) |
 | `/api/exam` | POST | `app/api/exam/route.js` | Sit or cheat in an exam |
-| `/api/floor0/pay` | POST | `app/api/floor0/pay/route.js` | Pay the bill to leave Floor 0 |
+| `/api/floor0/pay` | POST | `app/api/floor0/pay/route.js` | Pay the bill to leave Floor O |
 | `/api/players` | GET | `app/api/players/route.js` | Search players by name |
 | `/api/profile` | GET | `app/api/profile/route.js` | Public profile |
 | `/api/messages` | GET, POST | `app/api/messages/route.js` | Inbox, conversation, send |
@@ -226,8 +226,8 @@ Missing an exam is an automatic fail. An average grade point of 1.0 or more adva
 means withdrawal. Graduation at 500L gives a Nigerian-style class (First Class from 4.5 and so on). CGPA is the average over every
 exam sat. Cheating adds marks, but a caught cheat caps the score at 25 and adds a strike.
 
-**Risk and Floor 0.** Risky hustle: 30% chance to win ₦100k to ₦600k, but each attempt raises suspicion and the DSA
-catch chance rises with it. Arrest: Floor 0 for 30 minutes to 3 hours, lose 15 health, 25 energy and 10 happiness, the
+**Risk and Floor O.** Risky hustle: 30% chance to win ₦100k to ₦600k, but each attempt raises suspicion and the DSA
+catch chance rises with it. Arrest: Floor O for 30 minutes to 3 hours, lose 15 health, 25 energy and 10 happiness, the
 DSA seizes 30% of your cash, and you can pay a bill (10% of cash, between ₦150k and ₦5M) to leave early. Strikes: 3 means
 a 2-week suspension, 5 means expulsion.
 

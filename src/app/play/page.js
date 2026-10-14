@@ -102,6 +102,15 @@ export default function Play() {
     return () => clearInterval(t);
   }, []);
 
+  // The moment the sentence runs out, ask the server for the fresh state (it releases the player), so everything unlocks at once.
+  const releaseAt = st?.floorZero?.releaseAt;
+  useEffect(() => {
+    if (!releaseAt) return;
+    const ms = Math.max(0, new Date(releaseAt) - Date.now()) + 300;
+    const t = setTimeout(() => game.refresh(), ms);
+    return () => clearTimeout(t);
+  }, [releaseAt]);
+
   async function plain(path, body, describe) {
     if (busy) return;
     setBusy(true);
@@ -279,8 +288,7 @@ export default function Play() {
   if (!st) return <Loader fullscreen label="Loading your life" />;
   const c = st.character,
     a = st.academics,
-    fz = st.floorZero,
-    left = fz ? Math.max(0, new Date(fz.releaseAt) - now) : 0;
+    left = st.floorZero ? Math.max(0, new Date(st.floorZero.releaseAt) - now) : 0;
   if (c.graduated)
     return (
       <View key={view}>

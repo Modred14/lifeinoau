@@ -158,7 +158,7 @@ export default function Admin() {
             <div>
               <b>{ov.jailed}</b>
               <br />
-              <span className="mut">in Floor 0</span>
+              <span className="mut">in Floor O</span>
             </div>
             <div>
               <b>{ov.expelled}</b>

@@ -138,7 +138,7 @@ export default function MapPage() {
                 <Icon name="close" />
               </button>
             </div>
-            {/* <p className="mut">Building outlines, roads and names come from the OpenStreetMap map of OAU. Heights are assumed (most OAU buildings are 5 to 8 m; the Senate Building is 24 m) and shown taller than life so you can read the map. Places marked approximate were placed from another map. Ojaja, Akintola Hall, the Postgraduate hall, Floor 0, the clubs and the billboards are game placements: no map shows where they really are.</p> */}
+            {/* <p className="mut">Building outlines, roads and names come from the OpenStreetMap map of OAU. Heights are assumed (most OAU buildings are 5 to 8 m; the Senate Building is 24 m) and shown taller than life so you can read the map. Places marked approximate were placed from another map. Ojaja, Akintola Hall, the Postgraduate hall, Floor O, the clubs and the billboards are game placements: no map shows where they really are.</p> */}
             <input
               type="search"
               value={q}

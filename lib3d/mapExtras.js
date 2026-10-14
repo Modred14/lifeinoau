@@ -1,5 +1,5 @@
 // lib3d/mapExtras.js
-// Game places the OpenStreetMap render does not show: Ojaja, Akintola, the Postgraduate hall, Floor 0, the three clubs and the ten billboards.
+// Game places the OpenStreetMap render does not show: Ojaja, Akintola, the Postgraduate hall, Floor O, the three clubs and the ten billboards.
 // They are merged onto the real map data when it loads (withExtras), so public/data/oau-campus.json stays exactly as the generator wrote it.
 // Positions are GAME PLACEMENTS in the same metre grid as the real data (x east, z south). Each one was checked to sit clear of every
 // real building, road, lake and wood on the map, but nobody has surveyed where these places really are, and the map says so (conf "game").
@@ -45,7 +45,7 @@ const BUILDINGS = [
   { id: "h_ojaja", name: "Ojaja", kind: "hostel", tier: 1, x: -628, z: 1030, w: 60, d: 26, h: 16, shape: "L", wall: "#e9e2d0", roof: "#6b5a46" },
   { id: "h_akintola", name: "Akintola Hall", kind: "hostel", tier: 1, x: 1000, z: -230, w: 52, d: 22, h: 12 },
   { id: "h_pg", name: "Murtala Muhammed Postgraduate Hall", kind: "hostel", tier: 1, x: -740, z: -20, w: 48, d: 20, h: 11 },
-  { id: "floor0", name: "Floor 0 (DSA Custody)", kind: "jail", tier: 1, x: 200, z: 95, w: 30, d: 22, h: 3.5, wall: "#8d99a8", roof: "#b8322f" },
+  { id: "floor0", name: "Floor O (DSA Custody)", kind: "jail", tier: 1, x: 200, z: 95, w: 30, d: 22, h: 3.5, wall: "#8d99a8", roof: "#b8322f" },
   { id: "club_quantum", name: "Quantum", kind: "club", tier: 1, x: -276.8, z: 873.8, w: 30, d: 20, h: 9, wall: "#5b4a8a", roof: "#2a1d45", neon: "#38e8ff" },
   { id: "club_0203", name: "0203", kind: "club", tier: 1, x: -200, z: 880, w: 30, d: 20, h: 9, wall: "#7a3f6e", roof: "#2a1d45", neon: "#ff4fd8" },
   { id: "club_divas", name: "Royal Divas", kind: "club", tier: 1, x: -100, z: 880, w: 30, d: 20, h: 9, wall: "#8a6a2f", roof: "#2a1d45", neon: "#ffd24a" },
@@ -56,7 +56,7 @@ export const EXTRA_META = {
   motion_ground: { blurb: "The open field between the Amphitheatre and the Senate Building. Concerts, rallies, big evenings and the odd football match all end up here.", actions: [{ label: "This week's parties", href: "/parties" }], verified: false },
   religious_ground: { blurb: "A quiet walled ground just before the Main Bowl, with a church for each fellowship. Come for a service, or just for the calm.", actions: [], verified: false },
   ...Object.fromEntries(CHURCHES.map((c) => [c.id, { blurb: `${c.name}, in the Religious Ground before the Main Bowl. Services, choir practice and fellowship.`, actions: [], verified: false }])),
-  floor0: { blurb: "Where the DSA takes you when you get caught. You can wait out the time, or pay the bill to walk out early.", actions: [{ label: "Go to Floor 0", href: "/play" }], verified: false },
+  floor0: { blurb: "Where the DSA takes you when you get caught. You can wait out the time, or pay the bill to walk out early.", actions: [{ label: "Go to Floor O", href: "/play" }], verified: false },
   ...Object.fromEntries(BILLBOARDS.map((b) => [b.id, { blurb: `A billboard at ${b.where}. Ten poster spots, each shown for ${BILLBOARD.SECONDS} seconds in turn.`, actions: [], verified: false }])),
 };
 

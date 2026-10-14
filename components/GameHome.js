@@ -58,7 +58,7 @@ export default function GameHome({
   const router = useRouter(),
     c = st.character,
     a = st.academics,
-    fz = st.floorZero,
+    fz = st.floorZero && left > 0 ? st.floorZero : null, // time is up: free at once, without waiting for the server to answer
     mode = usePlayMode(),
     buying = mode === "buy";
   // The room is kept in a shared store: coming back to the home screen shows it at once and refreshes it quietly.
@@ -312,7 +312,7 @@ export default function GameHome({
                   <Icon name="siren" size={22} />
                 </span>
                 <div>
-                  <h2 id="fz-h">You are on Floor 0</h2>
+                  <h2 id="fz-h">You are on Floor O</h2>
                   <p>
                     {Math.floor(hours / 3600000)}h{" "}
                     {String(Math.floor(hours / 60000) % 60).padStart(2, "0")}m{" "}

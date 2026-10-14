@@ -1,5 +1,5 @@
 // tests/billboards.test.mjs
-// Billboards and the extra map places: prices, picture checks, the rotation clock, and that every game hostel / club / Floor 0 is on the map. Pure Node, no database.
+// Billboards and the extra map places: prices, picture checks, the rotation clock, and that every game hostel / club / Floor O is on the map. Pure Node, no database.
 import fs from "node:fs";
 import { BILLBOARD, BILLBOARDS, withExtras } from "../lib3d/mapExtras.js";
 import { currentIndex } from "../lib3d/billboards3d.js" ;
@@ -47,7 +47,7 @@ chk("a paid whole board shows its poster and no free spots", L2.boards[3].free =
 // the map data
 const d = JSON.parse(fs.readFileSync(new URL("../public/data/oau-campus.json", import.meta.url), "utf8")), x = withExtras(d), places = listPlaces(x);
 const has = (id) => places.some((p) => p.id === id && p.located);
-chk("Ojaja, Floor 0, Quantum, 0203 and Royal Divas are on the map", ["h_ojaja", "floor0", "club_quantum", "club_0203", "club_divas"].every(has));
+chk("Ojaja, Floor O, Quantum, 0203 and Royal Divas are on the map", ["h_ojaja", "floor0", "club_quantum", "club_0203", "club_divas"].every(has));
 const living = [...new Set(["M", "F"].flatMap((g) => [100, 200].flatMap((lv) => ["NEPO", "MAPO", "LAPO"].flatMap((c) => allowedHostels(c, g, lv)))))].filter((h) => h !== "Off-campus");
 chk(`every hostel a player can live in is on the map (${living.join(", ")})`, living.length >= 9 && living.every((h) => places.some((p) => p.kind === "hostel" && p.located && p.name.toLowerCase().includes(h.toLowerCase()))));
 chk("the Postgraduate hall and Akintola Hall are on the map", has("h_pg") && has("h_akintola"));
