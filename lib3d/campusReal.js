@@ -32,7 +32,7 @@ const inPoly = (x, z, pts) => { let c = false; for (let i = 0, j = pts.length - 
 function flat(areas, color, y, o = {}) { // flat polygons (roads, parking, pitches ...) as one mesh
   const gs = []; for (const a of areas) { try { const s = new THREE.Shape(a.pts.map(V)); for (const h of a.holes ?? []) s.holes.push(new THREE.Path(h.map(V))); const g = new THREE.ShapeGeometry(s); g.rotateX(-Math.PI / 2); gs.push(g); } catch { /* a malformed outline is skipped */ } }
   if (!gs.length) return null; const m = new THREE.Mesh(mergeGeometries(gs), new THREE.MeshStandardMaterial({ color, roughness: o.rough ?? 0.95, metalness: o.metal ?? 0, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -(o.layer ?? 1), polygonOffsetUnits: -(o.layer ?? 1) }));
-  m.position.y = y; m.receiveShadow = true; gs.forEach((g) => g.dispose()); return m;
+  m.position.y = y; m.userData.layerY = y; m.receiveShadow = true; gs.forEach((g) => g.dispose()); return m;
 }
 
 /** data: parsed oau-campus.json. meta: optional { [placeId]: {blurb, actions, ...} } merged onto the places. */
@@ -76,7 +76,7 @@ export function buildRealCampus(data, meta = {}) {
     trees.forEach(([x, z, k], i) => { d.position.set(x * S, 0.5 * k, z * S); d.scale.setScalar(k); d.updateMatrix(); trunk.setMatrixAt(i, d.matrix); d.position.set(x * S, 1.5 * k, z * S); d.updateMatrix(); crown.setMatrixAt(i, d.matrix); crown.setColorAt(i, c.set("#2f6b3b").lerp(new THREE.Color("#4f8f3f"), rnd())); });
     trunk.castShadow = crown.castShadow = true; root.add(trunk, crown); }
 
-  // ---- club neon and the Floor O siren (decoration on the game-placed buildings) ----
+  // ---- club neon and the Floor 0 siren (decoration on the game-placed buildings) ----
   const glow = [];
   for (const p of data.places) { const bd = p.bid != null ? data.buildings.find((q) => q.id === p.bid) : null; if (!bd) continue;
     if (bd.neon) { const [cx, cz] = centroid(bd.pts), xs = bd.pts.map((q) => q[0]), zs = bd.pts.map((q) => q[1]), w = (Math.max(...xs) - Math.min(...xs)) * S, d = (Math.max(...zs) - Math.min(...zs)) * S, top = bd.h * S * EX, m = new THREE.MeshBasicMaterial({ color: bd.neon, toneMapped: false });
@@ -96,15 +96,22 @@ export function buildRealCampus(data, meta = {}) {
     places.push({ ...meta[p.id], id: p.id, name: p.name, kind: p.kind, tier: p.tier, conf: p.conf, src: p.src, x, z, h, hSrc: bd?.hSrc ?? null, hasFootprint: !!bd, approx: p.conf === "approximate" || p.conf === "game", offmap: !!p.offmap, unnamed: !!p.unnamed, osmLabel: p.osmLabel, pos, radius: bd ? Math.max(3, Math.sqrt(bd.area) * S * 0.7) : p.kind === "billboard" ? 5 : 3 });
   }
   const sel = new THREE.Mesh(new THREE.RingGeometry(1, 1.2, 48), new THREE.MeshBasicMaterial({ color: "#3fd08a", transparent: true, opacity: 0.9, side: THREE.DoubleSide })); sel.rotation.x = -Math.PI / 2; sel.visible = false; root.add(sel);
-  const setSelected = (id) => { const L = places.find((l) => l.id === id); if (!L) { sel.visible = false; return; } sel.position.set(L.x, 0.2, L.z); sel.scale.setScalar(L.radius); sel.visible = true; };
-  const update = (t, dt = 0.016) => { bb.update(dt); const k = 0.35 + 0.65 * Math.max(0, Math.sin(t * 5)); glow.forEach((m) => m.color.setRGB(k, k * 0.23, k * 0.19)); if (sel.visible) { sel.material.opacity = 0.65 + Math.sin(t * 3) * 0.25; sel.rotation.z = t * 0.4; } };
+  /** Any place the player can pick: a named place, or a building with no name ("bld_12"). Returns { id, x, z, radius, pos, bid } in scene units, or null. */
+  const unnamed = new Map(), resolve = (id) => { const L = places.find((l) => l.id === id); if (L) return L; if (!id?.startsWith("bld_")) return null; if (unnamed.has(id)) return unnamed.get(id); const bd = bById.get(Number(id.slice(4))); if (!bd) return null; const [cx, cz] = centroid(bd.pts), r = { id, name: "Building", kind: "building", bid: bd.id, x: cx * S, z: cz * S, radius: Math.max(3, Math.sqrt(bd.area ?? 400) * S * 0.7), pos: new THREE.Vector3(cx * S, bd.h * S * EX + 1.2, cz * S) }; unnamed.set(id, r); return r; };
+  const setSelected = (id) => { const L = resolve(id); if (!L) { sel.visible = false; return; } sel.position.set(L.x, 0.2, L.z); sel.scale.setScalar(L.radius); sel.visible = true; };
+  // "You are here": a pulsing gold ring and arrow over the building the player is at
+  const here = new THREE.Group(), hereMat = new THREE.MeshBasicMaterial({ color: "#f0c05a", transparent: true, opacity: 0.95, side: THREE.DoubleSide }), hring = new THREE.Mesh(new THREE.RingGeometry(1, 1.14, 48), hereMat), harrow = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.1, 4), hereMat); hring.rotation.x = -Math.PI / 2; harrow.rotation.x = Math.PI; here.add(hring, harrow); here.visible = false; root.add(here);
+  let hereId = null; const setYou = (id) => { hereId = id; const L = resolve(id); if (!L) { here.visible = false; return; } here.visible = true; here.position.set(L.x, 0, L.z); hring.position.y = 0.22; hring.scale.setScalar(L.radius * 1.1); harrow.position.y = (L.pos?.y ?? 3) + 0.6; };
+  const update = (t, dt = 0.016) => { bb.update(dt); const k = 0.35 + 0.65 * Math.max(0, Math.sin(t * 5)); glow.forEach((m) => m.color.setRGB(k, k * 0.23, k * 0.19)); if (sel.visible) { sel.material.opacity = 0.65 + Math.sin(t * 3) * 0.25; sel.rotation.z = t * 0.4; } if (here.visible) { harrow.position.y += Math.sin(t * 4) * 0.004; hring.rotation.z = t * 0.3; } };
+  /** While a trip runs, the flat ground layers sit almost on the ground so cars and people do not look like they stand on slabs, and the map's labels get out of the way. */
+  const tripMode = (on) => { root.traverse((o) => { if (o.userData?.layerY != null) o.position.y = on ? o.userData.layerY * 0.12 : o.userData.layerY; }); edges.group.traverse((o) => { if (o.name === "road-stubs") { o.userData.layerY ??= o.position.y; o.position.y = on ? o.userData.layerY * 0.12 : o.userData.layerY; } }); };
 
-  /** Which named place is under a raycaster? Returns a place id or null. Only buildings that carry a name answer. */
+  /** Which place is under a raycaster? Returns a place id, "bld_<n>" for a building with no name, or null. */
   const pick = (ray) => { const bh = ray.intersectObjects(bb.meshes, false)[0], h0 = ray.intersectObjects([wallMesh, capMesh].filter(Boolean), false)[0]; if (bh && (!h0 || bh.distance <= h0.distance)) return bh.object.userData.placeId; const hit = ray.intersectObjects([wallMesh, capMesh].filter(Boolean), false)[0]; if (!hit) return null; const isW = hit.object === wallMesh, v = hit.face.a;
-    const r = ranges.find((q) => (isW ? v >= q.s0 && v < q.s1 : v >= q.c0 && v < q.c1)); return r ? placeAt.get(r.bid)?.id ?? null : null; };
+    const r = ranges.find((q) => (isW ? v >= q.s0 && v < q.s1 : v >= q.c0 && v < q.c1)); return r ? placeAt.get(r.bid)?.id ?? "bld_" + r.bid : null; };
   const extent = Math.max(x1 - x0, z1 - z0) / 2, dispose = () => { bb.dispose(); edges.dispose(); root.traverse((o) => { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : m ? [m] : []).forEach((q) => q.dispose()); }); win.map.dispose(); win.emis.dispose(); };
   const setBillboards = (list) => bb.setBoards(list);
-  return { root, anchors, places, pick, update, setSelected, setBillboards, dispose, bounds: { x0, x1, z0, z1 }, extent, attribution: data.meta.attribution,
+  return { root, anchors, places, pick, resolve, update, setSelected, setYou, tripMode, setTripMode: tripMode, setBillboards, dispose, bounds: { x0, x1, z0, z1 }, extent, attribution: data.meta.attribution,
     camera: { home: { x: 0, z: 8, dist: 210, az: 0.7, pol: 0.95 }, min: 10, max: 520 } };
 }
 

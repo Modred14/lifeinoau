@@ -1,0 +1,20 @@
+/* components/apps/hire-app.css: the Hire app inside the phone. Light page, one card per plan. */
+.hr { display: grid; gap: 12px; padding-top: 2px; }
+.hr-now { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 20px; background: linear-gradient(135deg, #596273, #3f4756); color: #fff; }
+.hr-now[data-on="1"] { background: linear-gradient(135deg, #2f7cc4, #245f9c); }
+.hr-now-ico { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; background: rgba(255, 255, 255, 0.2); flex: none; }
+.hr-now small { display: block; opacity: 0.85; font-size: 0.76rem; }
+.hr-now b { display: block; font: 700 1.2rem var(--font-head); letter-spacing: -0.01em; }
+.hr-now span { font-size: 0.84rem; opacity: 0.92; }
+.hr-note { margin: 0 4px; color: var(--muted); font-size: 0.84rem; line-height: 1.4; }
+.hr-card { display: grid; gap: 8px; padding: 14px; border-radius: 20px; background: var(--surface); }
+.hr-top { display: flex; align-items: center; gap: 8px; }
+.hr-top b { font: 700 1.08rem var(--font-head); letter-spacing: -0.01em; color: var(--text); }
+.hr-tag { font-style: normal; font-size: 0.7rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: #ffefc2; color: #8a5a00; }
+.hr-price { font-size: 0.92rem; color: var(--text); }
+.hr-price span { color: var(--muted); font-size: 0.82rem; }
+.pa-content button.hr-go { width: 100%; }
+.pa-content button.hr-map { justify-self: center; }
+.hr-empty { display: grid; justify-items: center; gap: 8px; padding: 28px 18px; border-radius: 20px; background: var(--surface); text-align: center; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
+.hr-empty b { font: 700 1.1rem var(--font-head); color: var(--text); }
+.hr-ico { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px; background: #e6ecf5; color: #36507a; }

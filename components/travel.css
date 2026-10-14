@@ -1,0 +1,89 @@
+/* components/travel.css: the travel sheet, the trip screen (mini map, controls) and the inside-a-building screen. Dark glass, like the rest of the map. */
+.stage[data-trip="1"] .bl, .stage[data-trip="1"] .stage-ctrls, .stage[data-trip="1"] .stage-hint { display: none !important; }
+body[data-trip] .nav, body[data-trip] .map-chrome { display: none !important; }
+
+/* ---- the sheet: how do you want to go? ---- */
+.ts-scrim { position: fixed; inset: 0; z-index: 60; background: rgba(7, 10, 18, 0.5); display: flex; align-items: flex-end; justify-content: center; }
+.ts { width: min(560px, 100%); background: #fff; color: #161b26; border-radius: 26px 26px 0 0; padding: 10px 16px calc(var(--safe-b) + 16px); display: grid; gap: 12px; box-shadow: 0 -20px 50px -20px rgba(0, 0, 0, 0.5); animation: ts-up 240ms var(--ease); }
+@keyframes ts-up { from { transform: translateY(40px); opacity: 0; } }
+.ts-grab { justify-self: center; width: 44px; height: 5px; border-radius: 9px; background: #d5d9e0; }
+.ts-head { display: flex; align-items: center; gap: 12px; }
+.ts-head div { flex: 1; min-width: 0; }
+.ts-head b { display: block; font: 700 1.2rem var(--font-head); letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ts-head small { color: #66707f; font-size: 0.82rem; }
+.ts-ico { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; background: #e8f6ee; color: #15803d; flex: none; }
+.ts .ts-x { background: #eef0f4; color: #161b26; border: 0; width: 36px; height: 36px; padding: 0; border-radius: 50%; display: grid; place-items: center; }
+.ts-modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.ts .ts-mode { display: grid; justify-items: center; align-content: start; gap: 2px; padding: 12px 4px 10px; border-radius: 18px; background: #f1f3f7; color: #161b26; border: 2px solid transparent; min-height: 108px; }
+.ts .ts-mode:hover:not(:disabled) { background: #e9ecf2; border-color: transparent; }
+.ts .ts-mode[data-on="1"] { background: #e9f1ff; border-color: #3b82f6; }
+.ts-mode b { font-size: 0.9rem; margin-top: 4px; }
+.ts-mode span { font-size: 0.84rem; font-weight: 600; color: #3a4252; }
+.ts-mode small { font-size: 0.7rem; color: #7a8394; text-align: center; line-height: 1.15; }
+.ts-note { margin: 0; color: #66707f; font-size: 0.85rem; line-height: 1.4; text-align: center; }
+.ts-driver { display: flex; align-items: center; gap: 8px; justify-content: center; font-size: 0.9rem; font-weight: 600; color: #1d3f78; background: #e9f1ff; border-radius: 12px; padding: 9px 12px; }
+.ts .ts-go { width: 100%; padding: 15px; font-size: 1.05rem; border-radius: 16px; }
+
+/* ---- the trip: the little map, the line saying where you are going, the controls ---- */
+.th { position: fixed; inset: 0; z-index: 25; pointer-events: none; }
+.th > * { pointer-events: auto; }
+.th-mini { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--safe-t) + var(--hud-h, 70px) + 8px); width: 148px; height: 148px; padding: 0; border-radius: 50%; border: 0; background: transparent; box-shadow: 0 10px 28px -8px rgba(0, 0, 0, 0.6); }
+.th-mini:hover:not(:disabled) { background: transparent; }
+.th-mini canvas { width: 100%; height: 100%; border-radius: 50%; display: block; }
+.th-mini-hint { position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%); font-size: 0.66rem; font-weight: 700; background: rgba(13, 19, 33, 0.85); color: #fff; padding: 2px 9px; border-radius: 99px; white-space: nowrap; }
+.th-chip { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--safe-t) + var(--hud-h, 70px) + 170px); max-width: calc(100% - 24px); display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-radius: 99px; background: rgba(13, 19, 33, 0.82); backdrop-filter: blur(10px); color: #fff; font-size: 0.9rem; white-space: nowrap; }
+.th-chip b { overflow: hidden; text-overflow: ellipsis; }
+.th-chip span { color: #7be3ad; font-weight: 700; }
+.th-cancel { position: absolute; left: 12px; top: calc(var(--safe-t) + var(--hud-h, 70px) + 10px); background: rgba(13, 19, 33, 0.82); border-color: rgba(255, 255, 255, 0.18); gap: 6px; }
+.th-stick { position: absolute; left: 22px; bottom: calc(var(--safe-b) + 28px); width: 132px; height: 132px; border-radius: 50%; background: rgba(255, 255, 255, 0.22); border: 2px solid rgba(255, 255, 255, 0.55); backdrop-filter: blur(4px); touch-action: none; display: grid; place-items: center; }
+.th-stick i { width: 58px; height: 58px; border-radius: 50%; background: rgba(255, 255, 255, 0.92); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35); }
+.th .th-btn { background: rgba(255, 255, 255, 0.9); color: #161b26; border: 0; border-radius: 18px; font-weight: 800; letter-spacing: 0.03em; touch-action: none; user-select: none; display: grid; place-items: center; box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.5); }
+.th .th-btn:hover:not(:disabled) { background: #fff; border: 0; }
+.th .th-btn:active { transform: scale(0.95); }
+.th-run { position: absolute; right: 22px; bottom: calc(var(--safe-b) + 40px); width: 84px; height: 84px; border-radius: 50% !important; }
+.th-steer { position: absolute; left: 18px; bottom: calc(var(--safe-b) + 28px); display: flex; gap: 12px; }
+.th-steer .th-btn { width: 78px; height: 78px; }
+.th-pedals { position: absolute; right: 18px; bottom: calc(var(--safe-b) + 28px); display: flex; align-items: flex-end; gap: 12px; }
+.th .th-gas { width: 78px; height: 110px; background: #17a34a; color: #fff; }
+.th .th-gas:hover:not(:disabled) { background: #17a34a; }
+.th .th-brake { width: 78px; height: 84px; background: #dc2626; color: #fff; }
+.th .th-brake:hover:not(:disabled) { background: #dc2626; }
+.th .th-horn { width: 52px; height: 52px; border-radius: 50%; margin-bottom: 4px; }
+.th-pre-scrim { position: fixed; inset: 0; z-index: 70; background: rgba(7, 10, 18, 0.6); display: grid; place-items: center; padding: 12px; }
+.th-pre { width: min(760px, 100%); background: #fff; color: #161b26; border-radius: 22px; overflow: hidden; display: grid; box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.7); }
+.th-pre header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 10px 18px; }
+.th-pre header b { font: 700 1.1rem var(--font-head); }
+.th-pre header .ghost { background: #eef0f4; color: #161b26; border: 0; width: 36px; height: 36px; padding: 0; border-radius: 50%; display: grid; place-items: center; }
+.th-pre canvas { width: 100%; height: auto; max-height: 62vh; aspect-ratio: 900 / 640; background: #eceee3; display: block; }
+.th-pre footer { display: flex; align-items: center; gap: 10px; padding: 10px 18px 14px; font-size: 0.9rem; color: #3a4252; font-weight: 600; }
+.th-key { width: 42px; height: 8px; flex: none; border-radius: 9px; }
+.th-key.solid { background: #1a73e8; box-shadow: 0 0 0 2px #fff, 0 0 0 3px #c7d6f2; }
+.th-key.dots { height: 6px; background: radial-gradient(circle, #1a73e8 2.6px, transparent 3px) 0 50% / 10px 6px repeat-x; }
+
+/* ---- going through the door ---- */
+.trip-fade { position: fixed; inset: 0; z-index: 80; background: #05070c; opacity: 0; pointer-events: none; transition: opacity 420ms ease; }
+.trip-fade[data-on="1"] { opacity: 1; pointer-events: auto; }
+
+/* ---- inside a building ---- */
+.bi { position: fixed; inset: 0; z-index: 75; display: grid; place-items: center; padding: 16px; background: radial-gradient(120% 90% at 50% 0%, #26324d 0%, #0d1321 70%); overflow: auto; animation: bi-in 380ms ease; }
+@keyframes bi-in { from { opacity: 0; } }
+.bi-card { width: min(480px, 100%); display: grid; gap: 10px; justify-items: center; text-align: center; padding: 26px 20px 22px; border-radius: 26px; background: rgba(20, 28, 46, 0.92); border: 1px solid rgba(255, 255, 255, 0.1); }
+.bi-card h2 { margin: 0; font: 700 1.6rem var(--font-head); letter-spacing: -0.02em; }
+.bi-card h3 { margin: 10px 0 0; font-size: 0.95rem; display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.bi-card p { margin: 0; color: var(--muted); line-height: 1.45; }
+.bi-card small { color: var(--green-text); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.7rem; }
+.bi-ico { display: grid; place-items: center; width: 60px; height: 60px; border-radius: 20px; background: rgba(63, 208, 138, 0.16); color: var(--green-text); }
+.bi-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.bi-people { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; width: 100%; max-height: 32vh; overflow: auto; }
+.bi-people li { display: grid; grid-template-columns: 36px 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; text-align: left; padding: 8px 10px; border-radius: 14px; background: rgba(255, 255, 255, 0.06); }
+.bi-people .bi-av { grid-row: span 2; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: #2f62c4; font-weight: 700; }
+.bi-people small { text-transform: none; letter-spacing: 0; color: var(--muted); font-weight: 500; font-size: 0.78rem; }
+.bi-soon { font-size: 0.82rem; }
+.bi-card button.go { margin-top: 6px; width: 100%; padding: 13px; display: inline-flex; gap: 8px; align-items: center; justify-content: center; }
+
+/* ---- map card additions ---- */
+.dock .card .row { flex-wrap: wrap; }
+.dock .card .go-there { display: inline-flex; gap: 8px; align-items: center; }
+.map-here { position: fixed; z-index: 20; left: 10px; top: calc(var(--safe-t) + 124px); max-width: min(70vw, 360px); font-size: 0.8rem; padding: 6px 12px; border-radius: 99px; background: rgba(13, 19, 33, 0.88); color: #fff; display: inline-flex; gap: 6px; align-items: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.map-here b { color: #f0c05a; }
+@media (max-width: 520px) { .th-mini { width: 124px; height: 124px; } .th-chip { top: calc(var(--safe-t) + var(--hud-h, 70px) + 146px); } .ts-mode small { font-size: 0.64rem; } }

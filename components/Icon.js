@@ -3,7 +3,7 @@
 import { House, MapTrifold, DeviceMobile, Briefcase, ChatCircleText, TrendUp, Heart, GraduationCap, Trophy, Medal, Confetti, Wallet, Bell, ArrowClockwise, ArrowCounterClockwise,
   Plus, Minus, X, CaretLeft, Buildings, Books, FirstAidKit, Plant, Bed, UsersThree, Star, Door, MusicNotes, Storefront, Eye, EyeSlash, ListBullets, ArrowRight, Check, Crosshair,
   Lightning, Smiley, BookOpen, HeartStraight, Coins, Gift, Car, PersonSimpleWalk, Warning, DiceFive, FastForward, Moon, ChatsCircle, UserFocus, CaretRight, Lock, Phone, HandCoins, Siren, Timer,
-  ShoppingBag, CookingPot, Couch, GameController, Package, Tag, ArrowsClockwise, Gear, SignOut, CellSignalFull, WifiHigh, BatteryFull, SmileyMeh, SmileySad, SmileyWink, CaretDown, CaretUp, Cube, Backpack, Bank, Handshake, Newspaper, Sparkle, ArrowsOutCardinal, Fan, Wrench, Presentation, Image, UploadSimple, SpeakerHigh, SpeakerSlash } from "@phosphor-icons/react";
+  ShoppingBag, CookingPot, Couch, GameController, Package, Tag, ArrowsClockwise, Gear, SignOut, CellSignalFull, WifiHigh, BatteryFull, SmileyMeh, SmileySad, SmileyWink, CaretDown, CaretUp, Cube, Backpack, Bank, Handshake, Newspaper, Sparkle, ArrowsOutCardinal, Fan, Wrench, Presentation, Image, UploadSimple, SpeakerHigh, SpeakerSlash, Bus, Taxi, SteeringWheel, MapPin, NavigationArrow, IdentificationBadge, DoorOpen, Megaphone, Users, ArrowLeft } from "@phosphor-icons/react";
 
 const ICONS = { home: House, map: MapTrifold, phone: DeviceMobile, jobs: Briefcase, chat: ChatCircleText, invest: TrendUp, love: Heart, courses: GraduationCap, forbes: Trophy, medal: Medal,
   party: Confetti, wallet: Wallet, bell: Bell, rotateRight: ArrowClockwise, rotateLeft: ArrowCounterClockwise, plus: Plus, minus: Minus, close: X, back: CaretLeft, hall: Buildings,
@@ -12,7 +12,8 @@ const ICONS = { home: House, map: MapTrifold, phone: DeviceMobile, jobs: Briefca
   energy: Lightning, happy: Smiley, study: BookOpen, health: HeartStraight, coins: Coins, gift: Gift, ride: Car, trek: PersonSimpleWalk, warn: Warning, dice: DiceFive, skip: FastForward,
   moon: Moon, talk: ChatsCircle, focus: UserFocus, caret: CaretRight, lock: Lock, call: Phone, hustle: HandCoins, siren: Siren, timer: Timer,
   bag: ShoppingBag, kitchen: CookingPot, sofa: Couch, game: GameController, box: Package, sell: Tag, spin: ArrowsClockwise, gear: Gear, logout: SignOut, signal: CellSignalFull, wifi: WifiHigh, battery: BatteryFull,
-  meh: SmileyMeh, sad: SmileySad, wink: SmileyWink, down: CaretDown, up: CaretUp, cube: Cube, backpack: Backpack, bank: Bank, deal: Handshake, news: Newspaper, sparkle: Sparkle, move: ArrowsOutCardinal, fan: Fan, wrench: Wrench, billboard: Presentation, image: Image, upload: UploadSimple, music: MusicNotes, sound: SpeakerHigh, mute: SpeakerSlash };
+  meh: SmileyMeh, sad: SmileySad, wink: SmileyWink, down: CaretDown, up: CaretUp, cube: Cube, backpack: Backpack, bank: Bank, deal: Handshake, news: Newspaper, sparkle: Sparkle, move: ArrowsOutCardinal, fan: Fan, wrench: Wrench, billboard: Presentation, image: Image, upload: UploadSimple, music: MusicNotes, sound: SpeakerHigh, mute: SpeakerSlash,
+  bus: Bus, keke: Taxi, wheel: SteeringWheel, pin: MapPin, nav: NavigationArrow, driver: IdentificationBadge, door: DoorOpen, horn: Megaphone, users: Users, left: ArrowLeft, right: ArrowRight };
 export const KIND_ICON = { hall: "hall", library: "library", faculty: "faculty", hospital: "hospital", farm: "farm", hostel: "hostel", social: "social", statue: "statue", gate: "gate", club: "club", town: "town" };
 
 /** One consistent icon set (Phosphor, regular weight). Decorative by default; pass `label` when the icon stands alone. */

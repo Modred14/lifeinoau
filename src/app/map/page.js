@@ -1,13 +1,20 @@
 // src/app/map/page.js
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { ICON_OF, KIND_LABEL, MAP_GROUPS } from "@/lib3d/landmarks.js";
-import { loadCampusData, listPlaces, trustNote } from "@/lib3d/campusData.js";
+import { loadCampusData, listPlaces, buildingPlace } from "@/lib3d/campusData.js";
 import { Icon } from "@/components/Icon";
 import BillboardPanel from "@/components/BillboardPanel";
-import { call } from "@/lib/client";
+import TravelSheet from "@/components/TravelSheet";
+import TripHud from "@/components/TripHud";
+import BuildingInside from "@/components/BuildingInside";
+import { call, naira } from "@/lib/client";
+import { toast } from "@/lib/toast";
+import { game, useGame, run, cash } from "@/lib/gameStore";
+import { fareKobo, placeOf, ownsCar, driverActive, MODE_INFO } from "@/lib/travel.js";
+import { playSound } from "@/lib/sound";
 
 const CampusMap = dynamic(() => import("@/components/CampusMap"), {
   ssr: false,
@@ -19,6 +26,9 @@ export default function MapPage() {
     [places, setPlaces] = useState([]),
     [q, setQ] = useState("");
   const [bb, setBb] = useState(null);
+  const [data, setData] = useState(null), [sheet, setSheet] = useState(false), [trip, setTrip] = useState(null), [tripSt, setTripSt] = useState(null), [inside, setInside] = useState(null), [fade, setFade] = useState(false), [counts, setCounts] = useState({});
+  const g = useGame(), ch = g?.character, here = ch ? placeOf(ch) : null, miniRef = useRef(null), previewRef = useRef(null), input = useRef({}).current, tripRef = useRef(null);
+  tripRef.current = trip;
   const refreshBb = () =>
     call("/api/billboards").then((r) => {
       if (!r.failed) setBb(r);
@@ -31,7 +41,7 @@ export default function MapPage() {
   useEffect(() => {
     let on = true;
     loadCampusData()
-      .then((d) => on && setPlaces(listPlaces(d)))
+      .then((d) => { if (on) { setPlaces(listPlaces(d)); setData(d); } })
       .catch(() => {});
     return () => {
       on = false;
@@ -43,7 +53,17 @@ export default function MapPage() {
     document.addEventListener("keydown", k);
     return () => document.removeEventListener("keydown", k);
   }, [list]);
-  const L = places.find((l) => l.id === sel),
+  // where everybody is: a ping every minute so others see you, and the little "N here" numbers
+  useEffect(() => {
+    if (!ch) return; let on = true;
+    const ping = () => !document.hidden && call("/api/travel", { action: "ping" });
+    const cnt = async () => { const r = await call("/api/travel?counts=1"); if (on && !r.failed) setCounts(r.counts ?? {}); };
+    ping(); cnt(); const a = setInterval(ping, 60000), b = setInterval(() => !document.hidden && cnt(), 20000);
+    return () => { on = false; clearInterval(a); clearInterval(b); };
+  }, [!!ch]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (trip) document.body.dataset.trip = "1"; else delete document.body.dataset.trip; return () => { delete document.body.dataset.trip; }; }, [!!trip]);
+  const find = useCallback((id) => places.find((l) => l.id === id) ?? (data && buildingPlace(data, id)) ?? null, [places, data]);
+  const L = find(sel), youPlace = here ? find(here) : null,
     shown = useMemo(
       () =>
         places.filter((p) =>
@@ -51,16 +71,48 @@ export default function MapPage() {
         ),
       [places, q],
     );
+  // ---- travelling ----
+  async function begin(mode, withDriver) {
+    const dest = L; if (!dest) return; setSheet(false);
+    const r = await call("/api/travel?at=" + encodeURIComponent(dest.id)); // the real players there now are drawn around the door when you arrive
+    setTripSt(null); input.jx = input.jy = input.steer = input.gas = input.brake = 0; input.run = false;
+    setTrip({ id: crypto.randomUUID(), from: here, to: dest.id, mode, driver: withDriver, look: ch?.look ?? null, gender: ch?.gender ?? "M", people: r.failed ? [] : r.people ?? [], name: dest.name });
+    setSel(null);
+  }
+  async function pay() { // the vehicle has stopped: the fare leaves the wallet now, and you are at the new place
+    const t = tripRef.current; if (!t) return false; const fare = fareKobo(t.mode);
+    const res = await run({ key: "trip:" + t.id, ok: fare > 0n ? `Paid ${naira(fare.toString())} · ${MODE_INFO[t.mode].name}` : undefined, sound: "coin", request: () => call("/api/travel", { to: t.to, mode: t.mode, requestId: crypto.randomUUID() }),
+      effects: [{ store: game, patch: (x) => ({ ...cash(-fare)(x), character: { ...x.character, placeId: t.to } }) }] });
+    return !res.failed;
+  }
+  function entered() { const t = tripRef.current; setFade(true); setTimeout(() => { if (t) setInside(t.to); setTrip(null); setFade(false); }, 520); }
+  const tripEnded = (why) => { setTrip(null); if (why === "error") toast.error("The trip could not start. Try again."); };
+  const tripPlace = trip ? find(trip.to) : null, insidePlace = inside ? find(inside) : null;
   return (
     <>
       <div className="mapwrap">
         <CampusMap
           selectedId={sel}
-          onSelect={setSel}
+          onSelect={(id) => { if (!trip) setSel(id); }}
           billboards={bb?.boards ?? null}
+          youId={here}
+          trip={trip}
+          tripInput={input}
+          getMini={() => miniRef.current}
+          getPreview={() => previewRef.current}
+          onTripState={setTripSt}
+          onTripArrive={pay}
+          onTripEnter={entered}
+          onTripEnd={tripEnded}
         />
       </div>
+      {trip && <TripHud trip={trip} placeName={trip.name} st={tripSt} input={input} miniRef={miniRef} previewRef={previewRef} onCancel={() => setTrip(null)} />}
+      <div className="trip-fade" data-on={fade ? "1" : undefined} aria-hidden="true" />
+      {insidePlace && <BuildingInside place={insidePlace} onLeave={() => setInside(null)} />}
+      {sheet && L && <TravelSheet place={L} here={youPlace?.name} hasCar={ownsCar(ch)} driver={driverActive(ch, g?.week) ? { name: ch.driverName } : null} people={counts[L.id] ?? 0} onGo={begin} onClose={() => setSheet(false)} />}
+      {youPlace && !trip && <div className="map-here" role="status"><Icon name="pin" size={14} weight="fill" /> You are at <b>{youPlace.name}</b></div>}
       <div
+        className="map-chrome"
         style={{
           position: "fixed",
           zIndex: 20,
@@ -76,8 +128,8 @@ export default function MapPage() {
           <Icon name="list" /> Places
         </button>
       </div>
-      {L && (
-        <div className="dock">
+      {L && !trip && (
+        <div className="dock map-chrome">
           <div
             className={"card" + (L.kind === "billboard" ? " bb" : "")}
             role="region"
@@ -106,6 +158,11 @@ export default function MapPage() {
                 onChanged={refreshBb}
               />
             )}
+            {counts[L.id] > 0 && <p className="mut"><Icon name="users" size={15} /> {counts[L.id]} player{counts[L.id] === 1 ? "" : "s"} here now</p>}
+            <div className="row">
+              {L.id === here ? <button type="button" className="go go-there" onClick={() => setInside(L.id)}><Icon name="door" size={18} /> Go inside</button>
+                : <button type="button" className="go go-there" disabled={!L.located || !ch} onClick={() => setSheet(true)}><Icon name="nav" size={18} weight="fill" /> {L.located ? "Go there" : "Not on the map yet"}</button>}
+            </div>
             {L.actions?.length > 0 && (
               <div className="row">
                 {L.actions.map((a) => (
@@ -138,7 +195,7 @@ export default function MapPage() {
                 <Icon name="close" />
               </button>
             </div>
-            {/* <p className="mut">Building outlines, roads and names come from the OpenStreetMap map of OAU. Heights are assumed (most OAU buildings are 5 to 8 m; the Senate Building is 24 m) and shown taller than life so you can read the map. Places marked approximate were placed from another map. Ojaja, Akintola Hall, the Postgraduate hall, Floor O, the clubs and the billboards are game placements: no map shows where they really are.</p> */}
+            {/* <p className="mut">Building outlines, roads and names come from the OpenStreetMap map of OAU. Heights are assumed (most OAU buildings are 5 to 8 m; the Senate Building is 24 m) and shown taller than life so you can read the map. Places marked approximate were placed from another map. Ojaja, Akintola Hall, the Postgraduate hall, Floor 0, the clubs and the billboards are game placements: no map shows where they really are.</p> */}
             <input
               type="search"
               value={q}

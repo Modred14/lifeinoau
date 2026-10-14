@@ -15,6 +15,7 @@ import LeaderboardsApp from "./apps/LeaderboardsApp";
 import AchievementsApp from "./apps/AchievementsApp";
 import SettingsApp from "./apps/SettingsApp";
 import HousingApp from "./apps/HousingApp";
+import HireApp from "./apps/HireApp";
 import "./phone.css";
 
 /** Every app opens inside the handset. `own` apps draw their own header (Messages has a chat bar). */
@@ -28,10 +29,11 @@ const APPS = {
   forbes: { name: "Forbes", icon: "forbes", tone: "amber", C: LeaderboardsApp },
   awards: { name: "Awards", icon: "medal", tone: "orange", C: AchievementsApp },
   housing: { name: "Housing", icon: "home", tone: "sky", C: HousingApp },
+  hire: { name: "Hire", icon: "driver", tone: "indigo", C: HireApp },
   settings: { name: "Settings", icon: "gear", tone: "graphite", C: SettingsApp },
 };
 export const PHONE_APPS = Object.keys(APPS);
-const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "forbes", "awards", "housing", "settings"];
+const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "forbes", "awards", "housing", "hire", "settings"];
 
 const day = (d) => d.toLocaleDateString("en-NG", { weekday: "long", day: "numeric", month: "long" });
 const clock = (d) =>

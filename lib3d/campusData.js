@@ -4,7 +4,7 @@ import { LANDMARKS, KIND_LABEL } from "./landmarks.js";
 import { withExtras, EXTRA_META } from "./mapExtras.js";
 
 let cache;
-/** Fetches /data/oau-campus.json once and adds the game-only places (Ojaja, Floor O, clubs, billboards). A failed load is not cached, so a retry can succeed. */
+/** Fetches /data/oau-campus.json once and adds the game-only places (Ojaja, Floor 0, clubs, billboards). A failed load is not cached, so a retry can succeed. */
 export const loadCampusData = () => (cache ??= fetch("/data/oau-campus.json").then((r) => { if (!r.ok) throw new Error("map data " + r.status); return r.json(); }).then(withExtras).catch((e) => { cache = undefined; throw e; }));
 
 /** Game details by place id: { blurb, actions, verified }. New real-map places get a plain default blurb. */
@@ -27,4 +27,13 @@ export function trustNote(p) {
   if (p.conf === "game") return "";
   if (p.conf === "approximate") return "";
   return "";
+}
+/** A building with no name on the map is still a place you can go to. It is called after the nearest named place, e.g. "Building near Alumni Hall". Null for an id that is not a building. */
+export function buildingPlace(data, id) {
+  if (!id?.startsWith("bld_")) return null;
+  const bd = data.buildings.find((b) => b.id === Number(id.slice(4))); if (!bd) return null;
+  const n = bd.pts.length, cx = bd.pts.reduce((t, p) => t + p[0], 0) / n, cz = bd.pts.reduce((t, p) => t + p[1], 0) / n;
+  let best = null, bd2 = Infinity; for (const p of data.places) { if (p.offmap || p.kind === "billboard") continue; const d = (p.x - cx) ** 2 + (p.z - cz) ** 2; if (d < bd2) { bd2 = d; best = p; } }
+  const name = best ? `Building near ${best.name}` : "Campus building";
+  return { id, name, kind: "building", tier: 3, conf: "map", located: true, bid: bd.id, x: cx, z: cz, blurb: "A building on the OAU campus. Nothing is signposted here yet, but you can still go and have a look inside.", actions: [] };
 }

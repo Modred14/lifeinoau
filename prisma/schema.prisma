@@ -66,6 +66,15 @@ model Character {
   hostel             String         @default("") // empty until chosen after the class reveal; changed later from the Housing app on the phone
   rentPaidUntilWeek  Int            @default(0) // last game week whose rent was paid up front when moving home (0 = none); tick.js skips rent up to it
   transport          String         @default("Trek")
+  placeId            String         @default("") // where the player is on the map ("" = at home, see lib/travel.js); other players see them there while placeAt is recent
+  placeAt            DateTime? // last time they were seen at placeId (the map pings it every minute)
+  driverName         String         @default("") // the driver hired from the Hire app on the phone
+  driverUntilWeek    Int            @default(0) // last game week the driver is paid for (0 = none)
+  tripX              Float? // while on a trip: where the player is on the road (map metres), so other players can see them pass
+  tripZ              Float?
+  tripH              Float? // heading, radians
+  tripMode           String         @default("")
+  tripAt             DateTime? // last position ping; the player counts as on the road for a few seconds after
   // 0-100 stats, clamped in the engine
   health             Int            @default(80)
   energy             Int            @default(90)
@@ -101,6 +110,8 @@ model Character {
   notifications      Notification[]
 
   @@index([facultyId])
+  @@index([placeId, placeAt])
+  @@index([tripAt])
 }
 
 // Cached balance for fast reads. The ledger is the source of truth.
