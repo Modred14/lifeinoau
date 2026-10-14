@@ -8,7 +8,7 @@ import { Icon } from "./Icon";
 export default function RoomStage({ room, items, look, gender, mode, selected, onSelect, onMove, apiRef, tool }) {
   const box = useRef(null), bar = useRef(null), scene = useRef(null), cbs = useRef({}), [ready, setReady] = useState(false), [failed, setFailed] = useState(false);
   cbs.current = { onSelect, onMove };
-  const roomKey = room ? `${room.w}x${room.d}:${room.theme}:${room.grime ?? 0}` : "", lookKey = JSON.stringify([look ?? null, gender]);
+  const roomKey = room ? `${room.w}x${room.d}:${room.theme}:${room.layout ?? ""}:${room.grime ?? 0}` : "", lookKey = JSON.stringify([look ?? null, gender]);
 
   useEffect(() => {
     let alive = true, s = null;

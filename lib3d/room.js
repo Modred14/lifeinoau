@@ -16,7 +16,8 @@ import {
   spawnCell,
   cellsOf,
 } from "../lib/room.js";
-import { sizeOf } from "../lib/furniture.js";
+import { sizeOf, isOutdoor } from "../lib/furniture.js";
+import { layoutOf, wallRuns, zoneAt } from "../lib/layouts.js";
 
 const WALL_H = 3.1,
   CUT = 0.09,
@@ -42,7 +43,9 @@ function dispose(obj) {
   });
 }
 
-function floorTexture(W, D, theme, wood) {
+// floors of the wet rooms and the passage in a home with several rooms: cool tiles in the kitchen and bathroom, pale ones in the passage
+const ZONE_TILE = { kitchen: ["#c3c7c9", "#b6bbbf"], bath: ["#c8ced6", "#bcc3cc"], passage: ["#ece6d9", "#e2dbcb"] };
+function floorTexture(W, D, theme, wood, kindAt) {
   const S = 64,
     c = document.createElement("canvas");
   c.width = W * S;
@@ -52,9 +55,10 @@ function floorTexture(W, D, theme, wood) {
   const r = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
   for (let i = 0; i < W; i++)
     for (let j = 0; j < D; j++) {
-      g.fillStyle = (i + j) % 2 ? theme.floorA : theme.floorB;
+      const tint = kindAt && ZONE_TILE[kindAt(i, j)], wooden = wood && !tint;
+      g.fillStyle = (i + j) % 2 ? (tint?.[0] ?? theme.floorA) : (tint?.[1] ?? theme.floorB);
       g.fillRect(i * S, j * S, S, S);
-      if (wood) {
+      if (wooden) {
         for (let p = 0; p < 4; p++) {
           g.fillStyle = `rgba(${r() > 0.5 ? "255,235,200" : "60,30,10"},${0.05 + r() * 0.07})`;
           g.fillRect(i * S, j * S + p * (S / 4), S, S / 4);
@@ -81,6 +85,9 @@ function floorTexture(W, D, theme, wood) {
   t.anisotropy = 8;
   return t;
 }
+
+// where a spot `at` (in cells along a wall, 0 to its length) sits in that wall's own frame (see buildRoom)
+const wallX = (side, at, W, D) => ({ N: at - W / 2, S: W / 2 - at, W: D / 2 - at, E: at - D / 2 })[side];
 
 function windowDecor(theme, w = 1.3, h = 1.25) {
   const g = new THREE.Group(),
@@ -366,7 +373,8 @@ export function createRoomScene(container, cb = {}) {
   tap.position.y = 0.04;
   scene.add(tap);
 
-  let room = null,
+  let builtShape = "",
+    room = null,
     theme = null,
     W = 0,
     D = 0,
@@ -410,7 +418,7 @@ export function createRoomScene(container, cb = {}) {
     if (grime > 0.05) theme = { ...theme, wall: dirty(theme.wall, grime * 0.4, "#6e6552"), floorA: dirty(theme.floorA, grime * 0.3, "#4f483d"), floorB: dirty(theme.floorB, grime * 0.3, "#4f483d") }; // paint dulls and floors darken
     W = room.w;
     D = room.d;
-    const R = Math.hypot(W, D) / 2 + 0.9;
+    const L = layoutOf(room), R = Math.hypot(W, D) / 2 + 1.6; // a wide lawn: the generator stands on it, outside the east wall
     const lawn = new THREE.Mesh(
       new THREE.CylinderGeometry(R, R + 0.12, 0.5, 72),
       mat("#8fb592", { roughness: 1 }),
@@ -433,7 +441,7 @@ export function createRoomScene(container, cb = {}) {
     rim.position.y = -0.37;
     world.add(rim);
     // floor
-    const tex = floorTexture(W, D, theme, room.theme === "wood"),
+    const tex = floorTexture(W, D, theme, room.theme === "wood", L && ((i, j) => zoneAt(L, i, j)?.kind)),
       side = mat(theme.floorB, { roughness: 0.9 });
     const floor = new THREE.Mesh(new THREE.BoxGeometry(W, 0.34, D), [
       side,
@@ -501,6 +509,34 @@ export function createRoomScene(container, cb = {}) {
       obj.position.set(x, y, 0);
       walls[wall].decor.add(obj);
     };
+    if (L) {
+      // a home with several rooms: low walls between the rooms (so you can always see in), doorways left open, windows and the front door
+      const INNER = 0.8, wallMat = mat(theme.wall, { roughness: 0.92 }), capMat = mat(theme.trim, { roughness: 0.6 });
+      const { walls: runs, doors } = wallRuns(L);
+      for (const r of runs) {
+        const horiz = r.z1 === r.z2, len = (horiz ? r.x2 - r.x1 : r.z2 - r.z1) + 0.12, cx = (r.x1 + r.x2) / 2 - W / 2, cz = (r.z1 + r.z2) / 2 - D / 2;
+        const g = new THREE.Group();
+        g.position.set(cx, 0, cz);
+        if (!horiz) g.rotation.y = Math.PI / 2;
+        const body = new THREE.Mesh(new THREE.BoxGeometry(len, INNER, 0.12), wallMat);
+        body.position.y = INNER / 2;
+        body.castShadow = true;
+        body.receiveShadow = true;
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(len + 0.01, 0.05, 0.16), capMat);
+        cap.position.y = INNER - 0.025;
+        g.add(body, cap);
+        world.add(g);
+      }
+      for (const dr of doors) { // a threshold strip across each doorway
+        const th = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.02, 0.16), capMat);
+        th.position.set(dr.x - W / 2, 0.01, dr.z - D / 2);
+        if (dr.dir === "v") th.rotation.y = Math.PI / 2;
+        world.add(th);
+      }
+      for (const w of L.windows) place(w.side, windowDecor(theme, w.w, w.h), wallX(w.side, w.at, W, D), w.y ?? 0.95);
+      for (const d of L.decor) place(d.side, d.kind === "ac" ? acDecor() : d.kind === "clock" ? clockDecor(theme) : posterDecor(d.n ?? 0, theme), wallX(d.side, d.at, W, D), d.y ?? 1.55);
+      place("S", doorDecor(theme), wallX("S", L.entry.at, W, D), 0);
+    } else {
     place("N", windowDecor(theme), W * 0.2, 0.95);
     place("N", acDecor(), -W * 0.2, 2.45);
     place("N", posterDecor(0, theme), -W * 0.02, 1.55);
@@ -514,6 +550,7 @@ export function createRoomScene(container, cb = {}) {
     place("S", windowDecor(theme, 1.5, 1.2), -W * 0.15, 0.95);
     place("S", posterDecor(3, theme), W * 0.2, 1.6);
     place("S", clockDecor(theme), W * 0.32, 2.4);
+    }
     // the lawn around the room
     for (let i = 0; i < 14; i++) {
       const a = (i / 14) * Math.PI * 2 + 0.2,
@@ -538,6 +575,12 @@ export function createRoomScene(container, cb = {}) {
     sun.shadow.camera.updateProjectionMatrix();
     lamp.position.set(0, 2.55, 0);
     itemsRoot.position.set(0, 0, 0);
+    const shape = `${W}x${D}:${room.layout ?? ""}`;
+    if (shape !== builtShape) { // a different home: the character walks in again
+      builtShape = shape;
+      me.placed = false;
+      spawn();
+    }
     fit(true);
   }
 
@@ -549,7 +592,7 @@ export function createRoomScene(container, cb = {}) {
       aspect = w / h,
       vf = THREE.MathUtils.degToRad(camera.fov),
       hf = 2 * Math.atan(Math.tan(vf / 2) * aspect);
-    const r = Math.hypot(W, D) / 2 + 0.6;
+    const r = Math.hypot(W, D) / 2 + 1.1;
     fitDist = Math.max(r / Math.sin(vf / 2), r / Math.sin(hf / 2)) * 1.0;
     controls.minDistance = fitDist * 0.5;
     controls.maxDistance = fitDist * 1.35;
@@ -585,11 +628,18 @@ export function createRoomScene(container, cb = {}) {
     return { x, z, yaw: (-d.rot * Math.PI) / 2 };
   };
   function addItem(d, animate) {
-    const group = buildFurniture(d.key);
+    const group = buildFurniture(d.key),
+      y0 = isOutdoor(d.key) ? -0.3 : 0; // outdoor things stand on the lawn, below the floor, on a little concrete pad
     group.userData.itemId = String(d.id);
+    if (y0) {
+      const pad = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.08, 0.9), mat("#bdb8ab", { roughness: 1 }));
+      pad.position.y = -0.04;
+      pad.receiveShadow = true;
+      group.add(pad);
+    }
     itemsRoot.add(group);
     const t = targetOf(d);
-    group.position.set(t.x, 0, t.z);
+    group.position.set(t.x, y0, t.z);
     group.rotation.y = t.yaw;
     if (group.userData.spin) fans.push(group.userData.spin);
     const it = {
@@ -598,6 +648,7 @@ export function createRoomScene(container, cb = {}) {
       t,
       age: animate ? 0 : 1,
       lift: 0,
+      y0,
       shake: 0,
       leaving: 0,
     };
@@ -755,6 +806,28 @@ export function createRoomScene(container, cb = {}) {
     tap.position.z = z;
     tapT = 0;
   }
+  // the character walks in through the front door and goes to the middle of the home
+  function spawn() {
+    if (!room || !av) return;
+    const L = layoutOf(room);
+    me.placed = true;
+    me.path = [];
+    let goal;
+    if (L) { // front door in the south wall
+      const [x, z] = cellWorld(L.entry.x, L.entry.z);
+      me.x = x;
+      me.z = z + 1.0;
+      me.yaw = Math.PI;
+      goal = L.goal;
+    } else { // front door in the west wall
+      const [x, z] = cellWorld(0, D - 1);
+      me.x = x - 0.4;
+      me.z = z;
+      me.yaw = Math.PI / 2;
+      goal = [Math.round(W / 2), Math.round(D / 2)];
+    }
+    setTimeout(() => !disposed && walkTo(...nearestFree(goal, blocked())), 600); // by then the furniture is in, so it picks a free cell
+  }
   async function setAvatar(look, gender) {
     const mine = ++avTicket,
       next = await createAvatar(look, gender);
@@ -776,16 +849,7 @@ export function createRoomScene(container, cb = {}) {
       }
     });
     avRoot.add(av.root);
-    if (room && !me.placed) {
-      const [x, z] = cellWorld(0, D - 1);
-      me.x = x - 0.4;
-      me.z = z;
-      me.placed = true;
-      me.yaw = Math.PI / 2;
-      const bl = blocked();
-      let goal = nearestFree([Math.round(W / 2), Math.round(D / 2)], bl);
-      setTimeout(() => !disposed && walkTo(...goal), 600);
-    }
+    if (room && !me.placed) spawn();
     me.playing = null;
   }
 
@@ -829,6 +893,7 @@ export function createRoomScene(container, cb = {}) {
         const it = items.get(id),
           t = it.t;
         select(id);
+        if (isOutdoor(it.data.key)) return; // the generator stays on its lawn spot: you can store or sell it, not drag it into the house
         drag = {
           id,
           offx: (f?.x ?? t.x) - t.x,
@@ -968,9 +1033,9 @@ export function createRoomScene(container, cb = {}) {
         it.age = Math.min(1, it.age + dt / 0.7);
         const e = easeOutBack(Math.min(1, it.age * 1.2));
         g.scale.setScalar(Math.max(0.001, e));
-        g.position.y = (1 - Math.min(1, it.age * 1.6)) * 1.3 + it.lift;
+        g.position.y = (1 - Math.min(1, it.age * 1.6)) * 1.3 + it.lift + it.y0;
       } else {
-        g.position.y += (it.lift - g.position.y) * k;
+        g.position.y += (it.lift + it.y0 - g.position.y) * k;
         if (g.scale.x !== 1) g.scale.setScalar(1);
       }
       g.position.x += (it.t.x - g.position.x) * k;
@@ -1057,7 +1122,7 @@ export function createRoomScene(container, cb = {}) {
   }
   function setRoom(r) {
     const changed =
-      !room || room.w !== r.w || room.d !== r.d || room.theme !== r.theme || (room.grime ?? 0) !== (r.grime ?? 0);
+      !room || room.w !== r.w || room.d !== r.d || room.theme !== r.theme || room.layout !== r.layout || (room.grime ?? 0) !== (r.grime ?? 0);
     room = r;
     if (changed) {
       buildRoom();

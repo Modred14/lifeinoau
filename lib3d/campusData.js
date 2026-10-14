@@ -23,8 +23,8 @@ export function listPlaces(data) {
 
 /** One line telling the player how far to trust a place's position. */
 export function trustNote(p) {
-  if (!p.located) return "Not placed on the map yet: no reference showed where this is";
-  if (p.conf === "game") return "Game placement: no map shows where this really is";
-  if (p.conf === "approximate") return "Approximate position (read from a Google screenshot)";
-  return "Position and name from the OpenStreetMap map";
+  if (!p.located) return "";
+  if (p.conf === "game") return "";
+  if (p.conf === "approximate") return "";
+  return "";
 }

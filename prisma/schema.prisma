@@ -63,7 +63,8 @@ model Character {
   personalities      String[]
   facultyId          Int
   level              Int            @default(100)
-  hostel             String         @default("") // empty until chosen after the class reveal
+  hostel             String         @default("") // empty until chosen after the class reveal; changed later from the Housing app on the phone
+  rentPaidUntilWeek  Int            @default(0) // last game week whose rent was paid up front when moving home (0 = none); tick.js skips rent up to it
   transport          String         @default("Trek")
   // 0-100 stats, clamped in the engine
   health             Int            @default(80)

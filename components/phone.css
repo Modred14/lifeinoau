@@ -37,6 +37,7 @@
 .ph-ico[data-tone="rose"] { background: linear-gradient(165deg, #ff8fb4, #e8407a); } .ph-ico[data-tone="violet"] { background: linear-gradient(165deg, #b48cff, #6c42e6); }
 .ph-ico[data-tone="amber"] { background: linear-gradient(165deg, #ffb64d, #ea7418); } .ph-ico[data-tone="orange"] { background: linear-gradient(165deg, #ff9d6a, #e8452e); }
 .ph-ico[data-tone="mint"] { background: linear-gradient(165deg, #6ee3b0, #1fa56f); } .ph-ico[data-tone="slate"] { background: linear-gradient(165deg, #a5b0c6, #5a6784); }
+.ph-ico[data-tone="sky"] { background: linear-gradient(165deg, #6ad0ff, #2486d9); }
 .ph-ico[data-tone="graphite"] { background: linear-gradient(165deg, #8d95a6, #3c4453); }
 /* the Ile-Ife skyline at the bottom of the wallpaper */
 .ph-city { position: absolute; z-index: 1; left: 0; right: 0; bottom: 0; height: 22%; background: #9a5a1c; opacity: 0.6; pointer-events: none;

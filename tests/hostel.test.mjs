@@ -1,7 +1,7 @@
 // tests/hostel.test.mjs
 // Hostel rules: rent per session, who shares a room, what each room comes with, and how rough it gets. Pure Node, no database.
 import { sessionRentOf, rentInstalmentKobo, occupantsFor, occupancyRange, SESSION_WEEKS, allowedHostels } from "../lib/rules.js";
-import { starterFor, ITEMS, inShop } from "../lib/furniture.js";
+import { starterFor, starterPlan, ITEMS, inShop } from "../lib/furniture.js";
 import { roomFor, grimeFor, fits, autoPlace } from "../lib/room.js";
 let bad = 0; const chk = (l, c) => { if (!c) bad++; console.log((c ? "OK  " : "FAIL") + " " + l); };
 const SCHOOL = ["Awo", "Fajuyi", "ETF", "Moremi", "Akintola", "Alumni"], BIG = ["Angola", "Mozambique"];
@@ -29,7 +29,7 @@ chk("the toilet comes with the room and is not in the shop", ITEMS.ensuite.fixed
 // everything a room comes with must actually fit and be placed
 for (const [h, n] of [["Awo", 8], ["Fajuyi", 6], ["Angola", 10], ["Mozambique", 9], ["Ojaja", 2], ["Off-campus", 2], ["Off-campus", 1]]) {
   const room = roomFor(h, "x"), want = starterFor(h, n), placed = []; let all = true;
-  for (const k of want) { const s = autoPlace(room, placed, k); if (!s || !fits(room, placed, k, s.x, s.z, s.rot)) all = false; else placed.push({ id: String(placed.length), key: k, placed: true, ...s }); }
+  for (const [k, zone] of starterPlan(h, n)) { const s = autoPlace(room, placed, k, zone); if (!s || !fits(room, placed, k, s.x, s.z, s.rot)) all = false; else placed.push({ id: String(placed.length), key: k, placed: true, ...s }); }
   chk(`${h} (${n} people): the whole starter set fits in the ${room.w}x${room.d} room`, all);
 }
 chk("school rooms use the plain dorm look, Ojaja the suite, off campus the wood look", roomFor("Awo").theme === "dorm" && roomFor("Angola").theme === "dorm" && roomFor("Ojaja").theme === "suite" && roomFor("Off-campus").theme === "wood");

@@ -1,0 +1,25 @@
+/* components/apps/housing-app.css: the Housing app inside the phone. Light page, one card per home with its floor plan. */
+.hs { display: grid; gap: 12px; padding-top: 2px; }
+.hs-now { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 20px; background: linear-gradient(135deg, #1f8a70, #146c5b); color: #fff; }
+.hs-now-ico { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; background: rgba(255, 255, 255, 0.2); }
+.hs-now small { display: block; opacity: 0.85; font-size: 0.76rem; }
+.hs-now b { font: 700 1.2rem var(--font-head); letter-spacing: -0.01em; }
+.hs-note { margin: 0 4px; color: var(--muted); font-size: 0.84rem; line-height: 1.4; }
+.hs-done { display: grid; gap: 6px; padding: 14px 16px; border-radius: 20px; background: #e7f6ec; color: #0d5c2e; }
+.hs-done span { font-size: 0.88rem; }
+.pa-content .hs-done button { justify-self: start; }
+.pa-content .hs-tabs { margin: 0; }
+.hs-card { display: grid; gap: 10px; padding: 14px; border-radius: 20px; background: var(--surface); }
+.hs-card[data-current="1"] { outline: 2px solid var(--green); outline-offset: -2px; background: #f1faf4; }
+.hs-plan { width: 100%; max-height: 190px; border-radius: 12px; background: #fff; padding: 6px; box-sizing: border-box; }
+.hs-info { display: grid; gap: 4px; }
+.hs-top { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }
+.hs-top b { font: 700 1.08rem var(--font-head); letter-spacing: -0.01em; color: var(--text); }
+.hs-tag { font-style: normal; font-size: 0.7rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: #e6ecf5; color: #36507a; }
+.hs-tag.hs-gold { background: #ffefc2; color: #8a5a00; }
+.hs-meta { font-size: 0.82rem; color: var(--muted); }
+.hs-about { font-size: 0.86rem; line-height: 1.4; color: var(--text); }
+.hs-rent { font-size: 0.9rem; color: var(--text); }
+.hs-rent span { color: var(--muted); font-size: 0.82rem; }
+.hs-here { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--green-text); font-size: 0.92rem; }
+.pa-content button.hs-go { width: 100%; }

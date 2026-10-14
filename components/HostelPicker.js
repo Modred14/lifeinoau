@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Icon } from "./Icon";
 import { CLASS_INFO, allowanceOf, fmtN } from "@/lib/classes.js";
-import { sessionRentOf, occupancyText, isSchoolHostel, SESSION_WEEKS } from "@/lib/rules.js";
+import { sessionRentOf, occupancyText, aboutHome, SESSION_WEEKS } from "@/lib/rules.js";
 import "./hostel-picker.css";
 
 /** Choose where to live. Picking only selects; the move happens when the player confirms, because it can't be changed yet. */
@@ -20,21 +20,13 @@ export default function HostelPicker({ cls, hostels = [], busy, onChoose }) {
     priciest = only(rents[rents.length - 1]);
   const kind = (h) =>
     h === "Off-campus" ? "Off campus" : h === "Ojaja" ? "" : "On campus";
-  // what the room is like, in one line
-  const about = (h) =>
-    isSchoolHostel(h)
-      ? "Iron double bunks and wardrobes. No kitchen, no TV, and the room gets rough fast."
-      : h === "Ojaja"
-        ? "Single beds, wardrobes, your own kitchen and toilet. No TV. Kept clean."
-        : "Single beds, wardrobes, your own kitchen and toilet, and a TV. Kept clean.";
   return (
     <div className="hp" style={{ "--cls": info?.color }}>
       <header className="hp-head">
         <h1>Where will you stay?</h1>
         <p className="mut">
           These are the places open to a <b className="hp-cls">{cls}</b>{" "}
-          student. Rent is priced per session ({SESSION_WEEKS} game weeks) and comes out of your allowance in weekly instalments. Moving
-          later isn't available yet, so choose with care.
+          student. Rent is priced per session ({SESSION_WEEKS} game weeks) and comes out of your allowance in weekly instalments. You can move later from the Housing app on your phone.
         </p>
       </header>
       <div className="hp-grid" role="radiogroup" aria-label="Hostel">
@@ -71,7 +63,7 @@ export default function HostelPicker({ cls, hostels = [], busy, onChoose }) {
                 <span className="mut">a session</span>
               </span>
               <span className="mut hp-about">
-                <b>{occupancyText(h)}.</b> {about(h)}
+                <b>{occupancyText(h)}.</b> {aboutHome(h)}
               </span>
               <span className="hp-share">
                 <span className="hp-bar" aria-hidden="true">

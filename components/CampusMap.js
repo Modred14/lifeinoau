@@ -101,7 +101,7 @@ export default function CampusMap({ interactive = true, zoomOnly = false, pins =
           <button type="button" aria-label="Reset the view" onClick={reset}><Icon name="reset" /></button>
         </div>
         {hint && <p className="stage-hint" role="status" onClick={() => setHint(false)}>Drag to move · pinch to zoom · two fingers to turn and tilt · double-tap to zoom in</p>}
-        <p className="stage-credit">Map data © OpenStreetMap contributors</p>
+        {/* <p className="stage-credit">Map data © OpenStreetMap contributors</p> */}
       </>)}
       {mounts.map(({ id, el, L }) => createPortal(
         <button type="button" className="bl" data-kind={L.kind} data-tier={L.tier} data-approx={L.approx ? "true" : "false"} aria-pressed={selectedId === id} aria-label={L.name + (L.approx ? " (approximate position)" : "")} onClick={() => { hold(); onSelect?.(id); }}>
