@@ -16,6 +16,7 @@ import AchievementsApp from "./apps/AchievementsApp";
 import SettingsApp from "./apps/SettingsApp";
 import HousingApp from "./apps/HousingApp";
 import HireApp from "./apps/HireApp";
+import BetApp from "./bet/BetApp";
 import "./phone.css";
 
 /** Every app opens inside the handset. `own` apps draw their own header (Messages has a chat bar). */
@@ -30,10 +31,11 @@ const APPS = {
   awards: { name: "Awards", icon: "medal", tone: "orange", C: AchievementsApp },
   housing: { name: "Housing", icon: "home", tone: "sky", C: HousingApp },
   hire: { name: "Hire", icon: "driver", tone: "indigo", C: HireApp },
+  bet: { name: "Bet", icon: "ticket", tone: "bet", own: true, C: BetApp }, // draws its own header and tab bar, like Messages
   settings: { name: "Settings", icon: "gear", tone: "graphite", C: SettingsApp },
 };
 export const PHONE_APPS = Object.keys(APPS);
-const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "forbes", "awards", "housing", "hire", "settings"];
+const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "forbes", "awards", "housing", "hire", "bet", "settings"];
 
 const day = (d) => d.toLocaleDateString("en-NG", { weekday: "long", day: "numeric", month: "long" });
 const clock = (d) =>
@@ -148,7 +150,7 @@ export default function Phone({ open, onClose, st, firstApp, initialApp, onShop,
                 </header>
               )}
               <div className="pa-body">
-                {Cur ? <div className="pa-content"><Cur onOpenApp={setApp} onClose={onClose} /></div> : <MessagesApp onHome={home} onUnread={setUnread} />}
+                {Cur ? (cur.own ? <Cur onHome={home} onClose={onClose} /> : <div className="pa-content"><Cur onOpenApp={setApp} onClose={onClose} /></div>) : <MessagesApp onHome={home} onUnread={setUnread} />}
               </div>
             </section>
           )}

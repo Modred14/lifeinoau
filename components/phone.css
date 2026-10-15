@@ -40,6 +40,7 @@
 .ph-ico[data-tone="sky"] { background: linear-gradient(165deg, #6ad0ff, #2486d9); }
 .ph-ico[data-tone="graphite"] { background: linear-gradient(165deg, #8d95a6, #3c4453); }
 .ph-ico[data-tone="indigo"] { background: linear-gradient(165deg, #7f8cff, #4350d8); }
+.ph-ico[data-tone="bet"] { background: #10151c; color: #2fd27a; } /* flat, no gradient: the Bet app is dark inside */
 /* the Ile-Ife skyline at the bottom of the wallpaper */
 .ph-city { position: absolute; z-index: 1; left: 0; right: 0; bottom: 0; height: 22%; background: #9a5a1c; opacity: 0.6; pointer-events: none;
   clip-path: polygon(0 62%, 5% 62%, 5% 38%, 11% 38%, 11% 55%, 17% 55%, 17% 24%, 22% 24%, 22% 48%, 30% 48%, 30% 30%, 36% 30%, 36% 58%, 44% 58%, 44% 18%, 49% 18%, 49% 44%, 57% 44%, 57% 34%, 63% 34%, 63% 56%, 70% 56%, 70% 26%, 76% 26%, 76% 50%, 84% 50%, 84% 36%, 90% 36%, 90% 60%, 100% 60%, 100% 100%, 0 100%); }
@@ -190,3 +191,8 @@
 @media (prefers-reduced-motion: reduce) { .pa, .ph, .ph-scrim, .ph-sheet { animation: none; } }
 /* notifications wait behind the phone while it is open */
 body:has(.ph-scrim) .tt-region { z-index: 55; }
+/* ---------- the Bet app is a dark, full-height app that scrolls inside itself ---------- */
+.ph[data-app="bet"] .ph-status { color: #fff; }
+.ph[data-app="bet"] .ph-home i { background: rgba(255, 255, 255, 0.9); }
+.ph[data-app="bet"] .pa { --bg: #0b0e13; color-scheme: dark; }
+.ph[data-app="bet"] .pa-body { overflow: hidden; padding-bottom: 0; }

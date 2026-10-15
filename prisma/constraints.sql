@@ -23,3 +23,5 @@ ALTER TABLE "Holding" ADD CONSTRAINT holding_nonneg CHECK ("unitsMicro" >= 0 AND
 ALTER TABLE "RoomItem" ADD CONSTRAINT roomitem_bounds CHECK (rot BETWEEN 0 AND 3 AND paid >= 0);
 
 ALTER TABLE "BillboardSlot" ADD CONSTRAINT billboardslot_bounds CHECK (board BETWEEN 1 AND 10 AND slot BETWEEN 1 AND 10 AND "amountKobo" > 0 AND "orderKobo" > 0);
+ALTER TABLE "BetSlip" ADD CONSTRAINT betslip_bounds CHECK ("stakeKobo" > 0 AND "potentialKobo" > 0 AND "payoutKobo" >= 0);
+ALTER TABLE "CasinoRound" ADD CONSTRAINT casinoround_bounds CHECK ("stakeKobo" > 0 AND "payoutKobo" >= 0);

@@ -422,3 +422,40 @@ model BillboardSlot {
   @@index([ownerId])
   @@index([orderId])
 }
+
+// Bet app, sports: one row per slip. legs is a Json list of { fx, mk, pk, odds (hundredths), home, away, leagueName, ko }. Money is real in-game cash held by the CASINO system account.
+model BetSlip {
+  id          BigInt    @id @default(autoincrement())
+  characterId String
+  stakeKobo   BigInt
+  oddsText    String // total odds, for display ("12.45")
+  potentialKobo BigInt // what a win pays, fixed at placing time
+  legs        Json
+  status      String    @default("OPEN") // OPEN | WON | LOST
+  payoutKobo  BigInt    @default(0)
+  createdAt   DateTime  @default(now())
+  settledAt   DateTime?
+
+  @@index([characterId, status])
+  @@index([characterId, createdAt])
+}
+
+// Bet app, casino: one row per Aviator flight or roulette spin.
+// Aviator: crashCenti is the secret multiplier (hundredths) the plane flies away at; it is never sent to the player until the flight is over.
+model CasinoRound {
+  id          BigInt    @id @default(autoincrement())
+  characterId String
+  game        String // AVIATOR | ROULETTE
+  stakeKobo   BigInt
+  status      String    @default("FLYING") // FLYING | WON | LOST (roulette is settled at once)
+  crashCenti  Int       @default(0)
+  autoCenti   Int? // the player's auto cash-out, settled by the server even if they close the app
+  cashCenti   Int? // multiplier the player got out at
+  payoutKobo  BigInt    @default(0)
+  data        Json? // roulette: { n } the number that came up
+  startedAt   DateTime  @default(now())
+  settledAt   DateTime?
+
+  @@index([characterId, game, startedAt])
+  @@index([characterId, status])
+}
