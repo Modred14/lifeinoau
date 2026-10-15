@@ -143,6 +143,7 @@ oau-life-backend/
 | `/api/parent/call` | POST | `app/api/parent/call/route.js` | Call parent (once per game week) |
 | `/api/risky` | POST | `app/api/risky/route.js` | Risky hustle (DSA risk) |
 | `/api/exam` | POST | `app/api/exam/route.js` | Sit or cheat in an exam |
+| `/api/fight` | POST | `app/api/fight/route.js` | Report a lecturer brawl; the server decides the cost (80% DSA catch after a win) |
 | `/api/floor0/pay` | POST | `app/api/floor0/pay/route.js` | Pay the bill to leave Floor O |
 | `/api/players` | GET | `app/api/players/route.js` | Search players by name |
 | `/api/profile` | GET | `app/api/profile/route.js` | Public profile |
@@ -231,6 +232,15 @@ catch chance rises with it. Arrest: Floor O for 30 minutes to 3 hours, lose 15 h
 DSA seizes 30% of your cash, and you can pay a bill (10% of cash, between ₦150k and ₦5M) to leave early. Strikes: 3 means
 a 2-week suspension, 5 means expulsion.
 
+**Fighting a lecturer.** On the Courses app, "Fight <lecturer>" (20 energy, once per game week, behind a confirm) opens a full-screen 3D brawl
+(`components/LectureFight.js`, scene in `lib3d/lectureScene.js`). It plays itself (auto-fight) so you watch your character beat the lecturer, and you can
+take control at any moment (Punch / Kick / Block / Dodge buttons, or Space-J / K / hold L / S-D, T toggles auto). The brawl is `lib/fightSim.js`
+(pure, tested in `tests/fight.test.mjs`). The browser reports who won; `lib/fight.js` + `lib/fightService.js` decide the cost.
+If you lose: -20 health, -10 happiness, -5 popularity. If you win: **80% the DSA van comes** (`DSA_CATCH_PERCENT`): the cutscene shows the van arriving with sirens,
+officers chasing you down, carrying you into the van and driving you through the Floor O gate; the normal arrest rules apply (30% of cash seized, bill,
+sentence, a strike, reason "Beat up <lecturer>"). The other 20% you run away (+15 happiness, +8 popularity, +25 suspicion). The cutscenes are pure functions of
+time (`seek(name, t)` jumps to any moment) and have a Skip button.
+
 **Parties.** Each of 0203, Royal Divas and Quantum hosts one party per game week (price roughly ₦8k to ₦30k, limited
 capacity). One night out per player per week, with a random outcome on the night.
 
@@ -308,7 +318,7 @@ These are starting numbers. Real players will find strategies the simulations di
 - The interactive **OAU map and locations** (the server does not track where a player is, so actions work from anywhere).
 - Transport choices (trek, shuttle, bike off campus, Daddy Benz). The rules are in the prototype only.
 - Departments and assignments. (Courses, fictional lecturers including Boroks, attendance, preparation and surprise tests ARE built.
-  Lecture slots are flavour only.) Bribing or fighting a lecturer is not built; the Yahoo-style hustle is the generic risky hustle.
+  Lecture slots are flavour only.) Fighting a lecturer IS built (see "Fighting a lecturer"); bribing one is not; the Yahoo-style hustle is the generic risky hustle.
 - Daily and weekly objectives, audio, the cinematic onboarding, the full landing page (features, FAQ).
 - Hostel changes (so MAPO players cannot yet use the 200L Ojaja unlock).
 - Live updates (everything refreshes on request or on a timer; no websockets yet).

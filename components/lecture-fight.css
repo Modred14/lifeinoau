@@ -1,0 +1,40 @@
+/* components/lecture-fight.css: the full-screen lecturer brawl, the DSA cutscenes and the result card. */
+.lf { position: fixed; inset: 0; z-index: 300; background: #05070c; color: #fff; font-family: var(--font-ui); overflow: hidden; touch-action: none; user-select: none; }
+.lf-canvas { position: absolute; inset: 0; }
+.lf-hud { position: absolute; top: calc(var(--safe-t) + 12px); left: 12px; right: 12px; display: flex; align-items: center; gap: 10px; pointer-events: none; }
+.lf-bar { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.lf-bar span { font: 700 0.85rem var(--font-head); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lf-bar[data-who="l"] { text-align: right; }
+.lf-bar div { height: 14px; border-radius: 99px; background: rgba(0, 0, 0, 0.55); border: 2px solid rgba(255, 255, 255, 0.85); overflow: hidden; }
+.lf-bar i { display: block; height: 100%; background: linear-gradient(#7dffa8, #28b863); transition: width 0.18s ease-out; }
+.lf-bar[data-who="l"] i { background: linear-gradient(#ff9a8a, #e03a2c); margin-left: auto; }
+.lf-vs { font: 900 1rem var(--font-head); color: var(--gold-text); text-shadow: 0 2px 4px #000; }
+.lf-load { position: absolute; inset: 0; display: grid; place-items: center; font: 600 1.1rem var(--font-head); background: #0d1321; }
+.lf-cap { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); max-width: min(90vw, 640px); text-align: center; font: 900 clamp(1.4rem, 5vw, 2.4rem) var(--font-head); letter-spacing: -0.01em; text-shadow: 0 3px 0 #000, 0 0 18px rgba(0, 0, 0, 0.8); animation: lf-pop 0.35s var(--ease); pointer-events: none; }
+@keyframes lf-pop { from { transform: translateX(-50%) scale(0.6); opacity: 0; } }
+.lf-ctl { position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 12px calc(var(--safe-b) + 14px); display: grid; gap: 10px; justify-items: center; background: linear-gradient(transparent, rgba(0, 0, 0, 0.65)); }
+.lf-mode { padding: 11px 18px; border-radius: 99px; border: 2px solid rgba(255, 255, 255, 0.5); background: rgba(20, 28, 46, 0.85); color: #fff; font: 700 0.95rem var(--font-ui); cursor: pointer; }
+.lf-mode[data-on="1"] { border-color: var(--green-text); }
+.lf-mode[data-on="0"] { border-color: var(--gold-text); background: rgba(80, 50, 10, 0.85); }
+.lf-tip { margin: 0; font-size: 0.85rem; color: #cdd6e4; text-align: center; max-width: 36ch; }
+.lf-pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: min(100%, 560px); }
+.lf-pad button { display: grid; gap: 2px; align-content: center; justify-items: center; min-height: 74px; border-radius: 18px; border: 2px solid rgba(255, 255, 255, 0.25); background: rgba(27, 38, 64, 0.92); color: #fff; font: 800 1.05rem var(--font-head); touch-action: none; cursor: pointer; }
+.lf-pad button:first-child { background: #b3283c; border-color: #ff8a98; }
+.lf-pad button:nth-child(2) { background: #c46a1c; border-color: #ffc27a; }
+.lf-pad button:nth-child(3) { background: #1f4d9a; border-color: #8fc3ff; }
+.lf-pad button:active { transform: scale(0.95); filter: brightness(1.2); }
+.lf-pad small { font: 500 0.65rem var(--font-ui); opacity: 0.75; }
+.lf-skip { position: absolute; right: 14px; bottom: calc(var(--safe-b) + 16px); padding: 9px 18px; border-radius: 99px; background: rgba(0, 0, 0, 0.55); border: 1px solid rgba(255, 255, 255, 0.5); color: #fff; font: 700 0.9rem var(--font-ui); cursor: pointer; }
+.lf-nogl { position: absolute; inset: 0; display: grid; place-content: center; gap: 6px; text-align: center; padding: 24px; background: #0d1321; }
+.lf-card { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(92vw, 420px); padding: 22px 20px; border-radius: 22px; background: #fff; color: #161b26; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); animation: lf-card 0.4s var(--ease); display: grid; gap: 12px; }
+@keyframes lf-card { from { transform: translate(-50%, -46%) scale(0.92); opacity: 0; } }
+.lf-card h2 { margin: 0; font: 800 1.6rem var(--font-head); }
+.lf-card[data-tone="bad"] h2 { color: #c4202b; }
+.lf-card[data-tone="good"] h2 { color: #15803d; }
+.lf-card p { margin: 0; line-height: 1.45; color: #3a4252; }
+.lf-card ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 4px; }
+.lf-row { display: flex; gap: 8px; }
+.lf-card button { padding: 13px; border-radius: 14px; border: 0; background: #e8ebf1; color: #161b26; font: 700 1rem var(--font-ui); cursor: pointer; flex: 1; }
+.lf-card .lf-go { background: #15803d; color: #fff; }
+.lf-card[data-tone="bad"] .lf-go { background: #c4202b; }
+@media (prefers-reduced-motion: reduce) { .lf-cap, .lf-card { animation: none; } }
