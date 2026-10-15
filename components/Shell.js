@@ -8,6 +8,7 @@ import { call, naira, notifyError } from "@/lib/client";
 import { setPlayMode, usePlayMode, useBare, resetBoot } from "@/lib/ui";
 import { Icon } from "./Icon";
 import Phone from "./Phone";
+import { useChat } from "@/lib/chat";
 import SoundToggle from "./SoundToggle";
 import { toast } from "@/lib/toast";
 import { game, useGame } from "@/lib/gameStore";
@@ -32,6 +33,7 @@ export default function Shell({ children }) {
     [loggingOut, setLoggingOut] = useState(false),
     g = useGame(), // one copy of the player's state, shared with the home screen: a change made anywhere shows here at once
     st = g?.character?.hostel ? g : null,
+    unreadChats = useChat((x) => x.unread),
     [phone, setPhone] = useState(false),
     [phoneApp, setPhoneApp] = useState(null),
     [clock, setClock] = useState(null),
@@ -215,7 +217,10 @@ export default function Shell({ children }) {
               setPhone(true);
             }}
           >
-            <Icon name="phone" weight={phone ? "fill" : "regular"} />
+            <span className="nav-ico">
+              <Icon name="phone" weight={phone ? "fill" : "regular"} />
+              {unreadChats > 0 && <i className="nav-badge" role="status" aria-label={`${unreadChats} unread messages`}>{unreadChats > 9 ? "9+" : unreadChats}</i>}
+            </span>
             <span>Phone</span>
           </button>
         </nav>

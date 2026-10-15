@@ -6,6 +6,7 @@ import { naira, call } from "@/lib/client";
 import { CLASS_INFO } from "@/lib/classes.js";
 import { playSound } from "@/lib/sound";
 import MessagesApp from "./apps/MessagesApp";
+import { chat, useChat } from "@/lib/chat";
 import CareerApp from "./apps/CareerApp";
 import CoursesApp from "./apps/CoursesApp";
 import InvestApp from "./apps/InvestApp";
@@ -60,9 +61,8 @@ function Tile({ name, icon, tone, onClick, badge, first, sound }) {
 export default function Phone({ open, onClose, st, firstApp, initialApp, onShop, onLogout, loggingOut }) {
   const [now, setNow] = useState(() => new Date());
   const [app, setApp] = useState(null);
-  const [unread, setUnread] = useState(0);
-  const wasOpen = useRef(false),
-    lastUnread = useRef(null);
+  const unread = useChat((s) => s.unread); // pushed by the chat connection: nothing is polled for it any more
+  const wasOpen = useRef(false);
 
   useEffect(() => {
     // the handset slides up and away with a sound, whichever way it was opened or closed
@@ -76,21 +76,9 @@ export default function Phone({ open, onClose, st, firstApp, initialApp, onShop,
     const t = setInterval(() => setNow(new Date()), 15000);
     return () => clearInterval(t);
   }, [open, initialApp]);
-  useEffect(() => {
-    if (!open || !st) return;
-    let on = true;
-    const load = async () => {
-      const r = await call("/api/messages?unread=1"); // just a number: the old call downloaded the whole inbox every 30 seconds
-      if (!on || r.failed) return;
-      const n = r.unread ?? 0;
-      if (lastUnread.current !== null && n > lastUnread.current) playSound("receive");
-      lastUnread.current = n;
-      setUnread(n);
-    };
-    load();
-    const t = setInterval(() => !document.hidden && load(), 30000);
-    return () => { on = false; clearInterval(t); };
-  }, [open, !!st]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the chat connection lives as long as the player is in the game, so messages arrive even while the phone is closed
+  const me = st?.character?.name;
+  useEffect(() => { if (me) chat.begin(me); }, [me]);
   useEffect(() => {
     if (!open) return;
     const k = (e) => {
@@ -150,7 +138,7 @@ export default function Phone({ open, onClose, st, firstApp, initialApp, onShop,
                 </header>
               )}
               <div className="pa-body">
-                {Cur ? (cur.own ? <Cur onHome={home} onClose={onClose} /> : <div className="pa-content"><Cur onOpenApp={setApp} onClose={onClose} /></div>) : <MessagesApp onHome={home} onUnread={setUnread} />}
+                {Cur ? (cur.own ? <Cur onHome={home} onClose={onClose} /> : <div className="pa-content"><Cur onOpenApp={setApp} onClose={onClose} /></div>) : <MessagesApp onHome={home} />}
               </div>
             </section>
           )}

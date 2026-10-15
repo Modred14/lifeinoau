@@ -216,16 +216,49 @@ model ExamResult {
   @@unique([characterId, gameWeek]) // one result per exam week: no re-sitting
 }
 
-model Message {
-  id        BigInt    @id @default(autoincrement())
-  fromId    String // Character ids
-  toId      String
-  body      String // max 500 chars, validated server-side
-  readAt    DateTime?
-  createdAt DateTime  @default(now())
+// ---- Messaging. Built to stay small: one Chat row per pair of players, and thin Message rows. ----
+// Chat holds everything that used to be written onto every message: who read what (watermarks, not a flag per message),
+// unread counters and the preview line. "Read" is a single number per side, so reading 50 messages is ONE tiny update
+// instead of 50 row rewrites (Postgres rewrites a whole row on every update, which is what bloats a table).
+// aId is the smaller of the two character ids (compared as plain text), bId the larger.
+model Chat {
+  id        Int      @id @default(autoincrement())
+  aId       String
+  bId       String
+  lastId    BigInt   @default(0) // newest message id (0 = none yet)
+  lastAt    DateTime @default(now())
+  lastBody  String   @default("") // preview line for the inbox, at most 60 characters, so old messages can be pruned freely
+  lastKind  Int      @default(0) @db.SmallInt // 0 text, 1 money
+  lastFromA Boolean  @default(true)
+  aRead     BigInt   @default(0) // newest message id that A has read
+  bRead     BigInt   @default(0)
+  aDel      BigInt   @default(0) // newest message id that reached A's device
+  bDel      BigInt   @default(0)
+  aUnread   Int      @default(0)
+  bUnread   Int      @default(0)
 
-  @@index([toId, readAt])
-  @@index([fromId, toId, createdAt])
+  @@unique([aId, bId])
+  @@index([bId])
+}
+
+// Only the newest messages of each chat are kept (CHAT_KEEP_PER_CHAT, default 150, and CHAT_KEEP_DAYS, default 30), so the table
+// stops growing. kind 1 is a money note: body is "<naira>\n<note>". The primary key doubles as the chat+time index.
+model Message {
+  id        BigInt   @default(autoincrement())
+  chatId    Int
+  fromA     Boolean
+  kind      Int      @default(0) @db.SmallInt
+  body      String
+  createdAt DateTime @default(now())
+
+  @@id([chatId, id])
+}
+
+// When a player last had the game open. Written once when they go offline, never on a timer. "Online" itself lives in the
+// realtime server's memory and costs no storage at all.
+model Presence {
+  characterId String   @id
+  lastSeen    DateTime
 }
 
 model Block {
@@ -242,6 +275,7 @@ model Report {
   targetId   String
   reason     String
   status     String   @default("OPEN") // reviewed in the admin panel
+  evidence   Json? // the last 20 messages between the two players, copied when the report is made so pruning can never erase them
   createdAt  DateTime @default(now())
 
   @@index([status, createdAt])

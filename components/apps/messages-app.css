@@ -1,0 +1,189 @@
+/* components/apps/messages-app.css: the Messages app. Flat colours only (no gradients), the game's own fonts, sentence case throughout.
+   Lives inside the phone's light page (.pa), so it reuses that page's tokens and adds its own for the chat. */
+.ms {
+  --paper: #e6ede8;        /* the chat wallpaper: a pale sage */
+  --in: #ffffff;           /* what they send */
+  --out: #cfeedb;          /* what you send: light enough that the blue ticks stay readable */
+  --tick: #8794a6; --tick-read: #2b7fff;
+  --online: #22c55e;
+  --money: #14412b; --gold: #f2b53c; --gold-ink: #4a2d00;
+  --ink-soft: #4d5b52;     /* time stamps on a tinted bubble */
+  position: relative; height: 100%; display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+}
+.ms :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+/* the global button look is switched off here; each control below says what it is */
+.ms button { min-height: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; font: inherit; color: inherit; gap: 0; text-align: left; justify-content: flex-start; }
+.ms button:hover:not(:disabled) { background-color: transparent; border-color: transparent; }
+.ms button:active:not(:disabled) { transform: none; }
+
+/* ---------- header ---------- */
+.ms-bar { flex: none; display: flex; align-items: center; gap: 2px; height: 60px; padding: 0 8px 0 4px; background: #fff; border-bottom: 1px solid var(--line); }
+.ms-bar--list { height: 56px; background: var(--bg); border-bottom: 0; padding-left: 6px; }
+.ms-bar h2 { margin: 0; flex: 1; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+.ms .ms-back, .ms .ms-icon { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; color: var(--text); }
+.ms .ms-back { color: var(--blue); }
+.ms .ms-new { background: var(--surface); border-radius: 50%; }
+.ms .ms-back:hover:not(:disabled), .ms .ms-icon:hover:not(:disabled) { background-color: rgba(16, 24, 40, 0.06); }
+.ms .ms-who { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 4px 6px; border-radius: 12px; }
+.ms .ms-who:hover:not(:disabled) { background-color: rgba(16, 24, 40, 0.05); }
+.ms-who > span:last-child { display: grid; min-width: 0; line-height: 1.25; }
+.ms-who b { font-family: var(--font-head); font-weight: 600; font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-who small { color: var(--muted); font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 1em; }
+.ms-who small.live { color: var(--green-text); }
+.ms-menuwrap { display: contents; }
+.ms-scrim { position: absolute; inset: 0; z-index: 14; }
+.ms-menu { position: absolute; z-index: 15; top: 56px; right: 8px; min-width: 190px; padding: 6px; border-radius: 16px; background: #fff; box-shadow: 0 0 0 1px var(--line), 0 12px 28px -8px rgba(16, 24, 40, 0.35); animation: ms-menu 140ms var(--ease) both; transform-origin: top right; }
+.ms .ms-menu button { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 10px; font-size: 0.95rem; }
+.ms .ms-menu button:hover:not(:disabled), .ms .ms-menu button:focus-visible { background-color: var(--surface); }
+.ms .ms-menu button.bad { color: var(--danger-text); }
+@keyframes ms-menu { from { opacity: 0; transform: scale(0.96); } }
+
+.ms-banner { flex: none; margin: 0; padding: 7px 14px; background: #fff0c7; color: #6b4a00; font-size: 0.8rem; text-align: center; }
+.ms-avwrap { position: relative; display: inline-block; flex: none; }
+.ms-av { display: inline-grid; place-items: center; border-radius: 50%; color: #fff; font-weight: 600; font-family: var(--font-head); letter-spacing: 0.02em; }
+.ms-online { position: absolute; right: -1px; bottom: -1px; border-radius: 50%; background: var(--online); border: 2px solid #fff; box-sizing: border-box; }
+
+/* ---------- inbox ---------- */
+.ms-search { flex: none; position: relative; margin: 4px 16px 10px; color: var(--muted); }
+.ms-search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.ms-search input { width: 100%; min-height: 46px; padding: 8px 14px 8px 40px; border-radius: 16px; border: 1.5px solid transparent; background: var(--surface); color: var(--text); font: inherit; font-size: 0.95rem; }
+.ms-search input::placeholder { color: #6f7b8c; }
+.ms-search input:focus { border-color: var(--blue); background: #fff; outline: none; }
+.ms-chips { flex: none; display: flex; gap: 8px; padding: 0 16px 8px; overflow-x: auto; scrollbar-width: none; }
+.ms .ms-chips button { min-height: 34px; padding: 0 16px; display: inline-flex; align-items: center; border-radius: 999px; background: var(--surface); color: var(--muted); font-weight: 600; font-size: 0.86rem; white-space: nowrap; }
+.ms .ms-chips button.on { background: #e3ecff; color: var(--blue); }
+.ms .ms-chips button:hover:not(:disabled):not(.on) { background-color: var(--raised); }
+.ms-list { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 0 38px; scrollbar-width: none; }
+.ms .ms-conv { width: 100%; min-height: 70px; display: flex; align-items: center; gap: 12px; padding: 10px 16px; }
+.ms .ms-conv:hover:not(:disabled) { background-color: var(--surface); }
+.ms-c { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.ms-c1, .ms-c2 { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.ms-c b { font-family: var(--font-head); font-weight: 600; font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-c time { flex: none; color: var(--muted); font-size: 0.76rem; }
+.ms-c time.unread { color: var(--green-text); font-weight: 600; }
+.ms-c small { min-width: 0; display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 0.88rem; }
+.ms-c small > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-c small.unread { color: var(--text); font-weight: 600; }
+.ms-c small.typing { color: var(--green-text); }
+.ms-c small svg { flex: none; }
+.ms-dot { flex: none; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--green); color: #fff; font: 600 0.72rem/20px var(--font-ui); text-align: center; font-style: normal; }
+.ms-empty { display: grid; justify-items: center; gap: 6px; padding: 56px 28px; text-align: center; color: var(--muted); font-size: 0.92rem; margin: 0; }
+.ms-empty b { color: var(--text); font-family: var(--font-head); font-size: 1.05rem; margin-top: 6px; }
+.ms-emptyico { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 20px; background: #e3ecff; color: var(--blue); }
+
+/* ---------- the conversation ---------- */
+.ms-thread { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px 12px 10px; display: flex; flex-direction: column; background: var(--paper); scrollbar-width: none; }
+.ms-thread > .ms-empty { margin: auto; }
+.ms-day { align-self: center; margin: 12px 0 6px; padding: 3px 11px; border-radius: 999px; background: rgba(255, 255, 255, 0.78); color: var(--muted); font-size: 0.72rem; font-weight: 500; }
+.ms-unreadline { align-self: stretch; margin: 12px 0 6px; padding: 5px 12px; border-radius: 999px; background: #fff; color: var(--green-text); font-size: 0.76rem; font-weight: 600; text-align: center; }
+.ms .ms-earlier { align-self: center; margin: 4px 0 8px; min-height: 34px; padding: 0 14px; display: inline-flex; align-items: center; border-radius: 999px; background: #fff; color: var(--blue); font-size: 0.82rem; font-weight: 600; }
+.ms-row { display: flex; flex-direction: column; align-items: flex-start; margin-top: 2px; }
+.ms-row.first { margin-top: 8px; }
+.ms-row.mine { align-items: flex-end; }
+
+.ms-bub { position: relative; margin: 0; max-width: 86%; padding: 7px 11px 6px; border-radius: 18px; background: var(--in); color: var(--text); font-size: 0.95rem; line-height: 1.38; overflow-wrap: anywhere; white-space: pre-wrap; box-shadow: 0 1px 0 rgba(16, 24, 40, 0.07); transition: opacity 160ms; }
+.ms-row.mine .ms-bub { background: var(--out); }
+.ms-bub.pending { opacity: 0.78; }
+/* the corners on the sender's side are tight inside a run of messages, and the last one gets a small tail */
+.ms-row:not(.mine) .ms-bub { border-top-left-radius: 6px; border-bottom-left-radius: 6px; }
+.ms-row.mine .ms-bub { border-top-right-radius: 6px; border-bottom-right-radius: 6px; }
+.ms-row:not(.mine).first .ms-bub { border-top-left-radius: 18px; } .ms-row.mine.first .ms-bub { border-top-right-radius: 18px; }
+.ms-row:not(.mine).last .ms-bub { border-bottom-left-radius: 4px; } .ms-row.mine.last .ms-bub { border-bottom-right-radius: 4px; }
+/* the time and ticks sit in the bubble's bottom corner; an invisible spacer after the text keeps the last line of text clear of them */
+.ms-meta { position: absolute; right: 10px; bottom: 5px; display: inline-flex; align-items: center; gap: 4px; color: var(--ink-soft); font-size: 0.68rem; line-height: 1; white-space: nowrap; }
+.ms-text::after { content: ""; display: inline-block; width: 44px; height: 1px; }
+.ms-row.mine .ms-text::after { width: 65px; }
+.ms-meta time { font-variant-numeric: tabular-nums; }
+
+/* the ticks: clock (sending), one grey (sent), two grey (delivered), two blue (read) */
+.ms-tick { display: inline-flex; align-items: center; color: var(--tick); }
+.ms-tick svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
+.ms-tick.read { color: var(--tick-read); }
+.ms-tick.read svg { animation: ms-pop 320ms var(--ease) both; }
+.ms-tick.failed { color: var(--danger-text); }
+@keyframes ms-pop { 0% { transform: scale(0.7); } 55% { transform: scale(1.18); } 100% { transform: scale(1); } }
+.ms-failed { display: flex; gap: 12px; margin-top: 3px; color: var(--danger-text); font-size: 0.76rem; }
+.ms .ms-failed button { color: var(--blue); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; min-height: 28px; }
+
+/* money: a card, not a bubble, so it can never be mistaken for something typed */
+.ms-money { position: relative; display: grid; gap: 1px; width: min(78%, 250px); padding: 12px 14px 8px; border-radius: 20px; background: var(--money); color: #fff; }
+.ms-row:not(.mine) .ms-money { border-top-left-radius: 8px; } .ms-row.mine .ms-money { border-top-right-radius: 8px; }
+.ms-coin { position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--gold); color: var(--gold-ink); }
+.ms-money-who { font-size: 0.8rem; color: rgba(255, 255, 255, 0.78); padding-right: 40px; }
+.ms-money-amt { font-family: var(--font-head); font-weight: 600; font-size: 1.7rem; letter-spacing: -0.02em; line-height: 1.15; }
+.ms-money-note { margin-top: 2px; font-size: 0.88rem; color: rgba(255, 255, 255, 0.92); overflow-wrap: anywhere; }
+.ms-money .ms-meta { position: static; justify-self: end; margin: 6px 0 0; color: rgba(255, 255, 255, 0.7); }
+.ms-money .ms-tick { color: rgba(255, 255, 255, 0.66); }
+.ms-money .ms-tick.read { color: #7cc0ff; }
+
+.ms .ms-jump { position: absolute; z-index: 6; right: 14px; bottom: 98px; min-width: 40px; height: 40px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; background: #fff; color: var(--text); font-weight: 600; font-size: 0.82rem; box-shadow: 0 0 0 1px var(--line), 0 6px 16px -6px rgba(16, 24, 40, 0.4); }
+.ms .ms-jump span { color: #fff; background: var(--green); border-radius: 999px; min-width: 20px; height: 20px; display: grid; place-items: center; padding: 0 5px; font-size: 0.72rem; }
+
+/* ---------- composer ---------- */
+.ms-compose { flex: none; display: flex; align-items: flex-end; gap: 8px; padding: 8px 10px 34px; background: #fff; border-top: 1px solid var(--line); }
+.ms-compose textarea { flex: 1; min-width: 0; resize: none; min-height: 44px; max-height: 112px; padding: 11px 16px; border-radius: 22px; border: 1.5px solid transparent; background: var(--surface); color: var(--text); font: inherit; font-size: 0.95rem; line-height: 1.3; }
+.ms-compose textarea::placeholder { color: #6f7b8c; }
+.ms-compose textarea:focus { border-color: var(--blue); background: #fff; outline: none; }
+.ms .ms-send, .ms .ms-pay { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; animation: ms-swap 160ms var(--ease) both; }
+.ms .ms-send { background: var(--green); color: #fff; }
+.ms .ms-send:hover:not(:disabled) { background-color: #15913f; }
+.ms .ms-pay { background: var(--gold); color: var(--gold-ink); }
+.ms .ms-pay:hover:not(:disabled) { background-color: #e9a82a; }
+@keyframes ms-swap { from { transform: scale(0.8); opacity: 0.4; } }
+.ms-blocked { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px 36px; background: #fff; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; }
+.ms .ms-blocked button { min-height: 40px; padding: 0 18px; display: inline-flex; align-items: center; border-radius: 12px; background: var(--surface); color: var(--text); font-weight: 600; }
+
+/* ---------- sheets ---------- */
+/* a sheet is a scrolling body with a footer that always stays in view, so the main button is never below the fold */
+.ms .ms-sheet { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
+.ms-sheet .ph-grab { flex: none; }
+.ms-form { display: contents; }
+.ms-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: 14px; scrollbar-width: none; }
+.ms-body--solo { padding-bottom: 36px; }
+.ms-foot { flex: none; padding: 10px 0 34px; background: #fff; border-top: 1px solid var(--line); margin: 0 -18px; padding-left: 18px; padding-right: 18px; }
+.ms .ms-sheet button { border-radius: 14px; }
+.ms-sheet h3 { font-family: var(--font-head); }
+.ms-sheet label { display: block; margin-top: 14px; font-size: 0.9rem; font-weight: 500; }
+.ms-sheet label > input, .ms-sheet label > textarea { margin-top: 6px; }
+.ms-sheet textarea { width: 100%; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--field); background: #fff; color: var(--text); font: inherit; font-size: 0.95rem; resize: none; }
+.ms-prof { display: grid; justify-items: center; text-align: center; gap: 2px; padding-top: 4px; }
+.ms-prof h3 { margin: 8px 0 0; font-size: 1.25rem; }
+.ms-prof p { margin: 0; }
+.ms-tags { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 10px 0 0; }
+.ms-tags span { padding: 4px 10px; border-radius: 999px; background: var(--surface); font-size: 0.78rem; color: var(--muted); font-weight: 500; }
+.ms-facts { display: grid; grid-template-columns: 1fr 1.7fr 1fr; gap: 8px; margin: 16px 0 6px; }
+.ms-facts div { padding: 10px 6px; border-radius: 14px; background: var(--surface); text-align: center; }
+.ms-facts dt { font-size: 0.74rem; color: var(--muted); }
+.ms-facts dd { margin: 2px 0 0; font: 600 0.95rem var(--font-head); white-space: nowrap; }
+.ms-note { text-align: center; color: var(--gold-text); font-size: 0.88rem; margin: 6px 0; }
+.ms-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
+.ms .ms-sheet .ms-actions button { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: var(--surface); border: 0; font-weight: 600; }
+.ms .ms-sheet .ms-actions button.go { grid-column: 1 / -1; background: var(--green); color: #fff; }
+.ms .ms-sheet .ms-actions button.bad { color: var(--danger-text); }
+
+.ms-amt-label { display: block; color: var(--muted); font-size: 0.82rem; font-weight: 500; }
+.ms-amt-field { display: flex; align-items: center; gap: 6px; margin-top: 4px; padding: 6px 0; border-bottom: 2px solid var(--field); font-family: var(--font-head); font-size: 2.1rem; font-weight: 600; letter-spacing: -0.02em; }
+.ms-amt-field:focus-within { border-color: var(--green); }
+.ms-sheet .ms-amt-field input { margin: 0; min-height: 0; padding: 0; border: 0; border-radius: 0; background: none; font: inherit; width: 100%; outline: none; }
+.ms-quick { display: flex; gap: 8px; margin-top: 10px; }
+.ms .ms-sheet .ms-quick button { flex: 1; min-height: 38px; display: inline-flex; align-items: center; justify-content: center; background: var(--surface); border: 0; font-weight: 600; font-size: 0.88rem; }
+.ms .ms-sheet .ms-quick button:hover:not(:disabled) { background-color: var(--raised); }
+.ms-err { min-height: 1.3em; margin: 8px 0 0; color: var(--danger-text); font-size: 0.84rem; }
+.ms-sum { margin: 14px 0 0; padding: 10px 14px; border-radius: 14px; background: var(--surface); display: grid; gap: 6px; }
+.ms-sum div { display: flex; justify-content: space-between; font-size: 0.9rem; }
+.ms-sum dt { color: var(--muted); } .ms-sum dd { margin: 0; font-weight: 600; }
+.ms .ms-sheet .ms-gobtn { width: 100%; min-height: 50px; margin-top: 0; display: inline-flex; align-items: center; justify-content: center; background: var(--green); color: #fff; border: 0; font-weight: 600; font-size: 1rem; }
+.ms .ms-sheet .ms-gobtn:disabled { background: #d0d5dd; color: #fff; opacity: 1; }
+.ms-limits { margin: 8px 0 0; text-align: center; font-size: 0.8rem; }
+
+.ms-reasons { display: grid; gap: 5px; margin-top: 10px; }
+.ms .ms-sheet .ms-reasons button { min-height: 42px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; background: var(--surface); border: 1.5px solid transparent; font-weight: 500; font-size: 0.94rem; }
+.ms .ms-sheet .ms-reasons button.on { background: #e3ecff; border-color: var(--blue); color: var(--blue); font-weight: 600; }
+.ms-sheet label.ms-check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-weight: 400; }
+.ms-check input { width: 22px; height: 22px; accent-color: var(--green); flex: none; margin: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ms-menu, .ms-send, .ms-pay, .ms-tick.read svg { animation: none; }
+  .ms-bub { transition: none; }
+}
