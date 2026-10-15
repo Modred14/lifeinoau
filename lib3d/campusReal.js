@@ -76,7 +76,7 @@ export function buildRealCampus(data, meta = {}) {
     trees.forEach(([x, z, k], i) => { d.position.set(x * S, 0.5 * k, z * S); d.scale.setScalar(k); d.updateMatrix(); trunk.setMatrixAt(i, d.matrix); d.position.set(x * S, 1.5 * k, z * S); d.updateMatrix(); crown.setMatrixAt(i, d.matrix); crown.setColorAt(i, c.set("#2f6b3b").lerp(new THREE.Color("#4f8f3f"), rnd())); });
     trunk.castShadow = crown.castShadow = true; root.add(trunk, crown); }
 
-  // ---- club neon and the Floor 0 siren (decoration on the game-placed buildings) ----
+  // ---- club neon and the Floor O siren (decoration on the game-placed buildings) ----
   const glow = [];
   for (const p of data.places) { const bd = p.bid != null ? data.buildings.find((q) => q.id === p.bid) : null; if (!bd) continue;
     if (bd.neon) { const [cx, cz] = centroid(bd.pts), xs = bd.pts.map((q) => q[0]), zs = bd.pts.map((q) => q[1]), w = (Math.max(...xs) - Math.min(...xs)) * S, d = (Math.max(...zs) - Math.min(...zs)) * S, top = bd.h * S * EX, m = new THREE.MeshBasicMaterial({ color: bd.neon, toneMapped: false });

@@ -121,7 +121,7 @@ oau-life-backend/
 | `/play` | `app/play/page.js` | Main game: create character, class reveal, hostel, stats, actions, exams, Floor O |
 | `/people` | `app/people/page.js` | Search players, profiles, messages, send money, block/report |
 | `/parties` | `app/parties/page.js` | Weekly parties at 0203, Royal Divas, Quantum |
-| `/relationship` | `app/relationship/page.js` | NPC love interests, dates, pregnancy decisions |
+| `/relationship` | `app/relationship/page.js` | Opens the Love app (real players: bonds, requests, dates, babe, sneaky link, proposals, moving in) |
 | `/career` | `app/career/page.js` | Jobs and businesses |
 | `/invest` | `app/invest/page.js` | Market news, prices, buy and sell investments |
 | `/courses` | `app/courses/page.js` | Your four courses, lecturers, attend lectures, study |
@@ -153,7 +153,7 @@ oau-life-backend/
 | `/api/leaderboard` | GET | `app/api/leaderboard/route.js` | A leaderboard (`?board=forbes`) |
 | `/api/achievements` | GET | `app/api/achievements/route.js` | Achievement list |
 | `/api/parties` | GET, POST | `app/api/parties/route.js` | List this week's parties, buy a ticket |
-| `/api/relationship` | GET, POST | `app/api/relationship/route.js` | View / act on a relationship |
+| `/api/relationship` | GET, POST | `app/api/relationship/route.js` | The Love app: view everything, or act (`add`, `note`, `food`, `gift`, `request`, `answer`, `cancel`, `breakup`, `forgive`, `apologise`, `fresh`, `remove`) |
 | `/api/pregnancy` | POST | `app/api/pregnancy/route.js` | Decide on a pregnancy |
 | `/api/career` | GET | `app/api/career/route.js` | Jobs and businesses overview |
 | `/api/career/job` | POST | `app/api/career/job/route.js` | Pick, quit, work a shift |
@@ -234,10 +234,16 @@ a 2-week suspension, 5 means expulsion.
 **Parties.** Each of 0203, Royal Divas and Quantum hosts one party per game week (price roughly ₦8k to ₦30k, limited
 capacity). One night out per player per week, with a random outcome on the night.
 
-**Relationships.** With NPC love interests (3 new faces a week, opposite gender). Stages: Stranger, Friend, Talking stage,
-Sneaky link, Dating. Affection fades 3 points per week without contact. Everything is text-only and non-graphic.
-Pregnancy is a decision event: keep (₦150,000 now plus ₦10,000 a week) or end (₦500,000). If you do not decide in 2 game
-weeks it settles itself with consequences. These are fictional game rules, not OAU policy.
+**Love (real players).** You can only start something with a player you have messaged and who has messaged you back (Messages app).
+Opposite genders start as *talking*; the same gender is a *bestie* and stays one. Dates (2, one a week), buying them food (1) and having them
+over to your side (1) unlock asking them to be your **babe** (one at a time, for both of you) or your **sneaky link** (up to 2). A date, a visit,
+hanging out and a night in are *invites* the other player accepts; food, gifts and notes happen at once. After 1 week as babe you can **propose**
+(you buy the ring only if they say yes). You can **take your babe home** (they move into your home, you cover the rent or they pay their own) but
+only while you live off campus. Either of you can break up at once; an ex can be asked for another chance within 4 weeks. Keep a sneaky link while
+you have a babe and each time you link up the babe may catch you: affection drops 35, the babe must forgive you (you can say sorry with a gift),
+and being caught twice ends it. Affection fades 3 a week without contact (1 a week when living together). A night in can lead to the pregnancy
+decision. Everything is text-only and non-graphic. Rules: `lib/relationships.js` (pure, shared with the phone), service: `lib/relationshipService.js`,
+instant screen changes: `lib/lovePatches.js`, tables: `Bond`, `LoveRequest`, `BondEvent`.
 
 **Jobs.** 12 jobs (Vendor, Barber, Lash Tech, Developer, Tech Bro and more). Up to 5 shifts a week. Pay rises 12% per
 job level. Some need 200L or 300L, and some need a specific faculty.
@@ -304,7 +310,6 @@ These are starting numbers. Real players will find strategies the simulations di
 - Departments and assignments. (Courses, fictional lecturers including Boroks, attendance, preparation and surprise tests ARE built.
   Lecture slots are flavour only.) Bribing or fighting a lecturer is not built; the Yahoo-style hustle is the generic risky hustle.
 - Daily and weekly objectives, audio, the cinematic onboarding, the full landing page (features, FAQ).
-- Real-player romance and cheating. Relationships are with NPCs only.
 - Hostel changes (so MAPO players cannot yet use the 200L Ojaja unlock).
 - Live updates (everything refreshes on request or on a timer; no websockets yet).
 
@@ -337,7 +342,7 @@ These are starting numbers. Real players will find strategies the simulations di
 | Lecturer names | Fictional only (Boroks stays fictional) |
 | MAPO hostels | Same rules for men and women with their own hostels; Ojaja is for both |
 | Starting academics | Raised from 25-55 to 35-60 (otherwise a third of players would struggle from week one) |
-| Relationships | NPC love interests, text-only, non-graphic; real-player romance later with consent |
+| Relationships | Real-player romance with consent (every ask is answered by the other player), text-only, non-graphic |
 | Faculties | 12 listed including Computer Science; names still to be verified |
 | Courses | Four per level per faculty, fictional lecturers; ability is fixed, effort (attendance and preparation) decides results |
 | Styling | Plain CSS reused from the prototype instead of Tailwind |
@@ -367,7 +372,7 @@ Run them all with `npm test`. Each file prints what it checked.
 | `admin.test.mjs` | Admin access, audited adjustments, reports |
 | `lb.test.mjs` | Leaderboards: ranks, ties, cache, Forbes breakdown |
 | `party.test.mjs` | Party generation, nights, ticket purchase, sell-outs |
-| `rel.test.mjs`, `relsvc.test.mjs` | Relationship rules and full journey, pregnancy decisions |
+| `love.test.mjs` (+ `fakedb.mjs`) | Love rules and the whole journey between real players: talking, dates, babe, sneaky link, getting caught, proposal, moving in, breakup, pregnancy |
 | `ach.test.mjs` | Achievements |
 | `courses.test.mjs` | Curriculum, Boroks, attendance and study rules, effort-driven exams, course service |
 | `biz.test.mjs`, `career.test.mjs` | Business economics simulation, jobs and businesses service |

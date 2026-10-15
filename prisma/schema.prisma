@@ -300,6 +300,66 @@ model Relationship {
   @@index([characterId, status])
 }
 
+// ---- The Love app: real players, not made-up ones. One row per pair of players (lowId < highId), kept after a breakup as kind EX. ----
+model Bond {
+  id          BigInt   @id @default(autoincrement())
+  lowId       String // the two players' ids, the smaller one first, so a pair can only exist once
+  highId      String
+  kind        String   @default("TALKING") // TALKING | BESTIE | SNEAKY | BABE | ENGAGED | EX
+  prevKind    String? // what it was before a breakup (a reconciliation goes back to it)
+  affection   Int      @default(0) // 0-100; fades 3 a week without contact (1 a week when living together)
+  startedWeek Int
+  kindWeek    Int // game week the current kind began ("one week of dating" is counted from here)
+  lastWeek    Int // last game week they did something together
+  dates       Int      @default(0) // dates they have been on together
+  meals       Int      @default(0) // times one bought the other food
+  visits      Int      @default(0) // times one had the other over
+  done        Json     @default("{}") // this week's limits: { date: week, visit: week, "<playerId>:food": week, ... }
+  everBabe    Boolean  @default(false) // reached the dating stage at least once (for the achievement)
+  everEngaged Boolean  @default(false)
+  together    Boolean  @default(false) // living in the same home (valid only while both still live in homeHostel)
+  homeHostel  String?
+  cheatedBy   String? // the player who was caught with a sneaky link and has not been forgiven yet
+  cheatedWeek Int?
+  lastCheater String? // the player who was last caught (kept after forgiving, for the achievement)
+  strikes     Int      @default(0) // times they were caught
+  endedWeek   Int?
+  endedBy     String?
+  createdAt   DateTime @default(now())
+
+  @@unique([lowId, highId])
+  @@index([highId])
+}
+
+// Something one player asks of the other: a date, a visit, a night in, to be babe / sneaky link, a proposal, to move in, to get back together.
+model LoveRequest {
+  id        BigInt    @id @default(autoincrement())
+  bondId    BigInt
+  fromId    String
+  toId      String
+  kind      String // DATE | VISIT | HANG | NIGHT | BABE | SNEAKY | PROPOSE | MOVEIN | RECONCILE
+  variant   String? // night: safe | risky; ring: simple | classic | royal; move in: cover | own
+  gameWeek  Int // the week it was sent; a request not answered within 3 game weeks lapses
+  status    String    @default("PENDING") // PENDING | ACCEPTED | DECLINED | CANCELLED | EXPIRED
+  createdAt DateTime  @default(now())
+  answeredAt DateTime?
+
+  @@index([toId, status])
+  @@index([fromId, status])
+  @@index([bondId])
+}
+
+// What the two of them have done together, newest first (shown as "Memories").
+model BondEvent {
+  id       BigInt   @id @default(autoincrement())
+  bondId   BigInt
+  gameWeek Int
+  body     String
+  createdAt DateTime @default(now())
+
+  @@index([bondId, id])
+}
+
 enum PregStatus {
   PENDING
   KEPT

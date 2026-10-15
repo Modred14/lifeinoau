@@ -1,0 +1,177 @@
+/* components/apps/relationship-app.css: the Love app inside the phone.
+   Flat colour only (no gradients): white cards, one rose accent, amber for the secret stuff, blue for besties. Everything is a plain block with a thin line. */
+.lv {
+  --lv-rose: #c2255c; --lv-rose-d: #a31d4b; --lv-rose-bg: #fdeff4; --lv-rose-line: #f2c6d7;
+  --lv-amber: #9a4a00; --lv-amber-bg: #fff1dc; --lv-amber-line: #f3d6a8;
+  --lv-blue: #1d4ed8; --lv-blue-bg: #e8f0ff; --lv-blue-line: #c6d8fb;
+  --lv-gold: #7a5200; --lv-gold-bg: #fff2c2; --lv-gold-line: #ecd57a;
+  --lv-green: #0d7a3f; --lv-green-bg: #e3f6ea;
+  --lv-slate: #475467; --lv-slate-bg: #eef0f4;
+  padding-top: 2px;
+}
+.lv * { box-sizing: border-box; }
+.lv h3, .lv h4, .lv p { margin: 0; max-width: none; }
+.lv button { font: inherit; }
+
+/* ---------- tabs (the phone's own segmented style, kept in view while you scroll) ---------- */
+.lv-sticky { position: sticky; top: 0; z-index: 3; margin: 0 -16px 8px; padding: 6px 16px 2px; background: #fff; }
+.pa-content .lv-sticky [role="tablist"] { margin: 0; }
+.pa-content .lv-sticky [role="tablist"] { gap: 0; overflow: visible; }
+.pa-content .lv-sticky [role="tablist"] > button { flex: 1 1 auto; padding: 6px 4px; font-size: 0.84rem; }
+.lv-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 5px; padding: 0 5px; border-radius: 999px; background: var(--lv-rose); color: #fff; font: 700 0.7rem/1 var(--font-ui); }
+
+/* ---------- avatars ---------- */
+.lv-av { position: relative; flex: none; display: grid; place-items: center; border-radius: 50%; color: #fff; font: 600 1rem var(--font-head); letter-spacing: 0.02em; }
+.lv-av[data-ring="1"] { box-shadow: 0 0 0 3px #fff, 0 0 0 5px #d9a400; }
+.lv-av i { position: absolute; right: -2px; bottom: -2px; display: grid; place-items: center; width: 40%; height: 40%; min-width: 18px; min-height: 18px; border-radius: 50%; border: 2px solid #fff; color: #fff; }
+.lv-av i[data-k="BABE"], .lv-av i[data-k="ENGAGED"] { background: var(--lv-rose); }
+.lv-av i[data-k="SNEAKY"] { background: var(--lv-amber); }
+.lv-av i[data-k="BESTIE"] { background: var(--lv-blue); }
+
+/* ---------- chips ---------- */
+.lv-chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 10px; border-radius: 999px; font: 600 0.74rem/1 var(--font-ui); letter-spacing: 0.01em; white-space: nowrap; }
+.lv-chip[data-k="BABE"] { background: var(--lv-rose-bg); color: var(--lv-rose-d); }
+.lv-chip[data-k="ENGAGED"] { background: var(--lv-gold-bg); color: var(--lv-gold); }
+.lv-chip[data-k="SNEAKY"] { background: var(--lv-amber-bg); color: var(--lv-amber); }
+.lv-chip[data-k="BESTIE"] { background: var(--lv-blue-bg); color: var(--lv-blue); }
+.lv-chip[data-k="TALKING"], .lv-chip[data-k="EX"], .lv-chip[data-k="WAIT"] { background: var(--lv-slate-bg); color: var(--lv-slate); }
+.lv-chip[data-k="HOME"] { background: var(--lv-green-bg); color: var(--lv-green); }
+
+/* ---------- the love meter: five blocks, each one a fifth of the way ---------- */
+.lv-meter { display: grid; gap: 6px; }
+.lv-meter-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 0.8rem; color: var(--lv-slate); }
+.lv-meter-top b { color: #101828; font-weight: 600; }
+.lv-meter-top .num { font-weight: 600; color: #101828; }
+.lv-bar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.lv-bar span { position: relative; height: 8px; border-radius: 4px; background: #e6e9ef; overflow: hidden; }
+.lv-bar span i { position: absolute; inset: 0 auto 0 0; background: var(--lv-rose); border-radius: 4px; transition: width 360ms var(--ease); }
+.lv-bar[data-k="SNEAKY"] span i { background: #c2700a; }
+.lv-bar[data-k="BESTIE"] span i { background: #2f64e6; }
+.lv-bar[data-k="TALKING"] span i, .lv-bar[data-k="EX"] span i { background: #7a8599; }
+.lv-bar[data-k="ENGAGED"] span i { background: #c99700; }
+
+/* ---------- cards ---------- */
+.lv-card { background: #fff; border: 1px solid var(--line); border-radius: 22px; padding: 16px; margin: 0 0 12px; display: grid; gap: 14px; }
+.lv-card[data-k="BABE"], .lv-card[data-k="ENGAGED"] { background: var(--lv-rose-bg); border-color: var(--lv-rose-line); }
+.lv-card[data-k="ENGAGED"] { background: #fff8dc; border-color: var(--lv-gold-line); }
+.lv-card[data-k="SNEAKY"] { background: #fffaf2; border-color: var(--lv-amber-line); }
+.lv-card[data-k="EX"] { background: #fafbfc; }
+.lv-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.lv-who { min-width: 0; display: grid; gap: 4px; justify-items: start; }
+.lv-who h3 { font: 600 1.18rem/1.1 var(--font-head); letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.lv-who small, .lv-sub { color: var(--lv-slate); font-size: 0.8rem; }
+.lv-head .lv-grow { flex: 1; min-width: 0; }
+.lv-line { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; color: var(--lv-slate); font-size: 0.82rem; }
+.lv-note { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 14px; background: var(--lv-amber-bg); color: var(--lv-amber); font-size: 0.82rem; line-height: 1.35; }
+.lv-note svg { flex: none; margin-top: 1px; }
+.lv-note[data-tone="bad"] { background: #fde8e6; color: #b42318; }
+.lv-note[data-tone="plain"] { background: var(--lv-slate-bg); color: var(--lv-slate); }
+.lv-note[data-tone="rose"] { background: #fff; color: var(--lv-rose-d); border: 1px solid var(--lv-rose-line); }
+.lv-h { font: 600 0.74rem var(--font-ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 16px 4px 8px; display: flex; align-items: center; justify-content: space-between; }
+.lv-h:first-child { margin-top: 4px; }
+.lv-h small { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 0.78rem; }
+
+/* ---------- action tiles ---------- */
+.lv-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.lv-grid[data-n="5"] { grid-template-columns: repeat(3, 1fr); }
+.pa-content .lv-tile { display: grid; align-content: start; justify-items: start; gap: 8px; min-height: 92px; padding: 11px 10px 10px; border-radius: 16px; background: #fff; border: 1px solid var(--line); box-shadow: none; text-align: left; transition: transform 120ms var(--ease), background-color 120ms; }
+.lv-card[data-k="BABE"] .lv-tile, .lv-card[data-k="ENGAGED"] .lv-tile { border-color: rgba(194, 37, 92, 0.14); }
+.pa-content .lv-tile:active:not(:disabled) { transform: scale(0.96); }
+.pa-content .lv-tile:hover:not(:disabled) { background: #fafbfc; border-color: rgba(16, 24, 40, 0.18); }
+.pa-content .lv-tile:disabled { opacity: 1; background: #f4f5f7; border-color: transparent; }
+.lv-tile .t-ico { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: var(--lv-rose-bg); color: var(--lv-rose); }
+.lv-card[data-k="SNEAKY"] .t-ico { background: var(--lv-amber-bg); color: var(--lv-amber); }
+.lv-card[data-k="BESTIE"] .t-ico { background: var(--lv-blue-bg); color: var(--lv-blue); }
+.lv-card[data-k="TALKING"] .t-ico { background: var(--lv-slate-bg); color: var(--lv-slate); }
+.lv-tile:disabled .t-ico { background: #e6e9ef; color: #8a94a6; }
+.lv-tile b { font: 600 0.86rem/1.15 var(--font-ui); color: #101828; }
+.lv-tile:disabled b { color: #667085; }
+.lv-tile small { font-size: 0.72rem; line-height: 1.25; color: var(--lv-slate); }
+.lv-tile .t-txt { display: grid; gap: 2px; }
+.lv-tile[data-wait="1"] small { color: var(--lv-slate); }
+
+/* ---------- buttons ---------- */
+.pa-content .lv-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 8px 16px; border-radius: 14px; background: #fff; border: 1px solid var(--line); color: #101828; font-weight: 600; font-size: 0.9rem; box-shadow: none; transition: transform 120ms var(--ease), background-color 120ms; }
+.pa-content .lv-btn:active:not(:disabled) { transform: scale(0.97); }
+.pa-content .lv-btn.primary { background: var(--lv-rose); border-color: transparent; color: #fff; }
+.pa-content .lv-btn.primary:hover:not(:disabled) { background: var(--lv-rose-d); }
+.pa-content .lv-btn.dark { background: #101828; border-color: transparent; color: #fff; }
+.pa-content .lv-btn.dark:hover:not(:disabled) { background: #1d2939; }
+.pa-content .lv-btn.ghost { background: transparent; border-color: transparent; color: var(--lv-slate); min-height: 40px; padding: 6px 10px; }
+.pa-content .lv-btn.ghost:hover:not(:disabled) { background: rgba(16, 24, 40, 0.05); }
+.pa-content .lv-btn.danger { background: transparent; border-color: rgba(180, 35, 24, 0.25); color: #b42318; }
+.pa-content .lv-btn.danger:hover:not(:disabled) { background: #fde8e6; }
+.pa-content .lv-btn:disabled { opacity: 0.5; }
+.pa-content .lv-btn.primary:disabled { background: #d7dbe3; color: #667085; opacity: 1; }
+.lv-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.lv-row > * { flex: 1 1 0; min-width: 120px; }
+.lv-row.tight > * { min-width: 0; }
+.lv-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- "what's next" steps ---------- */
+.lv-steps { display: grid; gap: 8px; padding: 12px; border-radius: 16px; background: rgba(255, 255, 255, 0.7); border: 1px solid rgba(16, 24, 40, 0.07); }
+.lv-card[data-k="TALKING"] .lv-steps, .lv-card[data-k="SNEAKY"] .lv-steps { background: #fff; }
+.lv-step { display: flex; align-items: center; gap: 10px; font-size: 0.88rem; color: #101828; }
+.lv-step .ck { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid #c3c9d4; color: transparent; }
+.lv-step[data-done="1"] .ck { background: var(--lv-green); border-color: var(--lv-green); color: #fff; }
+.lv-step[data-done="1"] span { color: var(--lv-slate); }
+.lv-step em { margin-left: auto; font-style: normal; font: 600 0.78rem var(--font-ui); color: var(--lv-slate); }
+.lv-steps-t { font: 600 0.78rem var(--font-ui); color: var(--lv-slate); letter-spacing: 0.02em; }
+
+/* ---------- memories ---------- */
+.lv-mem { display: grid; gap: 0; }
+.lv-mem li { list-style: none; display: grid; grid-template-columns: 52px 1fr; gap: 8px; padding: 7px 0; font-size: 0.84rem; border-top: 1px solid rgba(16, 24, 40, 0.07); color: #344054; }
+.lv-mem li:first-child { border-top: 0; }
+.lv-mem li time { color: var(--lv-slate); font-size: 0.74rem; padding-top: 1px; font-variant-numeric: tabular-nums; }
+.lv-mem { margin: 0; padding: 0; }
+.pa-content .lv-fold { justify-content: space-between; width: 100%; background: transparent; border: 0; padding: 4px 0; min-height: 32px; color: var(--lv-slate); font: 600 0.78rem var(--font-ui); letter-spacing: 0.04em; text-transform: uppercase; box-shadow: none; }
+.pa-content .lv-fold:hover:not(:disabled) { background: transparent; }
+
+/* ---------- requests ---------- */
+.lv-req { background: #fff; border: 1px solid var(--line); border-radius: 20px; padding: 14px; margin: 0 0 10px; display: grid; gap: 12px; }
+.lv-req[data-in="1"] { border-color: var(--lv-rose-line); background: #fff; }
+.lv-req p { font-size: 0.95rem; line-height: 1.35; color: #101828; }
+.lv-req .lv-sub { margin-top: 3px; display: block; }
+
+/* ---------- people / empty ---------- */
+.lv-person { display: flex; align-items: center; gap: 12px; padding: 12px; background: #fff; border: 1px solid var(--line); border-radius: 18px; margin: 0 0 8px; }
+.lv-person .lv-who { flex: 1; }
+.pa-content .lv-person .lv-btn { min-height: 38px; padding: 6px 14px; flex: none; }
+.lv-empty { display: grid; justify-items: center; gap: 8px; padding: 30px 22px; text-align: center; color: var(--lv-slate); font-size: 0.9rem; line-height: 1.45; background: #fff; border: 1px dashed #d5dae3; border-radius: 22px; margin: 0 0 12px; }
+.lv-empty b { color: #101828; font: 600 1.05rem var(--font-head); }
+.lv-empty .e-ico { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 18px; background: var(--lv-rose-bg); color: var(--lv-rose); margin-bottom: 4px; }
+.lv-empty[data-tone="blue"] .e-ico { background: var(--lv-blue-bg); color: var(--lv-blue); }
+.lv-empty[data-tone="slate"] .e-ico { background: var(--lv-slate-bg); color: var(--lv-slate); }
+.lv-empty .lv-btn { margin-top: 6px; }
+
+.lv-how { background: #fff; border: 1px solid var(--line); border-radius: 22px; padding: 16px; display: grid; gap: 12px; margin-top: 14px; }
+.lv-how h3 { font: 600 1.02rem var(--font-head); }
+.lv-how ol { margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: s; }
+.lv-how li { list-style: none; display: grid; grid-template-columns: 26px 1fr; gap: 10px; font-size: 0.86rem; line-height: 1.4; color: #344054; counter-increment: s; }
+.lv-how li::before { content: counter(s); display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--lv-rose-bg); color: var(--lv-rose-d); font: 600 0.78rem var(--font-ui); }
+.lv-how li b { color: #101828; }
+
+/* ---------- loading skeleton ---------- */
+.lv-sk { display: grid; gap: 12px; }
+.lv-sk i { display: block; border-radius: 20px; background: #eef0f4; animation: lv-pulse 1.4s ease-in-out infinite; }
+@keyframes lv-pulse { 50% { opacity: 0.55; } }
+
+/* ---------- bottom sheet pieces (the sheet itself is the phone's .ph-sheet) ---------- */
+.lv .ph-sheet h3 { font: 600 1.2rem var(--font-head); }
+.lv .ph-sheet .lv-lead { color: var(--lv-slate); font-size: 0.9rem; margin: 2px 0 14px; line-height: 1.4; }
+.lv .ph-sheet .lv-opts { display: grid; gap: 8px; }
+.lv .ph-sheet .lv-opt { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 62px; padding: 10px 14px; border-radius: 16px; background: #fff; border: 1px solid var(--line); color: #101828; text-align: left; justify-content: flex-start; font-size: 0.95rem; transition: transform 120ms var(--ease), background-color 120ms; }
+.lv .ph-sheet .lv-opt:hover:not(:disabled) { background: #fafbfc; }
+.lv .ph-sheet .lv-opt:active:not(:disabled) { transform: scale(0.985); }
+.lv .ph-sheet .lv-opt:disabled { opacity: 0.45; }
+.lv .ph-sheet .lv-opt[data-on="1"] { border-color: var(--lv-rose); background: var(--lv-rose-bg); }
+.lv .ph-sheet .lv-opt .o-ico { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 11px; background: var(--lv-rose-bg); color: var(--lv-rose); }
+.lv .ph-sheet .lv-opt span.o-t { display: grid; gap: 1px; flex: 1; min-width: 0; line-height: 1.25; }
+.lv .ph-sheet .lv-opt b { font-weight: 600; }
+.lv .ph-sheet .lv-opt small { color: var(--lv-slate); font-size: 0.8rem; }
+.lv .ph-sheet .lv-opt em { font-style: normal; font: 600 0.86rem var(--font-ui); color: var(--lv-rose-d); white-space: nowrap; }
+.lv .ph-sheet .lv-btn.primary { width: 100%; margin-top: 14px; background: var(--lv-rose); color: #fff; border-color: transparent; }
+.lv .ph-sheet .lv-btn.primary:hover:not(:disabled) { background: var(--lv-rose-d); }
+
+@media (max-width: 380px) { .lv-grid { gap: 6px; } .pa-content .lv-tile { padding: 10px 8px 9px; } }
+@media (prefers-reduced-motion: reduce) { .lv-bar span i, .pa-content .lv-tile, .pa-content .lv-btn, .lv-sk i { transition: none; animation: none; } }

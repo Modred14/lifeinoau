@@ -88,7 +88,7 @@ const db = {
   },
   partyTicket: { count: async () => 0 },
   business: { count: async () => 0 },
-  relationship: { count: async () => 0 },
+  relationship: { count: async () => 0 }, bond: { count: async () => 0 },
   floorZero: { count: async () => 0 },
   examResult: { findMany: async () => [] },
   notification: { create: async ({ data }) => notes.push(data.body) },

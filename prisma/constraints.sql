@@ -25,3 +25,10 @@ ALTER TABLE "RoomItem" ADD CONSTRAINT roomitem_bounds CHECK (rot BETWEEN 0 AND 3
 ALTER TABLE "BillboardSlot" ADD CONSTRAINT billboardslot_bounds CHECK (board BETWEEN 1 AND 10 AND slot BETWEEN 1 AND 10 AND "amountKobo" > 0 AND "orderKobo" > 0);
 ALTER TABLE "BetSlip" ADD CONSTRAINT betslip_bounds CHECK ("stakeKobo" > 0 AND "potentialKobo" > 0 AND "payoutKobo" >= 0);
 ALTER TABLE "CasinoRound" ADD CONSTRAINT casinoround_bounds CHECK ("stakeKobo" > 0 AND "payoutKobo" >= 0);
+
+-- The Love app (see migration 20261014190000_love_bonds): a pair exists once, affection stays 0-100, one open request of each kind per couple.
+ALTER TABLE "Bond" ADD CONSTRAINT bond_pair_ordered CHECK ("lowId" < "highId");
+ALTER TABLE "Bond" ADD CONSTRAINT bond_affection_range CHECK (affection BETWEEN 0 AND 100);
+ALTER TABLE "Bond" ADD CONSTRAINT bond_kind_valid CHECK (kind IN ('TALKING','BESTIE','SNEAKY','BABE','ENGAGED','EX'));
+ALTER TABLE "LoveRequest" ADD CONSTRAINT loverequest_status_valid CHECK (status IN ('PENDING','ACCEPTED','DECLINED','CANCELLED','EXPIRED'));
+CREATE UNIQUE INDEX one_pending_love_request ON "LoveRequest" ("bondId", kind) WHERE status = 'PENDING';
