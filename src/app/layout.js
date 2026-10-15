@@ -5,6 +5,7 @@ import Shell from "@/components/Shell";
 import Toaster from "@/components/Toaster";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import SoundEngine from "@/components/SoundEngine";
+import OfflineGate from "@/components/OfflineGate";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -89,6 +90,7 @@ export default function RootLayout({ children }) {
       <body>
         <Shell>{children}</Shell>
         <Toaster />
+        <OfflineGate />
         <ConfirmDialog />
         <SoundEngine />
       </body>

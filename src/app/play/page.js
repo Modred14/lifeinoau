@@ -244,12 +244,12 @@ export default function Play() {
   }
 
  if (view === "loading") return <Loader fullscreen label="Loading your life" />;
-  if (view === "error")
-    return (
-      <View key={view}>
-        <LoadError title="Your game didn't load" onRetry={load} />
-      </View>
-    );
+  // if (view === "error")
+  //   return (
+  //     <View key={view}>
+  //       <LoadError title="Your game didn't load" onRetry={load} />
+  //     </View>
+  //   );
   if (view === "create")
     return (
       <View key={view}>

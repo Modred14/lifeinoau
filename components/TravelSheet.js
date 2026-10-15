@@ -10,6 +10,7 @@ import { canAfford } from "@/lib/gameStore";
 import "./travel.css";
 
 export default function TravelSheet({ place, here, hasCar, driver, people, onGo, onClose }) {
+  // `place.blurb` is the short description of the building; it shows under the title so the sheet can replace the info card.
   const [mode, setMode] = useState("trek"), [withDriver, setWithDriver] = useState(true);
   const fare = fareKobo(mode), poor = fare > 0n && !canAfford(fare), useDriver = mode === "car" && !!driver && withDriver;
   const sub = (m) => (m === "car" ? (!hasCar ? "No car" : driver ? `${RIDE_SECONDS.driver}s with driver` : "You drive") : MODE_INFO[m].sub);
@@ -22,6 +23,7 @@ export default function TravelSheet({ place, here, hasCar, driver, people, onGo,
           <div><b>{place.name}</b><small>{here ? `From ${here}` : "OAU campus"}{people > 0 ? ` · ${people} player${people === 1 ? "" : "s"} there now` : ""}</small></div>
           <button type="button" className="ghost ts-x" aria-label="Close" onClick={onClose}><Icon name="close" /></button>
         </header>
+        {place.blurb && <p className="ts-blurb">{place.blurb}</p>}
         <div className="ts-modes" role="radiogroup" aria-label="How to travel">
           {MODES.map((m) => {
             const off = m === "car" && !hasCar, price = fareKobo(m);

@@ -71,6 +71,10 @@ export default function MapPage() {
         ),
       [places, q],
     );
+  // Tapping a normal building goes straight to the "How do you want to go?" sheet, which carries the building's description.
+  // Billboards (they have their own panel) and the place you are standing in still use the small info card.
+  const direct = !!(L && !trip && ch && L.located && L.id !== here && L.kind !== "billboard");
+  const closeSheet = () => { setSheet(false); if (direct) setSel(null); };
   // ---- travelling ----
   async function begin(mode, withDriver) {
     const dest = L; if (!dest) return; setSheet(false);
@@ -109,7 +113,7 @@ export default function MapPage() {
       {trip && <TripHud trip={trip} placeName={trip.name} st={tripSt} input={input} miniRef={miniRef} previewRef={previewRef} onCancel={() => setTrip(null)} />}
       <div className="trip-fade" data-on={fade ? "1" : undefined} aria-hidden="true" />
       {insidePlace && <BuildingInside place={insidePlace} onLeave={() => setInside(null)} />}
-      {sheet && L && <TravelSheet place={L} here={youPlace?.name} hasCar={ownsCar(ch)} driver={driverActive(ch, g?.week) ? { name: ch.driverName } : null} people={counts[L.id] ?? 0} onGo={begin} onClose={() => setSheet(false)} />}
+      {(sheet || direct) && L && <TravelSheet place={L} here={youPlace?.name} hasCar={ownsCar(ch)} driver={driverActive(ch, g?.week) ? { name: ch.driverName } : null} people={counts[L.id] ?? 0} onGo={begin} onClose={closeSheet} />}
       {youPlace && !trip && <div className="map-here" role="status"><Icon name="pin" size={14} weight="fill" /> You are at <b>{youPlace.name}</b></div>}
       <div
         className="map-chrome"
@@ -128,7 +132,7 @@ export default function MapPage() {
           <Icon name="list" /> Places
         </button>
       </div>
-      {L && !trip && (
+      {L && !trip && !direct && (
         <div className="dock map-chrome">
           <div
             className={"card" + (L.kind === "billboard" ? " bb" : "")}

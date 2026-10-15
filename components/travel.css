@@ -13,6 +13,7 @@ body[data-trip] .nav, body[data-trip] .map-chrome { display: none !important; }
 .ts-head small { color: #66707f; font-size: 0.82rem; }
 .ts-ico { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; background: #e8f6ee; color: #15803d; flex: none; }
 .ts .ts-x { background: #eef0f4; color: #161b26; border: 0; width: 36px; height: 36px; padding: 0; border-radius: 50%; display: grid; place-items: center; }
+.ts-blurb { margin: 0; color: #3a4252; font-size: 0.92rem; line-height: 1.45; }
 .ts-modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .ts .ts-mode { display: grid; justify-items: center; align-content: start; gap: 2px; padding: 12px 4px 10px; border-radius: 18px; background: #f1f3f7; color: #161b26; border: 2px solid transparent; min-height: 108px; }
 .ts .ts-mode:hover:not(:disabled) { background: #e9ecf2; border-color: transparent; }
