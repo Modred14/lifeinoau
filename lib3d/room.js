@@ -7,6 +7,7 @@
 import * as THREE from "three";
 import { createStage } from "./stage.js";
 import { createAvatar } from "./avatar/loadAvatar.js";
+import { createIdleController, IDLE_DELAY } from "./avatar/idleEmote.js";
 import { buildFurniture, setGlow, posterTex } from "./furnitureModels.js";
 import {
   THEMES,
@@ -851,7 +852,26 @@ export function createRoomScene(container, cb = {}) {
     avRoot.add(av.root);
     if (room && !me.placed) spawn();
     me.playing = null;
+    idleEmote.reset();
   }
+
+  // ----- idle emote: after IDLE_DELAY seconds of doing nothing the character plays an emote, then blends back to idle -----
+  const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const idleEmote = createIdleController({
+    delay: IDLE_DELAY,
+    canPlay: () => !!av && !document.hidden && !reducedMotion() && me.playing === "idle" && av.has("idleEmote"),
+    play: () => {
+      if (!av.emote({ onDone: (finished) => { if (finished) { idleEmote.finish(); me.playing = "idle"; } } })) return false; // it blends back to idle by itself
+      me.playing = "idleEmote";
+    },
+    stop: () => { av?.stopEmote(); me.playing = "idle"; },
+  });
+  // any input anywhere on the page (tap, click, key, scroll) counts as activity; capture phase so UI panels over the room count too
+  const poke = () => idleEmote.poke(),
+    activity = ["pointerdown", "keydown", "wheel", "touchstart"],
+    onVisible = () => { if (document.hidden) poke(); };
+  activity.forEach((n) => window.addEventListener(n, poke, { capture: true, passive: true }));
+  document.addEventListener("visibilitychange", onVisible);
 
   // ----- pointer -----
   const ray = new THREE.Raycaster(),
@@ -1075,7 +1095,9 @@ export function createRoomScene(container, cb = {}) {
       avRoot.position.set(me.x, 0, me.z);
       avRoot.rotation.y = me.yaw;
       const want = moving && av.has("walk") ? "walk" : "idle";
-      if (me.playing !== want) {
+      // busy = walking, a finger/mouse held down, dragging furniture, or shopping/arranging; any of these stops the countdown and a running emote
+      idleEmote.update(dt, moving || !!down || !!drag || mode !== "home" || selectedId != null);
+      if (me.playing !== want && !(want === "idle" && idleEmote.playing)) {
         me.playing = want;
         av.play(want);
       }
@@ -1150,6 +1172,8 @@ export function createRoomScene(container, cb = {}) {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
+      activity.forEach((n) => window.removeEventListener(n, poke, { capture: true }));
+      document.removeEventListener("visibilitychange", onVisible);
       av?.dispose();
       dispose(world);
       dispose(itemsRoot);

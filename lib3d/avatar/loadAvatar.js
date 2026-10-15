@@ -16,7 +16,8 @@ import {
   partUrl,
   boneKey,
 } from "./manifest.js";
-import { createAnimator, createFace } from "./animation.js";
+import { createAnimator, createFace, resolveClip } from "./animation.js";
+import { buildIdleEmoteClip } from "./idleEmote.js";
 
 const loader = new GLTFLoader(),
   gltfCache = new Map(),
@@ -222,6 +223,9 @@ async function loadModel(look, gender) {
     COLORS[look.top] ?? COLORS.navy,
     COLORS[look.bottom] ?? COLORS.khaki,
   );
+  if (!resolveClip(clips, "idleEmote")) { // no authored emote installed: build it from the skeleton
+    try { const emote = buildIdleEmoteClip(root); if (emote) clips.push(emote); } catch (e) { console.warn("idle emote unavailable:", e); }
+  }
   const animator = createAnimator(root, clips),
     face = createFace(root);
   animator.play("idle");
@@ -258,6 +262,9 @@ export async function createAvatar(
             m.face.update(t, dt);
           },
           play: (n, o) => m.animator.play(n, o),
+          /** Plays the idle emote once and blends back to idle. onDone(finishedByItself). Returns false if this model cannot. */
+          emote: (o) => m.animator.playOnce("idleEmote", o),
+          stopEmote: () => m.animator.stopOnce("idle"),
           has: (n) => m.animator.has(n),
           animations: () => m.animator.available(),
           setExpression: (n) => m.face.setExpression(n),
@@ -282,6 +289,8 @@ export async function createAvatar(
     height: c.height,
     update: (t) => c.update(t),
     play: () => false,
+    emote: () => false,
+    stopEmote: () => {},
     has: () => false,
     animations: () => [],
     setExpression: () => {},

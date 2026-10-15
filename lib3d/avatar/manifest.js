@@ -65,4 +65,5 @@ export const ANIMATIONS = {
   fight: ["fight", "punch", "defend", "self_defense"],
   sad: ["sad", "sad_pose", "sad_idle"],
   no: ["no", "headshake", "head_shake", "disagree"],
+  idleEmote: ["idle_emote", "emote_idle", "idle_dance", "belle"], // the automatic emote when the player has done nothing for a while (built in code if no clip is installed)
 };
