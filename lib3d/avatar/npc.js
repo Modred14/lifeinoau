@@ -19,7 +19,7 @@ const ROLES = {
   student: { outfit: [["campus", 40], ["casual", 50], ["office", 4], ["owambe", 6]], age: 0 },
   staff: { outfit: [["office", 100]], age: 1 }, // lecturers, administrators
   celebrant: { outfit: [["owambe", 100]], age: 0 },
-  officer: { outfit: [["sitework", 100]], age: 1 }, // DSA and site workers: navy uniform and a hi-vis vest
+  officer: { outfit: [["sitework", 100]], age: 1 }, // QRS and site workers: navy uniform and a hi-vis vest
 };
 
 /**

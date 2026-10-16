@@ -1,4 +1,4 @@
-/* components/lecture-fight.css: the full-screen lecturer brawl, the DSA cutscenes and the result card. */
+/* components/lecture-fight.css: the full-screen lecturer brawl, the QRS cutscenes and the result card. */
 .lf { position: fixed; inset: 0; z-index: 300; background: #05070c; color: #fff; font-family: var(--font-ui); overflow: hidden; touch-action: none; user-select: none; }
 .lf-canvas { position: absolute; inset: 0; }
 .lf-hud { position: absolute; top: calc(var(--safe-t) + 12px); left: 12px; right: 12px; display: flex; align-items: center; gap: 10px; pointer-events: none; }

@@ -81,7 +81,7 @@ const run = (lbl, type, policy) => {
   );
 };
 console.log(
-  "Final value (cash withdrawn + capital) after 60 game weeks, starting capital = purchase price:",
+  "Final value (cash withdrawn + capital) after 60 weeks, starting capital = purchase price:",
 );
 run("Food, 4 staff, withdraw (thin buffer)", "FOOD", {
   hire: 4,

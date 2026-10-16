@@ -2,7 +2,7 @@
 "use client";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { call, naira, notifyError, loggedOut, say } from "@/lib/client";
+import { call, naira, notifyError, loggedOut } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import CreateFlow from "@/components/CreateFlow";
 import LifeRoll from "@/components/LifeRoll";
@@ -65,7 +65,8 @@ export default function Play() {
   }, []);
 
   const load = useCallback(async () => {
-    const s = await game.refresh();
+    // already holding a fresh copy (for example coming back from the map)? Use it instead of asking the server again.
+    const s = await (game.get() ? game.refreshIfStale(15_000) : game.refresh());
     if (s.status === 401) return loggedOut(router);
     if (s.status === 404) {
       const m = await call("/api/meta");
@@ -97,10 +98,14 @@ export default function Play() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [view]); // a new screen always starts at its top
+  // The page only needs a ticking clock for the Floor O countdown: without a sentence it never re-renders on a timer.
+  const jailed = !!st?.floorZero;
   useEffect(() => {
+    if (!jailed) return;
+    setNow(Date.now());
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [jailed]);
 
   // The moment the sentence runs out, ask the server for the fresh state (it releases the player), so everything unlocks at once.
   const releaseAt = st?.floorZero?.releaseAt;
@@ -111,17 +116,29 @@ export default function Play() {
     return () => clearTimeout(t);
   }, [releaseAt]);
 
-  async function plain(path, body, describe) {
-    if (busy) return;
-    setBusy(true);
-    const res = await call(path, body);
-    setBusy(false);
-    if (res.status === 401) return loggedOut(router);
-    if (res.failed) notifyError(res, "Something went wrong. Please try again.");
-    else if (res.duplicate) toast.info("That was already done.");
-    else if (describe) say(describe(res));
-    await load();
-  }
+  // Choosing a hostel: the game opens straight away. If the server refuses (or cannot be reached) the picker comes back with the reason.
+  const chooseHostel = (h) => {
+    const hasState = !!game.get(); // without a copy of the state there is nothing to show yet, so wait for the answer instead
+    if (hasState) setView("game");
+    return go({
+      key: "hostel",
+      router,
+      ok: `You moved into ${h}. Welcome home.`,
+      request: () => call("/api/character/hostel", { hostel: h }),
+      effects: hasState
+        ? [{ store: game, patch: (s) => ({ ...s, hostels: null, character: { ...s.character, hostel: h } }) }]
+        : [],
+      then: () => {
+        if (!hasState) load();
+      },
+    }).then((res) => {
+      if (res.failed && !res.skipped) {
+        setView("hostel");
+        load(); // if it had in fact gone through (a lost answer), the fresh state sends the player on to the game
+      }
+      return res;
+    });
+  };
 
   // ---- Instant actions. Each one changes the screen and shows its message at once, then asks the server in the background.
   // If the server refuses, that one change is taken back and the reason is shown. Amounts nobody can know in advance (a random
@@ -138,6 +155,8 @@ export default function Play() {
           ? "You rested and feel better."
           : "Safe hustle done. Cash added.",
       sound: action === "rest" ? undefined : "coin",
+      sensitive: action === "hustle", // it pays money: "cash added" is only said once the server has paid
+      pending: "Hustling…",
       request: () =>
         call("/api/action", { action, requestId: crypto.randomUUID() }),
       effects: [{ store: game, patch: bump(deltas(c, pred.stats)) }],
@@ -159,10 +178,10 @@ export default function Play() {
         r.caught
           ? {
               bad: true,
-              text: `DSA HAS CAUGHT YOU. They seized ${naira(r.seizedKobo)}.${r.expelled ? " You have been expelled." : r.suspended ? " You are suspended for 2 weeks." : ""}`,
+              text: `QRS HAS CAUGHT YOU. They seized ${naira(r.seizedKobo)}.${r.expelled ? " You have been expelled." : r.suspended ? " You are suspended for 2 weeks." : ""}`,
             }
           : BigInt(r.earnedKobo) > 0n
-            ? { text: `The hustle paid ${naira(r.earnedKobo)}. DSA is watching.`, sound: "coin" }
+            ? { text: `The hustle paid ${naira(r.earnedKobo)}. QRS is watching.`, sound: "coin" }
             : { info: true, text: "The hustle went nowhere." },
     });
   };
@@ -214,18 +233,16 @@ export default function Play() {
     return go({
       key: "bail",
       router,
+      sensitive: true,
+      pending: "Paying your bail…",
       ok: "Bail paid. You're free.",
       sound: "coin",
       request: () => call("/api/floor0/pay", {}),
+      // the money leaves the wallet at once (taken back if refused), but the Floor O screen only lifts when the server confirms
       effects: [
-        {
-          store: game,
-          patch: (s) =>
-            s.floorZero
-              ? { ...cash(-BigInt(s.floorZero.billKobo))(s), floorZero: null }
-              : s,
-        },
+        { store: game, patch: (s) => (s.floorZero ? cash(-BigInt(s.floorZero.billKobo))(s) : s) },
       ],
+      after: () => [{ store: game, patch: (s) => ({ ...s, floorZero: null }) }],
     });
   };
 
@@ -276,11 +293,7 @@ export default function Play() {
           cls={st?.character?.class ?? reveal?.class}
           hostels={st?.hostels ?? reveal?.hostels ?? []}
           busy={busy}
-          onChoose={(h) =>
-            plain("/api/character/hostel", { hostel: h }, () => ({
-              text: `You moved into ${h}. Welcome home.`,
-            }))
-          }
+          onChoose={chooseHostel}
         />
       </View>
     );
@@ -348,7 +361,7 @@ export default function Play() {
       id: "risky",
       icon: "dice",
       name: "Risky hustle",
-      note: "25 energy. Big money, or DSA.",
+      note: "25 energy. Big money, or QRS.",
       run: risky,
       off: c.energy < 25,
       why: "Needs 25 energy",

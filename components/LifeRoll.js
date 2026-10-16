@@ -244,7 +244,7 @@ function Package({ pkg, info }) {
       </div>
       <h3 className="lr-group">Money</h3>
       <ul className="lr-rows">
-        <Row i={n++} icon="wallet" label="Allowance every game week">
+        <Row i={n++} icon="wallet" label="Allowance every week">
           <b className="num lr-big">{fmtN(pkg.allowance)}</b>
         </Row>
         <Row i={n++} icon="hostel" label="Rent each session (paid weekly)">

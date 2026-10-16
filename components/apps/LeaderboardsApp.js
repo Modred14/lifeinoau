@@ -1,8 +1,8 @@
 // components/apps/LeaderboardsApp.js: lives inside the phone (see components/Phone.js)
 "use client";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { call, naira, notifyError, loggedOut } from "@/lib/client";
+import { useState } from "react";
+import { naira } from "@/lib/client";
+import { useResource } from "@/lib/gameStore";
 import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
 
@@ -17,29 +17,10 @@ const TABS = [
 const MEDAL = { 1: "#d9a441", 2: "#aeb7c4", 3: "#b7794a" };
 
 export default function Boards() {
-  const router = useRouter(),
-    [key, setKey] = useState("forbes"),
-    [b, setB] = useState(null),
-    [failed, setFailed] = useState(false),
-    [tries, setTries] = useState(0);
-  useEffect(() => {
-    let live = true;
-    setB(null);
-    setFailed(false);
-    call("/api/leaderboard?board=" + key).then((r) => {
-      if (!live) return;
-      if (r.status === 401) return loggedOut(router);
-      if (r.failed) {
-        notifyError(r);
-        setFailed(true);
-        return;
-      }
-      setB(r);
-    });
-    return () => {
-      live = false;
-    };
-  }, [key, router, tries]);
+  // Each board is kept after it has been seen: switching tabs (or reopening the app) shows it at once and refreshes it quietly,
+  // instead of blanking the screen and asking the server again every time. A slow answer for one tab can never land on another.
+  const [key, setKey] = useState("forbes");
+  const { d: b, load, loadFailed: failed } = useResource("/api/leaderboard?board=" + key);
   return (
     <>
       <div className="top">
@@ -64,7 +45,7 @@ export default function Boards() {
       {failed && (
         <LoadError
           title="This board didn't load"
-          onRetry={() => setTries((t) => t + 1)}
+          onRetry={load}
         />
       )}
       {!b && !failed && <Loader label="Loading leaderboards" />}

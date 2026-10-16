@@ -153,6 +153,7 @@ export default function Relationship({ onOpenApp }) {
     const spend = naira || energy ? { store: game, patch: chain(naira && cash(-naira * 100), energy && bump({ energy: -energy })) } : { store: game };
     return run({
       key: `love:${b?.id ?? ""}:${key}`, ok, sound, router, request: () => post(body),
+      sensitive: naira > 0, pending: "Sending…", // spending cash: "sent" is only said once the server has confirmed it
       effects: [{ store, patch }, spend],
       then: (r) => {
         for (const x of r.caught ?? []) toast.error(x.over ? `${x.by} caught you with ${x.with} again. It is over.` : `${x.by} caught you with ${x.with}.`, { duration: 9000 });
@@ -448,7 +449,7 @@ export default function Relationship({ onOpenApp }) {
         <section className="lv-card" role="alert" data-k="EX">
           <div className="lv-who"><h3>A big decision</h3></div>
           <p className="lv-sub" style={{ fontSize: "0.9rem", color: "#344054" }}>
-            {d.partnerIsPregnant ? "Your partner says she is pregnant." : "You think you might be pregnant."} You have <b>{d.pregnancy.weeksLeft}</b> game week(s) to decide. If you wait too long, life decides for you.
+            {d.partnerIsPregnant ? "Your partner says she is pregnant." : "You think you might be pregnant."} You have <b>{d.pregnancy.weeksLeft}</b> week(s) to decide. If you wait too long, life decides for you.
           </p>
           <div className="lv-row tight">
             <button type="button" className="lv-btn primary" onClick={() => decide("keep")}>Keep the baby<br /><span style={{ fontWeight: 400, fontSize: "0.76rem" }}>₦150,000 now, then ₦10,000 a week</span></button>
@@ -499,7 +500,7 @@ export default function Relationship({ onOpenApp }) {
           {outgoing.map((r) => <Fragment key={r.id}>{Request({ r })}</Fragment>)}
           {!incoming.length && !outgoing.length && (
             <Empty icon={Hourglass} tone="slate" title="Nothing waiting">
-              Invites, dates and questions show up here. People have {plural(REQUEST_WEEKS, "game week")} to answer before a request lapses.
+              Invites, dates and questions show up here. People have {plural(REQUEST_WEEKS, "week")} to answer before a request lapses.
             </Empty>
           )}
         </>

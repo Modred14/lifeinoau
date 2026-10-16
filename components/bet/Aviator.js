@@ -174,18 +174,25 @@ export default function Aviator({ active }) {
       effects: [{ store: game, patch: cash(pay) }],
     });
     if (res.failed && !res.skipped) { // too late: the win is taken back and the real crash shows
+      toast.dismiss("avwin");
       x.cashed = null; if (res.round?.crashCenti) finishRound(x, res.round.crashCenti);
     } else if (res.round?.status === "WON") {
       x.cashed = { centi: res.round.cashCenti, payout: BigInt(res.round.payoutKobo), pending: false };
+      playSound("coin");
+      toast.success(`Cashed out at ${fmtX(res.round.cashCenti)}: +${moneyK(BigInt(res.round.payoutKobo) - x.stakeKobo)}`, { id: "avwin" });
       finishRound(x, res.round.crashCenti);
-    }
+    } else if (res.replayed) { // an earlier try of this cash-out went through (its answer was lost): the real numbers come from the next check
+      x.cashed = { ...x.cashed, pending: false };
+      toast.info("Cashed out. Your balance is refreshing.", { id: "avwin" });
+      x.checking = false; check();
+    } else toast.dismiss("avwin");
     rerender();
   }
   function cashOut() {
     const x = fl.current; if (!x || x.crash || x.cashed || x.done) return;
     const centi = centiAt((performance.now() - x.t0) / 1000), pay = payout(x.stakeKobo, centi);
-    x.cashed = { centi, payout: pay, pending: true }; playSound("coin");
-    toast.success(`Cashed out at ${fmtX(centi)}: +${moneyK(pay - x.stakeKobo)}`, { id: "avwin" });
+    x.cashed = { centi, payout: pay, pending: true };
+    toast.pending(`Cashing out at ${fmtX(centi)}…`, { id: "avwin" }); // the win is only announced once the server has confirmed it was not too late
     rerender();
     if (x.id) sendCash(x); else x.queued = true; // the bet is still on its way: the cash-out follows it
   }

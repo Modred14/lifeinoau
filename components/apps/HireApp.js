@@ -12,7 +12,7 @@ import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
 import "./hire-app.css";
 
-const weeksText = (n) => `${n} game week${n === 1 ? "" : "s"}`;
+const weeksText = (n) => `${n} week${n === 1 ? "" : "s"}`;
 
 export default function HireApp({ onClose }) {
   const { d, store, load, loadFailed, router } = useResource("/api/hire");
@@ -32,6 +32,8 @@ export default function HireApp({ onClose }) {
     await run({
       key: "hire:driver",
       router,
+      sensitive: true,
+      pending: `Hiring ${name}…`,
       ok: `${name} is your driver for ${weeksText(d.driver ? d.driver.weeksLeft + p.weeks : p.weeks)}.`,
       sound: "coin",
       request: () => call("/api/hire", { weeks: p.weeks, requestId: crypto.randomUUID() }),
@@ -75,7 +77,7 @@ export default function HireApp({ onClose }) {
         </div>
       </div>
       <p className="hr-note">
-        With a driver, trips in your car take {RIDE_SECONDS.driver} seconds and you sit back. You pay the driver up front for a number of game weeks (a game week is 7 days); the ₦500 fuel is still paid on arrival.
+        With a driver, trips in your car take {RIDE_SECONDS.driver} seconds and you sit back. You pay the driver up front for a number of weeks (a week is 7 days); the ₦500 fuel is still paid on arrival.
       </p>
       {d.plans.map((p) => {
         const poor = !canAfford(p.priceKobo), per = Math.round(Number(BigInt(p.priceKobo) / 100n) / p.weeks), best = p.weeks === DRIVER_PLANS[DRIVER_PLANS.length - 1].weeks;

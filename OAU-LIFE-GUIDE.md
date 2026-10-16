@@ -60,7 +60,7 @@ npm test
 ```
 
 ### Important facts about the first run
-- The **game clock starts when you run `npm run seed`**. That moment is "week 1". One real day = one game week.
+- The **game clock starts when you run `npm run seed`**. That moment is "week 1". One real day = one week.
 - Run the seed only once. It is safe to repeat (it will not duplicate anything), but never delete the `GameClock` row.
 - If step 5 fails, the most common reason is that the constraints were pasted into the wrong migration, or applied twice.
 - `npm run build` runs `prisma generate` first, then `next build`. `migrate dev` also runs `generate` for you.
@@ -140,10 +140,10 @@ oau-life-backend/
 | `/api/character/hostel` | POST | `app/api/character/hostel/route.js` | Choose hostel (once) |
 | `/api/state` | GET | `app/api/state/route.js` | Everything the game screen needs (also catches the player up on missed weeks) |
 | `/api/action` | POST | `app/api/action/route.js` | class, study, rest, safe hustle |
-| `/api/parent/call` | POST | `app/api/parent/call/route.js` | Call parent (once per game week) |
-| `/api/risky` | POST | `app/api/risky/route.js` | Risky hustle (DSA risk) |
+| `/api/parent/call` | POST | `app/api/parent/call/route.js` | Call parent (once per week) |
+| `/api/risky` | POST | `app/api/risky/route.js` | Risky hustle (QRS risk) |
 | `/api/exam` | POST | `app/api/exam/route.js` | Sit or cheat in an exam |
-| `/api/fight` | POST | `app/api/fight/route.js` | Report a lecturer brawl; the server decides the cost (80% DSA catch after a win) |
+| `/api/fight` | POST | `app/api/fight/route.js` | Report a lecturer brawl; the server decides the cost (80% QRS catch after a win) |
 | `/api/floor0/pay` | POST | `app/api/floor0/pay/route.js` | Pay the bill to leave Floor O |
 | `/api/players` | GET | `app/api/players/route.js` | Search players by name |
 | `/api/profile` | GET | `app/api/profile/route.js` | Public profile |
@@ -176,7 +176,7 @@ Grouped by job. Files marked *pure* have no database access and are the easiest 
 
 | Group | Files |
 |---|---|
-| Foundation | `rules.js` (hostel and class rules, transfer limits), `rng.js` (secure random), `clock.js` (game week from server time), `auth.js` (sessions), `client.js` (browser helper), `ratelimit.js` |
+| Foundation | `rules.js` (hostel and class rules, transfer limits), `rng.js` (secure random), `clock.js` (week from server time), `auth.js` (sessions), `client.js` (browser helper), `ratelimit.js` |
 | Money | `ledger.js` (**the only code allowed to move money**) |
 | Weekly simulation | `tick.js` (catches a player up on missed weeks: allowance, rent, exams, sessions, childcare, businesses, investments valuation) |
 | Rules (*pure*) | `engine.js` (actions, risk, exams, progression), `parties.js`, `relationships.js`, `jobs.js`, `business.js`, `market.js`, `achievements.js`, `curriculum.js` (courses and fictional lecturers), `courses.js` (attendance, preparation, exams, surprise tests) |
@@ -202,13 +202,13 @@ Then run steps 2 to 7 from section 1.
 
 ## 3. How the game works (rules as built)
 
-**Time.** One real day = one game week, decided by the server clock. Each player is "caught up" on missed weeks
+**Time.** One real day = one week, decided by the server clock. Each player is "caught up" on missed weeks
 whenever they make a request. If nothing new has happened, the catch-up does nothing.
 
 **Character.** Gender, faculty, at least one personality (Party Animal, Introvert, Extrovert, Shana).
 Class is drawn by the server: **MAPO 60%, LAPO 30%, NEPO 10%**. Players must tick that they are 18+ at sign-up.
 
-**Allowance per game week:** NEPO ₦500,000, MAPO ₦100,000, LAPO ₦30,000. Calling your parent once each game week
+**Allowance per week:** NEPO ₦500,000, MAPO ₦100,000, LAPO ₦30,000. Calling your parent once each week
 keeps it intact. Each missed week cuts the next allowance by 10% (maximum 50%). Rent: school hostel ₦2,000,
 off-campus ₦6,000, Ojaja ₦15,000 a week.
 
@@ -220,28 +220,28 @@ Men: Awo, Fajuyi, Angola, ETF.
 with their own difficulty, personality and teaching style. Science-like faculties (Science, Technology, Computer Science, Pharmacy,
 Agriculture) get Mathematics with **Boroks**: loud, strict and the toughest lecturer, who loves surprise tests. Your **ability**
 (the academics stat) is fixed at the start. What you can change is **effort**: attend a lecture (12 energy) and study (15 energy),
-once per course per game week. Attendance and preparation in each course, plus your energy, luck and the lecturer's difficulty, decide
+once per course per week. Attendance and preparation in each course, plus your energy, luck and the lecturer's difficulty, decide
 your exam score, which is the average of your four courses. Lecturers can also spring a **surprise test** during the weeks, scored
-out of 20 from the effort you have put in. Sessions are 12 game weeks with 2 exams (every 6th week of the player's own timeline).
+out of 20 from the effort you have put in. Sessions are 12 weeks with 2 exams (every 6th week of the player's own timeline).
 Missing an exam is an automatic fail. An average grade point of 1.0 or more advances you (100L to 500L). Two failed sessions in a row
 means withdrawal. Graduation at 500L gives a Nigerian-style class (First Class from 4.5 and so on). CGPA is the average over every
 exam sat. Cheating adds marks, but a caught cheat caps the score at 25 and adds a strike.
 
-**Risk and Floor O.** Risky hustle: 30% chance to win ₦100k to ₦600k, but each attempt raises suspicion and the DSA
+**Risk and Floor O.** Risky hustle: 30% chance to win ₦100k to ₦600k, but each attempt raises suspicion and the QRS
 catch chance rises with it. Arrest: Floor O for 30 minutes to 3 hours, lose 15 health, 25 energy and 10 happiness, the
-DSA seizes 30% of your cash, and you can pay a bill (10% of cash, between ₦150k and ₦5M) to leave early. Strikes: 3 means
+QRS seizes 30% of your cash, and you can pay a bill (10% of cash, between ₦150k and ₦5M) to leave early. Strikes: 3 means
 a 2-week suspension, 5 means expulsion.
 
-**Fighting a lecturer.** On the Courses app, "Fight <lecturer>" (20 energy, once per game week, behind a confirm) opens a full-screen 3D brawl
+**Fighting a lecturer.** On the Courses app, "Fight <lecturer>" (20 energy, once per week, behind a confirm) opens a full-screen 3D brawl
 (`components/LectureFight.js`, scene in `lib3d/lectureScene.js`). It plays itself (auto-fight) so you watch your character beat the lecturer, and you can
 take control at any moment (Punch / Kick / Block / Dodge buttons, or Space-J / K / hold L / S-D, T toggles auto). The brawl is `lib/fightSim.js`
 (pure, tested in `tests/fight.test.mjs`). The browser reports who won; `lib/fight.js` + `lib/fightService.js` decide the cost.
-If you lose: -20 health, -10 happiness, -5 popularity. If you win: **80% the DSA van comes** (`DSA_CATCH_PERCENT`): the cutscene shows the van arriving with sirens,
+If you lose: -20 health, -10 happiness, -5 popularity. If you win: **80% the QRS van comes** (`DSA_CATCH_PERCENT`): the cutscene shows the van arriving with sirens,
 officers chasing you down, carrying you into the van and driving you through the Floor O gate; the normal arrest rules apply (30% of cash seized, bill,
 sentence, a strike, reason "Beat up <lecturer>"). The other 20% you run away (+15 happiness, +8 popularity, +25 suspicion). The cutscenes are pure functions of
 time (`seek(name, t)` jumps to any moment) and have a Skip button.
 
-**Parties.** Each of 0203, Royal Divas and Quantum hosts one party per game week (price roughly ₦8k to ₦30k, limited
+**Parties.** Each of 0203, Royal Divas and Quantum hosts one party per week (price roughly ₦8k to ₦30k, limited
 capacity). One night out per player per week, with a random outcome on the night.
 
 **Love (real players).** You can only start something with a player you have messaged and who has messaged you back (Messages app).
@@ -259,7 +259,7 @@ instant screen changes: `lib/lovePatches.js`, tables: `Bond`, `LoveRequest`, `Bo
 job level. Some need 200L or 300L, and some need a specific faculty.
 
 **Businesses.** 10 types (₦200k to ₦1M to start). The number you can run equals your level (1 at 100L, up to 5).
-Hire up to 8 staff, upgrade to level 5, add or withdraw capital (a safety reserve stays inside). Each game week brings
+Hire up to 8 staff, upgrade to level 5, add or withdraw capital (a safety reserve stays inside). Each week brings
 revenue, expenses and random events. A business with no capital left goes bankrupt. Businesses keep trading after graduation.
 
 **Investments.** Six fictional products from low risk to high risk. Prices come from a secret, deterministic series, so
@@ -280,7 +280,7 @@ and a total cap of ₦5M times your level number (100L = ₦5M, 200L = ₦10M an
 - Player balances can never go below zero (a database CHECK enforces it).
 - Every action carries a `requestId`, so a double-tap or retry changes nothing twice.
 - Only player accounts are locked during transfers, so shared system accounts are never a bottleneck.
-- System accounts: `WORLD` (money created and removed), `LANDLORDS`, `PARENTS`, `DSA`, `TRANSPORT`, `VENUES`,
+- System accounts: `WORLD` (money created and removed), `LANDLORDS`, `PARENTS`, `QRS`, `TRANSPORT`, `VENUES`,
   `CLINICS`, `BUSINESS` (capital held inside businesses), `MARKET` (investment buys and sells).
 - The admin overview checks that every player's cached balance matches the ledger and that the `BUSINESS` account
   matches the capital held in businesses.
@@ -289,7 +289,7 @@ and a total cap of ₦5M times your level number (100L = ₦5M, 200L = ₦10M an
 
 ## 5. Economy balance (from simulations)
 
-| Thing | Result over 60 game weeks |
+| Thing | Result over 60 weeks |
 |---|---|
 | Honest MAPO allowance | about ₦5.9M after rent |
 | Risky hustling, greedy | expelled 100% of the time, within about 10 weeks |
@@ -344,7 +344,7 @@ These are starting numbers. Real players will find strategies the simulations di
 
 | Topic | Decision |
 |---|---|
-| Time | 1 real day = 1 game week; sessions are 12 game weeks |
+| Time | 1 real day = 1 week; sessions are 12 weeks |
 | Money | Integer kobo in a double-entry ledger |
 | Game time engine | Catch-up on request, no per-player cron job |
 | Sign-up | Must tick "I am 18 or older" |

@@ -23,6 +23,8 @@ export default function Career() {
       key: `${path}:${body.action}:${body.id ?? body.job ?? ""}`,
       router,
       ok: fx.ok,
+      sensitive: !!fx.pending, // money moves: a spinner shows while the server confirms, and the result is announced when it answers
+      pending: fx.pending,
       okLate: fx.okLate ?? ((r) => r.note ?? "Done."),
       request: () => call(path, { ...body, requestId: crypto.randomUUID() }),
       effects: [
@@ -97,14 +99,17 @@ export default function Career() {
         return go("/api/career/business", base, {
           local: patchBiz(id, (y) => ({ capitalKobo: (BigInt(y.capitalKobo) + n).toString() })),
           me: cash(-n),
+          pending: "Adding capital…",
         });
       case "withdraw":
         return go("/api/career/business", base, {
           local: patchBiz(id, (y) => ({ capitalKobo: (BigInt(y.capitalKobo) - n).toString() })),
           me: cash(n),
+          pending: "Withdrawing…",
         });
       case "upgrade":
         return go("/api/career/business", base, {
+          pending: "Upgrading…",
           local: patchBiz(id, (y) => ({
             level: y.level + 1,
             capitalKobo: (BigInt(y.capitalKobo) - BigInt(y.upgradeCostKobo ?? 0)).toString(),
@@ -114,9 +119,10 @@ export default function Career() {
         return go("/api/career/business", base, {
           local: (x) => ({ ...x, businesses: x.businesses.filter((y) => y.id !== id) }),
           me: cash(BigInt(b.capitalKobo)),
+          pending: "Closing the business…",
         });
       default: // starting a business: the server picks its id, so it appears when the server answers
-        return go("/api/career/business", base);
+        return go("/api/career/business", base, { pending: "Starting your business…" });
     }
   };
   if (!d)

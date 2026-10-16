@@ -22,6 +22,8 @@ export default function Parties() {
     return run({
       key: "party:" + venue,
       router,
+      sensitive: true, // the last ticket may have just gone: "ticket bought" is only said once the server has confirmed it
+      pending: `Buying your ticket to ${venue}…`,
       ok: `Ticket bought. You're going to ${venue}.`,
       request: () =>
         call("/api/parties", { venue, requestId: crypto.randomUUID() }),
@@ -53,7 +55,7 @@ export default function Parties() {
         </a>
       </div>
       <p className="mut">
-        Week {d?.week}. One night out per game week. New lineups every week.
+        Week {d?.week}. One night out per week. New lineups every week.
       </p>
       {!d && <Loader label="Loading parties" />}
       {d?.parties.map((p) => {

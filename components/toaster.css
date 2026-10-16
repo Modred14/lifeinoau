@@ -69,3 +69,14 @@ input[aria-invalid="true"]:not(.am-input), textarea[aria-invalid="true"], select
   .tt-bar { display: none; }
   .tt-slot[data-state="out"] { opacity: 0; }
 }
+/* pending: same light look as info, with a spinner while the server confirms */
+.tt[data-type="pending"] { background: #f4f7fb; color: #0d1321; border-color: rgba(13, 19, 33, 0.1); }
+.tt[data-type="pending"] .tt-icon { background: rgba(29, 78, 216, 0.1); color: #1d4ed8; }
+.tt[data-type="pending"] .tt-count { background: rgba(13, 19, 33, 0.08); }
+.tt[data-type="pending"] .tt-close { color: #3b4559; }
+.tt[data-type="pending"] .tt-close:hover:not(:disabled) { background: rgba(13, 19, 33, 0.08); color: #0d1321; }
+.tt[data-type="pending"] .tt-bar { display: none; }
+.tt[data-type="pending"] :focus-visible { outline-color: #1d4ed8; }
+.tt-spin { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid rgba(29, 78, 216, 0.25); border-top-color: #1d4ed8; animation: tt-rot 0.8s linear infinite; }
+@keyframes tt-rot { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .tt-spin { animation-duration: 2.4s; } }

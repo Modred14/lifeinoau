@@ -43,8 +43,10 @@ export default function Shell({ children }) {
   const bare = path === "/",
     full = path === "/map" || path === "/play",
     hideBars = path === "/play" && bareUi; // no top bar or bottom nav while the game loads or the player is creating a character
-  const load = useCallback(async () => {
-    const r = await game.refresh(); // one request at a time, however many parts of the app ask at once
+  // `force` asks the server no matter what. Without it, a copy younger than 15 seconds is reused, so moving between screens
+  // (or flipping back to this tab) does not hit the server every time. One request at a time, however many parts of the app ask at once.
+  const load = useCallback(async (force = false) => {
+    const r = await (force ? game.refresh() : game.refreshIfStale(15_000));
     // 401/404 are normal (logged out / no character yet). Anything else: say so once per outage, not every poll.
     if (r.failed && r.status !== 401 && r.status !== 404) {
       if (!failing.current) {
@@ -58,7 +60,7 @@ export default function Shell({ children }) {
     load();
     // Quietly re-check every minute, but only while the tab is on screen: a hidden tab costs the server nothing.
     const t = setInterval(() => !document.hidden && load(), 60000);
-    const f = () => load();
+    const f = () => load(true); // something just changed the player's cash or stats: always ask
     const v = () => !document.hidden && load();
     window.addEventListener("game:refresh", f);
     document.addEventListener("visibilitychange", v);

@@ -76,16 +76,18 @@ export default function MapPage() {
   const direct = !!(L && !trip && ch && L.located && L.id !== here && L.kind !== "billboard");
   const closeSheet = () => { setSheet(false); if (direct) setSel(null); };
   // ---- travelling ----
-  async function begin(mode, withDriver) {
+  // The trip starts the moment the player taps Go. The real players standing at the door are fetched alongside (handed over as a promise)
+  // and drawn when the list arrives; if that request is slow or fails, the trip is not held up and the door is simply empty.
+  function begin(mode, withDriver) {
     const dest = L; if (!dest) return; setSheet(false);
-    const r = await call("/api/travel?at=" + encodeURIComponent(dest.id)); // the real players there now are drawn around the door when you arrive
+    const people = call("/api/travel?at=" + encodeURIComponent(dest.id)).then((r) => (r.failed ? [] : r.people ?? []));
     setTripSt(null); input.jx = input.jy = input.steer = input.gas = input.brake = 0; input.run = false;
-    setTrip({ id: crypto.randomUUID(), from: here, to: dest.id, mode, driver: withDriver, look: ch?.look ?? null, gender: ch?.gender ?? "M", people: r.failed ? [] : r.people ?? [], name: dest.name });
+    setTrip({ id: crypto.randomUUID(), from: here, to: dest.id, mode, driver: withDriver, look: ch?.look ?? null, gender: ch?.gender ?? "M", people, name: dest.name });
     setSel(null);
   }
   async function pay() { // the vehicle has stopped: the fare leaves the wallet now, and you are at the new place
     const t = tripRef.current; if (!t) return false; const fare = fareKobo(t.mode);
-    const res = await run({ key: "trip:" + t.id, ok: fare > 0n ? `Paid ${naira(fare.toString())} · ${MODE_INFO[t.mode].name}` : undefined, sound: "coin", request: () => call("/api/travel", { to: t.to, mode: t.mode, requestId: crypto.randomUUID() }),
+    const res = await run({ key: "trip:" + t.id, sensitive: fare > 0n, pending: "Paying the fare…", ok: fare > 0n ? `Paid ${naira(fare.toString())} · ${MODE_INFO[t.mode].name}` : undefined, sound: "coin", request: () => call("/api/travel", { to: t.to, mode: t.mode, requestId: crypto.randomUUID() }),
       effects: [{ store: game, patch: (x) => ({ ...cash(-fare)(x), character: { ...x.character, placeId: t.to } }) }] });
     return !res.failed;
   }

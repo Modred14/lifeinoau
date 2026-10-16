@@ -40,7 +40,7 @@ const NEEDS = [
 export function statusOf(c) {
   if (c.health < 25) return { tone: "bad", text: "Very sick. Rest up" };
   if (c.energy < 20) return { tone: "bad", text: "Exhausted. Go and rest" };
-  if (c.suspicion >= 60) return { tone: "bad", text: "DSA is watching you" };
+  if (c.suspicion >= 60) return { tone: "bad", text: "QRS is watching you" };
   if (c.happiness < 25) return { tone: "warn", text: "Feeling low. Call home" };
   if (c.energy < 40) return { tone: "warn", text: "Getting tired" };
   return null;
@@ -101,7 +101,7 @@ export default function GameHome({
   const send = useCallback(
     (body, { room: patch, cash: delta }) => {
       const handles = begin([
-        { store: roomStore, patch, settle: (res) => res }, // the server's answer is the whole room: use it as is
+        { store: roomStore, patch, settle: (res) => (res.room && res.items ? res : null) }, // the answer is the whole room: use it, unless it is only a "done already" (then a refresh brings the room)
         delta ? { store: game, patch: cash(delta) } : null, // the top bar's cash moves too
       ]);
       const go = async () => finish(handles, await call("/api/room", body()));
@@ -140,12 +140,10 @@ export default function GameHome({
     const requestId = crypto.randomUUID(),
       tmp = "tmp-" + requestId,
       spot = rd?.room ? autoPlace(rd.room, items, key) : null; // same function the server uses, so it lands where the server will put it
-    const tid = toast.success(
-      spot
-        ? `${d.name} is in your room.`
-        : `${d.name} bought. Your room is full, so it is in storage.`,
-      { sound: "coin" },
-    );
+    const msg = spot
+      ? `${d.name} is in your room.`
+      : `${d.name} bought. Your room is full, so it is in storage.`;
+    const tid = toast.pending(`Buying ${d.name}…`); // the item appears at once, but "bought" is only said once the server has taken the money
     if (spot) setSelected(tmp);
     const r = await send(() => ({ action: "buy", key, requestId }), {
       cash: -price,
@@ -159,13 +157,14 @@ export default function GameHome({
       }),
     });
     if (!r) {
-      toast.dismiss(tid); // refused: the item is gone again and the message is taken back
+      toast.dismiss(tid); // refused: the item is gone again
       return setSelected((s) => (s === tmp ? null : s));
     }
-    if (r.duplicate) {
+    if (r.duplicate && !r.replayed) {
       toast.dismiss(tid);
       return toast.info("That was already bought.");
     }
+    toast.success(msg, { id: tid, sound: "coin" });
     if (r.boughtId) {
       ids.current.set(tmp, String(r.boughtId));
       setSelected((s) => (s === tmp ? String(r.boughtId) : s));
@@ -212,7 +211,7 @@ export default function GameHome({
     )
       return;
     setSelected(null);
-    const tid = toast.success(`Sold ${d.name} for ${naira(backKobo.toString())}.`, { sound: "coin" });
+    const tid = toast.pending(`Selling ${d.name}…`);
     const r = await send(() => ({ action: "sell", id: real(id) }), {
       cash: backKobo,
       room: (v) => ({
@@ -222,6 +221,7 @@ export default function GameHome({
       }),
     });
     if (!r) toast.dismiss(tid);
+    else toast.success(`Sold ${d.name} for ${naira(backKobo.toString())}.`, { id: tid, sound: "coin" });
   };
   const onMove = useCallback(
     (id, p) => {

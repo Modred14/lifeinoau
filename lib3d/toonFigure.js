@@ -1,5 +1,5 @@
 // lib3d/toonFigure.js
-// A small jointed, low-poly person for the cutscenes (the lecturer fight, the DSA pickup). Browser only.
+// A small jointed, low-poly person for the cutscenes (the lecturer fight, the QRS pickup). Browser only.
 // Everything is in metres, the figure faces +x, stands on y = 0, and its right side is +z.
 // Poses are a handful of joint angles in radians (see CHANNELS); apply(target, k) eases the figure towards a pose.
 import * as THREE from "three";
@@ -42,7 +42,7 @@ export function makeFigure(o = {}) {
     const vm = mat("#c8e61a", { roughness: 0.55, emissive: "#3a4a00", emissiveIntensity: 0.35 }), st = mat("#e8ecef", { roughness: 0.4, emissive: "#555", emissiveIntensity: 0.4 });
     add(torso, new THREE.BoxGeometry(0.245, 0.42, 0.4 * width), vm, 0, 0.27, 0);
     add(torso, new THREE.BoxGeometry(0.25, 0.04, 0.405 * width), st, 0, 0.2, 0); add(torso, new THREE.BoxGeometry(0.25, 0.04, 0.405 * width), st, 0, 0.36, 0);
-    const back = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.15), new THREE.MeshBasicMaterial({ map: textTexture("DSA", { w: 256, h: 128 }) })); geos.push(back.geometry);
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.15), new THREE.MeshBasicMaterial({ map: textTexture("QRS", { w: 256, h: 128 }) })); geos.push(back.geometry);
     back.position.set(-0.126, 0.3, 0); back.rotation.y = -Math.PI / 2; torso.add(back);
   }
 

@@ -35,16 +35,41 @@ function Picker({ pic, onPick, label }) {
 export default function BillboardPanel({ board, state, onChanged }) {
   const router = useRouter(), b = state?.boards?.find((x) => x.n === board), [sel, setSel] = useState([]), [whole, setWhole] = useState(false), [pic, setPic] = useState(null), [caption, setCaption] = useState(""), [busy, setBusy] = useState(false), [order, setOrder] = useState(null), [tick, setTick] = useState(0);
   useEffect(() => { setSel([]); setWhole(false); setPic(null); setCaption(""); setOrder(null); }, [board]);
-  useEffect(() => { const t = setInterval(() => setTick((v) => v + 1), 500); return () => clearInterval(t); }, []);
+  const animating = !!b?.posters?.length || !!order; // the countdown bar and the hold timer are the only things that move
+  const sending = useRef(false); // one money request at a time: a second tap while one is travelling does nothing
+  useEffect(() => { if (!animating) return; const t = setInterval(() => setTick((v) => v + 1), 1000); return () => clearInterval(t); }, [animating]);
   const mine = useMemo(() => new Map((b?.mine ?? []).map((m) => [m.slot, m])), [b]);
   if (!b) return <p className="mut">Loading billboard…</p>;
   const count = whole ? BILLBOARD.SLOTS : sel.length, total = whole ? BILLBOARD.WHOLE_KOBO : sel.length * BILLBOARD.SLOT_KOBO, shown = b.posters.length ? b.posters[Math.floor(Date.now() / 1000 / (state?.seconds ?? 15)) % b.posters.length] : null, left = Math.ceil((state?.seconds ?? 15) - ((Date.now() / 1000) % (state?.seconds ?? 15)));
   const guard = (res) => { if (res.status === 401) { loggedOut(router); return true; } if (res.failed) { notifyError(res); if (res.status === 409) onChanged?.(); return true; } return false; };
   const toggle = (s) => { setWhole(false); setSel((v) => (v.includes(s) ? v.filter((x) => x !== s) : [...v, s].sort((a, c) => a - c))); };
-  const reserve = async () => { if (!pic) { toast.error("Add your poster picture first."); return; } setBusy(true); const r = await call("/api/billboards", { action: "reserve", board, slots: sel, whole, caption, image: pic }); setBusy(false); if (guard(r)) return; setOrder(r); onChanged?.(); };
-  const pay = async () => { setBusy(true); const r = await call("/api/billboards", { action: "pay", orderId: order.orderId }); setBusy(false); if (guard(r)) return; toast.success("Your poster is live on the billboard."); setOrder(null); setSel([]); setWhole(false); setPic(null); setCaption(""); onChanged?.(); };
-  const cancel = async () => { setBusy(true); await call("/api/billboards", { action: "cancel", orderId: order.orderId }); setBusy(false); setOrder(null); onChanged?.(); };
-  const change = async (slot, image) => { setBusy(true); const r = await call("/api/billboards", { action: "poster", board, slot, image, caption: mine.get(slot)?.caption ?? "" }); setBusy(false); if (guard(r)) return; toast.success("Poster updated."); onChanged?.(); };
+  // Reserving and paying need the server to say yes (a spot can be taken, money moves), so they wait for it, with a pending label on the button only.
+  const reserve = async () => {
+    if (!pic) { toast.error("Add your poster picture first."); return; }
+    if (sending.current) return; sending.current = true; setBusy("reserve");
+    const r = await call("/api/billboards", { action: "reserve", board, slots: sel, whole, caption, image: pic });
+    sending.current = false; setBusy(false); if (guard(r)) return; setOrder(r); onChanged?.();
+  };
+  const pay = async () => {
+    if (sending.current) return; sending.current = true; setBusy("pay");
+    const tid = toast.pending("Paying for your poster…");
+    const r = await call("/api/billboards", { action: "pay", orderId: order.orderId });
+    sending.current = false; setBusy(false);
+    if (r.failed) { toast.dismiss(tid); guard(r); return; }
+    toast.success("Your poster is live on the billboard.", { id: tid }); setOrder(null); setSel([]); setWhole(false); setPic(null); setCaption(""); onChanged?.();
+  };
+  // Cancelling shows at once (the spots come back to choose from); if the server cannot do it, the reservation comes back.
+  const cancel = async () => {
+    const held = order; setOrder(null);
+    const r = await call("/api/billboards", { action: "cancel", orderId: held.orderId });
+    if (r.failed) { guard(r); setOrder(held); return; }
+    onChanged?.();
+  };
+  const change = async (slot, image) => {
+    if (sending.current) return; sending.current = true; setBusy("poster");
+    const r = await call("/api/billboards", { action: "poster", board, slot, image, caption: mine.get(slot)?.caption ?? "" });
+    sending.current = false; setBusy(false); if (guard(r)) return; toast.success("Poster updated."); onChanged?.();
+  };
   const minsLeft = order ? Math.max(0, Math.ceil((new Date(order.holdUntil) - Date.now()) / 60000)) : 0; void tick;
 
   return (<div className="bbp">
@@ -58,18 +83,18 @@ export default function BillboardPanel({ board, state, onChanged }) {
     {!order && (<>
       <div className="bbp-grid" role="group" aria-label="Poster spots">
         {Array.from({ length: BILLBOARD.SLOTS }, (_, i) => i + 1).map((s) => { const free = b.freeSlots.includes(s), m = mine.get(s), on = whole || sel.includes(s);
-          return (<button key={s} type="button" className={"bbp-slot" + (on ? " on" : "") + (m ? " mine" : "")} disabled={!free || busy} aria-pressed={free ? on : undefined} aria-label={`Spot ${s}: ${free ? "free" : m ? (m.status === "PAID" ? "yours" : "held for you") : "sold"}`} onClick={() => toggle(s)}>
+          return (<button key={s} type="button" className={"bbp-slot" + (on ? " on" : "") + (m ? " mine" : "")} disabled={!free} aria-pressed={free ? on : undefined} aria-label={`Spot ${s}: ${free ? "free" : m ? (m.status === "PAID" ? "yours" : "held for you") : "sold"}`} onClick={() => toggle(s)}>
             <b>{s}</b><span>{free ? "Free" : m ? (m.status === "PAID" ? "Yours" : "Held") : "Sold"}</span></button>); })}
       </div>
       <div className="row bbp-actions">
-        <button type="button" className={"ghost" + (whole ? " on" : "")} disabled={!b.canBuyWhole || busy} aria-pressed={whole} onClick={() => { setWhole((v) => !v); setSel([]); }}>
+        <button type="button" className={"ghost" + (whole ? " on" : "")} disabled={!b.canBuyWhole} aria-pressed={whole} onClick={() => { setWhole((v) => !v); setSel([]); }}>
           <Icon name="billboard" /> Whole billboard · {N(BILLBOARD.WHOLE_KOBO)}</button>
       </div>
       {!b.canBuyWhole && <p className="mut bbp-line">The whole billboard is only for sale while every spot is still free.</p>}
       {count > 0 && (<div className="bbp-buy">
         <Picker pic={pic} onPick={setPic} label="Upload your poster" />
         <input type="text" value={caption} maxLength={BILLBOARD.CAPTION_MAX} onChange={(e) => setCaption(e.target.value)} placeholder="Caption (optional)" aria-label="Poster caption" />
-        <button type="button" className="go" disabled={busy || !pic} onClick={reserve}>{whole ? "Reserve the whole billboard" : `Reserve ${count} spot${count > 1 ? "s" : ""}`} · {N(total)}</button>
+        <button type="button" className="go" disabled={!!busy || !pic} onClick={reserve}>{busy === "reserve" ? "Reserving…" : whole ? "Reserve the whole billboard" : `Reserve ${count} spot${count > 1 ? "s" : ""}`} · {N(total)}</button>
         {whole && <p className="mut bbp-line">You get every spot. Your poster shows by itself, and you can add a different poster to each spot afterwards.</p>}
       </div>)}
     </>)}
@@ -77,10 +102,10 @@ export default function BillboardPanel({ board, state, onChanged }) {
     {order && (<div className="bbp-buy">
       <p><b>{order.whole ? "Whole billboard" : `Spot${order.slots.length > 1 ? "s" : ""} ${order.slots.join(", ")}`}</b> held for you for {minsLeft} more minute{minsLeft === 1 ? "" : "s"}.</p>
       {state?.testPayments
-        ? <button type="button" className="go" disabled={busy} onClick={pay}>Pay {N(order.amountKobo)} (test payment)</button>
+        ? <button type="button" className="go" disabled={!!busy} onClick={pay}>{busy === "pay" ? "Paying…" : `Pay ${N(order.amountKobo)} (test payment)`}</button>
         : <button type="button" className="go" disabled>Pay {N(order.amountKobo)} · payments not switched on yet</button>}
       {state?.testPayments && <p className="mut bbp-line">Test mode: no real money moves yet. The real payment is connected later.</p>}
-      <button type="button" className="ghost" disabled={busy} onClick={cancel}>Cancel reservation</button>
+      <button type="button" className="ghost" disabled={busy === "pay"} onClick={cancel}>Cancel reservation</button>
     </div>)}
 
     {b.mine.some((m) => m.status === "PAID") && (<div className="bbp-mine"><h3>Your posters here</h3>

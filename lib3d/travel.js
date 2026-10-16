@@ -51,7 +51,7 @@ function buildDoor(door) {
 
 /**
  * Starts a trip. env: { stage, campus, light, data }. o: {
- *   from, to: place ids, mode: "trek"|"keke"|"bus"|"car", driver: boolean, look, gender, people: [{ name, gender, look }] (real players at the destination),
+ *   from, to: place ids, mode: "trek"|"keke"|"bus"|"car", driver: boolean, look, gender, people: [{ name, gender, look }] or a Promise of that list (real players at the destination; the trip does not wait for it),
  *   input: { jx, jy, steer, gas, brake, run } (mutable; the on-screen controls write to it), miniCanvas(): canvas|null, previewCanvas(): canvas|null,
  *   onState(s), onArrive(): Promise<boolean>, onEnter(), onEnd(reason) }.
  * Returns { setTravellers(list), pos(), route(), dispose(), horn() }. Resolves once the scene is set up.
@@ -91,7 +91,7 @@ export async function startTrip(env, o) {
 
   // real players waiting around the destination
   const there = [];
-  (async () => { for (const p of (o.people ?? []).slice(0, 8)) { if (!alive) return; try { const av = await createAvatar(p.look, p.gender), tag = nameTag(p.name, { bg: "rgba(21,128,61,0.88)" });
+  (async () => { const list = await (o.people ?? []); /* an array, or a promise of one: the trip never waits for it */ for (const p of list.slice(0, 8)) { if (!alive) return; try { const av = await createAvatar(p.look, p.gender), tag = nameTag(p.name, { bg: "rgba(21,128,61,0.88)" });
     for (let k = 0; k < 14; k++) { const a = Math.random() * Math.PI * 2, r = 2.5 + Math.random() * 6, x = B.front.x + Math.cos(a) * r, z = B.front.z + Math.sin(a) * r; if (walkable(net, x, z) && !isRoad(net, x, z) || k === 13) { av.root.position.set(x, 0.1, z); av.root.rotation.y = Math.random() * 6.28; break; } }
     tag.position.set(0, 2.2, 0); av.root.add(tag); av.play("idle"); world.add(av.root); there.push({ av, tag }); } catch { /* a player whose model fails to load is simply not drawn */ } } })();
   disposers.push(() => { for (const t of there) { world.remove(t.av.root); t.tag.userData.dispose(); t.av.dispose(); } });

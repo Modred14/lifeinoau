@@ -29,11 +29,14 @@ export default function OfflineGate() {
   async function retry() {
     if (checking) return;
     setChecking(true); setStill(false);
+    const ac = new AbortController(), t = setTimeout(() => ac.abort(), 6000); // a network that never answers must not leave "Checking…" up forever
     try {
-      await fetch("/icon.png?ping=" + Date.now(), { method: "HEAD", cache: "no-store" });
+      await fetch("/icon.png?ping=" + Date.now(), { method: "HEAD", cache: "no-store", signal: ac.signal });
       setOffline(false);
     } catch {
       setStill(true);
+    } finally {
+      clearTimeout(t);
     }
     setChecking(false);
   }

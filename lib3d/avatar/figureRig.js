@@ -1,6 +1,6 @@
 // lib3d/avatar/figureRig.js
 // Drives a realistic rigged avatar (the same GLB characters as the player) with the joint-angle poses that the cutscenes were written for in lib3d/toonFigure.js,
-// so the lecturer brawl and the DSA scene can use real characters without rewriting their choreography.
+// so the lecturer brawl and the QRS scene can use real characters without rewriting their choreography.
 //   makeAvatarFigure(avatar)  ->  { root, hips, torso, head, apply(pose, k), expr(name), height, dispose(), model }   (the same shape makeFigure returns)
 // The toon figure faces +x with its right side on +z; the avatar faces +z with its left on +x. The wrapper turns the model so both agree.
 // Every limb is posed by *direction* (see idleEmote.aim), so it works on any Mixamo-style skeleton whatever its bones' local axes are.

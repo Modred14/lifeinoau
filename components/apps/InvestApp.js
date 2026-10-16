@@ -51,7 +51,7 @@ export default function Invest() {
   const NGN = (k) => (k / 100n).toLocaleString("en-NG");
 
   // Buying and selling show at once (your holdings, your cash, the invested total) using the same fee and penalty maths as the server,
-  // and are undone if the server refuses. The prices only change once a game week, so nothing here depends on luck.
+  // and are undone if the server refuses. The prices only change once a week, so nothing here depends on luck.
   function go(body) {
     const P = d.products.find((p) => p.key === body.product),
       h = d.holdings.find((x) => x.product === body.product),
@@ -104,6 +104,8 @@ export default function Invest() {
     return run({
       key: `invest:${body.action}:${body.product}`,
       router,
+      sensitive: true, // money in or out: "bought" / "sold" is only said once the server has confirmed it
+      pending: body.action === "buy" ? `Buying ${P.name}…` : `Selling ${P.name}…`,
       ok,
       request: () => call("/api/invest", { ...body, requestId: crypto.randomUUID() }),
       effects: [{ store, patch: local }, me && { store: game, patch: me }],
@@ -137,7 +139,7 @@ export default function Invest() {
           {d.earlyPenaltyPercent}% extra.
         </p>
         <p className="mut">
-          Prices move every game week and nothing is guaranteed. You can lose
+          Prices move every week and nothing is guaranteed. You can lose
           money, and high-risk products usually do.
         </p>
       </div>

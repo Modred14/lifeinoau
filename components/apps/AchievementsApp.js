@@ -2,26 +2,12 @@
 "use client";
 import { Icon } from "../Icon";
 import LoadError from "@/components/LoadError";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { call, notifyError, loggedOut } from "@/lib/client";
+import { useResource } from "@/lib/gameStore";
 
 export default function Achievements() {
-  const router = useRouter(),
-    [list, setList] = useState(null),
-    [failed, setFailed] = useState(false),
-    [tries, setTries] = useState(0);
-  useEffect(() => {
-    call("/api/achievements").then((r) => {
-      if (r.status === 401) return loggedOut(router);
-      if (r.failed) {
-        notifyError(r);
-        setFailed(true);
-        return;
-      }
-      setList(r.achievements);
-    });
-  }, [router, tries]);
+  // Kept between visits: reopening shows the list at once and refreshes it quietly.
+  const { d, load, loadFailed: failed } = useResource("/api/achievements");
+  const list = d?.achievements ?? null;
   const got = list?.filter((a) => a.earned).length ?? 0;
   return (
     <>
@@ -34,10 +20,7 @@ export default function Achievements() {
       {failed && (
         <LoadError
           title="Your achievements didn't load"
-          onRetry={() => {
-            setFailed(false);
-            setTries((t) => t + 1);
-          }}
+          onRetry={load}
         />
       )}
       {list && (

@@ -65,6 +65,8 @@ export default function HousingApp({ onClose }) {
     const res = await run({
       key: "housing:move",
       router,
+      sensitive: true, // rent changes hands: "moved in" is only said once the server has confirmed it
+      pending: `Moving you into ${h.hostel}…`,
       ok: `You moved into ${h.hostel}.`,
       sound: "coin",
       request: () => call("/api/housing", { hostel: h.hostel, requestId: crypto.randomUUID() }),

@@ -46,7 +46,7 @@ const db = makeDb(MODELS, {
 });
 const T = db.T();
 const DAY = 864e5;
-T.gameClock.push({ id: 1, startedAt: new Date(Date.now() - 9 * 7 * DAY) }); // game week 10
+T.gameClock.push({ id: 1, startedAt: new Date(Date.now() - 9 * 7 * DAY) }); // week 10
 const weekNow = () => Math.floor((Date.now() - T.gameClock[0].startedAt.getTime()) / (7 * DAY)) + 1;
 for (const [id, kind, name] of [["VENUES", "SYSTEM", "VENUES"], ["LANDLORDS", "SYSTEM", "LANDLORDS"], ["CLINICS", "SYSTEM", "CLINICS"]]) T.account.push({ id, kind, systemName: name, balance: 0n });
 const person = (id, name, gender, hostel) => {

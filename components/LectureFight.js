@@ -1,6 +1,6 @@
 // components/LectureFight.js
 // Fight a lecturer: a full-screen 3D brawl (auto-played, and you can take over any time), then the server decides what it costs you.
-// If you win, the DSA van comes for you 80% of the time: you are chased, carried into the van and driven to Floor O.
+// If you win, the QRS van comes for you 80% of the time: you are chased, carried into the van and driven to Floor O.
 // The scenes live in lib3d/lectureScene.js, the rules in lib/fightSim.js (the brawl) and lib/fight.js (the consequences).
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -155,10 +155,10 @@ function ResultCard({ res, name, onClose }) {
     <div className="lf-card" data-tone={caught ? "bad" : escaped ? "good" : "meh"}>
       <h2>{caught ? "Floor O" : escaped ? "You got away" : "You lost"}</h2>
       {caught && (<>
-        <p>You knocked out {name} and the DSA caught you ({DSA_CATCH_PERCENT}% chance, and the dice said yes).</p>
+        <p>You knocked out {name} and the QRS caught you ({DSA_CATCH_PERCENT}% chance, and the dice said yes).</p>
         <ul><li>Cash seized: <b>{naira(res.seizedKobo)}</b></li><li>Bill to leave early: <b>{naira(res.billKobo)}</b></li>{mins && <li>Sentence: about <b>{mins} min</b></li>}<li>Strikes: <b>{res.strikes}</b>{res.expelled ? " (expelled)" : res.suspended ? " (suspended for 2 weeks)" : ""}</li></ul>
       </>)}
-      {escaped && <p>You knocked out {name} and left before the DSA van arrived. Happiness and fame up, but your suspicion jumped.</p>}
+      {escaped && <p>You knocked out {name} and left before the QRS van arrived. Happiness and fame up, but your suspicion jumped.</p>}
       {!res.won && <p>{name} beat you and carried on with the class. Your health and happiness took a hit.</p>}
       <button type="button" className="lf-go" onClick={onClose}>{caught ? "Go to the game" : "Back to class"}</button>
     </div>

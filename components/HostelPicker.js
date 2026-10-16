@@ -26,7 +26,7 @@ export default function HostelPicker({ cls, hostels = [], busy, onChoose }) {
         <h1>Where will you stay?</h1>
         <p className="mut">
           These are the places open to a <b className="hp-cls">{cls}</b>{" "}
-          student. Rent is priced per session ({SESSION_WEEKS} game weeks) and comes out of your allowance in weekly instalments. You can move later from the Housing app on your phone.
+          student. Rent is priced per session ({SESSION_WEEKS} weeks) and comes out of your allowance in weekly instalments. You can move later from the Housing app on your phone.
         </p>
       </header>
       <div className="hp-grid" role="radiogroup" aria-label="Hostel">

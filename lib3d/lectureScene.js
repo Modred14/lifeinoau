@@ -1,7 +1,7 @@
 // lib3d/lectureScene.js
 // The lecture-theatre brawl and what follows, in one 3D scene. Browser only.
 //   fight    a real-time brawl run by lib/fightSim.js (the scene only draws it). Auto-plays the player's side; press / hold to take over.
-//   dsa      the DSA van screeches in, officers jump out, run you down, CARRY you to the van, put you inside and drive off
+//   dsa      the QRS van screeches in, officers jump out, run you down, CARRY you to the van, put you inside and drive off
 //   floor0   the van rolls through the gate of Floor O and you are walked in
 //   escape   you won and ran before the van arrived
 //   lost     you lost the fight
@@ -364,7 +364,7 @@ export async function createLectureScene(container, opts = {}) {
   }
   const pick = (o, keys) => Object.fromEntries(keys.map((k) => [k, o[k]]));
 
-  // ----- you won and ran: the DSA arrive to an empty street -----
+  // ----- you won and ran: the QRS arrive to an empty street -----
   const camEsc = track([[0, [0, 1.55, 6.4], [0, 1.1, 0]], [2.2, [-2.5, 1.6, 6.8], [-4, 1.1, 0.3]], [4.2, [0.5, 1.7, 7.5], [0, 1.2, -1]], [7.5, [0.8, 1.6, 6.3], [0.5, 1.1, 0]]]);
   function escape(t) {
     world.setMode("campus");
@@ -390,9 +390,9 @@ export async function createLectureScene(container, opts = {}) {
   }
 
   const SCENES = {
-    dsa: { dur: 18, fn: dsa, cues: [[0.2, () => caption("Sirens... someone called the DSA.", 2400)], [3.2, () => { caption("DSA! Nobody move!", 1800); sound("door"); }], [4.5, () => caption("Run! Run!", 1500)], [6.0, () => caption("Got you!", 1500)], [7.6, () => caption("You are coming with us.", 2000)], [9.3, () => sound("door")], [11, () => caption("In you go.", 1500)], [12.2, () => sound("slam")], [12.5, () => caption("Next stop: Floor O.", 2400)], [14.8, () => sound("engine")]] },
-    floor0: { dur: 11.8, fn: floor0, cues: [[0.3, () => caption("The DSA van rolls up to Floor O.", 2600)], [3, () => sound("door")], [6.6, () => sound("door")], [9.2, () => caption("Welcome to Floor O.", 2600)], [10.2, () => sound("slam")]] },
-    escape: { dur: 7.8, fn: escape, cues: [[0.5, () => caption("You hear sirens...", 1600)], [1.4, () => caption("Run!", 1200)], [5.8, () => caption("The DSA got there too late.", 2400)]] },
+    dsa: { dur: 18, fn: dsa, cues: [[0.2, () => caption("Sirens... someone called the QRS.", 2400)], [3.2, () => { caption("QRS! Nobody move!", 1800); sound("door"); }], [4.5, () => caption("Run! Run!", 1500)], [6.0, () => caption("Got you!", 1500)], [7.6, () => caption("You are coming with us.", 2000)], [9.3, () => sound("door")], [11, () => caption("In you go.", 1500)], [12.2, () => sound("slam")], [12.5, () => caption("Next stop: Floor O.", 2400)], [14.8, () => sound("engine")]] },
+    floor0: { dur: 11.8, fn: floor0, cues: [[0.3, () => caption("The QRS van rolls up to Floor O.", 2600)], [3, () => sound("door")], [6.6, () => sound("door")], [9.2, () => caption("Welcome to Floor O.", 2600)], [10.2, () => sound("slam")]] },
+    escape: { dur: 7.8, fn: escape, cues: [[0.5, () => caption("You hear sirens...", 1600)], [1.4, () => caption("Run!", 1200)], [5.8, () => caption("The QRS got there too late.", 2400)]] },
     lost: { dur: 4.6, fn: lost, cues: [[0.5, () => caption(`${lecturer.name} wins. Sit down.`, 2800)]] },
   };
   const everyone = [player, lec, offA, offB, driver, ...crowd.map((c) => c.f)];

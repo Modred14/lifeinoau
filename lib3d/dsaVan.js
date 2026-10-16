@@ -1,5 +1,5 @@
 // lib3d/dsaVan.js
-// The DSA's patrol van: white with a blue stripe and a light bar, a sliding door on the right-hand side (+z), two rear doors,
+// The QRS's patrol van: white with a blue stripe and a light bar, a sliding door on the right-hand side (+z), two rear doors,
 // and a HOLLOW cargo area with benches so people can really be put inside. Metres; the nose points to -x, the rear is at +x, wheels on y = 0.
 import * as THREE from "three";
 import { mat } from "./toonFigure.js";
@@ -9,7 +9,7 @@ export const VAN = { L: 5.4, W: 2.0, rearX: 2.7, doorX: 0.1, floorY: 0.63 };
 function decal(w, h) {
   const c = document.createElement("canvas"); c.width = 512; c.height = Math.round(512 * (h / w));
   const g = c.getContext("2d"); g.clearRect(0, 0, c.width, c.height);
-  g.fillStyle = "#14377a"; g.font = `900 ${Math.round(c.height * 0.62)}px system-ui, sans-serif`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("DSA", c.width / 2, c.height * 0.42);
+  g.fillStyle = "#14377a"; g.font = `900 ${Math.round(c.height * 0.62)}px system-ui, sans-serif`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("QRS", c.width / 2, c.height * 0.42);
   g.font = `700 ${Math.round(c.height * 0.14)}px system-ui, sans-serif`; g.fillStyle = "#b3283c"; g.fillText("STUDENT AFFAIRS", c.width / 2, c.height * 0.86);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return new THREE.MeshBasicMaterial({ map: t, transparent: true });
 }

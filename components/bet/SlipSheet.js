@@ -28,7 +28,9 @@ export default function SlipSheet({ goBets, goSports }) {
     builder.clear(); builder.open(false); // the slip empties and closes at once
     goBets(); // see the slip in My Bets straight away
     const res = await run({
-      key: "bet:place", router, sound: "place",
+      // one key per slip (not one for the whole app): a second, different slip placed while the first is still travelling must not be dropped
+      key: `bet:place:${stake}:${legs.map((l) => l.fx + l.mk + l.pk).join("|")}`, router, sound: "place",
+      sensitive: true, pending: "Placing your bet…", // the slip shows in My Bets at once as open; "Bet placed" is only said once the server has taken the stake
       ok: `Bet placed: ${money(stake)} on ${n === 1 ? "1 match" : `${n} matches`}. Good luck!`,
       request: () => call("/api/bet/slips", { legs: legs.map(({ fx, mk, pk }) => ({ fx, mk, pk })), stakeNaira: stake, requestId: crypto.randomUUID() }),
       effects: [{ store: slipsStore, patch: temp }, { store: game, patch: cash(-stakeKobo) }],

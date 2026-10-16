@@ -1,6 +1,6 @@
 // src/app/page.js
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { call } from "@/lib/client";
@@ -17,17 +17,30 @@ export default function Home() {
   const router = useRouter();
   const [mode, setMode] = useState(null);
   // Returning player? The login cookie is remembered, so skip the landing page and go straight to the game.
-  const [checking, setChecking] = useState(true),
+  // The landing page is usable at once: new visitors are never held up by the session check. Only a browser that was signed in
+  // before (remembered on this device) covers the page with the loader while the check runs, so a returning player never sees a flash of it.
+  const [checking, setChecking] = useState(false),
     [welcome, setWelcome] = useState("");
+  useLayoutEffect(() => {
+    try {
+      if (localStorage.getItem("oau.in") === "1") setChecking(true);
+    } catch {
+      /* private mode: no hint, the page simply shows at once */
+    }
+  }, []);
   useEffect(() => {
     let on = true;
     call("/api/session").then((r) => {
       if (!on) return;
       if (r.authenticated) {
+        try { localStorage.setItem("oau.in", "1"); } catch { /* ignore */ }
         setWelcome(r.name ? `Welcome back, ${r.name}` : "Welcome back");
+        setChecking(true); // keep the loader up until the game page takes over
         router.replace("/play");
-      } // keep the loader up until the game page takes over
-      else setChecking(false);
+      } else {
+        try { localStorage.removeItem("oau.in"); } catch { /* ignore */ }
+        setChecking(false);
+      }
     });
     return () => {
       on = false;
