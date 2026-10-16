@@ -9,6 +9,9 @@
 import * as THREE from "three";
 import { createStage } from "./stage.js";
 import { makeFigure, pose, CHANNELS } from "./toonFigure.js";
+import { createAvatar } from "./avatar/loadAvatar.js";
+import { createNpc, npcSpec } from "./avatar/npc.js";
+import { makeAvatarFigure } from "./avatar/figureRig.js";
 import { makeDsaVan, VAN } from "./dsaVan.js";
 import { buildWorld, ROAD_Z } from "./lectureWorld.js";
 import { createFight, MOVES, STAGGER } from "../lib/fightSim.js";
@@ -77,14 +80,30 @@ export async function createLectureScene(container, opts = {}) {
 
   // ---------- people ----------
   const look = cleanLook(lookIn, gender);
-  const person = (o) => { const f = makeFigure(o); scene.add(f.root); toDispose.push(f); return f; };
-  const player = person({ skin: SKIN_TONES[look.skin], top: COLORS[look.top], bottom: COLORS[look.bottom], hair: hairFor(look.hair), width: gender === "F" ? 0.93 : 1, scale: look.height === "tall" ? 1 : look.height === "short" ? 0.9 : 0.95, long: false });
-  const lec = person(lecturerLook(lecturer.name, lecturer.difficulty));
-  const offA = person({ ...OFFICER, skin: "#6b4430" }), offB = person({ ...OFFICER, skin: "#9c6a45", scale: 1 }), driver = person({ ...OFFICER, skin: "#4a2e20" });
+  // Everyone is a real rigged character built by the same pipeline as the player (avatar/loadAvatar.js, avatar/npc.js) and posed by makeAvatarFigure from the joint-angle poses below.
+  // The little box figure of toonFigure.js stands in until a character has loaded (and for good if its models cannot be loaded), so the scene always works.
+  const people = []; let gone = false;
+  const person = (o, build) => {
+    const toon = makeFigure(o), holder = new THREE.Group(); holder.add(toon.root); scene.add(holder);
+    const f = { root: holder, impl: toon, get head() { return f.impl.head; }, apply: (p, k) => f.impl.apply(p, k), expr: (n) => f.impl.expr(n), dispose() { f.impl.dispose(); },
+      async upgrade() { try { const av = await build?.(); if (!av) return; if (gone || av.kind !== "glb") { av.dispose(); return; }
+          const fig = makeAvatarFigure(av); fig.root.traverse((m) => { if (m.isMesh) m.castShadow = true; }); fig.apply({}, 1);
+          holder.remove(toon.root); toon.dispose(); holder.add(fig.root); f.impl = fig; } catch (e) { console.warn("lecture scene: using the simple figure:", e); } } };
+    toDispose.push(f); people.push(f); return f;
+  };
+  const staff = (name) => { const h = hash(name), skins = Object.keys(SKIN_TONES); return { h, skin: skins[h % skins.length] }; };
+  const lecSpec = (() => { const { h, skin } = staff(lecturer.name), big = lecturer.difficulty > 1.3;
+    return npcSpec("lecturer:" + lecturer.name, { gender: "M", role: "staff", force: { bodyWidth: big ? 1.14 : 1.05, colors: { top: big ? "#7a1f33" : SHIRTS[h % SHIRTS.length], bottom: "#23262d" }, look: { skin, hair: "lowcut" } } }); })();
+  const player = person({ skin: SKIN_TONES[look.skin], top: COLORS[look.top], bottom: COLORS[look.bottom], hair: hairFor(look.hair), width: gender === "F" ? 0.93 : 1, scale: look.height === "tall" ? 1 : look.height === "short" ? 0.9 : 0.95, long: false },
+    () => createAvatar(look, gender)); // the player's own character, exactly as they made it
+  const lec = person(lecturerLook(lecturer.name, lecturer.difficulty), () => createNpc(lecSpec));
+  const officer = (seed, g) => npcSpec("dsa:" + seed, { gender: g, role: "officer" });
+  const offA = person({ ...OFFICER, skin: "#6b4430" }, () => createNpc(officer("a", "M"))), offB = person({ ...OFFICER, skin: "#9c6a45", scale: 1 }, () => createNpc(officer("b", "F"))), driver = person({ ...OFFICER, skin: "#4a2e20" }, () => createNpc(officer("c", "M")));
   const van = makeDsaVan(); scene.add(van.root); toDispose.push(van);
   van.driverSlot.add(driver.root); driver.root.rotation.y = Math.PI; scene.remove(driver.root); van.driverSlot.add(driver.root);
   const crowd = [[-4.6, 0.6], [-3.4, -1.3], [-5.8, -1.0], [3.9, -1.2], [5.1, 0.7], [-0.2, -1.8], [6.4, -0.6]].map(([x, z], i) => {
-    const f = person({ skin: CROWD_SKINS[i % 5], top: CROWD_TOPS[(i * 3) % 7], bottom: i % 2 ? "#2b3140" : "#a8946a", hair: i % 3 === 0 ? "long" : i % 3 === 1 ? "afro" : "short", scale: 0.9 + (i % 3) * 0.04 });
+    const f = person({ skin: CROWD_SKINS[i % 5], top: CROWD_TOPS[(i * 3) % 7], bottom: i % 2 ? "#2b3140" : "#a8946a", hair: i % 3 === 0 ? "long" : i % 3 === 1 ? "afro" : "short", scale: 0.9 + (i % 3) * 0.04 },
+      () => createNpc(npcSpec("campus-crowd:" + i, { gender: i % 2 ? "F" : "M", role: "student" })));
     return { f, x, z, phase: i * 1.3, run: 6 + i * 0.5, side: x < 0 ? -1 : 1 };
   });
   const place = (f, x, z, yaw = 0, y = 0, rz = 0) => { f.root.position.set(x, y, z); f.root.rotation.set(0, yaw, rz); };
@@ -402,6 +421,8 @@ export async function createLectureScene(container, opts = {}) {
     for (const p of sparks) if (p.life > 0) { p.life -= dt; p.v.y -= 9 * dt; p.m.position.addScaledVector(p.v, dt); if (p.life <= 0) p.m.visible = false; }
     world.update(time);
   }
+  // wait (a few seconds at most) for the characters, so the scene opens with people in it; any that are slower swap in when they arrive
+  await Promise.race([Promise.all(people.map((f) => f.upgrade())), new Promise((r) => setTimeout(r, 4500))]);
   stage.onFrame((t, dt) => { if (!paused) frame(dt); });
   applyK = 0.35;
 
@@ -419,6 +440,6 @@ export async function createLectureScene(container, opts = {}) {
     seek(name, t) { paused = true; applyK = 1; everyone.forEach((f) => (f.root.visible = true)); cut = { name, t, last: 1e9, resolve() {} }; mode = "held"; SCENES[name].fn(t); renderer.render(scene, camera); applyK = 0.35; },
     step(dt, n = 1) { paused = true; applyK = 1; for (let i = 0; i < n; i++) frame(dt); renderer.render(scene, camera); applyK = 0.35; },
     sim: () => sim,
-    dispose() { stage.dispose(); world.dispose(); toDispose.forEach((d) => d.dispose?.()); sparkGeo.dispose(); pops.forEach((p) => { p.s.material.map.dispose(); p.s.material.dispose(); }); },
+    dispose() { gone = true; stage.dispose(); world.dispose(); toDispose.forEach((d) => d.dispose?.()); sparkGeo.dispose(); pops.forEach((p) => { p.s.material.map.dispose(); p.s.material.dispose(); }); },
   };
 }

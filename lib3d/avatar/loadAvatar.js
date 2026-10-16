@@ -14,10 +14,12 @@ import {
   BODY_MORPHS,
   ATTACH_BONES,
   partUrl,
+  lodUrl,
   boneKey,
 } from "./manifest.js";
 import { createAnimator, createFace, resolveClip } from "./animation.js";
 import { buildIdleEmoteClip } from "./idleEmote.js";
+import { npcClips } from "./npcClips.js";
 
 const loader = new GLTFLoader(),
   gltfCache = new Map(),
@@ -90,6 +92,7 @@ function tintSkin(root, hex) {
         sheenRoughness: 0.6,
         sheenColor: sheen,
       });
+      p.userData.owned = true; // made for this one character, so it is disposed with it (the loaded model and its textures are shared)
       if (m.normalScale) p.normalScale.copy(m.normalScale);
       return p;
     });
@@ -100,15 +103,17 @@ function tintSkin(root, hex) {
 /** Clothes are recoloured by material name, whatever outfit is worn: "Top_*" takes the shirt colour, "Bottom_*" the trouser/skirt colour, and "TopDark_*" / "BottomDark_*"
  *  a slightly darker shade of the same (cuffs, a shirt under a vest). Trim, shoes, stripes, ties and hair keep their own colour. Materials are cloned because the loaded model is cached. */
 const SHADE = { "": 1, dark: 0.72, light: 1.18 };
-function tintOutfit(meshes, topHex, bottomHex) {
+function tintOutfit(meshes, topHex, bottomHex, darkTopHex = null) {
   for (const o of meshes) {
     const list = Array.isArray(o.material) ? o.material : [o.material];
     const out = list.map((m) => {
       const k = /^(top|bottom)(dark|light)?_/i.exec(m.name ?? "");
       if (!k) return m;
       const c = m.clone();
+      c.userData.owned = true;
       c.color.set(k[1].toLowerCase() === "top" ? topHex : bottomHex);
-      c.color.multiplyScalar(SHADE[(k[2] ?? "").toLowerCase()] ?? 1);
+      if (darkTopHex && k[1].toLowerCase() === "top" && /^dark$/i.test(k[2] ?? "")) c.color.set(darkTopHex); // NPC uniforms: a shirt of its own colour under the vest
+      else c.color.multiplyScalar(SHADE[(k[2] ?? "").toLowerCase()] ?? 1);
       return c;
     });
     o.material = Array.isArray(o.material) ? out : out[0];
@@ -164,8 +169,17 @@ export function attachToBone(base, object, boneName) {
   return true;
 }
 
-async function loadModel(look, gender) {
-  const url = BASES[gender];
+/** The URL to load: the lighter crowd copy when asked for and installed, otherwise the full-detail file. */
+async function resolveUrl(url, lod) {
+  if (lod) {
+    const l = lodUrl(url);
+    if (await available(l)) return l;
+  }
+  return url;
+}
+
+async function loadModel(look, gender, opt = {}) {
+  const url = await resolveUrl(BASES[gender], opt.lod);
   if (!(await available(url))) return null;
   const gltf = await loadGltf(url),
     root = SkeletonUtils.clone(gltf.scene),
@@ -174,7 +188,7 @@ async function loadModel(look, gender) {
     console.warn("avatar base is missing bones:", problems.join(", "));
     return null;
   }
-  tintSkin(root, SKIN_TONES[look.skin]);
+  tintSkin(root, opt.skinHex ?? SKIN_TONES[look.skin]);
   const clips = [...gltf.animations];
   if (await available(ANIM_LIBRARY))
     clips.push(...(await loadGltf(ANIM_LIBRARY)).animations);
@@ -195,6 +209,8 @@ async function loadModel(look, gender) {
         ? (HEIGHT[look.height] ?? 1)
         : (1.76 * (HEIGHT[look.height] ?? 1)) / raw;
   root.scale.multiplyScalar(k);
+  // NPCs only: there are no body-shape blend shapes in the models, so a little width makes people differ in build (the player's own build is left as it was)
+  if (opt.bodyWidth && opt.bodyWidth !== 1) { root.scale.x *= opt.bodyWidth; root.scale.z *= 1 + (opt.bodyWidth - 1) * 0.8; }
   const target = raw * k;
   root.updateMatrixWorld(true);
   // modular parts: each is optional, a missing file is skipped
@@ -205,7 +221,7 @@ async function loadModel(look, gender) {
     ],
     extra = [];
   for (const [slot, id] of parts) {
-    const u = partUrl(slot, id, gender);
+    const u = await resolveUrl(partUrl(slot, id, gender), opt.lod);
     if (!(await available(u))) {
       if (REQUIRED_SLOTS.includes(slot)) return null;
       continue;
@@ -220,9 +236,11 @@ async function loadModel(look, gender) {
   softenHair(extra);
   tintOutfit(
     extra,
-    COLORS[look.top] ?? COLORS.navy,
-    COLORS[look.bottom] ?? COLORS.khaki,
+    opt.colors?.top ?? COLORS[look.top] ?? COLORS.navy,
+    opt.colors?.bottom ?? COLORS[look.bottom] ?? COLORS.khaki,
+    opt.colors?.topDark ?? null,
   );
+  if (opt.npc) clips.push(...npcClips(root, gender, clips));
   if (!resolveClip(clips, "idleEmote")) { // no authored emote installed: build it from the skeleton
     try { const emote = buildIdleEmoteClip(root); if (emote) clips.push(emote); } catch (e) { console.warn("idle emote unavailable:", e); }
   }
@@ -236,6 +254,7 @@ async function loadModel(look, gender) {
     animator,
     face,
     parts: extra.length,
+    owned: true,
   };
 }
 
@@ -246,12 +265,12 @@ async function loadModel(look, gender) {
 export async function createAvatar(
   lookIn,
   gender = "F",
-  { preferModel = true } = {},
+  { preferModel = true, lod = false, npc = false, bodyWidth = 1, colors = null, skinHex = null } = {},
 ) {
   const look = cleanLook(lookIn, gender);
   if (preferModel) {
     try {
-      const m = await loadModel(look, gender);
+      const m = await loadModel(look, gender, { lod, npc, bodyWidth, colors, skinHex });
       if (m)
         return {
           kind: "glb",
@@ -266,12 +285,18 @@ export async function createAvatar(
           emote: (o) => m.animator.playOnce("idleEmote", o),
           stopEmote: () => m.animator.stopOnce("idle"),
           has: (n) => m.animator.has(n),
+          setSpeed: (k) => m.animator.setSpeed(k),
+          duration: (n) => m.animator.durationOf(n),
+          /** A bone of this character's skeleton by name without the rig prefix ("Head", "LeftHand"...), or null. */
+          bone: (n) => { let b = null; m.root.traverse((o) => { if (o.isBone && boneKey(o.name) === n) b = o; }); return b; },
           animations: () => m.animator.available(),
           setExpression: (n) => m.face.setExpression(n),
           dispose() {
             m.animator.dispose();
             m.root.traverse((o) => {
-              o.geometry?.dispose?.();
+              // an NPC only frees what is its own: the geometry and textures are shared with every other copy of the same model
+              if (npc) (Array.isArray(o.material) ? o.material : [o.material]).forEach((x) => x?.userData?.owned && x.dispose());
+              else o.geometry?.dispose?.();
             });
           },
         };

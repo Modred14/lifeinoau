@@ -193,7 +193,7 @@ export async function startTrip(env, o) {
   });
 
   const api = {
-    setTravellers: (l) => traffic.setTravellers(l), pos: () => ({ x: hero.x, z: hero.z, h: Math.atan2(hero.hx, hero.hz) }), route: () => route,
+    traffic, setTravellers: (l) => traffic.setTravellers(l), pos: () => ({ x: hero.x, z: hero.z, h: Math.atan2(hero.hx, hero.hz) }), route: () => route,
     horn() { if (hornT > 0) return; hornT = 0.4; o.onHorn?.(); },
     dispose() { if (!alive) return; alive = false; off?.(); for (const d of disposers.reverse()) { try { d(); } catch { /* clean up as much as possible */ } } stage.scene.remove(world); stage.setManual(false); campus.setTripMode(false);
       cam.near = saved.near; cam.fov = saved.fov; cam.updateProjectionMatrix(); Object.assign(light.sun.shadow.camera, { left: saved.shadow.l, right: saved.shadow.r, top: saved.shadow.t, bottom: saved.shadow.b }); light.sun.shadow.camera.updateProjectionMatrix(); },

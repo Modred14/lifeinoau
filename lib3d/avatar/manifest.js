@@ -9,6 +9,8 @@ export const BASES = { M: `${AVATAR_BASE}/base_male.glb`, F: `${AVATAR_BASE}/bas
 export const ANIM_LIBRARY = `${AVATAR_BASE}/anim/library.glb`;
 /** Modular clothing and hair: /models/avatars/parts/<slot>/<id>_m.glb or <id>_f.glb (they fit each base body), skinned to the same skeleton as the base or attached to a bone. */
 export const partUrl = (slot, id, gender = "M") => `${AVATAR_BASE}/parts/${slot}/${id}_${gender === "F" ? "f" : "m"}.glb`;
+/** The lighter crowd copy of any avatar file (tools/avaters/make_npc_lod.mjs): same skeleton, bones, materials and UVs, fewer triangles, smaller textures. NPCs use these. */
+export const lodUrl = (url) => url.replace(`${AVATAR_BASE}/`, `${AVATAR_BASE}/lod/`);
 /** Slots a look must have a part for before the authored model is used (otherwise the built-in character is shown, so nobody appears bare or bald). */
 export const REQUIRED_SLOTS = ["hair", "outfit"];
 
@@ -64,6 +66,8 @@ export const ANIMATIONS = {
   interact: ["interact", "pick_up", "use_object", "press_button"],
   fight: ["fight", "punch", "defend", "self_defense"],
   sad: ["sad", "sad_pose", "sad_idle"],
+  cheer: ["cheer", "celebrate", "victory"],
+  lookAround: ["look_around", "lookaround", "idle_look"],
   no: ["no", "headshake", "head_shake", "disagree"],
   idleEmote: ["idle_emote", "emote_idle", "idle_dance", "belle"], // the automatic emote when the player has done nothing for a while (built in code if no clip is installed)
 };

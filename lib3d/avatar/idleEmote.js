@@ -93,7 +93,7 @@ function bodyAt(t) {
 const V = new THREE.Vector3(), W = new THREE.Vector3(), Q = new THREE.Quaternion(), Q2 = new THREE.Quaternion(), E = new THREE.Euler();
 
 /** Turns `bone` so the segment from it to `child` points along `dir` (given in the root's space), twisted by `roll` degrees. */
-function aim(root, bone, child, dir, roll) {
+export function aim(root, bone, child, dir, roll) {
   root.updateMatrixWorld(true);
   const rootQ = root.getWorldQuaternion(new THREE.Quaternion()), want = new THREE.Vector3(...dir).normalize().applyQuaternion(rootQ);
   bone.getWorldPosition(V); child.getWorldPosition(W);

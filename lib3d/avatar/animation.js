@@ -19,11 +19,11 @@ export function createAnimator(root, clips) {
   const mixer = new THREE.AnimationMixer(root), actions = new Map(); let current = null, currentName = null, shot = null;
   const actionFor = (clip) => { if (!actions.has(clip)) actions.set(clip, mixer.clipAction(clip)); return actions.get(clip); };
   /** Plays a named animation with a cross-fade. Returns false (and keeps the current one) if the model has no such clip. */
-  function play(name, { fade = 0.3, once = false } = {}) {
+  function play(name, { fade = 0.3, once = false, timeScale = 1 } = {}) {
     const clip = resolveClip(clips, name); if (!clip) return false;
-    const next = actionFor(clip); if (next === current) return true;
+    const next = actionFor(clip); if (next === current) { next.timeScale = timeScale; return true; }
     if (shot) { const o = shot; shot = null; o.onDone?.(false); } // anything else starting ends a one-shot early
-    next.reset().setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity); next.clampWhenFinished = once; next.enabled = true; next.fadeIn(fade).play();
+    next.reset(); next.timeScale = timeScale; next.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity); next.clampWhenFinished = once; next.enabled = true; next.fadeIn(fade).play();
     if (current) current.fadeOut(fade); current = next; currentName = name; return true;
   }
   /** Plays a clip once and blends back into `returnTo` (default idle) just before it ends. onDone(true) = finished by itself, onDone(false) = cut short. */
@@ -35,7 +35,10 @@ export function createAnimator(root, clips) {
   function stopOnce(returnTo = "idle", fade = 0.3) { if (shot) play(returnTo, { fade }); }
   function update(dt) { mixer.update(dt);
     if (shot && shot.action.time >= shot.dur - shot.fade) { const o = shot; shot = null; play(o.returnTo, { fade: o.fade }); o.onDone?.(true); } }
-  return { play, playOnce, stopOnce, get playingOnce() { return !!shot; }, has: (n) => !!resolveClip(clips, n), available: () => availableAnimations(clips), get current() { return currentName; }, update,
+  /** Plays the current loop faster or slower (a walk that matches how fast the body really moves, so feet do not slide). */
+  const setSpeed = (k) => { if (current) current.timeScale = k; };
+  const durationOf = (name) => resolveClip(clips, name)?.duration ?? 0;
+  return { play, playOnce, setSpeed, durationOf, stopOnce, get playingOnce() { return !!shot; }, has: (n) => !!resolveClip(clips, n), available: () => availableAnimations(clips), get current() { return currentName; }, update,
     dispose() { shot = null; mixer.stopAllAction(); mixer.uncacheRoot(root); } };
 }
 

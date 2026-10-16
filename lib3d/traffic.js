@@ -4,10 +4,11 @@
 // and anything that drifts too far from the camera is moved to a fresh spot near it. Metres, x east, z south, y up; nose towards +z like vehicles.js.
 import * as THREE from "three";
 import { randomRoadNear, roadHalfWidth } from "./roadnet.js";
+import { createNpc, npcSpec } from "./avatar/npc.js";
 import { carBodyGeometry, CAR_WHEELS, CAR_WHEEL_R, CAR_COLORS, makeKeke, makeBus, makeCar, rollWheels } from "./vehicles.js";
 
 export const DENSITY = { cars: 6, kekes: 2, buses: 1, peds: 10 }; // within about 250 m of the camera
-const SKIN = ["#8d5a3b", "#6b4229", "#a8704a", "#4f301f", "#7a4a30"], SHIRT = ["#e4e0d4", "#2f62c4", "#c0312f", "#2f7a45", "#e3b83a", "#6b3fa0", "#dd6b27", "#1f2f55", "#e58aa8"], TROUSER = ["#1d1f23", "#3b4048", "#1f2f55", "#a8946a", "#6a4429"];
+
 
 /** A name floating above someone's head, as a sprite (metres). */
 export function nameTag(text, { color = "#ffffff", bg = "rgba(13,19,33,0.78)" } = {}) {
@@ -40,15 +41,18 @@ export function createTraffic({ parent, net, focus, hero, density = DENSITY, see
   const wheelGeo = new THREE.CylinderGeometry(CAR_WHEEL_R, CAR_WHEEL_R, 0.26, 10); wheelGeo.rotateZ(Math.PI / 2);
   const wheelsM = new THREE.InstancedMesh(wheelGeo, new THREE.MeshStandardMaterial({ color: "#16181c", roughness: 0.9 }), Math.max(1, nCars * 4));
   bodies.castShadow = true; bodies.frustumCulled = false; wheelsM.frustumCulled = false; group.add(bodies, wheelsM); disposables.push(bodyGeo, suvGeo, wheelGeo);
-  // ---- people: six instanced parts ----
-  const nPed = density.peds, geos = { torso: new THREE.BoxGeometry(0.42, 0.6, 0.24), head: new THREE.SphereGeometry(0.12, 8, 6), leg: new THREE.BoxGeometry(0.16, 0.82, 0.18), arm: new THREE.BoxGeometry(0.1, 0.56, 0.12) };
-  geos.leg.translate(0, -0.41, 0); geos.arm.translate(0, -0.28, 0);
-  const inst = (g) => { const m = new THREE.InstancedMesh(g, new THREE.MeshStandardMaterial({ roughness: 0.8 }), Math.max(1, nPed)); m.frustumCulled = false; m.castShadow = true; group.add(m); return m; };
-  const P = { torso: inst(geos.torso), head: inst(geos.head), legL: inst(geos.leg), legR: inst(geos.leg), armL: inst(geos.arm), armR: inst(geos.arm) }; Object.values(geos).forEach((g) => disposables.push(g));
+  // ---- people: real rigged characters, built by the same pipeline as the player (see avatar/npc.js). Each walker keeps a character while it is near the camera;
+  //      one that has wandered off is given a new face, clothes and build before it comes back, so the road never fills with the same few people. ----
+  const nPed = density.peds, WALK_V = 1.4; // the walk clip's own pace in metres per second; playing it at speed/WALK_V stops the feet sliding
+  let gone = false, npcSeq = seed * 1000;
+  const pedAnim = ["idle", "phone", "talk", "lookAround"]; // what a person does when they stop for a moment
+  const addNpc = (a, av) => { av.root.visible = false; av.root.position.set(0, -50, 0); group.add(av.root); a.npc = av; a.cur = null; };
+  const loadNpc = async (a) => { try { const av = await createNpc(npcSpec(++npcSeq, { role: rnd() < 0.08 ? "staff" : "student" })); if (gone) { av.dispose(); return null; } return av; } catch { return null; } };
 
   // ---- agents ----
   const mk = (kind) => ({ kind, on: false, x: 0, z: 0, hx: 1, hz: 0, v: 0, vmax: 8, look: 0, phase: rnd() * 6, side: rnd() < 0.5 ? 1 : -1, color: 0, suv: false, colors: [0, 0, 0, 0] });
-  const cars = Array.from({ length: nCars }, () => mk("car")), peds = Array.from({ length: nPed }, () => mk("ped"));
+  const cars = Array.from({ length: nCars }, () => mk("car")), peds = Array.from({ length: nPed }, () => ({ ...mk("ped"), pause: 0, nextPause: 2 + rnd() * 12, act: "idle", cur: null, npc: null }));
+  peds.forEach(async (a) => { const av = await loadNpc(a); if (av) addNpc(a, av); }); // the walkers appear as their characters finish loading
   const big = [...Array.from({ length: density.kekes }, () => { const a = mk("keke"); a.model = makeKeke(); return a; }), ...Array.from({ length: density.buses }, () => { const a = mk("bus"); a.model = makeBus(); return a; })];
   for (const a of big) { a.model.root.visible = false; a.model.root.traverse((o) => { if (o.isMesh) o.castShadow = true; }); group.add(a.model.root); }
   const tmp = new THREE.Matrix4(), base = new THREE.Matrix4(), loc = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), v3 = new THREE.Vector3(), sc = new THREE.Vector3(1, 1, 1), col = new THREE.Color();
@@ -61,7 +65,8 @@ export function createTraffic({ parent, net, focus, hero, density = DENSITY, see
     if (best <= 0) return false; a.x = p.x; a.z = p.z; a.hx = Math.cos(bd); a.hz = Math.sin(bd); a.timer = 0; a.on = true;
     a.vmax = a.kind === "ped" ? 1.1 + rnd() * 0.6 : a.kind === "bus" ? 6 + rnd() * 3 : a.kind === "keke" ? 6 + rnd() * 3 : 6 + rnd() * 5; a.v = a.vmax * 0.8; a.side = rnd() < 0.5 ? 1 : -1;
     if (a.kind === "car") { a.suv = rnd() < 0.3; a.colors = [CAR_COLORS[Math.floor(rnd() * CAR_COLORS.length)]]; }
-    if (a.kind === "ped") a.colors = [SKIN[Math.floor(rnd() * SKIN.length)], SHIRT[Math.floor(rnd() * SHIRT.length)], TROUSER[Math.floor(rnd() * TROUSER.length)]];
+    if (a.kind === "ped") { a.pause = 0; a.nextPause = 3 + rnd() * 14; if (a.npc && !a.loading) { a.loading = true; loadNpc(a).then((av) => { a.loading = false; if (!av) return; // swap in a new person only if the old one is not being looked at
+        if (a.npc && (!a.on || Math.hypot(a.x - focus().x, a.z - focus().z) > 60)) { group.remove(a.npc.root); a.npc.dispose(); addNpc(a, av); } else av.dispose(); }); } }
     return true;
   }
   function steerTo(a, dt) { // keep to the road: look ahead along a few headings and lean towards the one with the most road under it
@@ -71,9 +76,13 @@ export function createTraffic({ parent, net, focus, hero, density = DENSITY, see
     a.want = best == null ? h0 + Math.PI : best; // a dead end: turn round
   }
   function advance(a, dt, others) {
-    steerTo(a, dt);
+    if (a.kind === "ped") { // now and then someone stops to check their phone, chat or look around, then walks on
+      if (a.pause > 0) { a.pause -= dt; if (a.pause <= 0) a.nextPause = 15 + rnd() * 30; }
+      else { a.nextPause -= dt; if (a.nextPause <= 0 && a.v < 2) { a.pause = 4 + rnd() * 9; a.act = pedAnim[1 + Math.floor(rnd() * 3)]; } }
+    }
+    if (!(a.kind === "ped" && a.pause > 0)) steerTo(a, dt);
     const h0 = Math.atan2(a.hz, a.hx); let dh = (((a.want ?? h0) - h0 + Math.PI * 3) % (Math.PI * 2)) - Math.PI; dh = Math.max(-1, Math.min(1, dh)) * Math.min(1, dt * (a.kind === "ped" ? 4 : 2.2)); a.hx = Math.cos(h0 + dh); a.hz = Math.sin(h0 + dh);
-    let target = a.vmax; const rx = -a.hz, rz = a.hx;
+    let target = a.kind === "ped" && a.pause > 0 ? 0 : a.vmax; const rx = -a.hz, rz = a.hx;
     for (const o of others) { if (o === a || !o.on) continue; const dx = o.x - a.x, dz = o.z - a.z, f = dx * a.hx + dz * a.hz, s = Math.abs(dx * rx + dz * rz); if (f > 0 && f < 16 && s < 2.4 && o.hx * a.hx + o.hz * a.hz > 0.3) target = Math.min(target, f < 5 ? 0 : (o.v ?? 0) * 0.9); }
     a.v += (target - a.v) * Math.min(1, dt * 2.5); a.x += a.hx * a.v * dt; a.z += a.hz * a.v * dt; a.phase += a.v * dt * (a.kind === "ped" ? 4.5 : 1);
   }
@@ -85,16 +94,21 @@ export function createTraffic({ parent, net, focus, hero, density = DENSITY, see
     const now = performance.now(), seen = new Set();
     for (const t of list) {
       seen.add(t.id); let e = live.get(t.id);
-      if (!e) { const model = t.mode === "keke" ? makeKeke() : t.mode === "bus" ? makeBus() : t.mode === "car" ? makeCar() : null, walker = model ? null : makeWalker(SKIN[2], SHIRT[1], TROUSER[1]), root = model ? model.root : walker.root, tag = nameTag(t.name, { bg: "rgba(21,128,61,0.88)" });
+      if (!e) { const model = t.mode === "keke" ? makeKeke() : t.mode === "bus" ? makeBus() : t.mode === "car" ? makeCar() : null, walker = model ? null : makeWalker("#8d5a3b", "#2f62c4", "#1f2f55"), root = model ? model.root : new THREE.Group(), tag = nameTag(t.name, { bg: "rgba(21,128,61,0.88)" });
+        if (walker) { // on foot: the player's own look, drawn like everyone else, replaces the stand-in as soon as it has loaded
+          e = { root, model, walker, tag, x: t.x, z: t.z, h: t.h, tx: t.x, tz: t.z, th: t.h, phase: 0, at: now };
+          createNpc(npcSpec(t.id, { gender: t.gender === "F" ? "F" : "M", force: { look: t.look ?? undefined } }), { lod: false }).then((av) => { if (!live.has(t.id) || live.get(t.id) !== e || gone) { av.dispose(); return; } if (av.kind !== "glb") { av.dispose(); root.add(walker.root); return; } e.av = av; e.cur = null; root.add(av.root); }).catch(() => root.add(walker.root));
+        }
         tag.position.set(0, model ? model.height + 0.9 : 2.2, 0); root.add(tag); group.add(root); root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-        e = { root, model, walker, tag, x: t.x, z: t.z, h: t.h, tx: t.x, tz: t.z, th: t.h, phase: 0, at: now }; live.set(t.id, e); }
+        e = e ?? { root, model, walker, tag, x: t.x, z: t.z, h: t.h, tx: t.x, tz: t.z, th: t.h, phase: 0, at: now }; live.set(t.id, e); }
       Object.assign(e, { tx: t.x, tz: t.z, th: t.h, at: now, mode: t.mode });
     }
-    for (const [id, e] of live) if (!seen.has(id)) { group.remove(e.root); e.tag.userData.dispose(); e.root.traverse((o) => { o.geometry?.dispose?.(); }); live.delete(id); }
+    for (const [id, e] of live) if (!seen.has(id)) { group.remove(e.root); e.tag.userData.dispose(); if (e.av) e.av.dispose(); e.root.traverse((o) => { if (!e.av || !e.av.root.getObjectById(o.id)) o.geometry?.dispose?.(); }); live.delete(id); }
   }
 
-  let spawnCool = 0;
+  let spawnCool = 0, clock = 0;
   function update(dt) {
+    clock += dt;
     const f = focus(), hr = hero(), fast = (hr?.v ?? 0) > 22, all = [...cars, ...big, ...(hr ? [{ ...hr, on: true }] : [])];
     spawnCool -= dt;
     for (const a of [...cars, ...big, ...peds]) {
@@ -112,16 +126,20 @@ export function createTraffic({ parent, net, focus, hero, density = DENSITY, see
     bodies.instanceMatrix.needsUpdate = true; wheelsM.instanceMatrix.needsUpdate = true; if (bodies.instanceColor) bodies.instanceColor.needsUpdate = true;
     for (const a of big) { a.model.root.visible = a.on; if (!a.on) continue; const [x, z] = lane(a); a.model.root.position.set(x, 0.05, z); a.model.root.rotation.y = Math.atan2(a.hx, a.hz); rollWheels(a.model, a.v * dt); }
     // people
-    peds.forEach((a, i) => { if (!a.on) { for (const k in P) P[k].setMatrixAt(i, hide); return; }
-      const [x, z] = lane(a), sw = Math.sin(a.phase) * 0.7 * Math.min(1, a.v / 1.2); q.setFromAxisAngle(up, Math.atan2(a.hx, a.hz)); base.compose(v3.set(x, 0.05, z), q, sc);
-      const put = (m, ox, oy, oz, ang) => { loc.makeTranslation(ox, oy, oz); if (ang) { tmp.makeRotationX(ang); loc.multiply(tmp); } m.setMatrixAt(i, tmp.multiplyMatrices(base, loc)); };
-      put(P.torso, 0, 1.15, 0); put(P.head, 0, 1.6, 0); put(P.legL, -0.11, 0.86, 0, sw); put(P.legR, 0.11, 0.86, 0, -sw); put(P.armL, -0.27, 1.43, 0, -sw * 0.8); put(P.armR, 0.27, 1.43, 0, sw * 0.8);
-      P.torso.setColorAt(i, col.set(a.colors[1])); P.head.setColorAt(i, col.set(a.colors[0])); P.armL.setColorAt(i, col); P.armR.setColorAt(i, col); P.legL.setColorAt(i, col.set(a.colors[2])); P.legR.setColorAt(i, col); });
-    for (const k in P) { P[k].instanceMatrix.needsUpdate = true; if (P[k].instanceColor) P[k].instanceColor.needsUpdate = true; }
+    peds.forEach((a) => { const av = a.npc; if (!av) return;
+      if (!a.on) { av.root.visible = false; return; }
+      const [x, z] = lane(a), dist = Math.hypot(a.x - f.x, a.z - f.z);
+      av.root.position.set(x, 0.1, z); av.root.rotation.y = Math.atan2(a.hx, a.hz);
+      const moving = a.v > 0.2, want = moving ? "walk" : a.pause > 0 ? a.act : "idle";
+      if (want !== a.cur && av.has(want) && av.play(want, { fade: 0.35 })) a.cur = want;
+      if (moving && a.cur === "walk") av.setSpeed(Math.max(0.5, Math.min(1.7, a.v / WALK_V)));
+      av.tick(clock, dt, dist); });
     // real players: slide towards the latest reported spot (they report about every two seconds)
     for (const e of live.values()) { const k = Math.min(1, dt * 3), px = e.x, pz = e.z; e.x += (e.tx - e.x) * k; e.z += (e.tz - e.z) * k; let dh = ((e.th - e.h + Math.PI * 3) % (Math.PI * 2)) - Math.PI; e.h += dh * k; e.root.position.set(e.x, 0.05, e.z); e.root.rotation.y = e.h; const d = Math.hypot(e.x - px, e.z - pz);
-      if (e.model) rollWheels(e.model, d); else e.walker.pose((e.phase += d * 2.4), Math.min(1, d / dt / 1.2)); }
+      if (e.model) rollWheels(e.model, d);
+      else if (e.av) { const v = d / Math.max(dt, 1e-3), want = v > 0.25 ? "walk" : "idle"; if (want !== e.cur && e.av.play(want, { fade: 0.3 })) e.cur = want; if (want === "walk") e.av.setSpeed(Math.max(0.5, Math.min(1.9, v / WALK_V))); e.av.update(clock, dt); e.av.root.position.y = 0.05; }
+      else e.walker.pose((e.phase += d * 2.4), Math.min(1, d / dt / 1.2)); }
   }
-  function dispose() { for (const e of live.values()) e.tag.userData.dispose(); group.traverse((o) => { o.geometry?.dispose?.(); }); disposables.forEach((g) => g.dispose()); bodies.dispose(); wheelsM.dispose(); Object.values(P).forEach((m) => m.dispose()); parent.remove(group); }
-  return { update, setTravellers, dispose };
+  function dispose() { gone = true; for (const e of live.values()) { e.tag.userData.dispose(); e.av?.dispose(); } for (const a of peds) a.npc?.dispose(); group.traverse((o) => { if (o.userData.npcMesh || o.isSkinnedMesh) return; o.geometry?.dispose?.(); }); disposables.forEach((g) => g.dispose()); bodies.dispose(); wheelsM.dispose(); parent.remove(group); }
+  return { update, setTravellers, dispose, peds /* read-only, for tests */ };
 }
