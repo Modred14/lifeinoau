@@ -1,5 +1,5 @@
 import { getUserId } from "@/lib/auth";
-import { campusRequest, sameOrigin, noStore } from "@/lib/campus-proxy";
+import { campusRequest, readUpstream, sameOrigin, noStore } from "@/lib/campus-proxy";
 const paths = new Set(["summary", "order", "cancel", "rider/queue", "rider/claim", "rider/pickup", "rider/deliver", "rider/cancel"]);
 export const dynamic = "force-dynamic";
 export async function POST(request, context) {
@@ -11,7 +11,10 @@ export async function POST(request, context) {
   let body;
   try { body = await request.json(); } catch { return Response.json({ error: "invalid" }, { status: 400, headers: noStore }); }
   try {
-    const upstream = await campusRequest(request, `/market/${route}`, body);
-    return Response.json(await upstream.json(), { status: upstream.status, headers: noStore });
-  } catch { return Response.json({ error: "unavailable" }, { status: 503, headers: noStore }); }
+    const { status, data } = await readUpstream(await campusRequest(request, `/market/${route}`, body), `/market/${route}`);
+    return Response.json(data, { status, headers: noStore });
+  } catch (err) {
+    console.error("[market] upstream failed", err instanceof Error ? err.message : err);
+    return Response.json({ error: "unavailable" }, { status: 503, headers: noStore });
+  }
 }

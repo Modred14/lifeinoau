@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { getUserId, endSession } from "@/lib/auth";
 import { getState, GameError } from "@/lib/gameService";
-import { campusRequest, sameOrigin, noStore } from "@/lib/campus-proxy";
+import { campusRequest, readUpstream, sameOrigin, noStore } from "@/lib/campus-proxy";
 const db = globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15000, timeout: 60000 } });
 export const dynamic = "force-dynamic";
 export async function POST(request, context) {
@@ -14,8 +14,8 @@ export async function POST(request, context) {
   try {
     const state = await getState(db, userId);
     if (action === "session") return Response.json({ username: state.character.name, hasSave: true, level: `${state.character.level}L` }, { headers: noStore });
-    const upstream = await campusRequest(request, "/oau/session", { userId });
-    return Response.json(await upstream.json(), { status: upstream.status, headers: noStore });
+    const { status, data } = await readUpstream(await campusRequest(request, "/oau/session", { userId }), "/oau/session");
+    return Response.json(data, { status, headers: noStore });
   } catch (err) {
     if (err instanceof GameError) return Response.json({ error: err.message }, { status: err.status, headers: noStore });
     console.error("[campus] connection failed", err);
