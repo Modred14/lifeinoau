@@ -13,6 +13,7 @@ import { game, roomStore, useStore, begin, finish, cash, canAfford } from "@/lib
 import { ITEMS, MAX_ITEMS, roomScore, sellKobo, priceKobo } from "@/lib/furniture.js";
 import { roomFor, autoPlace } from "@/lib/room.js";
 import { fmtN } from "@/lib/classes.js";
+import { bailFor, HUSTLE } from "@/lib/engine.js";
 import { Icon } from "./Icon";
 import BuySheet from "./BuySheet";
 import "./game-home.css";
@@ -317,7 +318,7 @@ export default function GameHome({
                     {Math.floor(hours / 3600000)}h{" "}
                     {String(Math.floor(hours / 60000) % 60).padStart(2, "0")}m{" "}
                     {String(Math.floor(hours / 1000) % 60).padStart(2, "0")}s
-                    left
+                    left · bail drops {fmtN(HUSTLE.bailPerMinute)} every minute
                   </p>
                 </div>
                 <button
@@ -326,7 +327,7 @@ export default function GameHome({
                   disabled={busy}
                   onClick={bail}
                 >
-                  Pay {naira(fz.billKobo)}
+                  Pay {naira(bailFor(fz.releaseAt, now))}
                 </button>
               </section>
             )}

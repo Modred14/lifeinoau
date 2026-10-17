@@ -13,7 +13,7 @@
 .lo-glow { position: absolute; width: min(64vw, 420px); aspect-ratio: 1; border-radius: 50%; border: 1px solid rgba(242, 246, 255, 0.06); pointer-events: none; }
 
 /* ---- the logo forming ---- */
-.lf { position: relative; display: block; flex: none; overflow: visible; max-width: 80vw; height: auto; }
+.lo-logo { position: relative; display: block; flex: none; overflow: visible; max-width: 80vw; height: auto; }
 .lf-g path { fill: #f2f6ff; fill-opacity: 0; fill-rule: evenodd; stroke: #f2f6ff; stroke-width: 5; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1;
   animation: lf-draw 0.95s var(--ease) calc(var(--d) - var(--skip, 0s)) both, lf-fill 0.55s ease calc(var(--d) + 0.6s - var(--skip, 0s)) both; }
 .lf-tower, .lf-road, .lf-birds { transform-box: fill-box; transform-origin: 50% 100%; }
@@ -54,7 +54,7 @@
   .lo, .lo-full { animation: none !important; }
   .lf-g, .lf-g path, .lf-sunwrap { animation: none !important; transform: none; opacity: 1; }
   .lf-g path { fill-opacity: 1; stroke-opacity: 0; stroke-dashoffset: 0; }
-  .lf { animation: lo-calm 2.4s ease-in-out infinite !important; }
+  .lo-logo { animation: lo-calm 2.4s ease-in-out infinite !important; }
   .lf-sunwrap circle { animation: none !important; }
   .lo-orbit { animation: none !important; }
   .lo-dots i { animation: none !important; opacity: 1; }

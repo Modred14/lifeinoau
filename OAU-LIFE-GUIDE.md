@@ -139,9 +139,9 @@ oau-life-backend/
 | `/api/character` | POST | `app/api/character/route.js` | Create character; server draws MAPO/LAPO/NEPO |
 | `/api/character/hostel` | POST | `app/api/character/hostel/route.js` | Choose hostel (once) |
 | `/api/state` | GET | `app/api/state/route.js` | Everything the game screen needs (also catches the player up on missed weeks) |
-| `/api/action` | POST | `app/api/action/route.js` | class, study, rest, safe hustle |
+| `/api/action` | POST | `app/api/action/route.js` | class, study, rest, safe hustle (2 per in-game day, 6h apart) |
 | `/api/parent/call` | POST | `app/api/parent/call/route.js` | Call parent (once per week) |
-| `/api/risky` | POST | `app/api/risky/route.js` | Risky hustle (QRS risk) |
+| `/api/risky` | POST | `app/api/risky/route.js` | Risky hustle (once per in-game day; paid or jailed) |
 | `/api/exam` | POST | `app/api/exam/route.js` | Sit or cheat in an exam |
 | `/api/fight` | POST | `app/api/fight/route.js` | Report a lecturer brawl; the server decides the cost (80% QRS catch after a win) |
 | `/api/floor0/pay` | POST | `app/api/floor0/pay/route.js` | Pay the bill to leave Floor O |
@@ -227,10 +227,16 @@ Missing an exam is an automatic fail. An average grade point of 1.0 or more adva
 means withdrawal. Graduation at 500L gives a Nigerian-style class (First Class from 4.5 and so on). CGPA is the average over every
 exam sat. Cheating adds marks, but a caught cheat caps the score at 25 and adds a strike.
 
-**Risk and Floor O.** Risky hustle: 30% chance to win ₦100k to ₦600k, but each attempt raises suspicion and the QRS
-catch chance rises with it. Arrest: Floor O for 30 minutes to 3 hours, lose 15 health, 25 energy and 10 happiness, the
-QRS seizes 30% of your cash, and you can pay a bill (10% of cash, between ₦150k and ₦5M) to leave early. Strikes: 3 means
-a 2-week suspension, 5 means expulsion.
+**Hustles (all limits are enforced on the server, in `lib/engine.js` + `lib/gameService.js`; the screens only read them).**
+One in-game day is one real day, counted from the game clock's start (`dayWindow` in `lib/clock.js`).
+- Safe hustle: 20 energy, pays a random ₦1,500 to ₦15,000. At most 2 per in-game day, and at least 6 hours between attempts (the gap also holds across the day change).
+- Risky hustle (labelled VERY RISKY, ₦100,000 to ₦500,000): 25 energy, once per in-game day. Two outcomes only: N-QRS catches you (chance rises with suspicion), or you are paid a random ₦100,000 to ₦500,000.
+- The counts come from `ActionLog` rows (written in the same transaction as the hustle, so a failed hustle never counts; the player row is locked, so two quick taps cannot both pass). `getState` returns them as `hustle`.
+
+**Floor O and bail.** Caught on a risky hustle: Floor O for 30 minutes to 1 hour 30 minutes, lose 15 health, 25 energy and 10 happiness, the
+QRS seizes 30% of your cash. Bail is ₦3,500 for every minute of the sentence still to serve (a started minute counts), so it falls ₦3,500
+each minute served and is worked out on the server at the moment of payment (`bailFor`). Fighting a lecturer jails you for 30 minutes to 3 hours but uses the same bail rule.
+Strikes: 3 means a 2-week suspension, 5 means expulsion. A suspended player can still pay bail.
 
 **Fighting a lecturer.** On the Courses app, "Fight <lecturer>" (20 energy, once per week, behind a confirm) opens a full-screen 3D brawl
 (`components/LectureFight.js`, scene in `lib3d/lectureScene.js`). It plays itself (auto-fight) so you watch your character beat the lecturer, and you can

@@ -1,0 +1,2 @@
+-- Hustle limits (once / twice per in-game day) are counted from ActionLog: this index keeps that lookup fast.
+CREATE INDEX "ActionLog_characterId_action_createdAt_idx" ON "ActionLog"("characterId", "action", "createdAt");

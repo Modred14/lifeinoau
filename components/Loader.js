@@ -66,7 +66,7 @@ export default function Loader({ label = "Loading", showLabel = true, fullscreen
   return (
     <div ref={root} className={cls} role="status" aria-live="polite" aria-busy="true">
       {fullscreen && <span className="lo-glow" aria-hidden="true" />}
-      <svg className="lf" viewBox={LOGO_VIEWBOX} width={Math.round(h * LOGO_RATIO)} height={h} aria-hidden="true" focusable="false">
+      <svg className="lo-logo" viewBox={LOGO_VIEWBOX} width={Math.round(h * LOGO_RATIO)} height={h} aria-hidden="true" focusable="false">
         {STAGES.map(([g, d]) => (
           <g key={g} className={`lf-g lf-${g}`} style={{ "--d": d }}>
             {LOGO_PARTS[g].map((p, i) => <path key={i} d={p} pathLength="1" />)}

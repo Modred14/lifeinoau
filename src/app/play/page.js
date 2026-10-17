@@ -13,12 +13,28 @@ import { Icon } from "@/components/Icon";
 import GameHome from "@/components/GameHome";
 import { setBare, isBooted, markBooted } from "@/lib/ui";
 import { game, useGame, run as go, bump, cash, chain, deltas, canAfford } from "@/lib/gameStore";
-import { resolveAction } from "@/lib/engine";
+import { resolveAction, hustleBlock, safeHustleAt, bailFor, waitText, HUSTLE } from "@/lib/engine";
+import { confirmAction } from "@/lib/confirm";
+import { fmtN } from "@/lib/classes";
 import "./play.css";
 
 function View({ children }) {
   return <div className="gh-view">{children}</div>;
 }
+
+/** Show one more hustle used today, until the server's own count arrives. */
+const usedHustle = (kind) => (s) => {
+  const h = s.hustle;
+  if (!h) return s;
+  const fresh = Date.now() >= h.resetsAt; // a screen that kept the old day: count from a clean day
+  return {
+    ...s,
+    hustle:
+      kind === "safe"
+        ? { ...h, safeLeft: Math.max(0, (fresh ? HUSTLE.safe.perDay : h.safeLeft) - 1), safeUsed: (fresh ? 0 : h.safeUsed) + 1, safeGapEndsAt: Date.now() + HUSTLE.safe.gapMs, ...(fresh ? { resetsAt: h.resetsAt + Math.ceil((Date.now() - h.resetsAt + 1) / 86_400_000) * 86_400_000 } : {}) }
+        : { ...h, riskyLeft: 0, riskyUsed: (fresh ? 0 : h.riskyUsed) + 1, ...(fresh ? { resetsAt: h.resetsAt + Math.ceil((Date.now() - h.resetsAt + 1) / 86_400_000) * 86_400_000 } : {}) },
+  };
+};
 
 export default function Play() {
   const router = useRouter();
@@ -98,14 +114,22 @@ export default function Play() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [view]); // a new screen always starts at its top
-  // The page only needs a ticking clock for the Floor O countdown: without a sentence it never re-renders on a timer.
-  const jailed = !!st?.floorZero;
+  // The page only needs a ticking clock for the Floor O countdown and the hustle cooldowns: without either it never re-renders on a timer.
+  // The next moment something unlocks is also scheduled exactly, so a button comes back the second it is allowed.
+  const jailed = !!st?.floorZero,
+    hs = st?.hustle,
+    nextUnlock = hs ? Math.min(...[safeHustleAt(hs, Date.now()), hs.riskyLeft > 0 ? Infinity : hs.resetsAt].filter((t) => t > Date.now()), Infinity) : Infinity;
   useEffect(() => {
-    if (!jailed) return;
+    if (!jailed && nextUnlock === Infinity) return;
     setNow(Date.now());
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [jailed]);
+    const t = setInterval(() => setNow(Date.now()), jailed ? 1000 : 15_000),
+      u = nextUnlock === Infinity ? null : setTimeout(() => setNow(Date.now()), Math.max(0, nextUnlock - Date.now()) + 100);
+    return () => { clearInterval(t); clearTimeout(u); };
+  }, [jailed, nextUnlock]);
+
+  useEffect(() => {
+    if (hs) setNow(Date.now()); // a fresh answer from the server: show cooldowns against the real time
+  }, [hs]);
 
   // The moment the sentence runs out, ask the server for the fresh state (it releases the player), so everything unlocks at once.
   const releaseAt = st?.floorZero?.releaseAt;
@@ -147,6 +171,8 @@ export default function Play() {
     const c = st.character,
       pred = resolveAction(c, action, () => 0); // the same rules the server uses, so rest and hustle are predicted exactly
     if (pred.error) return toast.error(pred.error);
+    const why = action === "hustle" && st.hustle ? hustleBlock("safe", st.hustle, Date.now()) : null; // the server decides; this only saves a round trip
+    if (why) return toast.error(why);
     return go({
       key: "action:" + action,
       router,
@@ -159,30 +185,46 @@ export default function Play() {
       pending: "Hustling…",
       request: () =>
         call("/api/action", { action, requestId: crypto.randomUUID() }),
-      effects: [{ store: game, patch: bump(deltas(c, pred.stats)) }],
+      effects: [
+        { store: game, patch: bump(deltas(c, pred.stats)) },
+        action === "hustle" ? { store: game, patch: usedHustle("safe") } : null, // the cooldown starts on screen at once (the server keeps the real count)
+      ],
       after:
         action === "hustle"
           ? (r) => [{ store: game, patch: cash(r.earnedKobo ?? 0) }]
           : undefined,
     });
   };
-  const risky = () => {
-    if (st.character.energy < 25)
+  const risky = async () => {
+    if (st.character.energy < HUSTLE.risky.energy)
       return toast.error("You are too tired for that. Rest first.");
+    const why = st.hustle ? hustleBlock("risky", st.hustle, Date.now()) : null; // the server decides; this only saves a round trip
+    if (why) return toast.error(why);
+    if (
+      !(await confirmAction({
+        title: "Risky hustle: VERY RISKY",
+        message: `You either make ${fmtN(HUSTLE.risky.min)} to ${fmtN(HUSTLE.risky.max)}, or N-QRS catches you and you go to Floor O for ${HUSTLE.risky.jailMin} to ${HUSTLE.risky.jailMax} minutes. You can only try once a day.`,
+        confirmLabel: "Take the risk",
+        tone: "danger",
+      }))
+    )
+      return;
     return go({
       key: "risky",
       router,
       request: () => call("/api/risky", { requestId: crypto.randomUUID() }),
-      effects: [{ store: game, patch: bump({ energy: -25, suspicion: 15 }) }],
+      effects: [
+        { store: game, patch: bump({ energy: -HUSTLE.risky.energy, suspicion: 15 }) },
+        { store: game, patch: usedHustle("risky") },
+      ],
+      after: (r) => (!r.caught && r.earnedKobo ? [{ store: game, patch: cash(r.earnedKobo) }] : []),
       okLate: (r) =>
         r.caught
           ? {
               bad: true,
-              text: `QRS HAS CAUGHT YOU. They seized ${naira(r.seizedKobo)}.${r.expelled ? " You have been expelled." : r.suspended ? " You are suspended for 2 weeks." : ""}`,
+              text: `N-QRS HAS CAUGHT YOU. They seized ${naira(r.seizedKobo)} and you are in Floor O. Bail starts at ${naira(r.billKobo)}.${r.expelled ? " You have been expelled." : r.suspended ? " You are suspended for 2 weeks." : ""}`,
             }
-          : BigInt(r.earnedKobo) > 0n
-            ? { text: `The hustle paid ${naira(r.earnedKobo)}. QRS is watching.`, sound: "coin" }
-            : { info: true, text: "The hustle went nowhere." },
+          : { text: `The hustle paid ${naira(r.earnedKobo)}. N-QRS is watching.`, sound: "coin" },
     });
   };
   const exam = (cheat) =>
@@ -228,8 +270,8 @@ export default function Play() {
         toast.success(`Your parent sent you ${naira(r.gift)}.`, { sound: "coin" }),
     });
   const bail = () => {
-    if (!canAfford(st.floorZero.billKobo))
-      return toast.error("You cannot afford the bill. Wait out your sentence.");
+    if (!canAfford(bailFor(st.floorZero.releaseAt, Date.now())))
+      return toast.error("You cannot afford the bail. Wait out your sentence.");
     return go({
       key: "bail",
       router,
@@ -240,7 +282,7 @@ export default function Play() {
       request: () => call("/api/floor0/pay", {}),
       // the money leaves the wallet at once (taken back if refused), but the Floor O screen only lifts when the server confirms
       effects: [
-        { store: game, patch: (s) => (s.floorZero ? cash(-BigInt(s.floorZero.billKobo))(s) : s) },
+        { store: game, patch: (s) => (s.floorZero ? cash(-bailFor(s.floorZero.releaseAt, Date.now()))(s) : s) },
       ],
       after: () => [{ store: game, patch: (s) => ({ ...s, floorZero: null }) }],
     });
@@ -339,6 +381,13 @@ export default function Play() {
         </div>
       </View>
     );
+  const hsNow = st.hustle,
+    safeWhy = hsNow ? hustleBlock("safe", hsNow, now) : null,
+    riskyWhy = hsNow ? hustleBlock("risky", hsNow, now) : null,
+    safeLeft = hsNow ? (now >= hsNow.resetsAt ? HUSTLE.safe.perDay : hsNow.safeLeft) : null,
+    // short versions of the two messages, for the small action tiles (the toast gets the full sentence)
+    safeTile = safeWhy && `${safeLeft <= 0 ? "Both used today" : "Cooldown"}. Back in ${waitText(safeHustleAt(hsNow, now) - now)}`,
+    riskyTile = riskyWhy && `Tried today. Back in ${waitText(hsNow.resetsAt - now)}`;
   const ACTIONS = [
     {
       id: "rest",
@@ -352,19 +401,19 @@ export default function Play() {
       id: "hustle",
       icon: "hustle",
       name: "Safe hustle",
-      note: "20 energy. Earns ₦8k to ₦25k.",
+      note: `${HUSTLE.safe.energy} energy. ${fmtN(HUSTLE.safe.min)} to ${fmtN(HUSTLE.safe.max)}.${safeLeft != null ? ` ${safeLeft} left today.` : ""}`,
       run: () => act("hustle"),
-      off: c.energy < 20,
-      why: "Needs 20 energy",
+      off: c.energy < HUSTLE.safe.energy || !!safeWhy,
+      why: c.energy < HUSTLE.safe.energy ? `Needs ${HUSTLE.safe.energy} energy` : safeTile,
     },
     {
       id: "risky",
       icon: "dice",
       name: "Risky hustle",
-      note: "25 energy. Big money, or QRS.",
+      note: `VERY RISKY — ${fmtN(HUSTLE.risky.min)}–${fmtN(HUSTLE.risky.max)}`,
       run: risky,
-      off: c.energy < 25,
-      why: "Needs 25 energy",
+      off: c.energy < HUSTLE.risky.energy || !!riskyWhy,
+      why: c.energy < HUSTLE.risky.energy ? `Needs ${HUSTLE.risky.energy} energy` : riskyTile,
       tone: "risk",
     },
     {

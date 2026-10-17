@@ -181,6 +181,7 @@ model ActionLog {
   createdAt   DateTime @default(now())
 
   @@unique([characterId, requestId])
+  @@index([characterId, action, createdAt])
 }
 
 enum JailStatus {
