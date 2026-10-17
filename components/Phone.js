@@ -5,6 +5,7 @@ import { Icon } from "./Icon";
 import { naira, call } from "@/lib/client";
 import { CLASS_INFO } from "@/lib/classes.js";
 import { playSound } from "@/lib/sound";
+import { InPhone } from "./phoneContext";
 import MessagesApp from "./apps/MessagesApp";
 import { chat, useChat } from "@/lib/chat";
 import CareerApp from "./apps/CareerApp";
@@ -38,12 +39,17 @@ const APPS = {
 export const PHONE_APPS = Object.keys(APPS);
 const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "forbes", "awards", "housing", "hire", "bet", "settings"];
 
-const day = (d) => d.toLocaleDateString("en-NG", { weekday: "long", day: "numeric", month: "long" });
-const clock = (d) =>
-  d
-    .toLocaleTimeString("en-NG", { hour: "numeric", minute: "2-digit", hour12: true })
-    .replace(/\s?(am|pm)/i, (m) => m.trim().toUpperCase())
-    .replace(/^(\d+:\d+)(AM|PM)$/, "$1");
+/** "Friday 16 October · Ile-Ife" */
+const dateLine = (d) => {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-NG", { weekday: "long", day: "numeric", month: "long" }).formatToParts(d).map((x) => [x.type, x.value]));
+  return `${p.weekday} ${p.day} ${p.month} · Ile-Ife`;
+};
+/** "10:10" for the big clock, "10:10PM" (ampm = true) for the status bar. */
+const clock = (d, ampm = false) => {
+  const t = d.toLocaleTimeString("en-NG", { hour: "numeric", minute: "2-digit", hour12: true }).replace(/\s?(am|pm)/i, (m) => m.trim().toUpperCase());
+  return ampm ? t : t.replace(/(AM|PM)$/, "");
+};
+const isNight = (d) => d.getHours() >= 19 || d.getHours() < 6;
 
 function Tile({ name, icon, tone, onClick, badge, first, sound }) {
   return (
@@ -95,11 +101,12 @@ export default function Phone({ open, onClose, st, firstApp, initialApp, onShop,
   const cur = app && APPS[app];
   const Cur = cur?.C;
   return (
+    <InPhone.Provider value={true}>
     <div className="ph-scrim" onClick={onClose}>
       <div className="ph" role="dialog" aria-modal="true" aria-label="Phone" data-app={app ?? undefined} onClick={(e) => e.stopPropagation()}>
         <div className="ph-screen">
           <div className="ph-status">
-            <b className="num">{clock(now)}</b>
+            <b className="num">{clock(now, true)}</b>
             <span className="ph-notch" aria-hidden="true" />
             <span className="ph-sys">
               <i className="ph-4g"><i /><i /><i />4G</i>
@@ -109,11 +116,19 @@ export default function Phone({ open, onClose, st, firstApp, initialApp, onShop,
 
           <div className="ph-homescreen" aria-hidden={app ? true : undefined} inert={app ? true : undefined}>
             <div className="ph-body">
+              <div className="ph-hero">
+                <b className="ph-time num" aria-label={`Time ${clock(now, true)}`}>{clock(now)}</b>
+                <p className="ph-date">{dateLine(now)}</p>
+                <span className="ph-mode"><Icon name={isNight(now) ? "moon" : "sun"} size={17} weight="fill" />{isNight(now) ? "Night mode" : "Day mode"}</span>
+              </div>
               {st && (
                 <div className="ph-wallet" aria-label="Wallet">
-                  <span className="ph-wallet-ico"><Icon name="coins" size={18} weight="fill" /></span>
-                  <b className="num">{naira(st.balanceKobo)}</b>
-                  <span className="ph-wallet-s">Week {st.week} · CGPA {a.cgpa ?? "–"} · Energy {c.energy}%</span>
+                  <span className="ph-wallet-ico"><Icon name="coins" size={22} weight="fill" /></span>
+                  <span className="ph-wallet-t">
+                    <b className="num">{naira(st.balanceKobo)}</b>
+                    <small>CGPA {a.cgpa ?? "–"} · Energy {c.energy}%</small>
+                  </span>
+                  <span className="ph-wallet-wk">Week {st.week}</span>
                 </div>
               )}
               <div className="ph-grid">
@@ -153,5 +168,6 @@ export default function Phone({ open, onClose, st, firstApp, initialApp, onShop,
         </button>
       </div>
     </div>
+    </InPhone.Provider>
   );
 }

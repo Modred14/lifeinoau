@@ -1,6 +1,7 @@
 // components/Loader.js
 "use client";
-import { useLayoutEffect, useRef } from "react";
+import { useContext, useLayoutEffect, useRef } from "react";
+import { InPhone } from "./phoneContext";
 import "./loader.css";
 import { LOGO_VIEWBOX, LOGO_RATIO, LOGO_SUN, LOGO_PARTS } from "./logoData";
 
@@ -28,6 +29,7 @@ const STAGES = [
 ];
 
 export default function Loader({ label = "Loading", showLabel = true, fullscreen = true, size, className = "" }) {
+  const inPhone = useContext(InPhone);
   const small = size != null && size < 44;
   const root = useRef(null);
   useLayoutEffect(() => {
@@ -44,6 +46,8 @@ export default function Loader({ label = "Loading", showLabel = true, fullscreen
       goneVisible = resumed || t - mountedAt > FADE_MS;
     };
   }, [fullscreen, small]);
+  // Inside the phone: no logo, no caption, just a spinner (the label is still read out to screen readers).
+  if (inPhone) return <Spinner label={label} className={className} />;
   const h = size ?? (fullscreen ? 170 : 96);
   const cls = ["lo", fullscreen ? "lo-full" : "", small ? "lo-small" : "", className].filter(Boolean).join(" ");
   const caption = label && showLabel
@@ -77,6 +81,15 @@ export default function Loader({ label = "Loading", showLabel = true, fullscreen
         </g>
       </svg>
       {caption}
+    </div>
+  );
+}
+/** The phone's loading state: one ring, turning. Shows on the phone's own wallpaper when it is all that is on the page (see phone.css). */
+export function Spinner({ label = "Loading", className = "" }) {
+  return (
+    <div className={("ph-spin " + className).trim()} role="status" aria-live="polite" aria-busy="true">
+      <span className="ph-spin-ring" aria-hidden="true" />
+      <span className="lo-sr">{label}</span>
     </div>
   );
 }

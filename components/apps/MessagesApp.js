@@ -27,6 +27,7 @@ import { createSerial } from "@/lib/optimistic";
 import { chat, useChat } from "@/lib/chat";
 import { KIND, parseMoney, naira as fmt } from "@/lib/chatShared";
 import { Icon } from "../Icon";
+import { Spinner } from "../Loader";
 import "./messages-app.css";
 
 const lc = (n = "") => String(n).toLowerCase();
@@ -151,11 +152,7 @@ function Ticks({ state }) {
   );
 }
 
-const Spinner = () => (
-  <p className="ms-empty" role="status">
-    Loading…
-  </p>
-);
+
 
 /** Show the banner when the browser is offline, or when reconnecting takes more than a moment (so quick reconnects never flash). */
 function useLate(st) {

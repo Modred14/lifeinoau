@@ -15,6 +15,7 @@ import { confirmAction } from "@/lib/confirm";
 import { game, run, cash, bump, chain, canAfford, roomStore, useResource } from "@/lib/gameStore";
 import { ACTIVITY, GIFTS, RINGS, COST, NOTES, COUPLE, MAX_SNEAKY, REQUEST_WEEKS, PROPOSE_AFTER_WEEKS } from "@/lib/relationships";
 import * as P from "@/lib/lovePatches";
+import { Spinner } from "../Loader";
 import LoadError from "@/components/LoadError";
 import "./relationship-app.css";
 
@@ -100,15 +101,7 @@ function Opt({ icon: I, title, sub, price, onClick, disabled, on }) {
   );
 }
 
-function Skeleton() {
-  return (
-    <div className="lv lv-sk" aria-busy="true" aria-label="Loading">
-      <i style={{ height: 40, borderRadius: 16 }} />
-      <i style={{ height: 300 }} />
-      <i style={{ height: 120 }} />
-    </div>
-  );
-}
+const Skeleton = () => <Spinner label="Loading" />; // the phone's one loading state: a spinner
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 // the app
