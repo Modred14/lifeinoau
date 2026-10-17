@@ -36,7 +36,7 @@ export default function Home() {
         try { localStorage.setItem("oau.in", "1"); } catch { /* ignore */ }
         setWelcome(r.name ? `Welcome back, ${r.name}` : "Welcome back");
         setChecking(true); // keep the loader up until the game page takes over
-        router.replace("/play");
+        router.replace("/home");
       } else {
         try { localStorage.removeItem("oau.in"); } catch { /* ignore */ }
         setChecking(false);

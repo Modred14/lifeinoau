@@ -25,7 +25,7 @@ export default function Boards() {
     <>
       <div className="top">
         <h2>{key === "forbes" ? "FORBES OAU" : "Leaderboards"}</h2>
-        <a href="/play">
+        <a href="/home">
           <button>Back to game</button>
         </a>
       </div>

@@ -41,8 +41,8 @@ export default function Shell({ children }) {
     firstApp = useRef(null),
     failing = useRef(false);
   const bare = path === "/",
-    full = path === "/map" || path === "/play" || path === "/home" || path === "/campus",
-    hideBars = (path === "/play" && (bareUi || (st && !st.floorZero && !st.character.expelled && !st.character.graduated))) || path === "/campus"; // no top bar or bottom nav while the game loads or the player is creating a character
+    full = path === "/map" || path === "/home" || path === "/home" || path === "/campus",
+    hideBars = (path === "/home" && (bareUi || (st && !st.floorZero && !st.character.expelled && !st.character.graduated))) || path === "/campus"; // no top bar or bottom nav while the game loads or the player is creating a character
   // `force` asks the server no matter what. Without it, a copy younger than 15 seconds is reused, so moving between screens
   // (or flipping back to this tab) does not hit the server every time. One request at a time, however many parts of the app ask at once.
   const load = useCallback(async (force = false) => {
@@ -81,10 +81,10 @@ export default function Shell({ children }) {
   useEffect(() => {
     // old links (/career, /people ...) redirect to /play?app=x: open the phone on that app, then tidy the address bar
     const app = new URLSearchParams(window.location.search).get("app");
-    if (path === "/play" && app) {
+    if (path === "/home" && app) {
       setPhoneApp(app);
       setPhone(true);
-      window.history.replaceState(null, "", "/play");
+      window.history.replaceState(null, "", "/home");
     } else setPhone(false);
   }, [path]);
   useEffect(() => {
@@ -123,7 +123,7 @@ export default function Shell({ children }) {
         <SoundToggle />
       </>
     );
-  const creating = path === "/play" && !st,
+  const creating = path === "/home" && !st,
     onPlay = path === "/home" && !!st,
     buying = onPlay && mode === "buy",
     mood = st ? moodOf(st.character.happiness) : null;
@@ -140,7 +140,7 @@ export default function Shell({ children }) {
       {!hideBars && (
       <header className="hud">
         <Link
-          href={st ? "/play" : "/"}
+          href={st ? "/home" : "/"}
           className="brand"
           aria-label="lifeinoau home"
           onClick={() => setPlayMode("home")}

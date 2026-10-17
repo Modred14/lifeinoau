@@ -367,7 +367,7 @@ export default function AuthModal({ initialMode = "signup", onClose }) {
         ? "Account created successfully."
         : "Welcome back. You're logged in.",
     );
-    router.push("/play");
+    router.push("/home");
   }
 
   return (

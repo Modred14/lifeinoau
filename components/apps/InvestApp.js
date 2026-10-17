@@ -124,7 +124,7 @@ export default function Invest() {
     <>
       <div className="top">
         <h2>Invest</h2>
-        <a href="/play">
+        <a href="/home">
           <button>Back to game</button>
         </a>
       </div>

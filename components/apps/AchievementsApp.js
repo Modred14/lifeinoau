@@ -13,7 +13,7 @@ export default function Achievements() {
     <>
       <div className="top">
         <h2>Achievements</h2>
-        <a href="/play">
+        <a href="/home">
           <button>Back to game</button>
         </a>
       </div>

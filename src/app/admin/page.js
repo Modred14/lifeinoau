@@ -104,7 +104,7 @@ export default function Admin() {
     <>
       <div className="top">
         <h2>Admin</h2>
-        <a href="/play">
+        <a href="/home">
           <button>Back</button>
         </a>
       </div>

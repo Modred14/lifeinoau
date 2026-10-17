@@ -3,78 +3,33 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n web,campus \"npm:dev:web\" \"npm:dev:campus\"",
-    "build": "prisma generate && npm run build:campus && next build --webpack",
-    "start": "concurrently -k -n web,campus \"npm:start:web\" \"npm:start:campus\"",
-    "seed": "node --env-file-if-exists=.env prisma/seed.js",
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "seed": "node prisma/seed.js",
     "test": "node tests/run-all.mjs",
     "realtime": "node --env-file=.env realtime/server.js",
-    "test:chat": "node tests/chat.e2e.mjs",
-    "dev:web": "next dev",
-    "dev:campus": "npm run dev -w @campuslife/server",
-    "build:campus": "npm run build -w @campuslife/server",
-    "start:web": "next start",
-    "start:campus": "npm run start -w @campuslife/server",
-    "typecheck": "tsc --noEmit && npm run typecheck -w @campuslife/server",
-    "test:campus": "node --import tsx --test --test-concurrency=2 campus/shared/tests/avatar.test.ts campus/client/scripts/smooth-character-normals.test.mts campus/client/scripts/student-footwear.test.mts campus/client/scripts/student-hair.test.mts campus/client/scripts/student-clothes.test.mts campus/client/scripts/runtime-characters.test.mts campus/client/scripts/clothing-runtime.test.mts campus/client/game/avatar/asset-cache.test.ts campus/client/game/lifecycle.test.ts campus/client/game/camera.test.ts campus/shared/tests/phones.test.ts campus/server/tests/phones.test.ts campus/shared/tests/transport.test.ts campus/shared/tests/path.test.ts campus/server/src/sim/Hail.test.ts campus/client/game/vehicles.test.ts campus/client/game/buildings/buildings.test.ts campus/shared/tests/interiors.test.ts campus/server/src/sim/Dining.test.ts campus/client/game/interior/room.test.ts campus/client/game/avatar/activity-pose.test.mts campus/shared/tests/account.test.ts campus/server/tests/tickets.test.ts campus/shared/tests/traffic.test.ts campus/server/src/sim/Traffic.test.ts campus/client/game/scenery/scenery.test.ts campus/client/game/ambience.test.ts campus/shared/tests/academics.test.ts campus/server/src/sim/Classes.test.ts campus/shared/tests/banners.test.ts campus/client/game/scenery/banners.test.ts campus/shared/tests/shows.test.ts campus/shared/tests/venues.test.ts campus/server/src/sim/Shows.test.ts campus/shared/tests/politics.test.ts campus/server/src/sim/Politics.test.ts campus/shared/tests/vitals.test.ts campus/server/tests/shopping.test.ts campus/shared/tests/conditions.test.ts campus/server/src/sim/Conditions.test.ts campus/shared/tests/admin.test.ts campus/server/src/sim/Admin.test.ts campus/shared/tests/social.test.ts campus/server/src/sim/Social.test.ts campus/shared/tests/union.test.ts campus/server/src/sim/Union.test.ts campus/shared/tests/gist.test.ts campus/shared/tests/glue.test.ts campus/server/src/sim/Glue.test.ts campus/shared/tests/fixes.test.ts campus/server/src/sim/Fixes.test.ts campus/client/game/scenery/stalls.test.ts campus/shared/tests/campus-sites.test.ts campus/client/game/buildings/private-halls.test.ts campus/client/game/buildings/maintenance-halls.test.ts campus/shared/tests/semester.test.ts campus/shared/tests/solids.test.ts campus/shared/tests/market.test.ts campus/client/game/pick-building.test.ts",
-    "test:campus:integration": "node --env-file=.env --import tsx tests/campus.integration.mjs && node --env-file=.env --import tsx tests/campus-bridge.integration.ts"
+    "test:chat": "node tests/e2e/chat.e2e.mjs"
   },
   "dependencies": {
-    "@campuslife/shared": "*",
-    "@colyseus/core": "^0.18.18",
-    "@colyseus/schema": "^5.0.36",
-    "@colyseus/sdk": "^0.18.5",
-    "@colyseus/ws-transport": "^0.18.4",
-    "@node-rs/argon2": "^2.2.1",
     "@phosphor-icons/react": "^2.1.10",
     "@prisma/client": "^6.19.3",
     "bcryptjs": "^3.0.3",
-    "clsx": "^2.1.1",
-    "cmdk": "^1.1.1",
-    "cn": "^0.4.0",
-    "drizzle-orm": "^0.45.3",
     "jose": "^6.2.12",
-    "nanoid": "^3.3.20",
     "next": "^16.4.0",
-    "postgres": "^3.4.9",
-    "radix-ui": "^1.6.7",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "react-icons": "^5.7.0",
     "socket.io": "^4.8.4",
     "socket.io-client": "^4.8.4",
-    "tailwind-merge": "^3.7.0",
-    "three": "^0.186.1",
-    "zod": "^4.6.5"
+    "three": "^0.186.1"
   },
   "devDependencies": {
-    "@colyseus/sdk": "^0.18.5",
-    "@gltf-transform/core": "^4.5.1",
-    "@gltf-transform/extensions": "^4.5.1",
-    "@gltf-transform/functions": "^4.5.1",
-    "@serwist/next": "^9.5.13",
     "@tailwindcss/postcss": "^4.3.3",
-    "@types/node": "^22.10.0",
     "@types/react": "19.3.0",
-    "@types/react-dom": "^19.0.0",
-    "@types/three": "^0.186.0",
-    "concurrently": "^10.0.5",
-    "drizzle-kit": "^0.31.11",
-    "geotiff": "^3.0.5",
-    "meshoptimizer": "^1.3.0",
     "prisma": "^6.19.3",
-    "serwist": "^9.5.13",
-    "sharp": "^0.35.5",
-    "tailwindcss": "^4.3.3",
-    "tsup": "^8.5.1",
-    "tsx": "^4.23.15",
-    "typescript": "5.9.3"
+    "typescript": "7.0.2"
   },
   "engines": {
-    "node": ">=22.9.0"
-  },
-  "workspaces": [
-    "campus/shared",
-    "campus/server"
-  ]
+    "node": ">=20.9.0"
+  }
 }
