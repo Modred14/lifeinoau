@@ -88,3 +88,20 @@ body[data-trip] .nav, body[data-trip] .map-chrome { display: none !important; }
 .map-here { position: fixed; z-index: 20; left: 10px; top: calc(var(--safe-t) + 124px); max-width: min(70vw, 360px); font-size: 0.8rem; padding: 6px 12px; border-radius: 99px; background: rgba(13, 19, 33, 0.88); color: #fff; display: inline-flex; gap: 6px; align-items: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .map-here b { color: #f0c05a; }
 @media (max-width: 520px) { .th-mini { width: 124px; height: 124px; } .th-chip { top: calc(var(--safe-t) + var(--hud-h, 70px) + 146px); } .ts-mode small { font-size: 0.64rem; } }
+
+/* ---- walking around inside (components/BuildingInside.js, lib3d/interiors/scene.js) ---- */
+.bi3 { position: fixed; inset: 0; z-index: 75; background: #0d1321; animation: bi-in 380ms ease; touch-action: none; }
+.bi3-view { position: absolute; inset: 0; }
+.bi3-load { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px; color: #fff; font: 700 1.1rem var(--font-head); }
+.bi3 .bi[data-over="1"] { z-index: 90; background: rgba(7, 10, 18, 0.72); backdrop-filter: blur(3px); }
+.bi3-top { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; gap: 8px; padding: calc(var(--safe-t) + 10px) 12px 8px; background: linear-gradient(to bottom, rgba(7, 10, 18, 0.65), transparent); }
+.bi3-title { flex: 1; min-width: 0; display: grid; text-align: center; color: #fff; }
+.bi3-title b { font: 700 1rem var(--font-head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bi3-title span { font-size: 0.78rem; color: #cfe3ff; min-height: 1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.th .bi3-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px; border-radius: 14px; background: rgba(13, 19, 33, 0.82); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2); font-weight: 700; }
+.th .bi3-btn:hover:not(:disabled) { background: rgba(30, 42, 70, 0.95); border-color: rgba(255, 255, 255, 0.3); }
+.th .bi3-use { position: absolute; left: 50%; bottom: calc(var(--safe-b) + 150px); transform: translateX(-50%); display: inline-flex; align-items: center; gap: 8px; padding: 12px 18px; border-radius: 999px; background: #ffd24a; color: #1a1500; border: 0; font-weight: 800; box-shadow: 0 8px 22px -6px rgba(0, 0, 0, 0.6); max-width: calc(100% - 24px); }
+.th .bi3-use:hover:not(:disabled) { background: #ffe07a; border: 0; }
+.bi3-use kbd { font: 700 0.72rem ui-monospace, monospace; background: rgba(0, 0, 0, 0.14); border-radius: 6px; padding: 1px 6px; }
+.bi3-help { position: absolute; left: 0; right: 0; bottom: calc(var(--safe-b) + 6px); margin: 0; text-align: center; font-size: 0.7rem; color: rgba(255, 255, 255, 0.75); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); pointer-events: none; padding: 0 160px; }
+@media (max-width: 640px) { .bi3-help { display: none; } }

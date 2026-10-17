@@ -12,14 +12,14 @@ const TEXT = {
 };
 
 /** A thumb stick: drag inside the circle. Writes -1..1 into input.jx / input.jy. */
-function Stick({ input }) {
+export function Stick({ input }) {
   const ref = useRef(null), [dot, setDot] = useState([0, 0]);
   const move = (e) => { const r = ref.current.getBoundingClientRect(), R = r.width / 2, dx = e.clientX - (r.left + R), dy = e.clientY - (r.top + R), d = Math.min(R * 0.8, Math.hypot(dx, dy)), a = Math.atan2(dy, dx), x = Math.cos(a) * d, y = Math.sin(a) * d; setDot([x, y]); input.jx = x / (R * 0.8); input.jy = -y / (R * 0.8); };
   const end = () => { setDot([0, 0]); input.jx = 0; input.jy = 0; };
   return <div ref={ref} className="th-stick" role="application" aria-label="Walk: drag to move" onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); move(e); }} onPointerMove={(e) => e.buttons && move(e)} onPointerUp={end} onPointerCancel={end}><i style={{ transform: `translate(${dot[0]}px, ${dot[1]}px)` }} /></div>;
 }
 /** A button that is "down" while held. */
-function Hold({ className, label, onDown, onUp, children }) {
+export function Hold({ className, label, onDown, onUp, children }) {
   return <button type="button" className={className} aria-label={label} data-sound="none" onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); onDown(); }} onPointerUp={onUp} onPointerCancel={onUp} onLostPointerCapture={onUp} onContextMenu={(e) => e.preventDefault()}>{children}</button>;
 }
 

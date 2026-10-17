@@ -10,6 +10,7 @@ import BillboardPanel from "@/components/BillboardPanel";
 import TravelSheet from "@/components/TravelSheet";
 import TripHud from "@/components/TripHud";
 import BuildingInside from "@/components/BuildingInside";
+import { hasInterior } from "@/lib3d/interiors/registry.js";
 import { call, naira } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { game, useGame, run, cash } from "@/lib/gameStore";
@@ -91,7 +92,8 @@ export default function MapPage() {
       effects: [{ store: game, patch: (x) => ({ ...cash(-fare)(x), character: { ...x.character, placeId: t.to } }) }] });
     return !res.failed;
   }
-  function entered() { const t = tripRef.current; setFade(true); setTimeout(() => { if (t) setInside(t.to); setTrip(null); setFade(false); }, 520); }
+  function entered() { // only enclosed buildings open an interior; open-air places (billboards, grounds, statues, gates...) just end the trip with you standing there
+    const t = tripRef.current, p = t ? find(t.to) : null, indoors = !!p && hasInterior(p.id, p.kind); setFade(true); setTimeout(() => { if (t && indoors) setInside(t.to); else if (t) setSel(t.to); setTrip(null); setFade(false); }, 520); }
   const tripEnded = (why) => { setTrip(null); if (why === "error") toast.error("The trip could not start. Try again."); };
   const tripPlace = trip ? find(trip.to) : null, insidePlace = inside ? find(inside) : null;
   return (
@@ -114,7 +116,7 @@ export default function MapPage() {
       </div>
       {trip && <TripHud trip={trip} placeName={trip.name} st={tripSt} input={input} miniRef={miniRef} previewRef={previewRef} onCancel={() => setTrip(null)} />}
       <div className="trip-fade" data-on={fade ? "1" : undefined} aria-hidden="true" />
-      {insidePlace && <BuildingInside place={insidePlace} onLeave={() => setInside(null)} />}
+      {insidePlace && <BuildingInside place={insidePlace} look={ch?.look ?? null} gender={ch?.gender ?? "M"} onLeave={() => setInside(null)} />}
       {(sheet || direct) && L && <TravelSheet place={L} here={youPlace?.name} hasCar={ownsCar(ch)} driver={driverActive(ch, g?.week) ? { name: ch.driverName } : null} people={counts[L.id] ?? 0} onGo={begin} onClose={closeSheet} />}
       {youPlace && !trip && <div className="map-here" role="status"><Icon name="pin" size={14} weight="fill" /> You are at <b>{youPlace.name}</b></div>}
       <div
@@ -166,7 +168,7 @@ export default function MapPage() {
             )}
             {counts[L.id] > 0 && <p className="mut"><Icon name="users" size={15} /> {counts[L.id]} player{counts[L.id] === 1 ? "" : "s"} here now</p>}
             <div className="row">
-              {L.id === here ? <button type="button" className="go go-there" onClick={() => setInside(L.id)}><Icon name="door" size={18} /> Go inside</button>
+              {L.id === here ? (hasInterior(L.id, L.kind) ? <button type="button" className="go go-there" onClick={() => setInside(L.id)}><Icon name="door" size={18} /> Go inside</button> : <p className="mut"><Icon name="pin" size={15} /> You are here. This is an open-air place, so there are no rooms to enter.</p>)
                 : <button type="button" className="go go-there" disabled={!L.located || !ch} onClick={() => setSheet(true)}><Icon name="nav" size={18} weight="fill" /> {L.located ? "Go there" : "Not on the map yet"}</button>}
             </div>
             {L.actions?.length > 0 && (
