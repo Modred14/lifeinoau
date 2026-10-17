@@ -59,5 +59,10 @@ chk(`listPlaces returns placed and unplaced places (${list.length}: ${list.filte
 chk("game blurbs and actions survive the merge", list.find((p) => p.id === "oduduwa").actions.length > 0 && meta.library.blurb.length > 10);
 chk("every place gets a plain blurb", list.every((p) => typeof p.blurb === "string" && p.blurb.length > 5));
 chk("trust notes tell the three cases apart", new Set(list.map(trustNote)).size === 3);
+chk("unlocated places do not claim a position", /No position/.test(trustNote({ located: false })));
+chk("game placements disclose their purpose", /gameplay.*unknown/.test(trustNote({ located: true, conf: "game" })));
+chk("approximate placements disclose the screenshot source", /Approximate.*screenshot/.test(trustNote({ located: true, conf: "approximate" })));
+chk("named map placements are not presented as verified", /OpenStreetMap.*unverified/.test(trustNote({ located: true, conf: "named-in-osm-render" })));
+chk("unnamed buildings do not claim a verified identity", /identity is unverified/.test(trustNote({ located: true, conf: "map" })));
 
 console.log(bad ? `\n${bad} check(s) failed` : "\nall real-map data checks passed"); process.exit(bad ? 1 : 0);

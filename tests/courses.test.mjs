@@ -1,348 +1,120 @@
-// tests/courses.test.mjs
-import {
-  coursesFor,
-  LECTURERS,
-  hasBoroks,
-  FACULTIES_WITH_COURSES,
-} from "../lib/curriculum.js";
-import {
-  resolveCourseAction,
-  resolveCourseExam,
-  surpriseTest,
-  attendanceRate,
-} from "../lib/courses.js";
+import assert from "node:assert/strict";
+import { coursesFor, LECTURERS, FACULTIES_WITH_COURSES } from "../lib/curriculum.js";
+import { resolveCourseAction, resolveCourseExam, surpriseTest, attendanceRate, COSTS } from "../lib/courses.js";
 import { getCourses, courseAction } from "../lib/courseService.js";
 import { doAction, sitExam } from "../lib/gameService.js";
-import { randomInt } from "node:crypto";
-const roll = (a, b) => randomInt(a, b + 1);
-// ---------- curriculum ----------
-const sci = [
-    "Science",
-    "Technology",
-    "Computer Science",
-    "Pharmacy",
-    "Agriculture",
-  ],
-  non = FACULTIES_WITH_COURSES.filter((f) => !sci.includes(f));
-console.log(
-  "faculties with courses:",
-  FACULTIES_WITH_COURSES.length,
-  "| each has 4 courses with unique codes:",
-  FACULTIES_WITH_COURSES.every((f) => {
-    const c = coursesFor(f, 100, 1);
-    return c.length === 4 && new Set(c.map((x) => x.code)).size === 4;
-  }),
-);
-console.log(
-  "Boroks teaches Mathematics in:",
-  sci
-    .filter((f) =>
-      coursesFor(f, 100, 1).some(
-        (x) => x.lecturerKey === "BOROKS" && x.subject === "Mathematics",
-      ),
-    )
-    .join(", "),
-);
-console.log(
-  "Boroks appears nowhere else:",
-  non.every((f) =>
-    coursesFor(f, 100, 1).every((x) => x.lecturerKey !== "BOROKS"),
-  ),
-  "| Boroks is the toughest lecturer:",
-  Math.max(...Object.values(LECTURERS).map((l) => l.difficulty)) ===
-    LECTURERS.BOROKS.difficulty,
-);
-console.log(
-  "level 200 codes:",
-  coursesFor("Law", 200, 1)
-    .map((x) => x.code)
-    .join(", "),
-  "| deterministic:",
-  JSON.stringify(coursesFor("Arts", 300, 0.8)) ===
-    JSON.stringify(coursesFor("Arts", 300, 0.8)),
-);
-console.log(
-  "harder faculty raises difficulty:",
-  coursesFor("Science", 100, 1.3)[0].difficulty,
-  ">",
-  coursesFor("Science", 100, 0.8)[0].difficulty,
-);
-// ---------- actions ----------
-const c0 = {
-  energy: 60,
-  academics: 50,
-  luck: 50,
-  happiness: 60,
-  popularity: 10,
-  suspicion: 0,
-};
-let p = resolveCourseAction(c0, "attend", null, 5).progress;
-console.log(
-  "attend: attended",
-  p.attended,
-  "prep",
-  p.prep,
-  "| again same week:",
-  resolveCourseAction(c0, "attend", p, 5).error,
-  "| next week ok:",
-  !resolveCourseAction(c0, "attend", p, 6).error,
-);
-let q = resolveCourseAction(c0, "study", null, 5).progress;
-console.log(
-  "study: prep",
-  q.prep,
-  "| twice same week:",
-  resolveCourseAction(c0, "study", q, 5).error,
-);
-let big = { ...q, prep: 95, lastStudyWeek: 4 };
-console.log(
-  "prep capped at 100:",
-  resolveCourseAction(c0, "study", big, 5).progress.prep,
-  "| tired:",
-  resolveCourseAction({ ...c0, energy: 5 }, "attend", null, 5).error,
-  "| ability unchanged by effort:",
-  resolveCourseAction(c0, "study", null, 5).stats.academics === undefined,
-);
-// ---------- effort decides exam results ----------
-const courses = coursesFor("Science", 100, 1.1),
-  mean = (att, prep, n = 3000) => {
-    const prog = Object.fromEntries(
-      courses.map((x) => [x.code, { attended: att, prep }]),
-    );
-    let t = 0;
-    for (let i = 0; i < n; i++)
-      t += resolveCourseExam(
-        { ...c0, energy: 80 },
-        courses,
-        prog,
-        6,
-        false,
-        roll,
-      ).score;
-    return t / n;
-  };
-console.log(
-  "average exam score at week 6 (academics 50):",
-  [
-    ["no effort", 0, 0],
-    ["light", 3, 20],
-    ["balanced", 5, 45],
-    ["full", 6, 70],
-  ]
-    .map(([l, a, pr]) => `${l} ${mean(a, pr).toFixed(0)}`)
-    .join(" | "),
-);
-const cheat = (n = 3000) => {
-  let caught = 0,
-    t = 0;
-  const prog = Object.fromEntries(
-    courses.map((x) => [x.code, { attended: 4, prep: 40 }]),
-  );
-  for (let i = 0; i < n; i++) {
-    const r = resolveCourseExam(
-      { ...c0, energy: 80 },
-      courses,
-      prog,
-      6,
-      true,
-      roll,
-    );
-    caught += r.caught;
-    t += r.score;
-  }
-  return {
-    caught: ((caught / n) * 100).toFixed(0) + "%",
-    avg: (t / n).toFixed(0),
-  };
-};
-console.log(
-  "cheating (suspicion 0): caught",
-  cheat().caught,
-  "| average score",
-  cheat().avg,
-);
-const st = (att, prep) => {
-  let t = 0;
-  for (let i = 0; i < 4000; i++) {
-    const r = surpriseTest(c0, courses[0], { attended: att, prep }, 6, roll);
-    if (r.score < 0 || r.score > 20) throw new Error("out of range");
-    t += r.score;
-  }
-  return (t / 4000).toFixed(1);
-};
-console.log(
-  "surprise test /20 with Boroks: unprepared",
-  st(0, 0),
-  "| prepared",
-  st(6, 70),
-);
-// ---------- service against a fake database ----------
-const week = 6,
-  C = {
-    id: "c1",
-    userId: "u1",
-    hostel: "Awo",
-    expelled: false,
-    graduated: false,
-    suspendedUntilWeek: 0,
-    jailedUntil: null,
-    level: 100,
-    joinedWeek: 1,
-    sessionStartWeek: 1,
-    lastTickWeek: week,
-    personalities: [],
-    energy: 100,
-    happiness: 50,
-    popularity: 10,
-    suspicion: 0,
-    health: 80,
-    academics: 50,
-    luck: 50,
-    strikes: 0,
-    faculty: { name: "Science", difficulty: 1.1 },
-    account: { id: "p", kind: "PLAYER", balance: 0n },
-  };
-const PR = [],
-  AL = [],
-  ER = [];
-let id = 1n;
-const tx = {
-  $queryRaw: async () => [],
-  gameClock: {
-    findUnique: async () => ({
-      startedAt: new Date(Date.now() - (week - 1) * 864e5 - 1000),
-    }),
-  },
-  character: {
-    findUnique: async () => ({ ...C }),
-    update: async ({ data }) => Object.assign(C, data),
-  },
-  actionLog: {
-    create: async ({ data }) => {
-      if (AL.find((a) => a.requestId == data.requestId)) {
-        const e = new Error("dup");
-        e.code = "P2002";
-        throw e;
-      }
-      AL.push(data);
-    },
-  },
-  courseProgress: {
-    findMany: async () => PR,
-    findFirst: async ({ where }) =>
-      PR.find(
-        (r) =>
-          r.code == where.code && r.sessionStartWeek == where.sessionStartWeek,
-      ) ?? null,
-    create: async ({ data }) => {
-      PR.push({ id: id++, ...data });
-    },
-    update: async ({ where, data }) =>
-      Object.assign(
-        PR.find((r) => r.id == where.id),
-        data,
-      ),
-  },
-  examResult: {
-    create: async ({ data }) => {
-      ER.push(data);
-    },
-  },
-};
-const db = { ...tx, $transaction: async (f) => f(tx) };
+import { makeDb } from "./fakedb.mjs";
+
+const science = ["Science", "Technology", "Computer Science", "Pharmacy", "Agriculture"];
+for (const faculty of FACULTIES_WITH_COURSES) {
+  const courses = coursesFor(faculty, 100, 1);
+  assert.equal(courses.length, 4, faculty);
+  assert.equal(new Set(courses.map((c) => c.code)).size, 4, faculty);
+  assert.equal(courses.some((c) => c.lecturerKey === "BOROKS" && c.subject === "Mathematics"), science.includes(faculty), faculty);
+}
+assert.equal(Math.max(...Object.values(LECTURERS).map((l) => l.difficulty)), LECTURERS.BOROKS.difficulty);
+assert(coursesFor("Law", 200, 1).every((c) => /2\d\d/.test(c.code)));
+assert.deepEqual(coursesFor("Arts", 300, 0.8), coursesFor("Arts", 300, 0.8));
+assert(coursesFor("Science", 100, 1.3)[0].difficulty > coursesFor("Science", 100, 0.8)[0].difficulty);
+
+const character = { energy: 60, academics: 50, luck: 50, happiness: 60, popularity: 10, suspicion: 0 };
+const attend = resolveCourseAction(character, "attend", null, 5);
+assert.equal(attend.progress.attended, 1);
+assert.equal(attend.progress.prep, 3);
+assert.equal(attend.stats.energy, character.energy - COSTS.attend);
+assert(resolveCourseAction(character, "attend", attend.progress, 5).error);
+assert(!resolveCourseAction(character, "attend", attend.progress, 6).error);
+const study = resolveCourseAction(character, "study", null, 5);
+assert.equal(study.progress.prep, 10);
+assert.equal(study.stats.energy, character.energy - COSTS.study);
+assert.equal(study.stats.academics, undefined);
+assert(resolveCourseAction(character, "study", study.progress, 5).error);
+assert.equal(resolveCourseAction(character, "study", { ...study.progress, prep: 95, lastStudyWeek: 4 }, 5).progress.prep, 100);
+for (const action of ["attend", "study"]) assert(resolveCourseAction({ ...character, energy: 5 }, action, null, 5).error);
+assert(resolveCourseAction(character, "unknown", null, 5).error);
+assert.equal(attendanceRate(10, 6), 1);
+assert.equal(attendanceRate(0, 0), 0);
+assert.equal(attendanceRate(3, 6), 0.5);
+
+const courses = coursesFor("Science", 100, 1.1);
+const progress = (attended, prep) => Object.fromEntries(courses.map((c) => [c.code, { attended, prep }]));
+const midpoint = (a, b) => Math.floor((a + b) / 2);
+const prepared = resolveCourseExam(character, courses, progress(6, 70), 6, false, midpoint);
+const unprepared = resolveCourseExam(character, courses, {}, 6, false, midpoint);
+assert(prepared.score > unprepared.score + 30);
+assert.equal(prepared.perCourse.length, 4);
+assert(prepared.perCourse.every((c) => c.score >= 0 && c.score <= 100));
+const caught = resolveCourseExam(character, courses, progress(6, 70), 6, true, (a) => a);
+assert.equal(caught.caught, true);
+assert(caught.score <= 25);
+assert.equal(caught.stats.suspicion, character.suspicion + 10);
+const notCaught = resolveCourseExam(character, courses, progress(6, 70), 6, true, (a, b) => b);
+const honestHigh = resolveCourseExam(character, courses, progress(6, 70), 6, false, (a, b) => b);
+assert.equal(notCaught.caught, false);
+assert.equal(notCaught.score, Math.min(100, honestHigh.score + 22));
+for (const roll of [(a) => a, midpoint, (a, b) => b]) {
+  const low = surpriseTest(character, courses[0], { attended: 0, prep: 0 }, 6, roll);
+  const high = surpriseTest(character, courses[0], { attended: 6, prep: 70 }, 6, roll);
+  assert(high.score > low.score);
+  assert(high.score <= 20 && low.score >= 0);
+}
+
+function fixture(week = 6) {
+  const db = makeDb(["character", "account", "gameClock", "courseProgress", "actionLog", "examResult"], {
+    unique: { actionLog: ["characterId", "requestId"], examResult: ["characterId", "gameWeek"] },
+    join: { character: (c, T) => c && ({ ...c, faculty: { name: "Science", difficulty: 1.1 }, account: T.account[0] }) },
+  });
+  const T = db.T();
+  T.gameClock.push({ id: 1, startedAt: new Date(0), campusEpoch: new Date(), campusStartWeek: week });
+  T.character.push({ id: "c1", userId: "u1", hostel: "Awo", expelled: false, graduated: false, suspendedUntilWeek: 0, jailedUntil: null, level: 100, joinedWeek: 1, sessionStartWeek: 1, lastTickWeek: week, personalities: [], strikes: 0, ...character, energy: 100 });
+  T.account.push({ id: "p", kind: "PLAYER", characterId: "c1", balance: 0n });
+  return { db, T };
+}
 let n = 0;
-const rq = () => "req-" + String(++n).padStart(8, "0");
-const t = async (label, fn) => {
-  try {
-    const r = await fn();
-    console.log(
-      "OK  ",
-      label,
-      r?.note ?? (r?.duplicate ? "(duplicate ignored)" : ""),
-    );
-  } catch (e) {
-    console.log("DENY", label, "->", e.status ?? "ERR", e.message);
-  }
-};
-const g0 = await getCourses(db, "u1");
-console.log(
-  "\ncourses view:",
-  g0.courses.map((x) => x.code + " " + x.lecturer.name).join(" | "),
-  "| week",
-  g0.weeksElapsed,
-  "of",
-  g0.sessionWeeks,
-  "| exam today:",
-  g0.examToday,
-);
-const mth = g0.courses[0].code;
-await t("attend MTH lecture", () =>
-  courseAction(db, "u1", { action: "attend", code: mth, requestId: rq() }),
-);
-await t("attend the same course again this week", () =>
-  courseAction(db, "u1", { action: "attend", code: mth, requestId: rq() }),
-);
-const same = rq();
-await t("study", () =>
-  courseAction(db, "u1", { action: "study", code: mth, requestId: same }),
-);
-const e1 = C.energy;
-await t("replay that study request", () =>
-  courseAction(db, "u1", { action: "study", code: mth, requestId: same }),
-);
-console.log(
-  "     energy unchanged by replay:",
-  C.energy === e1,
-  "| progress rows:",
-  PR.length,
-  "attended",
-  PR[0].attended,
-  "prep",
-  PR[0].prep,
-);
-await t("a course that is not yours", () =>
-  courseAction(db, "u1", {
-    action: "attend",
-    code: "LAW 101",
-    requestId: rq(),
-  }),
-);
-await t("old generic 'study' action is refused", () =>
-  doAction(db, "u1", "study", rq()),
-);
-await t("old generic 'class' action is refused", () =>
-  doAction(db, "u1", "class", rq()),
-);
-// the exam really reads your progress rows
-const runExam = async (rows) => {
-  PR.length = 0;
-  rows.forEach((r, i) =>
-    PR.push({ id: BigInt(i + 1), sessionStartWeek: 1, ...r }),
-  );
-  let tot = 0,
-    k = 60,
-    detail = 0;
-  for (let i = 0; i < k; i++) {
-    C.energy = 90;
-    AL.length = 0;
-    ER.length = 0;
-    const r = await sitExam(db, "u1", false, rq());
-    tot += r.score;
-    detail = r.perCourse?.length ?? 0;
-  }
-  return { avg: tot / k, detail };
-};
-const lazy = await runExam([]),
-  keen = await runExam(
-    g0.courses.map((x) => ({ code: x.code, attended: 6, prep: 70 })),
-  );
-console.log(
-  "exam through the real service, average score: no effort",
-  lazy.avg.toFixed(0),
-  "| full effort",
-  keen.avg.toFixed(0),
-  "| per-course scores stored:",
-  keen.detail,
-  "| effort matters:",
-  keen.avg > lazy.avg + 15,
-);
+const requestId = () => "course-request-" + ++n;
+const { db, T } = fixture();
+const initial = await getCourses(db, "u1");
+assert.equal(initial.week, 6);
+assert.equal(initial.weeksElapsed, 6);
+assert.equal(initial.examToday, true);
+assert.equal(initial.courses.length, 4);
+const code = initial.courses[0].code;
+assert.equal((await courseAction(db, "u1", { action: "attend", code, requestId: requestId() })).ok, true);
+const beforeDenied = structuredClone(T);
+await assert.rejects(courseAction(db, "u1", { action: "attend", code, requestId: requestId() }), { status: 400 });
+assert.deepEqual(T, beforeDenied);
+const same = requestId();
+await courseAction(db, "u1", { action: "study", code, requestId: same });
+const beforeReplay = structuredClone(T);
+assert.equal((await courseAction(db, "u1", { action: "study", code, requestId: same })).duplicate, true);
+assert.deepEqual(T, beforeReplay);
+assert.equal(T.courseProgress.length, 1);
+assert.equal(T.courseProgress[0].attended, 1);
+assert.equal(T.courseProgress[0].prep, 13);
+await assert.rejects(courseAction(db, "u1", { action: "attend", code: "LAW 101", requestId: requestId() }), { status: 404 });
+for (const action of ["study", "class"]) await assert.rejects(doAction(db, "u1", action, requestId()), { status: 400 });
+
+async function examWith(rows) {
+  const { db, T } = fixture();
+  T.character[0].energy = 90;
+  T.courseProgress.push(...rows.map((p, i) => ({ id: BigInt(i + 1), characterId: "c1", sessionStartWeek: 1, ...p })));
+  const id = requestId();
+  const result = await sitExam(db, "u1", false, id);
+  assert.equal(result.ok, true);
+  assert.equal(T.examResult.length, 1);
+  assert.deepEqual(T.examResult[0].detail, result.perCourse);
+  assert.equal(result.perCourse.length, 4);
+  const before = structuredClone(T);
+  assert.equal((await sitExam(db, "u1", false, id)).duplicate, true);
+  assert.deepEqual(T, before);
+  return result;
+}
+const lazy = await examWith([]);
+const keen = await examWith(courses.map((c) => ({ code: c.code, attended: 6, prep: 70 })));
+assert(keen.score > lazy.score + 15);
+const offWeek = fixture(5);
+assert.equal((await getCourses(offWeek.db, "u1")).examToday, false);
+await assert.rejects(sitExam(offWeek.db, "u1", false, requestId()), { status: 409 });
+assert.equal(offWeek.T.examResult.length, 0);
+assert.equal(offWeek.T.actionLog.length, 0);
+console.log("Course rules, current campus clock, progress, exam records and replay checks passed");

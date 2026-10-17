@@ -9,7 +9,7 @@ chk(`0.01 degrees north = ${Math.abs(z1).toFixed(0)} m and is NORTH (z negative)
 chk(`0.01 degrees east = ${x2.toFixed(0)} m at this latitude and is EAST (x positive)`, Math.abs(x2 - 1103.7) < 2 && z2 === 0);
 chk("a 100 x 50 square has area 5000", area([[0, 0], [100, 0], [100, 50], [0, 50]]) === 5000);
 chk("road kinds map to classes and widths", roadClass("primary") === "major" && roadClass("footway") === "path" && roadClass("construction") === null && roadWidth("primary") > roadWidth("residential"));
-const raw = JSON.parse(fs.readFileSync(new URL("../tools/fixtures/overpass-sample.json", import.meta.url)));
+const raw = JSON.parse(fs.readFileSync(new URL("./fixtures/overpass-sample.json", import.meta.url)));
 chk("fixture is clearly marked synthetic", /SYNTHETIC/.test(raw._note));
 const d = fromOverpass(raw);
 chk(`roads imported: ${d.roads.length} (primary, residential, footway; 'construction' skipped)`, d.roads.length === 3 && d.stats.roadsSkippedKind === 1);

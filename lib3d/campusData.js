@@ -23,10 +23,11 @@ export function listPlaces(data) {
 
 /** One line telling the player how far to trust a place's position. */
 export function trustNote(p) {
-  if (!p.located) return "";
-  if (p.conf === "game") return "";
-  if (p.conf === "approximate") return "";
-  return "";
+  if (!p.located) return "No position found in the map references.";
+  if (p.conf === "game") return "Placed for gameplay; the real position is unknown.";
+  if (p.conf === "approximate") return "Approximate position from a screenshot reference.";
+  if (p.conf === "named-in-osm-render") return "Named in the OpenStreetMap screenshot; position is unverified.";
+  return "Building footprint from the map reference; identity is unverified.";
 }
 /** A building with no name on the map is still a place you can go to. It is called after the nearest named place, e.g. "Building near Alumni Hall". Null for an id that is not a building. */
 export function buildingPlace(data, id) {
