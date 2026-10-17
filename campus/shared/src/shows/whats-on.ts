@@ -213,4 +213,3 @@ export function whatsOn(t: GameTime, from?: Point): WhatsOnItem[] {
   const matches = place < 0 ? [] : upcoming(t, WHATS_ON_DAYS, matchesFor).map((m) => matchItem(m, t, place));
   return [...shows, ...matches, ...pitchOn(t), ...eventsOn(t)].sort((a, b) => a.startTotal - b.startTotal);
 }
-

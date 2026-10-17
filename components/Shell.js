@@ -187,7 +187,7 @@ export default function Shell({ children }) {
       {st && !hideBars && (
         <nav className="nav" aria-label="Main">
           <Link
-            href="/play"
+            href="/home"
             aria-current={onPlay && !buying ? "page" : undefined}
             data-active={onPlay && !buying ? "1" : undefined}
             onClick={goHome}

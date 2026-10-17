@@ -335,18 +335,22 @@ class SlowStore extends MemoryPoliticsStore {
   }
 }
 
-test("the stipend follows the account when the player reconnects during the claim", async () => {
+test("the stipend follows the account when the player reconnects during the claim", { timeout: 5000 }, async () => {
   const store = new SlowStore();
   const w = world(store);
   const tola = await elect(w);
   w.state.clock = clockAt(4, 18, 1);
   await w.tick();
   w.state.clock = clockAt(5, 10, 1);
-  await w.tick();
+  let finished = false;
+  const settlement = w.tick().then(() => { finished = true; });
+  await w.flush();
+  assert.equal(finished, false);
   const cash = tola.cash;
   w.players.delete("tola");
   w.players.set("tola-again", tola);
   store.release();
+  await settlement;
   await w.flush();
   await w.flush();
   assert.equal(tola.cash, cash + president.stipend);

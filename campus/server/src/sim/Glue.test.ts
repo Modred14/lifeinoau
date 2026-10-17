@@ -155,7 +155,7 @@ test("two rooms share one count of beds per hall", async () => {
   assert.deepEqual(back.admin.bed, { week, hall: hall.name }, "a held bed is restored from the shared table");
 });
 
-test("when the bed table is unreachable the room falls back to its own count", async () => {
+test("when the bed table is unreachable no bed is awarded and no fee is taken", async () => {
   const week = 5;
   const hall = BED_HALLS[0];
   const open: GameTime = gameTime(week * WEEK + ballotWindow().start + 1);
@@ -164,16 +164,21 @@ test("when the bed table is unreachable the room falls back to its own count", a
   console.error = () => {};
   try {
     const { admin } = room(broken);
-    let winners = 0;
+    let failures = 0;
     for (let i = 0; i < 60; i++) {
       const key = `offline-bed-${i}`;
       const who = learner(key);
       admin.join(key, who, open);
-      admin.handle(key, who, { a: "ballot", hall: hall.place }, open);
+      const cash = who.cash;
+      await Promise.resolve(admin.handle(key, who, { a: "ballot", hall: hall.place }, open)).catch((error) => {
+        assert.match(error.message, /offline/);
+        failures++;
+      });
       await settle();
-      if (who.admin.bed) winners++;
+      assert.equal(who.admin.bed, null);
+      assert.equal(who.cash, cash);
     }
-    assert.equal(winners, hall.beds);
+    assert.ok(failures > 0);
   } finally {
     console.error = quiet;
   }

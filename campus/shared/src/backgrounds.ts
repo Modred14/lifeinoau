@@ -29,4 +29,3 @@ export function rollBackground(random: () => number = Math.random): Background {
 export function sanitizeBackground(v: unknown): Background {
   return typeof v === "string" && (BACKGROUNDS as string[]).includes(v) ? (v as Background) : "regular";
 }
-
