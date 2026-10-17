@@ -6,7 +6,7 @@ const db = new PrismaClient();
 await db.gameClock.upsert({
   where: { id: 1 },
   update: {},
-  create: { id: 1, startedAt: new Date() },
+  create: { id: 1, startedAt: new Date(), campusEpoch: new Date(), campusStartWeek: 1 },
 });
 for (const name of [
   "WORLD",

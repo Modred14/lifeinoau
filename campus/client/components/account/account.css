@@ -1,0 +1,18 @@
+.campus-world .start-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 5px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.campus-world .start-tab { min-height: 44px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-size: 14px; font-weight: 700; transition: background-color 150ms, color 150ms; }
+.campus-world .start-tab.active { background: var(--accent); color: var(--accent-ink); }
+.campus-world .start-tab:focus-visible, .campus-world .password-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.campus-world .start-at { color: var(--muted); font-size: 18px; font-weight: 700; line-height: 1; }
+.campus-world .start-input-wrap > .start-at + input { margin-left: -6px; }
+.campus-world .game-start .start-hint { font-size: 12px; line-height: 1.5; color: var(--muted); }
+.campus-world .password-toggle { display: grid; place-items: center; width: 44px; height: 44px; margin-right: -12px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 21px; }
+.campus-world .game-start .start-link { align-self: center; min-height: 44px; font-size: 13px; }
+.campus-world .start-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 22px; }
+.campus-world .game-start .start-handle { margin: 0; font-size: 20px; font-weight: 800; color: var(--accent); overflow-wrap: anywhere; }
+.campus-world .recovery-code { display: block; padding: 18px 12px; border: 1px dashed var(--accent); border-radius: 10px; background: var(--bg); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: clamp(14px, 4.4vw, 18px); font-weight: 700; letter-spacing: 0.06em; text-align: center; user-select: all; -webkit-user-select: all; overflow-wrap: anywhere; }
+.campus-world .start-checking { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.campus-world .start-menu > .start-save-note { margin: 0; }
+.campus-world .start-menu > .start-error { text-align: center; }
+.campus-world .settings-account { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0 0; }
+.campus-world .settings-account b { overflow-wrap: anywhere; }
+.campus-world .settings-account .btn { min-height: 44px; padding: 8px 14px; font-size: 13px; }

@@ -1,0 +1,35 @@
+{
+  "name": "@campuslife/server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Authoritative Colyseus game server for Campus Life.",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
+    "build": "tsup",
+    "start": "node --env-file-if-exists=../../.env dist/index.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "smoke": "tsx scripts/smoke-test.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx --env-file-if-exists=../../.env scripts/migrate.ts",
+    "staff": "tsx --env-file-if-exists=../../.env scripts/staff.ts"
+  },
+  "dependencies": {
+    "@campuslife/shared": "*",
+    "@colyseus/core": "^0.18.18",
+    "@colyseus/schema": "^5.0.36",
+    "@colyseus/ws-transport": "^0.18.4",
+    "@node-rs/argon2": "^2.2.1",
+    "drizzle-orm": "^0.45.3",
+    "nanoid": "^3.3.19",
+    "postgres": "^3.4.9",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@colyseus/sdk": "^0.18.5",
+    "@types/node": "^22.10.0",
+    "drizzle-kit": "^0.31.11",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.0"
+  }
+}

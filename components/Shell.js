@@ -41,8 +41,8 @@ export default function Shell({ children }) {
     firstApp = useRef(null),
     failing = useRef(false);
   const bare = path === "/",
-    full = path === "/map" || path === "/play",
-    hideBars = path === "/play" && bareUi; // no top bar or bottom nav while the game loads or the player is creating a character
+    full = path === "/map" || path === "/play" || path === "/home" || path === "/campus",
+    hideBars = (path === "/play" && (bareUi || (st && !st.floorZero && !st.character.expelled && !st.character.graduated))) || path === "/campus"; // no top bar or bottom nav while the game loads or the player is creating a character
   // `force` asks the server no matter what. Without it, a copy younger than 15 seconds is reused, so moving between screens
   // (or flipping back to this tab) does not hit the server every time. One request at a time, however many parts of the app ask at once.
   const load = useCallback(async (force = false) => {
@@ -98,6 +98,12 @@ export default function Shell({ children }) {
       b.style.removeProperty("--nav-h");
     };
   }, [hideBars]);
+  useEffect(() => {
+    const open = () => { void game.refresh(); setPhoneApp(null); setPhone(true); };
+    window.addEventListener("oau:phone", open);
+    return () => window.removeEventListener("oau:phone", open);
+  }, []);
+  useEffect(() => { window.dispatchEvent(new CustomEvent("oau:phone-state", { detail: phone })); }, [phone]);
   async function logout() {
     if (loggingOut) return;
     setLoggingOut(true);
@@ -118,16 +124,16 @@ export default function Shell({ children }) {
       </>
     );
   const creating = path === "/play" && !st,
-    onPlay = path === "/play" && !!st,
+    onPlay = path === "/home" && !!st,
     buying = onPlay && mode === "buy",
     mood = st ? moodOf(st.character.happiness) : null;
   const goHome = () => {
     setPlayMode("home");
-    if (path !== "/play") router.push("/play");
+    if (path !== "/home") router.push("/home");
   };
   const goBuy = () => {
     setPlayMode("buy");
-    if (path !== "/play") router.push("/play");
+    if (path !== "/home") router.push("/home");
   };
   return (
     <>

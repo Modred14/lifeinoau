@@ -1,0 +1,258 @@
+{
+  "halls": {
+    "Angola Hall": {
+      "floors": 1,
+      "roof": "gable",
+      "wall": "#d8bb79",
+      "trim": "#eee7cf",
+      "roofColor": "#95978b",
+      "tanks": false,
+      "facade": "veranda"
+    },
+    "Mozambique Hall": {
+      "floors": 1,
+      "roof": "gable",
+      "wall": "#d6b766",
+      "trim": "#eee7cf",
+      "roofColor": "#94998f",
+      "tanks": false,
+      "facade": "veranda"
+    },
+    "ETF Hall": {
+      "floors": 1,
+      "roof": "hip",
+      "wall": "#e8ddbd",
+      "trim": "#f2ebd8",
+      "roofColor": "#91978e",
+      "tanks": false,
+      "facade": "veranda"
+    },
+    "Awolowo Hall": {
+      "roof": "flat",
+      "wall": "#efe9d7",
+      "trim": "#e6e0ca",
+      "roofColor": "#b5b5a8",
+      "tanks": false,
+      "facade": "screened"
+    },
+    "Adekunle Fajuyi Hall of Residence": {
+      "roof": "flat",
+      "wall": "#eee7d0",
+      "trim": "#d8c98c",
+      "roofColor": "#b5b5a8",
+      "tanks": false,
+      "facade": "screened"
+    },
+    "Moremi Hall": {
+      "floors": 4,
+      "roof": "flat",
+      "wall": "#d7b784",
+      "trim": "#eeeee3",
+      "roofColor": "#b3b6ac",
+      "tanks": false,
+      "facade": "boxed"
+    },
+    "Postgraduate Hall": {
+      "floors": 3,
+      "roof": "flat",
+      "wall": "#d7cbb7",
+      "trim": "#dedccb",
+      "roofColor": "#b3b5a9",
+      "tanks": false,
+      "facade": "screened"
+    },
+    "Alumni Hall": {
+      "floors": 2,
+      "roof": "gable",
+      "wall": "#dfce8f",
+      "trim": "#8b493a",
+      "roofColor": "#b96556",
+      "tanks": false
+    }
+  },
+  "landmarks": {
+    "Hezekiah Oluwasanmi Library": {
+      "archetype": "faculty",
+      "floors": 3,
+      "bandStep": 0.14,
+      "grooved": true,
+      "storey": 4,
+      "wall": "#eeeeea",
+      "trim": "#f4f2ec"
+    },
+    "Faculty of Arts (Block 1)": {
+      "archetype": "faculty",
+      "floors": 4,
+      "bandStep": 0.16
+    },
+    "Faculty of Arts (Block 2)": {
+      "archetype": "faculty",
+      "floors": 3,
+      "bandStep": 0.2
+    },
+    "Faculty of Arts (Block 3)": {
+      "archetype": "faculty",
+      "floors": 4,
+      "bandStep": 0.16
+    },
+    "Faculty of Education": {
+      "archetype": "faculty",
+      "floors": 3,
+      "bandStep": 0.2
+    },
+    "Faculty of Social Sciences": {
+      "archetype": "faculty",
+      "floors": 4,
+      "bandStep": 0.16
+    },
+    "Faculty of Law": {
+      "archetype": "faculty",
+      "floors": 4,
+      "bandStep": 0.12
+    },
+    "Faculty of Administration": {
+      "archetype": "faculty",
+      "floors": 4,
+      "bandStep": 0.12
+    },
+    "University Senate Building": {
+      "archetype": "faculty",
+      "floors": 9,
+      "bandStep": 0.02,
+      "wall": "#eeeeea",
+      "trim": "#f4f2ec"
+    },
+    "Senate Building": {
+      "archetype": "faculty",
+      "floors": 4,
+      "storey": 3.1,
+      "wall": "#c8aa74",
+      "trim": "#f1eee4",
+      "roof": "flat",
+      "bandStep": 0
+    },
+    "Oduduwa Hall": {
+      "archetype": "lectureTheatre",
+      "floors": 1,
+      "wall": "#878277",
+      "trim": "#efeee4"
+    },
+    "Amphi Theatre": {
+      "archetype": "lectureTheatre",
+      "floors": 1,
+      "wall": "#878277",
+      "trim": "#efeee4",
+      "roofColor": "#b1bcad"
+    },
+    "AUD I": {
+      "archetype": "lectureTheatre",
+      "floors": 3
+    },
+    "AUD II": {
+      "archetype": "lectureTheatre",
+      "floors": 3
+    },
+    "Student Union Building": {
+      "archetype": "civic",
+      "floors": 2,
+      "roof": "flat"
+    },
+    "OAU New Market": {
+      "archetype": "shopRow",
+      "floors": 1,
+      "storey": 3.1,
+      "roof": "gable",
+      "wall": "#e8e1ce",
+      "trim": "#eee9dc",
+      "roofColor": "#9b4f3e",
+      "tanks": false
+    },
+    "OAU New Market Hipped Shops": {
+      "archetype": "shopRow",
+      "floors": 1,
+      "storey": 3.1,
+      "roof": "hip",
+      "wall": "#e8e1ce",
+      "trim": "#eee9dc",
+      "roofColor": "#a26049",
+      "tanks": false
+    },
+    "Ladoke Akintola Hall": {
+      "archetype": "hostel",
+      "floors": 3,
+      "storey": 3.1,
+      "roof": "flat",
+      "wall": "#dfcc96",
+      "trim": "#b17964",
+      "roofColor": "#b0b0a4",
+      "tanks": false,
+      "facade": "screened"
+    },
+    "Akintola Entrance": {
+      "archetype": "civic",
+      "floors": 1,
+      "storey": 3.1,
+      "roof": "flat",
+      "wall": "#e3cd91",
+      "trim": "#a96d59",
+      "roofColor": "#b0b0a4",
+      "tanks": false,
+      "facade": "veranda"
+    },
+    "Ojaja Hostel": {
+      "archetype": "hostel",
+      "floors": 3,
+      "storey": 3.1,
+      "roof": "hip",
+      "wall": "#eee0c4",
+      "trim": "#e9dfc9",
+      "roofColor": "#ac5949",
+      "tanks": false,
+      "facade": "private"
+    },
+    "Ojaja Stair Wing": {
+      "archetype": "hostel",
+      "floors": 3,
+      "storey": 3.1,
+      "roof": "flat",
+      "wall": "#eee0c4",
+      "trim": "#e9dfc9",
+      "roofColor": "#d4cbb7",
+      "tanks": false,
+      "facade": "private"
+    },
+    "Amazing Grace Hostel": {
+      "archetype": "block",
+      "floors": 2,
+      "storey": 3.1,
+      "roof": "hip",
+      "wall": "#a75d65",
+      "trim": "#c49a54",
+      "roofColor": "#90877b",
+      "tanks": false,
+      "facade": "maintenance"
+    },
+    "SHG Hostel": {
+      "archetype": "hostel",
+      "floors": 2,
+      "storey": 3.1,
+      "roof": "hip",
+      "wall": "#83a07d",
+      "trim": "#e8d5b4",
+      "roofColor": "#a35750",
+      "tanks": false,
+      "facade": "shg"
+    },
+    "SHG Entrance": {
+      "archetype": "hostel",
+      "floors": 2,
+      "storey": 3.1,
+      "roof": "gable",
+      "wall": "#83a07d",
+      "trim": "#e8d5b4",
+      "roofColor": "#a35750",
+      "tanks": false,
+      "facade": "shg"
+    }
+  }
+}

@@ -257,7 +257,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const origins = (process.env.APP_ORIGIN ?? "").split(",").map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean);
   if (process.env.NODE_ENV === "production" && !origins.length) console.warn("[realtime] APP_ORIGIN is not set: any website may connect (a chat pass is still required).");
   const rt = createRealtime({ db, secret: process.env.SESSION_SECRET, origins });
-  const port = await rt.listen(Number(process.env.PORT) || 4000);
+  const port = await rt.listen(Number(process.env.REALTIME_PORT) || Number(process.env.PORT) || 4000);
   console.log(`[realtime] listening on :${port}`);
   const stop = async () => { await rt.close(); await db.$disconnect(); process.exit(0); };
   process.on("SIGTERM", stop); process.on("SIGINT", stop);

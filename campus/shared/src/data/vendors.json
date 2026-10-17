@@ -1,0 +1,223 @@
+{
+  "checked": "2026-10-09",
+  "note": "Real places named by public sources. Positions marked approximate are pinned to the named building or area, not the exact shop. Menus and prices are not published, so orders are free text and the rider confirms the price.",
+  "vendors": [
+    {
+      "id": "new-buka",
+      "name": "New Buka",
+      "category": "food",
+      "area": "Between ETF Hall and New Market",
+      "lat": 7.5169102,
+      "lng": 4.5139105,
+      "delivers": true,
+      "about": "Food court with about 33 bukas and shops.",
+      "source": "https://www.openstreetmap.org/node/6154104338"
+    },
+    {
+      "id": "forks-and-fingers",
+      "name": "Forks and Fingers",
+      "category": "food",
+      "area": "SUB, by the SUB bus stop",
+      "place": "Student Union Building",
+      "delivers": true,
+      "about": "Known for yam and fried egg.",
+      "source": "https://oauvibes.wordpress.com/2015/09/28/12-places-you-need-to-know-in-oau/"
+    },
+    {
+      "id": "spectra-chs",
+      "name": "Spectra (College of Health Sciences)",
+      "category": "food",
+      "area": "Behind the College of Health Sciences car park",
+      "lat": 7.5165315,
+      "lng": 4.5259378,
+      "delivers": true,
+      "source": "https://www.openstreetmap.org/node/14002380290"
+    },
+    {
+      "id": "spectra-pharmacy",
+      "name": "Spectra (Faculty of Pharmacy)",
+      "category": "food",
+      "area": "Faculty of Pharmacy, along Road 2",
+      "lat": 7.5172536,
+      "lng": 4.527443,
+      "delivers": true,
+      "source": "https://www.openstreetmap.org/node/14002366873"
+    },
+    {
+      "id": "spectra-main-gate",
+      "name": "Spectra (Main Gate)",
+      "category": "food",
+      "area": "Just south of the Main Gate",
+      "lat": 7.4954955,
+      "lng": 4.5251534,
+      "delivers": true,
+      "source": "https://www.openstreetmap.org/node/14002358099"
+    },
+    {
+      "id": "white-hands",
+      "name": "White Hands",
+      "category": "food",
+      "area": "HSLT C, College of Health Sciences",
+      "lat": 7.5160924,
+      "lng": 4.5268934,
+      "delivers": true,
+      "source": "https://www.openstreetmap.org/node/14002398478"
+    },
+    {
+      "id": "indeego",
+      "name": "Indeego Restaurant & Lounge",
+      "category": "food",
+      "area": "1 Falaju, about 700 m west of the Main Gate",
+      "lat": 7.4968534,
+      "lng": 4.515794,
+      "delivers": true,
+      "hours": "Every day, 10:00 to 22:00",
+      "source": "https://www.openstreetmap.org/node/9576385315"
+    },
+    {
+      "id": "honey-bee-kitchen",
+      "name": "Honey Bee Kitchen",
+      "category": "food",
+      "area": "Fajuyi Hall TV room",
+      "place": "Adekunle Fajuyi Hall of Residence",
+      "delivers": true,
+      "about": "Known for ewa agoyin.",
+      "source": "https://connectciti.com/listing/honey-bee-kitchen-oau-ife"
+    },
+    {
+      "id": "orente-grills",
+      "name": "Orente Grills",
+      "category": "food",
+      "area": "Africa Amphitheatre, beside ODLT 1",
+      "place": "Amphi Theatre",
+      "delivers": true,
+      "about": "Shawarma, burgers, chicken, fries, small chops and milkshakes.",
+      "source": "https://connectciti.com/listing/orente-grills"
+    },
+    {
+      "id": "kays-chippy",
+      "name": "Kays Chippy",
+      "category": "food",
+      "area": "Along Road 5",
+      "delivers": true,
+      "about": "Amala, jollof rice, pounded yam, eba and soups.",
+      "source": "https://connectciti.com/listing/kays-chippy-ife"
+    },
+    {
+      "id": "conference-centre",
+      "name": "Conference Centre restaurant",
+      "category": "food",
+      "area": "OAU Conference Centre, Road 8, Senior Staff Quarters",
+      "delivers": true,
+      "about": "Restaurant and snack bar at the guest houses.",
+      "source": "https://www.travelocity.com/es/Ife-Hoteles-OAU-CONFERENCE-CENTRE-GUEST-HOUSES-LTD.h43402262.Informacion-Hotel"
+    },
+    {
+      "id": "jopa-foodie",
+      "name": "Jopa Foodie",
+      "category": "food",
+      "area": "Mayfair, 13 Ede Road, May Fair Shopping Center",
+      "delivers": true,
+      "source": "https://connectciti.com/listing/jopa-foodie"
+    },
+    {
+      "id": "central-market",
+      "name": "OAU Central Market (New Market)",
+      "category": "provisions",
+      "area": "New Market, west of New Buka",
+      "lat": 7.516923,
+      "lng": 4.513075,
+      "delivers": true,
+      "about": "The main campus market for provisions, toiletries and phone accessories.",
+      "source": "https://oauvibes.wordpress.com/2015/09/28/12-places-you-need-to-know-in-oau/"
+    },
+    {
+      "id": "daily-needs",
+      "name": "Daily Needs",
+      "category": "provisions",
+      "area": "East of the campus core, near the staff quarters",
+      "lat": 7.523036,
+      "lng": 4.536802,
+      "delivers": true,
+      "about": "Convenience store. Cash only.",
+      "source": "https://www.openstreetmap.org/way/615629090"
+    },
+    {
+      "id": "badejoko-bookshop",
+      "name": "Badejoko Bookshop",
+      "category": "books",
+      "area": "New Market, beside Kaso Travels",
+      "place": "OAU New Market",
+      "delivers": true,
+      "source": "https://www.kasotravels.com/"
+    },
+    {
+      "id": "empire-internet-cafe",
+      "name": "Empire Internet Cafe",
+      "category": "cyber",
+      "area": "Shop 2, back of the SUB",
+      "place": "Student Union Building",
+      "delivers": false,
+      "source": "https://www.nyscbroadcast.com/2025/04/continuation-list-of-nysc-accredited.html"
+    },
+    {
+      "id": "arteries-communications",
+      "name": "Arteries Communications",
+      "category": "cyber",
+      "area": "New Market, Telecom Stand, Zone A",
+      "place": "OAU New Market",
+      "delivers": false,
+      "source": "https://www.nyscbroadcast.com/2025/04/continuation-list-of-nysc-accredited.html"
+    },
+    {
+      "id": "ephrath-nathan",
+      "name": "Ephrath Nathan Network",
+      "category": "cyber",
+      "area": "New Market, Zone B, Block 5",
+      "place": "OAU New Market",
+      "delivers": false,
+      "source": "https://www.nyscbroadcast.com/2025/04/continuation-list-of-nysc-accredited.html"
+    },
+    {
+      "id": "solidsolutions",
+      "name": "The SolidSolutions Premium Publisher",
+      "category": "cyber",
+      "area": "New Market, Zone D, Block D",
+      "place": "OAU New Market",
+      "delivers": false,
+      "source": "https://www.nyscbroadcast.com/2025/04/continuation-list-of-nysc-accredited.html"
+    },
+    {
+      "id": "first-unique-success",
+      "name": "First Unique Success Business Enterprise",
+      "category": "cyber",
+      "area": "Faculty of Agriculture",
+      "delivers": false,
+      "source": "https://www.nyscbroadcast.com/2025/04/continuation-list-of-nysc-accredited.html"
+    },
+    {
+      "id": "first-colinklinks",
+      "name": "First Colinklinks",
+      "category": "cyber",
+      "area": "Mayfair, 23 AP, opposite Water Corporation",
+      "delivers": false,
+      "source": "https://www.nyscbroadcast.com/2025/04/continuation-list-of-nysc-accredited.html"
+    },
+    {
+      "id": "gods-speed-cafe",
+      "name": "God's Speed Cafe",
+      "category": "cyber",
+      "area": "Mayfair, Fashogbon Shopping Complex",
+      "delivers": false,
+      "source": "https://www.nyscbroadcast.com/2025/04/continuation-list-of-nysc-accredited.html"
+    },
+    {
+      "id": "moboluwaduro",
+      "name": "Moboluwaduro Global Concepts",
+      "category": "cyber",
+      "area": "Mayfair, 12 Ede Road",
+      "delivers": false,
+      "source": "https://www.nyscbroadcast.com/2025/04/continuation-list-of-nysc-accredited.html"
+    }
+  ]
+}

@@ -1,0 +1,371 @@
+{
+  "default": {
+    "modes": [
+      "walk",
+      "okada",
+      "keke",
+      "shuttle"
+    ],
+    "fares": {
+      "okada": {
+        "base": 100,
+        "perKm": 100,
+        "max": 300
+      },
+      "keke": {
+        "base": 100,
+        "perKm": 150,
+        "max": 400
+      },
+      "shuttle": {
+        "base": 100,
+        "perKm": 75,
+        "max": 300
+      },
+      "bus": {
+        "base": 100,
+        "perKm": 50,
+        "max": 250
+      }
+    },
+    "verified": false,
+    "source": "default",
+    "confidence": "default",
+    "note": "Game default, not research. Every ride costs from 100 to 400 naira and grows with distance."
+  },
+  "byType": {
+    "university": {
+      "modes": [
+        "walk",
+        "okada",
+        "keke",
+        "shuttle",
+        "bus"
+      ],
+      "verified": false,
+      "source": "default",
+      "confidence": "default",
+      "note": "Default for universities, not research. Several large campuses run big buses."
+    }
+  },
+  "byState": {
+    "Lagos State": {
+      "modes": [
+        "walk",
+        "keke",
+        "shuttle",
+        "bus"
+      ],
+      "verified": false,
+      "source": "https://nairametrics.com/2022/08/18/lagos-extends-okada-ban-to-four-more-local-govts-from-september-1/",
+      "sourceDate": "2022-08-18",
+      "confidence": "default",
+      "note": "State default from the Lagos okada ban in ten LGAs. Not every LGA is covered, so this is a default, not a finding for each school."
+    },
+    "Rivers State": {
+      "modes": [
+        "walk",
+        "keke",
+        "shuttle",
+        "bus"
+      ],
+      "verified": false,
+      "source": "https://www.vanguardngr.com/2026/07/rivers-lg-bans-commercial-motorcycles-from-aug-1/",
+      "sourceDate": "2026-07",
+      "confidence": "default",
+      "note": "State default from the Rivers okada ban reported since 2008 and the Obio/Akpor ban from August 2026."
+    },
+    "Kano State": {
+      "modes": [
+        "walk",
+        "keke",
+        "shuttle",
+        "bus"
+      ],
+      "verified": false,
+      "source": "https://businessday.ng/news/article/kano-bans-commercial-motorcycle-in-key-lgas-over-rising-insecurity/",
+      "sourceDate": "2026",
+      "confidence": "default",
+      "note": "State default from the Kano metropolitan okada ban. Schools outside the metropolis may differ."
+    },
+    "Plateau State": {
+      "modes": [
+        "walk",
+        "keke",
+        "shuttle",
+        "bus"
+      ],
+      "verified": false,
+      "source": "https://www.vanguardngr.com/2026/03/attacks-plateau-to-go-tough-on-okada-riders-as-govt-reaffirms-ban-in-jos/",
+      "sourceDate": "2026-03",
+      "confidence": "default",
+      "note": "State default from the Jos and Bukuru okada ban. Schools outside Jos may differ."
+    },
+    "Cross River State": {
+      "modes": [
+        "walk",
+        "keke",
+        "shuttle",
+        "bus"
+      ],
+      "verified": false,
+      "source": "https://guardian.ng/news/otu-orders-total-ban-on-okada-in-calabar/",
+      "sourceDate": "2023-06-21",
+      "confidence": "default",
+      "note": "State default from the Calabar metropolis okada ban. Schools outside Calabar may differ."
+    },
+    "FCT Abuja": {
+      "modes": [
+        "walk",
+        "shuttle",
+        "bus"
+      ],
+      "verified": false,
+      "source": "https://www.vanguardngr.com/2026/08/fct-wont-allow-keke-napep-okada-back-into-city-centre-wike/",
+      "sourceDate": "2026-08",
+      "confidence": "default",
+      "note": "Default from the Abuja city centre rule that keeps okada and keke out. Schools in the area councils may differ."
+    }
+  },
+  "schools": {
+    "obafemi-awolowo-university-ile-ife": {
+      "modes": [
+        "walk",
+        "keke",
+        "shuttle",
+        "bus"
+      ],
+      "verified": true,
+      "source": "https://www.vanguardngr.com/2026/04/oau-insists-no-return-of-okada-as-students-battle-transport-crisis/",
+      "sourceDate": "2026-04-20",
+      "confidence": "high",
+      "note": "Okada and the old town buses were removed in 2026. The real shuttle is a flat 100 from the Road 1 gate to SUB by day. In the game every ride is priced by distance, from 100 to 400."
+    },
+    "university-of-ibadan": {
+      "modes": [
+        "walk",
+        "keke",
+        "shuttle"
+      ],
+      "verified": true,
+      "source": "https://afaspress.com.ng/2024/12/15/ui-reviews-intra-campus-transport-fares/",
+      "sourceDate": "2024-12-15",
+      "confidence": "high",
+      "note": "Okada banned on campus since 1 July 2019. Keke drop was 300 to 500 in December 2024. Campus cabs also run but cabs are not in the game.",
+      "fares": {
+        "keke": {
+          "base": 300,
+          "perKm": 100,
+          "max": 500
+        },
+        "shuttle": {
+          "base": 100,
+          "perKm": 0,
+          "max": 100
+        }
+      }
+    },
+    "university-of-lagos": {
+      "modes": [
+        "walk",
+        "shuttle",
+        "bus"
+      ],
+      "verified": false,
+      "source": "https://thesun.ng/unilag-students-to-pay-n150-per-stop-under-fgs-cng-transport-scheme-2/",
+      "sourceDate": "2026-10-02",
+      "confidence": "medium",
+      "note": "No campus okada notice found. Okada is left out because Akoka is in Lagos Mainland, which the state ban covers. Keke on campus is unconfirmed. Bus fare is the announced CNG bus fare.",
+      "fares": {
+        "bus": {
+          "base": 150,
+          "perKm": 0,
+          "max": 150
+        }
+      }
+    },
+    "university-of-nigeria-nsukka": {
+      "modes": [
+        "walk",
+        "shuttle"
+      ],
+      "verified": false,
+      "source": "https://advocatengr.com/2026/06/07/terror-attack-rumour-unn-beefs-up-security-on-nsukka-campus-bans-okada-riders/",
+      "sourceDate": "2026-06-07",
+      "confidence": "medium",
+      "note": "Motorcycles suspended on campus from June 2026. Keke unconfirmed. Current fares unconfirmed, so the default fare applies."
+    },
+    "ahmadu-bello-university-zaria": {
+      "modes": [
+        "walk",
+        "keke",
+        "shuttle"
+      ],
+      "verified": false,
+      "source": "http://abucampusreport.com/abu-zaria-freshers-guide/",
+      "sourceDate": "undated",
+      "confidence": "low",
+      "note": "Search snippet only, the page did not open. Okada status unconfirmed and left out."
+    },
+    "university-of-benin": {
+      "modes": [
+        "walk",
+        "shuttle"
+      ],
+      "verified": false,
+      "source": "https://gazettengr.com/uniben-shuttle-service-increases-transport-fare/",
+      "sourceDate": "2024-06-29",
+      "confidence": "medium",
+      "note": "Shuttle 150 to 200 inside campus from July 2024. Campus cabs also run. Okada and keke unconfirmed and left out.",
+      "fares": {
+        "shuttle": {
+          "base": 150,
+          "perKm": 0,
+          "max": 150
+        }
+      }
+    },
+    "university-of-ilorin": {
+      "modes": [
+        "walk",
+        "keke",
+        "shuttle",
+        "bus"
+      ],
+      "verified": false,
+      "source": "https://edutv.com.ng/articles/read/unilorin-students-decry-new-campus-transport-system-cite-stress-and-long-queues_407.html",
+      "sourceDate": "2025-10-28",
+      "confidence": "medium",
+      "note": "Korope minibuses carry movement inside campus, at 300 in October 2025. Keke and the big bus come from a search snippet.",
+      "fares": {
+        "shuttle": {
+          "base": 300,
+          "perKm": 0,
+          "max": 300
+        },
+        "bus": {
+          "base": 100,
+          "perKm": 0,
+          "max": 100
+        }
+      }
+    },
+    "federal-university-of-technology-akure": {
+      "modes": [
+        "walk",
+        "shuttle"
+      ],
+      "verified": false,
+      "source": "https://en.wikipedia.org/wiki/Federal_University_of_Technology_Akure",
+      "sourceDate": "undated",
+      "confidence": "low",
+      "note": "Search snippets only. Campus shuttle between Obanla and Obakekere. Current fare unconfirmed."
+    },
+    "federal-university-of-agriculture-abeokuta": {
+      "modes": [
+        "walk",
+        "shuttle"
+      ],
+      "verified": false,
+      "source": "https://funaab.edu.ng/funaabsu-introduces-transportation-scheme/",
+      "sourceDate": "2021-04-19",
+      "confidence": "low",
+      "note": "Students' Union minibus scheme from 2021. Normal seat fare unconfirmed."
+    },
+    "lagos-state-university-ojo": {
+      "modes": [
+        "walk",
+        "shuttle"
+      ],
+      "verified": false,
+      "source": "https://www.thelasuconscience.com.ng/lasu-shuttle-fare-hike-sparks-student-frustration-over-%E2%82%A650-change/",
+      "sourceDate": "2026-04-11",
+      "confidence": "medium",
+      "note": "Shuttle 100 to 150 in April 2026. Okada and keke reported at the gate, not confirmed inside.",
+      "fares": {
+        "shuttle": {
+          "base": 150,
+          "perKm": 0,
+          "max": 150
+        }
+      }
+    },
+    "olabisi-onabanjo-university-ago-iwoye": {
+      "modes": [
+        "walk",
+        "shuttle"
+      ],
+      "verified": false,
+      "source": "https://www.campusmirror.com.ng/2026/03/oou-sug-announces-50-increase-in-campus.html",
+      "sourceDate": "2026-03-23",
+      "confidence": "medium",
+      "note": "Campus buses from the School Park, 400 to 500 in April 2026. Okada inside campus unconfirmed.",
+      "fares": {
+        "shuttle": {
+          "base": 400,
+          "perKm": 0,
+          "max": 400
+        }
+      }
+    },
+    "university-of-port-harcourt": {
+      "modes": [
+        "walk",
+        "keke",
+        "shuttle"
+      ],
+      "verified": false,
+      "source": "https://mushrooms.ng/blog/student-housing-uniport-port-harcourt-guide",
+      "sourceDate": "2026",
+      "confidence": "low",
+      "note": "Search snippet from a housing guide. Keke drop 100 to 200 around Choba.",
+      "fares": {
+        "keke": {
+          "base": 150,
+          "perKm": 50,
+          "max": 300
+        }
+      }
+    },
+    "university-of-calabar": {
+      "modes": [
+        "walk",
+        "shuttle"
+      ],
+      "verified": false,
+      "source": "https://crossriverwatch.com/2025/02/unical-management-commissions-campus-shuttles-to-ease-transportation-stress/",
+      "sourceDate": "2025-02-26",
+      "confidence": "medium",
+      "note": "Five Students' Union minibuses commissioned in February 2025. Fares unconfirmed."
+    },
+    "bayero-university-kano": {
+      "modes": [
+        "walk",
+        "keke"
+      ],
+      "verified": false,
+      "source": "https://buk.edu.ng/faq_s&c",
+      "sourceDate": "undated",
+      "confidence": "low",
+      "note": "The university FAQ mentions shuttle tricycles. Buses between campuses unconfirmed."
+    },
+    "university-of-jos": {
+      "modes": [
+        "walk",
+        "bus"
+      ],
+      "verified": false,
+      "source": "https://www.opinionnigeria.com/subsidy-removal-unijos-deploys-free-commuter-buses-for-students-staff/",
+      "sourceDate": "2023-06-09",
+      "confidence": "low",
+      "note": "Free university buses with an ID card in June 2023. Whether they are still free is unconfirmed.",
+      "fares": {
+        "bus": {
+          "base": 0,
+          "perKm": 0,
+          "max": 0
+        }
+      }
+    }
+  }
+}

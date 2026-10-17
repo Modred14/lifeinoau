@@ -7,11 +7,14 @@ const keep = [{ key: "Cache-Control", value: `public, max-age=${DAY}, stale-whil
 /** @type {import("next").NextConfig} */
 export default {
   poweredByHeader: false,
+  agentRules: false,
+  transpilePackages: ["@campuslife/shared"],
   compress: true,
-  experimental: { optimizePackageImports: ["@phosphor-icons/react"] }, // load only the icons that are used, not the whole icon pack
+  experimental: { cpus: 2, optimizePackageImports: ["@phosphor-icons/react"] }, // load only the icons that are used, not the whole icon pack
   async headers() {
     return [
       { source: "/models/:path*", headers: keep },
+      { source: "/campus/:path*", headers: keep },
       { source: "/data/:path*", headers: keep },
       { source: "/:file(logo\\.png|logo\\.svg|icon\\.png|favicon\\.ico)", headers: keep },
     ];

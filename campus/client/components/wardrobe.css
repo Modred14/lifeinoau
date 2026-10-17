@@ -1,0 +1,150 @@
+.campus-world .creator.wardrobe {
+  inset: max(18px, var(--safe-top)) max(18px, var(--safe-right)) max(18px, var(--safe-bottom)) max(18px, var(--safe-left));
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  max-width: 1140px;
+  max-height: 780px;
+  margin: auto;
+  border: 2px solid #5b6950;
+  border-radius: 22px;
+  overflow: hidden;
+  background: #14271f;
+  box-shadow: 0 24px 80px #07130dd9, 0 2px 0 #f4f2df12 inset;
+}
+.campus-world .wardrobe-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 76px;
+  padding: 14px 24px;
+  border-bottom: 1px solid #516346;
+  background: #20362b;
+}
+.campus-world .wardrobe-header h2 { margin: 0; font: 400 clamp(16px, 2vw, 21px)/1.4 var(--font-game), sans-serif; text-wrap: balance; }
+.campus-world .wardrobe .icon-btn { display: inline-grid; place-items: center; width: 42px; height: 42px; border: 1px solid #53694c; border-radius: 10px; background: #1a3026; color: var(--accent); }
+.campus-world .wardrobe .icon-btn svg { font-size: 21px; }
+.campus-world .wardrobe .creator-preview {
+  min-height: 0;
+  min-width: 0;
+  isolation: isolate;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 42%, #547247 0%, #304d35 43%, #1a3025 78%);
+}
+.campus-world .wardrobe .creator-preview::before { bottom: 20%; width: 72%; max-width: 350px; aspect-ratio: 3.2; border: 2px solid #c6d49a55; background: #b9ce8c18; box-shadow: 0 12px 0 #101f1740, 0 16px 30px #07170a55; }
+.campus-world .wardrobe-stage-light { position: absolute; inset: 0; z-index: -1; background-image: linear-gradient(#dce9aa05 1px, transparent 1px), linear-gradient(90deg, #dce9aa05 1px, transparent 1px); background-size: 48px 48px; mask-image: linear-gradient(transparent, #000 30%, #000 65%, transparent); }
+.campus-world .wardrobe .preview-3d { inset: 48px 4px 112px; }
+.campus-world .wardrobe-preview-tools { position: absolute; top: 18px; left: 18px; right: 18px; display: flex; align-items: center; gap: 8px; }
+.campus-world .wardrobe-shuffle { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; margin-left: auto; padding: 8px 12px; border: 1px solid #53694c; border-radius: 10px; background: #1a3026; color: var(--text); font: 600 12px var(--font-ui), sans-serif; cursor: pointer; }
+.campus-world .wardrobe-shuffle svg { font-size: 20px; color: var(--accent); }
+.campus-world .wardrobe-equipped { position: absolute; bottom: 54px; left: 22px; right: 22px; display: flex; align-items: center; flex-direction: column; gap: 6px; text-align: center; pointer-events: none; }
+.campus-world .wardrobe-equipped strong { font: 400 18px/1.35 var(--font-game), sans-serif; color: #f2dca4; text-wrap: balance; }
+.campus-world .wardrobe-equipped > span { color: #c6d0b9; font-size: 11px; line-height: 1.5; }
+.campus-world .wardrobe .creator-spin { bottom: 20px; font-size: 11px; }
+.campus-world .wardrobe .creator-panel { min-width: 0; min-height: 0; padding: 20px 24px; gap: 16px; border-left: 1px solid #536346; border-radius: 0; background: #14271f; }
+.campus-world .wardrobe-tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); flex-shrink: 0; overflow: visible; gap: 6px; padding: 0 0 16px; border-color: #364d3c; }
+.campus-world .wardrobe-tabs .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-width: 0; min-height: 67px; padding: 9px 4px; border: 1px solid #405840; border-bottom-width: 3px; border-radius: 10px; font-size: 11px; background: #21392b; color: #c3ceb7; }
+.campus-world .wardrobe-tabs .tab svg { font-size: 23px; }
+.campus-world .wardrobe-tabs .tab.active { border-color: #f7d881; border-bottom-color: #b1893c; background: #edc76d; color: #253321; box-shadow: 0 2px 0 #fff4ba55 inset; }
+.campus-world .wardrobe .creator-options { min-height: 0; max-width: none; padding: 4px 8px 12px 4px; margin: -4px -8px 0 -4px; scrollbar-gutter: stable; }
+.campus-world .wardrobe .creator-options h3 { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 20px 0 12px; color: #e3e6cd; font-size: 14px; font-weight: 700; }
+.campus-world .wardrobe .creator-options h3 > span { color: #adbea4; font-size: 11px; font-weight: 500; }
+.campus-world .wardrobe-section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.campus-world .wardrobe .wardrobe-section-title h3 { margin: 0; }
+.campus-world .wardrobe-section-title > span { color: #9cb292; font-size: 11px; font-variant-numeric: tabular-nums; }
+.campus-world .wardrobe-body-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.campus-world .wardrobe-body-card { position: relative; display: flex; align-items: center; flex-direction: column; min-width: 0; overflow: hidden; padding: 12px 12px 14px; border: 2px solid #405b40; border-bottom-width: 4px; border-radius: 14px; background: radial-gradient(ellipse at 50% 32%, #3e5634, #22372a 70%); color: #e3e6cd; font: 600 13px var(--font-ui), sans-serif; cursor: pointer; }
+.campus-world .wardrobe-body-card img { display: block; height: clamp(112px, 20dvh, 168px); max-width: 100%; object-fit: contain; margin-bottom: 10px; }
+.campus-world .wardrobe-body-card.selected, .campus-world .wardrobe-item.selected { border-color: #efc66a; border-bottom-color: #b59248; background-color: #364932; color: #f2dca4; box-shadow: 0 0 0 1px #efc66a22 inset; }
+.campus-world .wardrobe-check { position: absolute; top: 9px; right: 9px; padding: 4px; width: 22px; height: 22px; border-radius: 6px; background: #efc66a; color: #20301d; }
+.campus-world .wardrobe-next { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 48px; margin-top: 22px; padding: 10px 14px; border: 1px solid #6f8153; border-radius: 10px; background: #263e2e; color: #efc66a; text-align: left; font: 600 12px var(--font-ui), sans-serif; cursor: pointer; }
+.campus-world .wardrobe-next svg { font-size: 21px; }
+.campus-world .wardrobe-next svg:last-child { margin-left: auto; }
+.campus-world .wardrobe-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.campus-world .wardrobe-filters button { min-height: 34px; padding: 7px 10px; border: 1px solid #405840; border-radius: 7px; background: #20372a; color: #b6c5ac; font: 500 10px var(--font-ui), sans-serif; cursor: pointer; }
+.campus-world .wardrobe-filters button.selected { border-color: #b89c58; background: #4b4d2d; color: #f5d889; }
+.campus-world .wardrobe-items { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.campus-world .wardrobe-item { position: relative; display: flex; flex-direction: column; min-width: 0; padding: 0; overflow: hidden; border: 2px solid #3b553a; border-bottom-width: 4px; border-radius: 12px; background: #21382a; color: #d7dfc8; cursor: pointer; transition: border-color 150ms, background-color 150ms, transform 150ms; }
+.campus-world .wardrobe-item-art { display: flex; justify-content: center; align-items: center; width: 100%; height: 116px; padding: 10px 12px 2px; background: radial-gradient(ellipse at 50% 55%, #62734144, transparent 70%); }
+.campus-world .wardrobe-item-art img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 4px #07130d44); }
+.campus-world .wardrobe-outfits .wardrobe-item-art { height: 154px; padding: 10px 12px 0; }
+.campus-world .wardrobe-item-name { display: flex; align-items: center; justify-content: center; min-height: 39px; padding: 8px 5px; width: 100%; font: 600 11px/1.35 var(--font-ui), sans-serif; text-align: center; text-wrap: balance; }
+.campus-world .wardrobe .wardrobe-swatches { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 10px; padding: 4px; }
+.campus-world .wardrobe .swatch { display: grid; place-items: center; min-height: 32px; max-height: 46px; border-radius: 9px; border-width: 2px; border-color: #f4f2df26; }
+.campus-world .wardrobe .swatch svg { font-size: 17px; filter: drop-shadow(0 1px 1px #0005); }
+.campus-world .wardrobe .swatch.active { outline-offset: 3px; outline-width: 2px; }
+.campus-world .wardrobe .creator-actions { flex-shrink: 0; align-items: center; padding-top: 16px; border-color: #405840; gap: 8px; }
+.campus-world .wardrobe .creator-actions .btn { min-height: 48px; flex: 1; font-size: 12px; }
+.campus-world .wardrobe .creator-actions .wardrobe-save { flex: 1.5; border: 1px solid #f6d989; border-bottom: 4px solid #ad873d; background: #edc76d; color: #253321; box-shadow: 0 2px 0 #fff2b333 inset; font-family: var(--font-game), sans-serif; font-weight: 400; }
+.campus-world .wardrobe-reset { display: grid; place-items: center; width: 44px; height: 48px; flex-shrink: 0; padding: 0; border: 1px solid #405840; border-radius: 9px; background: #20372a; color: #c1cbb0; font-size: 20px; cursor: pointer; }
+.campus-world .wardrobe button:active { transform: translateY(2px); }
+.campus-world .wardrobe .preview-loading { font-size: 13px; }
+.campus-world .wardrobe-preview-status { position: absolute; inset: 0; display: grid; place-content: center; gap: 10px; padding: 20px; text-align: center; color: #d6dfc2; font-size: 13px; background: #20362b99; }
+.campus-world .wardrobe-preview-status button { justify-self: center; }
+@media (hover: hover) {
+  .campus-world .wardrobe-item:hover, .campus-world .wardrobe-body-card:hover { border-color: #9baf73; }
+  .campus-world .wardrobe .tab:hover:not(.active), .campus-world .wardrobe-shuffle:hover, .campus-world .wardrobe-next:hover { background: #314d34; color: #f2dca4; }
+  .campus-world .wardrobe-item.selected:hover, .campus-world .wardrobe-body-card.selected:hover { border-color: #efc66a; }
+}
+@media (max-width: 760px) and (orientation: portrait) {
+  .campus-world .creator.wardrobe { inset: 0; max-width: none; max-height: none; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(160px, 30dvh) minmax(0, 1fr); border: 0; border-radius: 0; }
+  .campus-world .wardrobe-header { min-height: 64px; padding: calc(10px + var(--safe-top)) calc(16px + var(--safe-right)) 10px calc(16px + var(--safe-left)); }
+  .campus-world .wardrobe-header h2 { font-size: 15px; }
+  .campus-world .wardrobe-header .brand-mark { width: 30px; height: 30px; }
+  .campus-world .wardrobe .creator-preview { border-bottom: 1px solid #536346; }
+  .campus-world .wardrobe .preview-3d { inset: 4px 52px 18px; }
+  .campus-world .wardrobe .creator-preview::before { bottom: 14%; width: 160px; }
+  .campus-world .wardrobe-preview-tools { top: 12px; left: 12px; right: 12px; flex-direction: column; align-items: flex-start; width: 42px; }
+  .campus-world .wardrobe .icon-btn { width: 36px; height: 36px; }
+  .campus-world .wardrobe-shuffle { width: 36px; height: 36px; min-height: 36px; padding: 0; font-size: 0; }
+  .campus-world .wardrobe-shuffle svg { font-size: 20px; }
+  .campus-world .wardrobe-equipped { left: auto; right: 12px; top: 14px; bottom: auto; max-width: 92px; align-items: flex-end; text-align: right; }
+  .campus-world .wardrobe-equipped strong { font-size: 11px; }
+  .campus-world .wardrobe-equipped > span { display: none; }
+  .campus-world .wardrobe .creator-spin { bottom: 6px; font-size: 9px; }
+  .campus-world .wardrobe .creator-spin svg { font-size: 14px; }
+  .campus-world .wardrobe .creator-panel { padding: 14px calc(14px + var(--safe-right)) calc(12px + var(--safe-bottom)) calc(14px + var(--safe-left)); gap: 12px; border: 0; }
+  .campus-world .wardrobe-tabs { gap: 4px; padding-bottom: 12px; }
+  .campus-world .wardrobe-tabs .tab { min-height: 55px; font-size: 9px; border-radius: 8px; gap: 4px; padding: 6px 2px; }
+  .campus-world .wardrobe-tabs .tab svg { font-size: 20px; }
+  .campus-world .wardrobe-body-card { padding: 6px 8px 10px; font-size: 11px; }
+  .campus-world .wardrobe-body-card img { height: 110px; margin-bottom: 6px; }
+  .campus-world .wardrobe .creator-options h3 { font-size: 12px; margin: 16px 0 10px; }
+  .campus-world .wardrobe .wardrobe-section-title h3 { margin: 0; }
+  .campus-world .wardrobe-items { gap: 7px; }
+  .campus-world .wardrobe-item-art { height: 88px; padding: 8px 6px 0; }
+  .campus-world .wardrobe-outfits .wardrobe-item-art { height: 115px; }
+  .campus-world .wardrobe-item-name { font-size: 10px; min-height: 36px; }
+  .campus-world .wardrobe-check { width: 18px; height: 18px; top: 6px; right: 6px; padding: 3px; }
+  .campus-world .wardrobe .wardrobe-swatches { gap: 8px; }
+  .campus-world .wardrobe .swatch { min-height: 26px; border-radius: 7px; }
+  .campus-world .wardrobe .creator-actions { padding-top: 12px; }
+  .campus-world .wardrobe .creator-actions .btn { font-size: 11px; }
+  .campus-world .wardrobe-next { margin-top: 16px; }
+}
+@media (orientation: landscape) and (max-height: 560px) {
+  .campus-world .creator.wardrobe { inset: 8px; max-height: none; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+  .campus-world .wardrobe-header { min-height: 52px; padding: 8px 16px; }
+  .campus-world .wardrobe-header h2 { font-size: 14px; }
+  .campus-world .wardrobe-header .brand-mark { width: 30px; height: 30px; }
+  .campus-world .wardrobe .creator-panel { padding: 10px 14px; gap: 10px; }
+  .campus-world .wardrobe-tabs { padding-bottom: 8px; }
+  .campus-world .wardrobe-tabs .tab { min-height: 48px; padding: 4px; gap: 3px; font-size: 9px; }
+  .campus-world .wardrobe-tabs .tab svg { font-size: 19px; }
+  .campus-world .wardrobe-body-card img { height: 96px; }
+  .campus-world .wardrobe .creator-options h3 { margin: 14px 0 8px; }
+  .campus-world .wardrobe .wardrobe-section-title h3 { margin: 0; }
+  .campus-world .wardrobe .creator-actions { padding-top: 8px; }
+  .campus-world .wardrobe .creator-actions .btn, .campus-world .wardrobe-reset { min-height: 40px; height: 40px; }
+  .campus-world .wardrobe .preview-3d { inset: 42px 4px 78px; }
+  .campus-world .wardrobe-equipped { bottom: 34px; }
+  .campus-world .wardrobe-equipped strong { font-size: 13px; }
+  .campus-world .wardrobe-equipped > span { font-size: 9px; }
+  .campus-world .wardrobe .creator-spin { bottom: 8px; font-size: 9px; }
+  .campus-world .wardrobe-preview-tools { top: 10px; left: 12px; right: 12px; }
+  .campus-world .wardrobe .icon-btn, .campus-world .wardrobe-shuffle { width: 34px; height: 34px; min-height: 34px; }
+  .campus-world .wardrobe-shuffle { width: auto; font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { .campus-world .wardrobe button { transition: none; } }

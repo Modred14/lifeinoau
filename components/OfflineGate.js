@@ -15,7 +15,15 @@ export default function OfflineGate() {
     const down = () => setOffline(true), up = () => { setOffline(false); setStill(false); };
     window.addEventListener("offline", down);
     window.addEventListener("online", up);
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+    if ("serviceWorker" in navigator) {
+      if (process.env.NODE_ENV === "production") navigator.serviceWorker.register("/sw.js").catch(() => {});
+      else navigator.serviceWorker.getRegistrations().then(async (registrations) => {
+        for (const registration of registrations) {
+          if (registration.active && new URL(registration.active.scriptURL).pathname === "/sw.js") await registration.unregister();
+        }
+        if ("caches" in window) for (const key of await caches.keys()) if (key === "offline-v1" || key.startsWith("oau-campus-")) await caches.delete(key);
+      }).catch(() => {});
+    }
     return () => { window.removeEventListener("offline", down); window.removeEventListener("online", up); };
   }, []);
 

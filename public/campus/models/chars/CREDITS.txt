@@ -1,0 +1,4 @@
+Character models: Quaternius (https://quaternius.com), via poly.pizza.
+"Ultimate Modular Men Pack" and "Ultimate Modular Women Pack".
+License: CC0 1.0 Universal (public domain). Attribution not required, but appreciated.
+Processed by web/scripts/build-characters.mts (parts split, animations trimmed, meshopt-compressed).

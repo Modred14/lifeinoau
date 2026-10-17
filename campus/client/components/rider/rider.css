@@ -1,0 +1,24 @@
+.campus-world .rd { position: fixed; inset: 0; overflow-y: auto; padding: calc(20px + var(--safe-top, 0px)) 16px calc(32px + var(--safe-bottom, 0px)); background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.45; }
+.campus-world .rd > * { max-width: 560px; margin-inline: auto; }
+.campus-world .rd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.campus-world .rd h1 { font-family: var(--font-game), sans-serif; font-size: 20px; font-weight: 400; }
+.campus-world .rd h2 { margin-top: 24px; margin-bottom: 10px; font-size: 16px; }
+.campus-world .rd p { margin-block: 6px; }
+.campus-world .rd-list { display: grid; gap: 12px; padding: 0; list-style: none; }
+.campus-world .rd-order { display: flex; flex-direction: column; gap: 4px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.campus-world .rd-code { color: var(--accent); font-weight: 800; letter-spacing: 0.04em; }
+.campus-world .rd-request { padding: 10px 12px; border-radius: 8px; background: var(--surface-raised); font-size: 16px; }
+.campus-world .rd-muted { color: var(--muted); }
+.campus-world .rd-collect { font-weight: 800; }
+.campus-world .rd-error { padding: 10px 12px; border-radius: 8px; background: #fde8e6; color: #8f1d15; font-weight: 700; }
+.campus-world .rd-label { margin-top: 8px; font-weight: 700; }
+.campus-world .rd-input { min-height: 48px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; font-size: 16px; }
+.campus-world .rd-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; margin-top: 8px; padding: 10px 18px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent); color: var(--accent-ink); font-weight: 800; text-decoration: none; }
+.campus-world .rd-btn-quiet { border-color: var(--line); background: transparent; color: var(--text); }
+.campus-world .rd-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.campus-world .rd a:not(.rd-btn) { color: var(--accent); font-weight: 700; }
+.campus-world .rd :is(a, button, input):focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+@media (hover: hover) {
+  .campus-world .rd-btn-quiet:not(:disabled):hover { border-color: var(--accent); }
+  .campus-world .rd-btn:not(.rd-btn-quiet):not(:disabled):hover { filter: brightness(0.94); }
+}

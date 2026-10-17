@@ -1,0 +1,38 @@
+{
+  "name": "@campuslife/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Types, constants, map data and movement rules shared by client and server.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./account": "./src/account.ts",
+    "./constants": "./src/constants.ts",
+    "./map": "./src/map.ts",
+    "./movement": "./src/movement.ts",
+    "./messages": "./src/messages.ts",
+    "./schema": "./src/schema.ts",
+    "./avatar": "./src/avatar.ts",
+    "./path": "./src/path.ts",
+    "./interiors": "./src/interiors.ts",
+    "./transit": "./src/transit.ts",
+    "./life": "./src/life.ts",
+    "./drive": "./src/drive.ts",
+    "./backgrounds": "./src/backgrounds.ts",
+    "./levels": "./src/levels.ts",
+    "./schools": "./src/schools.ts",
+    "./departments": "./src/departments.ts",
+    "./queues": "./src/queues.ts",
+    "./clock": "./src/clock.ts",
+    "./market": "./src/market.ts",
+    "./market/orders": "./src/market/orders.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@colyseus/schema": "^5.0.36"
+  }
+}
