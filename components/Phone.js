@@ -119,14 +119,14 @@ export default function Phone({ open, onClose, st, firstApp, initialApp, onShop,
               <div className="ph-hero">
                 <b className="ph-time num" aria-label={`Time ${clock(now, true)}`}>{clock(now)}</b>
                 <p className="ph-date">{dateLine(now)}</p>
-                <span className="ph-mode"><Icon name={isNight(now) ? "moon" : "sun"} size={17} weight="fill" />{isNight(now) ? "Night mode" : "Day mode"}</span>
+                {/* <span className="ph-mode"><Icon name={isNight(now) ? "moon" : "sun"} size={17} weight="fill" />{isNight(now) ? "Night mode" : "Day mode"}</span> */}
               </div>
               {st && (
                 <div className="ph-wallet" aria-label="Wallet">
                   <span className="ph-wallet-ico"><Icon name="coins" size={22} weight="fill" /></span>
                   <span className="ph-wallet-t">
                     <b className="num">{naira(st.balanceKobo)}</b>
-                    <small>CGPA {a.cgpa ?? "–"} · Energy {c.energy}%</small>
+                    <small>{a.cgpa && `CGPA ${a.cgpa ?? "–"} · `}Energy {c.energy}%</small>
                   </span>
                   <span className="ph-wallet-wk">Week {st.week}</span>
                 </div>

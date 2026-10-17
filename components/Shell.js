@@ -40,9 +40,14 @@ export default function Shell({ children }) {
     opener = useRef(null),
     firstApp = useRef(null),
     failing = useRef(false);
-  const bare = path === "/",
-    full = path === "/map" || path === "/home" || path === "/home" || path === "/campus",
-    hideBars = (path === "/home" && (bareUi || (st && !st.floorZero && !st.character.expelled && !st.character.graduated))) || path === "/campus"; // no top bar or bottom nav while the game loads or the player is creating a character
+
+  // The landing page has no bars at all.
+  const bare = path === "/";
+  // Screens that fill the window instead of sitting inside the padded page wrapper.
+  const full = path === "/map" || path === "/home";
+  // On /home the bars are hidden only while the game loads or the player is creating a character.
+  const hideBars = path === "/home" && bareUi;
+
   // `force` asks the server no matter what. Without it, a copy younger than 15 seconds is reused, so moving between screens
   // (or flipping back to this tab) does not hit the server every time. One request at a time, however many parts of the app ask at once.
   const load = useCallback(async (force = false) => {
@@ -79,7 +84,8 @@ export default function Shell({ children }) {
     if (phone) firstApp.current?.focus();
   }, [phone]);
   useEffect(() => {
-    // old links (/career, /people ...) redirect to /play?app=x: open the phone on that app, then tidy the address bar
+    // old links (/career, /people ...) arrive as /home?app=x (or /play?app=x, which redirects here):
+    // open the phone on that app, then tidy the address bar
     const app = new URLSearchParams(window.location.search).get("app");
     if (path === "/home" && app) {
       setPhoneApp(app);
@@ -99,11 +105,17 @@ export default function Shell({ children }) {
     };
   }, [hideBars]);
   useEffect(() => {
-    const open = () => { void game.refresh(); setPhoneApp(null); setPhone(true); };
+    const open = () => {
+      void game.refresh();
+      setPhoneApp(null);
+      setPhone(true);
+    };
     window.addEventListener("oau:phone", open);
     return () => window.removeEventListener("oau:phone", open);
   }, []);
-  useEffect(() => { window.dispatchEvent(new CustomEvent("oau:phone-state", { detail: phone })); }, [phone]);
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("oau:phone-state", { detail: phone }));
+  }, [phone]);
   async function logout() {
     if (loggingOut) return;
     setLoggingOut(true);
@@ -138,46 +150,46 @@ export default function Shell({ children }) {
   return (
     <>
       {!hideBars && (
-      <header className="hud">
-        <Link
-          href={st ? "/home" : "/"}
-          className="brand"
-          aria-label="lifeinoau home"
-          onClick={() => setPlayMode("home")}
-        >
-          <span className="crown" aria-hidden="true">
-            <Logo size={28} />
-          </span>
-          <span>
-            life<i>in</i>oau
-          </span>
-        </Link>
-        {st && (
-          <>
-            <span className="sep" aria-hidden="true" />
-            <span className="meta num">
-              Week {st.week} · {st.character.level}L
+        <header className="hud">
+          <Link
+            href={st ? "/home" : "/"}
+            className="brand"
+            aria-label="lifeinoau home"
+            onClick={() => setPlayMode("home")}
+          >
+            <span className="crown" aria-hidden="true">
+              <Logo size={28} />
             </span>
-          </>
-        )}
-        <span className="grow" />
-        {st && clock && (
-          <span className="hud-mid">
-            <span className="hud-time num">{stamp(clock)}</span>
-            <span className="hud-mood">
-              <Icon name={mood[1]} size={18} weight="fill" />
-              {mood[0]}
+            <span>
+              life<i>in</i>oau
             </span>
-          </span>
-        )}
-        <span className="grow" />
-        {st && (
-          <span className="cash num" aria-label="Cash">
-            <Icon name="coins" size={18} weight="fill" />
-            {naira(st.balanceKobo)}
-          </span>
-        )}
-      </header>
+          </Link>
+          {st && (
+            <>
+              <span className="sep" aria-hidden="true" />
+              <span className="meta num">
+                Week {st.week} · {st.character.level}L
+              </span>
+            </>
+          )}
+          <span className="grow" />
+          {st && clock && (
+            <span className="hud-mid">
+              <span className="hud-time num">{stamp(clock)}</span>
+              <span className="hud-mood">
+                <Icon name={mood[1]} size={18} weight="fill" />
+                {mood[0]}
+              </span>
+            </span>
+          )}
+          <span className="grow" />
+          {st && (
+            <span className="cash num" aria-label="Cash">
+              <Icon name="coins" size={18} weight="fill" />
+              {naira(st.balanceKobo)}
+            </span>
+          )}
+        </header>
       )}
       {full ? (
         children
@@ -227,7 +239,15 @@ export default function Shell({ children }) {
           >
             <span className="nav-ico">
               <Icon name="phone" weight={phone ? "fill" : "regular"} />
-              {unreadChats > 0 && <i className="nav-badge" role="status" aria-label={`${unreadChats} unread messages`}>{unreadChats > 9 ? "9+" : unreadChats}</i>}
+              {unreadChats > 0 && (
+                <i
+                  className="nav-badge"
+                  role="status"
+                  aria-label={`${unreadChats} unread messages`}
+                >
+                  {unreadChats > 9 ? "9+" : unreadChats}
+                </i>
+              )}
             </span>
             <span>Phone</span>
           </button>

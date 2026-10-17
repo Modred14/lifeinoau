@@ -10,6 +10,7 @@ import HostelPicker from "@/components/HostelPicker";
 import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
 import { Icon } from "@/components/Icon";
+
 import GameHome from "@/components/GameHome";
 import { setBare, isBooted, markBooted } from "@/lib/ui";
 import { game, useGame, run as go, bump, cash, chain, deltas, canAfford } from "@/lib/gameStore";
@@ -381,6 +382,7 @@ export default function Play() {
         </div>
       </View>
     );
+
   const hsNow = st.hustle,
     safeWhy = hsNow ? hustleBlock("safe", hsNow, now) : null,
     riskyWhy = hsNow ? hustleBlock("risky", hsNow, now) : null,
