@@ -6,16 +6,16 @@ import { Icon } from "../Icon";
 import { call } from "@/lib/client";
 import { game, run, cash, canAfford, useGame } from "@/lib/gameStore";
 import { toast } from "@/lib/toast";
-import { slipsStore, useBuilder, builder, nowMs, money, moneyK, odd, pickLabel } from "@/lib/bet/betClient";
+import { slipsStore, useBuilder, builder, useNow, money, moneyK, odd, pickLabel } from "@/lib/bet/betClient";
 import { isOpen, parseId } from "@/lib/bet/fixtures.js";
 import { marketName, payoutOf, totalOddsX, MIN_STAKE, MAX_STAKE } from "@/lib/bet/markets.js";
 
 const QUICK = [500, 1000, 2000, 5000];
 
 export default function SlipSheet({ goBets, goSports }) {
-  const b = useBuilder(), router = useRouter(), g = useGame();
+  const b = useBuilder(), router = useRouter(), g = useGame(), now = useNow(1000); // ticks, so a match that kicks off while the slip is open is flagged at once
   if (!b.open || !b.legs.length) return null;
-  const now = nowMs(), closed = b.legs.filter((l) => !isOpen(parseId(l.fx), now)), stake = Number(b.stake) || 0;
+  const closed = b.legs.filter((l) => !isOpen(parseId(l.fx), now)), stake = Number(b.stake) || 0;
   const total = totalOddsX(b.legs), win = stake >= MIN_STAKE ? payoutOf(BigInt(stake) * 100n, b.legs) : 0n;
   const bal = BigInt(g?.balanceKobo ?? 0), short = stake * 100 > Number(bal);
   const bad = stake < MIN_STAKE ? `Minimum stake is ${money(MIN_STAKE)}` : stake > MAX_STAKE ? `Maximum stake is ${money(MAX_STAKE)}` : closed.length ? "Remove matches that have started" : short ? "Not enough cash" : "";

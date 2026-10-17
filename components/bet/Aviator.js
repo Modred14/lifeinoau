@@ -68,7 +68,7 @@ function paint(cv, f, t, w, h, dpr) {
 }
 
 export default function Aviator({ active }) {
-  const router = useRouter(), cv = useRef(null), box = useRef(null), fl = useRef(null), poll = useRef(null);
+  const router = useRouter(), cv = useRef(null), box = useRef(null), fl = useRef(null), poll = useRef(null), betting = useRef(false);
   const [, bump] = useState(0), rerender = useCallback(() => bump((x) => x + 1), []);
   const [stake, setStake] = useState(1000), [auto, setAuto] = useState({ on: false, x: "2.00" }), [hist, setHist] = useState([]);
 
@@ -87,6 +87,13 @@ export default function Aviator({ active }) {
     finishRound(x, r.crashCenti);
   }, [finishRound]);
 
+  // The server starts the clock for a flight when it takes the bet. Line the plane up with that clock (once), so the multiplier on screen
+  // is the one the server will pay at, instead of a plane that took off a network trip earlier.
+  const syncClock = useCallback((x, round, serverNow, rtt = 0) => {
+    if (x.synced || !round) return;
+    x.synced = true; x.t0 = performance.now() - Math.max(0, serverNow - round.startedAt) - Math.min(400, rtt / 2);
+  }, []);
+
   // ask the server how the flight is going (twice a second while the plane is up)
   const check = useCallback(async () => {
     const x = fl.current; if (!x || x.done || x.crash || x.checking) return;
@@ -95,9 +102,11 @@ export default function Aviator({ active }) {
     if (r.failed || fl.current !== x) return;
     setServerNow(r.now);
     if (r.history) setHist(r.history);
-    if (r.round && !x.id) x.id = r.round.id;
-    if (!r.round && r.last && (!x.id || r.last.id === x.id)) { if (!x.id) x.id = r.last.id; settleFrom(x, r.last); }
-  }, [settleFrom]);
+    if (r.round && !x.id) { x.id = r.round.id; syncClock(x, r.round, r.now); }
+    // Only the result of THIS flight settles it. Before the server has taken the bet, "last" is the PREVIOUS flight: using it would end the new
+    // plane at the old crash point and pay out the old win a second time.
+    if (!r.round && r.last && x.id && r.last.id === x.id) settleFrom(x, r.last);
+  }, [settleFrom, syncClock]);
 
   // load history, and pick up a flight that was in the air when the app was closed
   useEffect(() => {
@@ -107,7 +116,7 @@ export default function Aviator({ active }) {
       setServerNow(r.now); setHist(r.history ?? []);
       if (r.round && !fl.current) {
         const age = Math.max(0, r.now - r.round.startedAt);
-        fl.current = { id: r.round.id, t0: performance.now() - age, stake: Number(BigInt(r.round.stakeKobo) / 100n), stakeKobo: BigInt(r.round.stakeKobo), autoCenti: r.round.autoCenti, cashed: null, crash: null, sims: makeSims() };
+        fl.current = { id: r.round.id, synced: true, t0: performance.now() - age, stake: Number(BigInt(r.round.stakeKobo) / 100n), stakeKobo: BigInt(r.round.stakeKobo), autoCenti: r.round.autoCenti, cashed: null, crash: null, sims: makeSims() };
         rerender();
       }
     })();
@@ -148,22 +157,65 @@ export default function Aviator({ active }) {
   }, [check]);
 
   async function bet() {
-    if (flying) return;
+    const cur = fl.current;
+    if (betting.current || (cur && !cur.done && !cur.crashShown)) return; // read live, not from the last render: two quick taps must make ONE bet
     const n = Math.floor(Number(stake));
     if (!Number.isInteger(n) || n < MIN_STAKE || n > MAX_STAKE) return toast.error(`Stake between ${money(MIN_STAKE)} and ${money(MAX_STAKE)}.`, { id: "avstake" });
     let autoX = null;
     if (auto.on) { autoX = Number(auto.x); if (!(autoX >= 1.01 && autoX <= 1000)) return toast.error("Auto cash-out must be between 1.01x and 1000x.", { id: "avauto" }); }
     const stakeKobo = BigInt(n) * 100n;
     if (!canAfford(stakeKobo)) return toast.error("You do not have enough cash for that stake.", { id: "avcash" });
+    betting.current = true;
     const x = { id: null, t0: performance.now(), stake: n, stakeKobo, autoCenti: autoX ? Math.round(autoX * 100) : null, cashed: null, crash: null, sims: makeSims(), key: crypto.randomUUID() };
-    fl.current = x; rerender(); // the plane is already climbing
-    const res = await run({
-      key: "av:bet", router,
-      request: () => call("/api/bet/aviator", { stakeNaira: n, autoCashout: autoX ?? undefined, requestId: x.key }),
-      effects: [{ store: game, patch: cash(-stakeKobo) }],
-    });
-    if (res.failed || res.duplicate) { if (fl.current === x) fl.current = null; rerender(); return; } // refused: the plane lands, the stake is back
-    x.id = res.round.id; if (x.queued) sendCash(x);
+    fl.current = x; rerender(); // the plane is already climbing and the stake is already off your wallet (below)
+    const sent = performance.now();
+    let res;
+    try {
+      res = await run({
+        key: "av:bet", router,
+        request: () => call("/api/bet/aviator", { stakeNaira: n, autoCashout: autoX ?? undefined, requestId: x.key }),
+        effects: [{ store: game, patch: cash(-stakeKobo) }],
+      });
+    } finally { betting.current = false; }
+    if (res.skipped) return; // the same bet is already on its way: leave that flight alone
+    if (res.round) { // taken (or taken earlier: a repeat of the same request answers with the flight it started)
+      x.id = res.round.id; syncClock(x, res.round, res.now ?? res.round.startedAt, performance.now() - sent);
+      if (res.duplicate) game.scheduleRefresh();
+      if (x.queued) sendCash(x);
+      return;
+    }
+    if (res.failed && res.unknown) return recover(x); // no answer at all: the bet may have gone through, so find out before taking the plane down
+    toast.dismiss("avwin");
+    if (fl.current === x) fl.current = null; // refused: the plane lands and the stake is back
+    if (res.duplicate) game.scheduleRefresh(); // an earlier try of this bet had already been settled: the balance catches up
+    rerender();
+  }
+
+  /** The bet's answer never came. Ask the server whether a flight exists; if so, carry on with it, otherwise land the plane. */
+  async function recover(x) {
+    for (let i = 0; i < 4 && fl.current === x; i++) {
+      await new Promise((r) => setTimeout(r, 1200));
+      const r = await call("/api/bet/aviator");
+      if (r.failed) continue;
+      setServerNow(r.now);
+      if (r.round) { x.id = r.round.id; syncClock(x, r.round, r.now); game.scheduleRefresh(); rerender(); if (x.queued) sendCash(x); return; }
+      break;
+    }
+    toast.dismiss("avwin");
+    if (fl.current === x) { fl.current = null; rerender(); }
+    game.scheduleRefresh();
+  }
+
+  /** The cash-out's answer never came. Find out what the server did, and put the screen in line with it. */
+  async function confirmCash(x) {
+    for (let i = 0; i < 5 && fl.current === x; i++) {
+      await new Promise((r) => setTimeout(r, 900));
+      const r = await call("/api/bet/aviator");
+      if (r.failed) continue;
+      setServerNow(r.now);
+      if (r.round && r.round.id === x.id) { x.cashed = null; toast.dismiss("avwin"); toast.error("Your cash-out did not go through. Try again.", { id: "avwin" }); rerender(); return; } // still in the air: it never arrived
+      if (r.last && r.last.id === x.id) { x.cashed = null; toast.dismiss("avwin"); settleFrom(x, r.last); if (x.cashed) toast.success(`Cashed out at ${fmtX(x.cashed.centi)}: +${moneyK(x.cashed.payout - x.stakeKobo)}`, { id: "avwin" }); game.scheduleRefresh(); rerender(); return; }
+    }
   }
 
   async function sendCash(x) {
@@ -173,7 +225,9 @@ export default function Aviator({ active }) {
       request: () => call("/api/bet/aviator", { action: "cashout", roundId: x.id }),
       effects: [{ store: game, patch: cash(pay) }],
     });
-    if (res.failed && !res.skipped) { // too late: the win is taken back and the real crash shows
+    if (res.skipped) return; // this cash-out is already on its way
+    if (res.failed && (res.unknown || res.offline || res.timedOut)) return confirmCash(x); // outcome unknown: ask the server, never guess
+    if (res.failed || res.round?.status === "LOST") { // too late (or refused): the win is taken back and the real crash shows
       toast.dismiss("avwin");
       x.cashed = null; if (res.round?.crashCenti) finishRound(x, res.round.crashCenti);
     } else if (res.round?.status === "WON") {
