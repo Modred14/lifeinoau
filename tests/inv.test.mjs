@@ -35,7 +35,7 @@ const tx = {
       startedAt: new Date(Date.now() - (week - 1) * 864e5 - 1000),
     }),
   },
-  character: { findUnique: async () => ({ ...C, account: A.p }) },
+  character: { findUnique: async () => ({ ...C, account: A.p }), update: async ({ data }) => Object.assign(C, data) },
   account: {
     findUnique: async ({ where }) => ({
       ...(where.systemName ? sys[where.systemName] : A[where.id]),
