@@ -5,6 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { useRouter } from "next/navigation";
 import { call, naira, notifyError, loggedOut } from "@/lib/client";
 import { toast } from "@/lib/toast";
+import { noteSeen } from "@/lib/noteSeen";
 import CreateFlow from "@/components/CreateFlow";
 import LifeRoll from "@/components/LifeRoll";
 import HostelPicker from "@/components/HostelPicker";
@@ -58,7 +59,7 @@ export default function Play() {
 
   // Game notifications become persistent info toasts. Once the last one is closed they are marked read.
   const showNotes = useCallback((list) => {
-    const fresh = (list ?? []).filter((n) => !shown.current.has(n.id));
+    const fresh = (list ?? []).filter((n) => !shown.current.has(n.id) && !noteSeen(n.id)); // a result already announced elsewhere (a bet that just settled) is not announced again
     if (!fresh.length) return;
     fresh.forEach((n) => shown.current.add(n.id));
     const groups =
@@ -76,9 +77,9 @@ export default function Play() {
       if (pending.current === 0) call("/api/notifications", {});
     };
     groups.forEach((n) =>
-      toast.info(n.body, {
+      (n.kind === "bet:won" ? toast.success : toast.info)(n.body, { // a won bet is good news, not information
         id: "note-" + n.id,
-        sound: "notify",
+        sound: n.kind === "bet:won" ? "coin" : "notify",
         persistent: true,
         onDismiss: closed,
       }),

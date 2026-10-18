@@ -1,9 +1,10 @@
 /* components/toaster.css */
-/* Global toast stack. Desktop: top-right under the HUD. Phones: full width under the HUD, clear of the
+/* Global toast stack. It sits on its own top layer (z-index 1000: above the phone 60, dialogs 90, the offline screen 200 and the lecture fight 300);
+   it is mounted once in the root layout, outside every container that could clip it or trap its stacking. Desktop: top-right under the HUD. Phones: full width under the HUD, clear of the
    notch. The wrapper ignores pointer events so it never blocks the page; only the toasts are clickable.
    Colours: error red / success green, white text (>= 4.5:1); info is near-white with dark text. */
 
-.tt-region { position: fixed; z-index: 100; top: calc(var(--safe-t) + var(--hud-h) + 10px); right: max(16px, env(safe-area-inset-right, 0px)); width: min(392px, calc(100vw - 32px)); pointer-events: none; }
+.tt-region { position: fixed; z-index: 1000; top: calc(var(--safe-t) + var(--hud-h) + 10px); right: max(16px, env(safe-area-inset-right, 0px)); width: min(392px, calc(100vw - 32px)); pointer-events: none; }
 .tt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 
 /* each toast sits in a slot whose height animates, so the stack reflows smoothly instead of jumping */

@@ -5,7 +5,7 @@ import { allowed, tooMany } from "@/lib/ratelimit";
 import { markAllRead } from "@/lib/notifications";
 export const dynamic = "force-dynamic"; // never cache API responses
 const db = (globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } }));
-export async function POST() {
+export async function POST(req) {
   const uid = await getUserId();
   if (!uid) return Response.json({ error: "Please log in." }, { status: 401 });
   if (!(await allowed(db, "note:" + uid, 30, 60_000))) return tooMany();
@@ -18,6 +18,7 @@ export async function POST() {
       { error: "Create a character first." },
       { status: 404 },
     );
-  await markAllRead(db, c.id);
+  const body = await req.json().catch(() => ({}));
+  await markAllRead(db, c.id, body?.ids); // no ids: everything unread (the stack of game notes was closed); ids: just those results
   return Response.json({ ok: true });
 }

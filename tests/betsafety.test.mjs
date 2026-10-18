@@ -43,7 +43,7 @@ assert.throws(() => rl.settle([{ type: "even", ref: "constructor", chip: 100n }]
 
 // ---------- the services ----------
 const models = ["character", "account", "actionLog", "ledgerEntry", "floorZero", "gameClock", "notification", "achievement", "examResult", "partyTicket", "bond", "business", "casinoRound", "betSlip"];
-const db = makeDb(models, { defaults: { casinoRound: { status: "FLYING", crashCenti: 0, payoutKobo: 0n, settledAt: null, cashCenti: null, autoCenti: null, data: null }, betSlip: { status: "OPEN", payoutKobo: 0n, settledAt: null, createdAt: new Date(0) } }, unique: { actionLog: ["characterId", "requestId"], ledgerEntry: ["idempotencyKey"] }, join: { character: (r, T) => ({ ...r, account: T.account.find((a) => a.characterId === r.id), faculty: { name: "Tech", difficulty: 1 } }) } });
+const db = makeDb(models, { defaults: { notification: { readAt: null }, casinoRound: { status: "FLYING", crashCenti: 0, payoutKobo: 0n, settledAt: null, cashCenti: null, autoCenti: null, data: null }, betSlip: { status: "OPEN", payoutKobo: 0n, settledAt: null, createdAt: new Date(0) } }, unique: { actionLog: ["characterId", "requestId"], ledgerEntry: ["idempotencyKey"] }, join: { character: (r, T) => ({ ...r, account: T.account.find((a) => a.characterId === r.id), faculty: { name: "Tech", difficulty: 1 } }) } });
 const T = db.T();
 // the real database serialises one player\'s actions with a row lock (SELECT ... FOR UPDATE in loadLocked); the fake one has no locks, so make transactions take turns
 { const raw = db.$transaction; let tail = Promise.resolve(); db.$transaction = (fn) => { const p = tail.then(() => raw(fn)); tail = p.catch(() => {}); return p; }; }
@@ -140,6 +140,14 @@ try {
   assert.equal(wonRow.potentialKobo, mk.payoutOf(N(1000), S.buildLegs(legsWin, fxs[0].ko - 600_000)), "potential win = stake x total odds, as fixed at placing time");
   await S.getSlips(db, "u1"); await Promise.all([S.getSlips(db, "u1"), S.getSlips(db, "u1")]); assert.equal(bal(), bBefore + wonRow.potentialKobo, "settling again (or at the same time) never pays twice");
   assert.equal(T.ledgerEntry.filter((x) => /^bet:win:/.test(x.idempotencyKey)).length, 1); assert.equal(done.settled.length, 3);
+  // each settlement carries its saved note's id, so the screen can announce the result ONCE (same toast id from either source); kinds say won / lost
+  for (const x of done.settled) { const note = T.notification.find((n) => String(n.id) === x.noteId); assert.ok(note, "the settlement names its note"); assert.equal(note.kind, x.status === "WON" ? "bet:won" : "bet:lost"); }
+  assert.equal(T.notification.filter((n) => /^bet:/.test(n.kind)).length, 3, "one note per settled slip, none added by settling again");
+  { const { markAllRead } = await import("../lib/notifications.js"), cid = T.character[0].id, ids = done.settled.map((x) => x.noteId);
+    await markAllRead(db, cid, [ids[0], "not-a-number"]);
+    assert.equal(T.notification.filter((n) => n.readAt).length, 1, "marking by id reads only that note"); assert.ok(T.notification.find((n) => String(n.id) === ids[0]).readAt);
+    await markAllRead(db, cid, []); assert.equal(T.notification.filter((n) => n.readAt).length, 1, "an empty id list reads nothing");
+    await markAllRead(db, cid); assert.equal(T.notification.filter((n) => n.readAt).length, T.notification.length, "no ids: everything unread is read (existing behaviour)"); }
   conserved();
   // the house account holds the difference
   assert.equal(house(), -(bal() - N(1_000_000)), "what the player gained is what the house lost");

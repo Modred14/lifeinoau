@@ -135,8 +135,8 @@
 @media (max-height: 760px) { .ph-ico { width: 58px; height: 58px; border-radius: 19px; } .ph-grid { gap: 14px 4px; } .ph-time { font-size: 3.8rem; } .ph-wallet { margin: 14px 0 18px; } }
 @media (max-height: 640px) { .ph-ico { width: 52px; height: 52px; border-radius: 17px; } .ph-time { font-size: 3.1rem; } .ph-date { margin-bottom: 10px; } .ph-mode { display: none; } .ph-wallet { margin: 12px 0 14px; } }
 @media (prefers-reduced-motion: reduce) { .pa, .ph, .ph-scrim, .ph-sheet { animation: none; } }
-/* notifications wait behind the phone while it is open */
-body:has(.ph-scrim) .tt-region { z-index: 55; }
+/* Notifications are NOT held back while the phone is open: .tt-region (components/toaster.css) is a top-level layer above the phone,
+   its apps and every sheet or dialog. (An old rule here dropped it to z-index 55, under the phone's 60: that was the bug.) */
 /* ---------- the Bet app is a dark, full-height app that scrolls inside itself ---------- */
 .ph[data-app="bet"] .ph-status { color: #fff; }
 .ph[data-app="bet"] .ph-home i { background: rgba(255, 255, 255, 0.9); }
