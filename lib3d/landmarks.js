@@ -61,7 +61,7 @@ export const LANDMARKS = [
     25,
     -4,
     "OAU's central library provides books, journals, electronic resources and research facilities.",
-    [COURSES],
+    
     "relative",
     ["oluwasanmi library"],
   ),
@@ -72,7 +72,7 @@ export const LANDMARKS = [
     0,
     19,
     "A university administrative building associated with institutional governance and academic affairs.",
-    [COURSES],
+    
     "schematic",
   ),
   L(
@@ -106,7 +106,7 @@ export const LANDMARKS = [
     -58,
     -14,
     "An academic centre for scientific education, laboratory practicals and research.",
-    [COURSES],
+    
   ),
   L(
     "f_technology",
@@ -115,7 +115,7 @@ export const LANDMARKS = [
     -58,
     10,
     "An engineering-focused faculty for technical education, practical training and research.",
-    [COURSES],
+    
   ),
   L(
     "f_cs",
@@ -124,7 +124,7 @@ export const LANDMARKS = [
     -34,
     -46,
     "Home to computing disciplines including Computer Science, Software Engineering and related fields.",
-    [COURSES],
+    
   ),
   L(
     "f_law",
@@ -133,7 +133,7 @@ export const LANDMARKS = [
     -6,
     -50,
     "The academic home of legal education, where students study law, legislation and justice.",
-    [COURSES],
+    
     "relative",
   ),
   L(
@@ -143,7 +143,7 @@ export const LANDMARKS = [
     20,
     -50,
     "A faculty dedicated to the study of languages, literature, history and the humanities.",
-    [COURSES],
+    
   ),
   L(
     "f_education",
@@ -152,7 +152,7 @@ export const LANDMARKS = [
     44,
     -44,
     "A faculty focused on teaching, learning, educational research and teacher development.",
-    [COURSES],
+    
   ),
   L(
     "f_pharmacy",
@@ -161,7 +161,7 @@ export const LANDMARKS = [
     58,
     -22,
     "A faculty focused on pharmaceutical sciences, medicines and pharmacy practice.",
-    [COURSES],
+    
   ),
   L(
     "f_health",
@@ -170,7 +170,7 @@ export const LANDMARKS = [
     68,
     -2,
     "A college encompassing medical education and health sciences, including clinical training and research.",
-    [COURSES],
+    
   ),
   L(
     "f_social",
@@ -179,7 +179,7 @@ export const LANDMARKS = [
     56,
     20,
     "A faculty exploring society, economics, human behaviour, institutions and public policy.",
-    [COURSES],
+    
   ),
   L(
     "f_admin",
@@ -188,7 +188,7 @@ export const LANDMARKS = [
     30,
     33,
     "A faculty focused on administration, management and organisational studies.",
-    [COURSES],
+    
   ),
   L(
     "f_edm",
@@ -197,7 +197,7 @@ export const LANDMARKS = [
     -34,
     30,
     "A faculty covering the built environment, architecture, planning and design.",
-    [COURSES],
+    
     "relative",
     ["architecture"],
   ),
@@ -208,7 +208,7 @@ export const LANDMARKS = [
     -78,
     -44,
     "A faculty focused on agricultural science, crop production, soil management and farming systems.",
-    [COURSES],
+    
   ),
 
   // Halls of residence and health services
