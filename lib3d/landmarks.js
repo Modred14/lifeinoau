@@ -624,7 +624,7 @@ export const KIND_LABEL = {
   gate: "Gate",
   parking: "Parking",
   club: "Nightlife",
-  jail: "Floor O",
+  jail: "Floor O (N-QRS Custody)",
   billboard: "Billboard",
   building: "Campus building",
   town: "Town",
@@ -640,6 +640,6 @@ export const MAP_GROUPS = [
   ["Sports and worship", ["sports", "worship", "parking"]],
   ["Town and gate", ["gate", "town"]],
   ["Nightlife", ["club"]],
-  ["Floor O", ["jail"]],
+  ["Floor O (N-QRS Custody)", ["jail"]],
   ["Billboards", ["billboard"]],
 ];

@@ -60,7 +60,7 @@ npm test
 ```
 
 ### Important facts about the first run
-- The **game clock starts when you run `npm run seed`**. That moment is "week 1". One real day = one week.
+- The **game clock starts when you run `npm run seed`**. That moment is "week 1". The clock runs **1:1 with real time**: one game minute is one real minute, a day is 24 real hours and a week is 7 real days. Nothing ticks: every time is worked out from the stored epoch and the server clock (`lib/campus-clock.js`, `lib/clock.js`).
 - Run the seed only once. It is safe to repeat (it will not duplicate anything), but never delete the `GameClock` row.
 - If step 5 fails, the most common reason is that the constraints were pasted into the wrong migration, or applied twice.
 - `npm run build` runs `prisma generate` first, then `next build`. `migrate dev` also runs `generate` for you.
@@ -144,7 +144,7 @@ oau-life-backend/
 | `/api/risky` | POST | `app/api/risky/route.js` | Risky hustle (once per in-game day; paid or jailed) |
 | `/api/exam` | POST | `app/api/exam/route.js` | Sit or cheat in an exam |
 | `/api/fight` | POST | `app/api/fight/route.js` | Report a lecturer brawl; the server decides the cost (80% QRS catch after a win) |
-| `/api/floor0/pay` | POST | `app/api/floor0/pay/route.js` | Pay the bill to leave Floor O |
+| `/api/floor0/pay` | POST | `app/api/floor0/pay/route.js` | Pay the bail to leave Floor O (N-QRS Custody) |
 | `/api/players` | GET | `app/api/players/route.js` | Search players by name |
 | `/api/profile` | GET | `app/api/profile/route.js` | Public profile |
 | `/api/messages` | GET, POST | `app/api/messages/route.js` | Inbox, conversation, send |
@@ -202,8 +202,10 @@ Then run steps 2 to 7 from section 1.
 
 ## 3. How the game works (rules as built)
 
-**Time.** One real day = one week, decided by the server clock. Each player is "caught up" on missed weeks
-whenever they make a request. If nothing new has happened, the catch-up does nothing.
+**Time.** Strictly 1:1 with real time: a game minute is a real minute, an in-game day is 24 real hours and a week is 7 real days, all derived from the
+server clock and the `GameClock` row (never from a browser, never from a timer, so a refresh, logout, restart or reconnect cannot move it). Each player is "caught up" on
+missed weeks whenever they make a request. If nothing new has happened, the catch-up does nothing. Every deadline in the game (sentences, suspensions, expulsions,
+hustle cooldowns) is a stored timestamp; `getState` and `/api/travel` return `serverNow`, and every screen counts down against it (`lib/serverClock.js`), so devices with wrong clocks still agree.
 
 **Character.** Gender, faculty, at least one personality (Party Animal, Introvert, Extrovert, Shana).
 Class is drawn by the server: **MAPO 60%, LAPO 30%, NEPO 10%**. Players must tick that they are 18+ at sign-up.
@@ -228,7 +230,7 @@ means withdrawal. Graduation at 500L gives a Nigerian-style class (First Class f
 exam sat. Cheating adds marks, but a caught cheat caps the score at 25 and adds a strike.
 
 **Hustles (all limits are enforced on the server, in `lib/engine.js` + `lib/gameService.js`; the screens only read them).**
-One in-game day is one real day, counted from the game clock's start (`dayWindow` in `lib/clock.js`).
+One in-game day is 24 real hours, counted from the game clock's epoch (`dayWindow` in `lib/clock.js`).
 - Safe hustle: 20 energy, pays a random ₦1,500 to ₦15,000. At most 2 per in-game day, and at least 6 hours between attempts (the gap also holds across the day change).
 - Risky hustle (labelled VERY RISKY, ₦100,000 to ₦500,000): 25 energy, once per in-game day. Two outcomes only: N-QRS catches you (chance rises with suspicion), or you are paid a random ₦100,000 to ₦500,000.
 - The counts come from `ActionLog` rows (written in the same transaction as the hustle, so a failed hustle never counts; the player row is locked, so two quick taps cannot both pass). `getState` returns them as `hustle`.
@@ -236,7 +238,20 @@ One in-game day is one real day, counted from the game clock's start (`dayWindow
 **Floor O and bail.** Caught on a risky hustle: Floor O for 30 minutes to 1 hour 30 minutes, lose 15 health, 25 energy and 10 happiness, the
 QRS seizes 30% of your cash. Bail is ₦3,500 for every minute of the sentence still to serve (a started minute counts), so it falls ₦3,500
 each minute served and is worked out on the server at the moment of payment (`bailFor`). Fighting a lecturer jails you for 30 minutes to 3 hours but uses the same bail rule.
-Strikes: 3 means a 2-week suspension, 5 means expulsion. A suspended player can still pay bail.
+Strikes: 3 or 4 means a **2 real hour suspension**, 5 means a **5 real hour expulsion**. A suspended player can still pay bail.
+
+**Floor O (N-QRS Custody).** A sentence is served *inside* Floor O: the arrest moves the player to the map place `floor0`, and `FloorZero` keeps when custody started
+(`startedAt`), when it ends (`releaseAt`) and where (`location`), with `Character.jailedUntil` as the enforced deadline. While it is active every state-changing action is
+refused on the server (`loadLocked` in `lib/gameService.js`): no actions, travel or teleport (`/api/travel`), road positions, hiring, housing, shop, money transfers, parties or
+games. A presence ping can only confirm Floor O. **Messaging stays open** (it never goes through `loadLocked`). Bail still ends the sentence early. When the time is up the player is
+released automatically, with nothing to pay: the next request of any kind (or `settleCharacter`) clears `jailedUntil` and closes the custody record. The home screen shows the custody
+screen instead of the room, the map and phone are limited to messages, and other players see the prisoner at Floor O only.
+
+**Discipline and daily energy (`lib/discipline.js`).** Suspension (`suspendedAt`/`suspendedUntil`, 2 hours) and expulsion (`expelledAt`/`expelledUntil`, 5 hours) are real-time deadlines
+enforced on the server; whether one is active is always decided by comparing the stored deadline with the server clock, so an expired penalty can never stay active and no refresh
+or API call can shorten or skip a running one. When an expulsion ends the player **starts again at 100L**: a fresh session and exam count from that week, no strikes or failed sessions, and
+CGPA counted from the restart (`Character.restartWeek`; older exam results are kept, they just stop counting). The account, money, home, businesses, relationships, messages and
+achievements are untouched, and the weeks spent expelled are not caught up. Energy refills to 100 once per in-game day (`energyRefilledAt`), not in the weekly catch-up.
 
 **Fighting a lecturer.** On the Courses app, "Fight <lecturer>" (20 energy, once per week, behind a confirm) opens a full-screen 3D brawl
 (`components/LectureFight.js`, scene in `lib3d/lectureScene.js`). It plays itself (auto-fight) so you watch your character beat the lecturer, and you can
@@ -350,7 +365,7 @@ These are starting numbers. Real players will find strategies the simulations di
 
 | Topic | Decision |
 |---|---|
-| Time | 1 real day = 1 week; sessions are 12 weeks |
+| Time | 1:1 with real time (1 game minute = 1 real minute; week = 7 real days); sessions are 12 weeks |
 | Money | Integer kobo in a double-entry ledger |
 | Game time engine | Catch-up on request, no per-player cron job |
 | Sign-up | Must tick "I am 18 or older" |
@@ -383,6 +398,8 @@ Run them all with `npm test`. Each file prints what it checked.
 | File | Covers |
 |---|---|
 | `tick.test.mjs` | Weekly catch-up: sessions, withdrawal, graduation, childcare, pregnancy, businesses, no free energy |
+| `campus-clock.test.mjs` | The strict 1:1 clock: week and day boundaries derived from stored timestamps |
+| `discipline.test.mjs` | 2 hour suspension, 5 hour expulsion and restart at 100L, daily energy, Floor O (N-QRS Custody): no escape, messaging allowed, persistence, auto-release, server-clock countdowns |
 | `p2p.test.mjs` | Player-to-player transfers, fee, replays |
 | `rl.test.mjs` | Rate limiter |
 | `admin.test.mjs` | Admin access, audited adjustments, reports |

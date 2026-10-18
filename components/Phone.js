@@ -6,6 +6,7 @@ import { naira, call } from "@/lib/client";
 import { CLASS_INFO } from "@/lib/classes.js";
 import { playSound } from "@/lib/sound";
 import { InPhone } from "./phoneContext";
+import { serverDate } from "@/lib/serverClock";
 import MessagesApp from "./apps/MessagesApp";
 import { chat, useChat } from "@/lib/chat";
 import CareerApp from "./apps/CareerApp";
@@ -38,6 +39,8 @@ const APPS = {
 };
 export const PHONE_APPS = Object.keys(APPS);
 const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "forbes", "awards", "housing", "hire", "bet", "settings"];
+/** In Floor O (N-QRS Custody) the phone only does messages (and settings). The server refuses everything else too; this just stops offering it. */
+const CUSTODY_GRID = ["messages", "settings"];
 
 /** "Friday 16 October · Ile-Ife" */
 const dateLine = (d) => {
@@ -64,8 +67,8 @@ function Tile({ name, icon, tone, onClick, badge, first, sound }) {
 }
 
 /** The phone. A home screen with widgets, app icons and a dock. Tapping an app opens it on the same screen, nothing navigates away. */
-export default function Phone({ open, onClose, st, firstApp, initialApp, onShop, onLogout, loggingOut }) {
-  const [now, setNow] = useState(() => new Date());
+export default function Phone({ open, onClose, st, held = false, firstApp, initialApp, onShop, onLogout, loggingOut }) {
+  const [now, setNow] = useState(() => serverDate());
   const [app, setApp] = useState(null);
   const unread = useChat((s) => s.unread); // pushed by the chat connection: nothing is polled for it any more
   const wasOpen = useRef(false);
@@ -77,11 +80,11 @@ export default function Phone({ open, onClose, st, firstApp, initialApp, onShop,
   }, [open]);
   useEffect(() => {
     if (!open) return;
-    setApp(APPS[initialApp] ? initialApp : null);
-    setNow(new Date());
-    const t = setInterval(() => setNow(new Date()), 15000);
+    setApp(APPS[initialApp] && (!held || CUSTODY_GRID.includes(initialApp)) ? initialApp : null);
+    setNow(serverDate());
+    const t = setInterval(() => setNow(serverDate()), 15000);
     return () => clearInterval(t);
-  }, [open, initialApp]);
+  }, [open, initialApp, held]);
   // the chat connection lives as long as the player is in the game, so messages arrive even while the phone is closed
   const me = st?.character?.name;
   useEffect(() => { if (me) chat.begin(me); }, [me]);
@@ -132,10 +135,10 @@ export default function Phone({ open, onClose, st, firstApp, initialApp, onShop,
                 </div>
               )}
               <div className="ph-grid">
-                {GRID.map((id, k) => (
+                {(held ? CUSTODY_GRID : GRID).map((id, k) => (
                   <Tile key={id} {...APPS[id]} badge={id === "messages" ? unread : 0} first={k === 0 ? firstApp : undefined} onClick={() => setApp(id)} />
                 ))}
-                <Tile name="Shop" icon="bag" tone="mint" sound="none" onClick={onShop} />
+                {!held && <Tile name="Shop" icon="bag" tone="mint" sound="none" onClick={onShop} />}
                 <Tile name={loggingOut ? "Leaving…" : "Log out"} icon="logout" tone="slate" onClick={onLogout} />
               </div>
             </div>

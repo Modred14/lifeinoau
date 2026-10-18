@@ -153,12 +153,12 @@ function ResultCard({ res, name, onClose }) {
   const mins = res.releaseAt ? Math.max(1, Math.round((new Date(res.releaseAt) - Date.now()) / 60000)) : null;
   return (
     <div className="lf-card" data-tone={caught ? "bad" : escaped ? "good" : "meh"}>
-      <h2>{caught ? "Floor O" : escaped ? "You got away" : "You lost"}</h2>
+      <h2>{caught ? "Floor O (N-QRS Custody)" : escaped ? "You got away" : "You lost"}</h2>
       {caught && (<>
-        <p>You knocked out {name} and the QRS caught you ({DSA_CATCH_PERCENT}% chance, and the dice said yes).</p>
-        <ul><li>Cash seized: <b>{naira(res.seizedKobo)}</b></li><li>Bill to leave early: <b>{naira(res.billKobo)}</b></li>{mins && <li>Sentence: about <b>{mins} min</b></li>}<li>Strikes: <b>{res.strikes}</b>{res.expelled ? " (expelled)" : res.suspended ? " (suspended for 2 weeks)" : ""}</li></ul>
+        <p>You knocked out {name} and N-QRS caught you ({DSA_CATCH_PERCENT}% chance, and the dice said yes).</p>
+        <ul><li>Cash seized: <b>{naira(res.seizedKobo)}</b></li><li>Bill to leave early: <b>{naira(res.billKobo)}</b></li>{mins && <li>Sentence: about <b>{mins} min</b></li>}<li>Strikes: <b>{res.strikes}</b>{res.expelled ? " (expelled for 5 hours)" : res.suspended ? " (suspended for 2 hours)" : ""}</li></ul>
       </>)}
-      {escaped && <p>You knocked out {name} and left before the QRS van arrived. Happiness and fame up, but your suspicion jumped.</p>}
+      {escaped && <p>You knocked out {name} and left before the N-QRS van arrived. Happiness and fame up, but your suspicion jumped.</p>}
       {!res.won && <p>{name} beat you and carried on with the class. Your health and happiness took a hit.</p>}
       <button type="button" className="lf-go" onClick={onClose}>{caught ? "Go to the game" : "Back to class"}</button>
     </div>

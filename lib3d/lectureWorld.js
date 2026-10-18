@@ -68,7 +68,7 @@ export function buildWorld(scene) {
   const bf = tex(canvasTex(1024, 256, (g, w, h) => { g.fillStyle = "#98a3b2"; g.fillRect(0, 0, w, h); for (let r = 0; r < 2; r++) for (let i = 0; i < 12; i++) { g.fillStyle = "#222a35"; g.fillRect(30 + i * 82, 30 + r * 110, 34, 56); g.fillStyle = "#fff"; g.fillStyle = "#4a5565"; for (let b = 0; b < 3; b++) g.fillRect(34 + b * 11 + i * 82, 30 + r * 110, 3, 56); } }));
   const bm = mat("#98a3b2"), fb = mesh(fo, new THREE.BoxGeometry(24, 7, 9), [bm, bm, bm, bm, new THREE.MeshStandardMaterial({ map: bf, roughness: 0.9 }), bm], 0, 3.5, -19.5); fb.receiveShadow = true;
   box(fo, 25, 0.9, 10, 0, 7.45, -19.5, mat("#b8322f"));
-  mesh(fo, new THREE.PlaneGeometry(9, 2.4), new THREE.MeshBasicMaterial({ map: tex(sign("FLOOR O", "QRS CUSTODY", "#b8322f", "#fff6ec", 1024, 272)) }), 0, 5.4, -14.95, false);
+  mesh(fo, new THREE.PlaneGeometry(9, 2.4), new THREE.MeshBasicMaterial({ map: tex(sign("FLOOR O", "N-QRS CUSTODY", "#b8322f", "#fff6ec", 1024, 272)) }), 0, 5.4, -14.95, false);
   box(fo, 3.2, 3, 0.3, 0, 1.5, -15.0, mat("#1c2027")); box(fo, 3.6, 0.2, 1.1, 0, 3.15, -14.6, mat("#555b64"));
   const door = new THREE.Group(); door.position.set(-1.6, 0, -14.8); fo.add(door); mesh(door, new THREE.BoxGeometry(3.2, 2.9, 0.12), mat("#3b424d", { metalness: 0.4 }), 1.6, 1.45, 0);
   const beacon = mesh(fo, new THREE.SphereGeometry(0.45, 14, 10), new THREE.MeshBasicMaterial({ color: "#ff3b30" }), 0, 8.4, -17, false), beaconL = new THREE.PointLight(0xff3b30, 60, 30, 1.5); beaconL.position.set(0, 8.6, -16.5); fo.add(beaconL);

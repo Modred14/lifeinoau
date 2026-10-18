@@ -41,7 +41,7 @@ const NEEDS = [
 export function statusOf(c) {
   if (c.health < 25) return { tone: "bad", text: "Very sick. Rest up" };
   if (c.energy < 20) return { tone: "bad", text: "Exhausted. Go and rest" };
-  if (c.suspicion >= 60) return { tone: "bad", text: "QRS is watching you" };
+  if (c.suspicion >= 60) return { tone: "bad", text: "N-QRS is watching you" };
   if (c.happiness < 25) return { tone: "warn", text: "Feeling low. Call home" };
   if (c.energy < 40) return { tone: "warn", text: "Getting tired" };
   return null;
@@ -313,7 +313,7 @@ export default function GameHome({
                   <Icon name="siren" size={22} />
                 </span>
                 <div>
-                  <h2 id="fz-h">You are on Floor O</h2>
+                  <h2 id="fz-h">You are in Floor O (N-QRS Custody)</h2>
                   <p>
                     {Math.floor(hours / 3600000)}h{" "}
                     {String(Math.floor(hours / 60000) % 60).padStart(2, "0")}m{" "}

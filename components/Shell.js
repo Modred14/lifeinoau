@@ -12,6 +12,7 @@ import { useChat } from "@/lib/chat";
 import SoundToggle from "./SoundToggle";
 import { toast } from "@/lib/toast";
 import { game, useGame } from "@/lib/gameStore";
+import { serverDate, serverTime } from "@/lib/serverClock";
 
 const moodOf = (h) =>
   h >= 80
@@ -76,8 +77,8 @@ export default function Shell({ children }) {
     };
   }, [bare, path, load]);
   useEffect(() => {
-    setClock(new Date());
-    const t = setInterval(() => setClock(new Date()), 20000);
+    setClock(serverDate());
+    const t = setInterval(() => setClock(serverDate()), 20000);
     return () => clearInterval(t);
   }, []);
   useEffect(() => {
@@ -138,7 +139,8 @@ export default function Shell({ children }) {
   const creating = path === "/home" && !st,
     onPlay = path === "/home" && !!st,
     buying = onPlay && mode === "buy",
-    mood = st ? moodOf(st.character.happiness) : null;
+    mood = st ? moodOf(st.character.happiness) : null,
+    held = !!st?.floorZero && +new Date(st.floorZero.releaseAt) > serverTime(); // serving a sentence in Floor O (N-QRS Custody): no shop, and the phone is for messages only
   const goHome = () => {
     setPlayMode("home");
     if (path !== "/home") router.push("/home");
@@ -211,6 +213,8 @@ export default function Shell({ children }) {
             type="button"
             data-active={buying ? "1" : undefined}
             aria-current={buying ? "page" : undefined}
+            disabled={held}
+            title={held ? "Not while you are in Floor O (N-QRS Custody)" : undefined}
             onClick={goBuy}
           >
             <Icon name="bag" weight={buying ? "fill" : "regular"} />
@@ -257,6 +261,7 @@ export default function Shell({ children }) {
       <Phone
         open={phone && !!st}
         st={st}
+        held={held}
         firstApp={firstApp}
         initialApp={phoneApp}
         loggingOut={loggingOut}

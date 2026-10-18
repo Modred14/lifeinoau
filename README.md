@@ -1,3 +1,4 @@
+<!-- README.md -->
 # OAU Life
 
 OAU Life now includes the Campuslife world, focused on Obafemi Awolowo University. Existing OAU accounts, characters, homes, money, courses, relationships, businesses, investments, betting, achievements and messages remain available.
@@ -40,7 +41,7 @@ The OAU ledger is the only game wallet. Campus purchases, wages, fares, fines, r
 
 Physical classes and reading contribute to the existing OAU course record. Weekly campus assessments stay separate from degree progression; the Saturday assessment during an OAU exam week contributes to the original exam record. The existing six-week exam and twelve-week session rules still govern the degree. Existing OAU hostel residents own their matching campus bed; off-campus residents can use the campus ballot and squatting interactions.
 
-The shared clock advances one game minute every two real seconds: a day takes 48 real minutes and a week takes 5 hours 36 minutes. Migration preserves the current OAU week and academic progress, then uses this clock for weekly allowance, rent and progression. Original hustle cooldowns remain as configured in OAU Life.
+The game clock runs strictly 1:1 with real time: a game minute is a real minute, a day is 24 real hours and a week is 7 real days, derived from the server clock and stored timestamps only. The migration rebases the clock row and keeps the current OAU week, how far into it you are, and all academic progress. Suspension lasts 2 real hours and expulsion 5 real hours (then the player starts again at 100L); a sentence in Floor O (N-QRS Custody) is served inside Floor O, with messaging still open; energy refills once per in-game day. See `lib/discipline.js` and `OAU-LIFE-GUIDE.md`.
 
 The world includes walking/running, camera and touch controls, wardrobe and emotes, interiors, seats and beds, hunger and illness, queues, food and delivery jobs, power/water conditions, buses and player driving, hailing and fares, traffic, worship, parties, sports, stage shows, registration, handouts, ballots, porter raids, student politics and campus news.
 
