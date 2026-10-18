@@ -88,7 +88,7 @@ export default function MapPage() {
     if (held) return toast.error(`You are held in ${CUSTODY_NAME}. You cannot travel until your sentence ends.`);
     const people = call("/api/travel?at=" + encodeURIComponent(dest.id)).then((r) => (r.failed ? [] : r.people ?? []));
     setTripSt(null); input.jx = input.jy = input.steer = input.gas = input.brake = 0; input.run = false;
-    setTrip({ id: crypto.randomUUID(), from: here, to: dest.id, mode, driver: withDriver, look: ch?.look ?? null, gender: ch?.gender ?? "M", people, name: dest.name });
+    setTrip({ id: crypto.randomUUID(), from: here, to: dest.id, mode, driver: withDriver, look: ch?.look ?? null, gender: ch?.gender ?? "M", car: ch?.activeCar || "", carColor: ch?.activeCarColor || "", people, name: dest.name });
     setSel(null);
   }
   async function pay() { // the vehicle has stopped: the fare leaves the wallet now, and you are at the new place

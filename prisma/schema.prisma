@@ -70,6 +70,9 @@ model Character {
   placeAt            DateTime? // last time they were seen at placeId (the map pings it every minute)
   driverName         String         @default("") // the driver hired from the Hire app on the phone
   driverUntilWeek    Int            @default(0) // last game week the driver is paid for (0 = none)
+  activeCar          String         @default("") // the YK Autos car the player drives on the map (a lib/cars.js id); "" = none chosen (a Nepo's family car, or no car)
+  activeCarColor     String         @default("") // its paint
+  ownedCars          OwnedCar[]
   tripX              Float? // while on a trip: where the player is on the road (map metres), so other players can see them pass
   tripZ              Float?
   tripH              Float? // heading, radians
@@ -703,4 +706,19 @@ model ClassTest {
   character        Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
 
   @@unique([characterId, gameWeek])
+}
+
+// A car bought at YK Autos on the Ride app (lib/cars.js has the showroom). One row per car model per player: the unique key is also what stops
+// a double purchase, however many requests arrive at once. pricePaid is kobo, as charged.
+model OwnedCar {
+  id          BigInt    @id @default(autoincrement())
+  characterId String
+  modelId     String
+  color       String    @default("")
+  pricePaid   BigInt
+  createdAt   DateTime  @default(now())
+  character   Character @relation(fields: [characterId], references: [id])
+
+  @@unique([characterId, modelId])
+  @@index([characterId])
 }

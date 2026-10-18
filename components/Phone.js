@@ -19,6 +19,7 @@ import AchievementsApp from "./apps/AchievementsApp";
 import SettingsApp from "./apps/SettingsApp";
 import HousingApp from "./apps/HousingApp";
 import HireApp from "./apps/HireApp";
+import RideApp from "./apps/RideApp";
 import BetApp from "./bet/BetApp";
 import "./phone.css";
 
@@ -34,11 +35,12 @@ const APPS = {
   awards: { name: "Awards", icon: "medal", tone: "orange", C: AchievementsApp },
   housing: { name: "Housing", icon: "home", tone: "sky", C: HousingApp },
   hire: { name: "Hire", icon: "driver", tone: "indigo", C: HireApp },
+  ride: { name: "Ride", icon: "ride", tone: "orange", C: RideApp },
   bet: { name: "Bet", icon: "ticket", tone: "bet", own: true, C: BetApp }, // draws its own header and tab bar, like Messages
   settings: { name: "Settings", icon: "gear", tone: "graphite", C: SettingsApp },
 };
 export const PHONE_APPS = Object.keys(APPS);
-const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "forbes", "awards", "housing", "hire", "bet", "settings"];
+const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "forbes", "awards", "housing", "ride", "hire", "bet", "settings"];
 /** In Floor O (N-QRS Custody) the phone only does messages (and settings). The server refuses everything else too; this just stops offering it. */
 const CUSTODY_GRID = ["messages", "settings"];
 

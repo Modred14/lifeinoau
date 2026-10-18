@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { S } from "./campusReal.js";
 import { buildRoadNet, destinationOf, drivePlan, findPath, isRoad, drivable, walkable, nearestWalkable, Path } from "./roadnet.js";
-import { makeKeke, makeBus, makeCar, rollWheels } from "./vehicles.js";
+import { makeKeke, makeBus, makeVehicle, rollWheels } from "./vehicles.js";
 import { createTraffic, nameTag, makeWalker } from "./traffic.js";
 import { createAvatar } from "./avatar/loadAvatar.js";
 import { paintBase, drawMini, drawPreview } from "./minimap.js";
@@ -87,7 +87,7 @@ export async function startTrip(env, o) {
   const placeAvatar = () => { avatar.root.position.set(me.x, 0.1, me.z); avatar.root.rotation.y = yawOf(me.hx, me.hz); };
   let walking = false; const setWalk = (w) => { if (w !== walking) { walking = w; avatar.play(w ? "walk" : "idle"); } };
   const avatarPhase = { p: 0 };
-  if (mode !== "trek") { const m = mode === "keke" ? makeKeke() : mode === "bus" ? makeBus() : makeCar(); vehicle = m; world.add(m.root); disposers.push(() => { world.remove(m.root); m.root.traverse((x) => x.geometry?.dispose?.()); }); }
+  if (mode !== "trek") { const m = mode === "keke" ? makeKeke() : mode === "bus" ? makeBus() : makeVehicle(o.car, o.carColor); vehicle = m; world.add(m.root); disposers.push(() => { world.remove(m.root); m.root.traverse((x) => x.geometry?.dispose?.()); }); }
 
   // real players waiting around the destination
   const there = [];
