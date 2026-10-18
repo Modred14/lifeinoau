@@ -110,13 +110,14 @@ model Character {
   look               Json? // appearance choices, validated by lib/look.js
   jobKey             String?
   jobXp              Int            @default(0)
-  sleepingSince      DateTime? // set while the player is asleep in their bed; wake-up energy is computed from this on the server
-  arrivedAt          DateTime? // when the player last arrived at placeId (travel sets it): the earliest they can arrive anywhere else follows from the distance
-  sleepingBed        String? // the RoomItem id of the bed the player is lying in (set with sleepingSince)
-  jobShifts          JobShift[]
-  hustleRuns         HustleRun[]
-  classTests         ClassTest[]
   businesses         Business[]
+  // Where the player last said they stand INSIDE a building (see lib/activityService.js). Position is checked on the server: the place must be
+  // the one they travelled to, each step must be walkable in the time that passed, and an activity needs them beside its ring.
+  inPlace            String         @default("")
+  inX                Float?
+  inZ                Float?
+  inFloor            Int            @default(0)
+  inAt               DateTime?
   createdAt          DateTime       @default(now())
   user               User           @relation(fields: [userId], references: [id])
   faculty            Faculty        @relation(fields: [facultyId], references: [id])
@@ -199,6 +200,28 @@ model ActionLog {
 
   @@unique([characterId, requestId])
   @@index([characterId, action, createdAt])
+}
+
+// One use of a building activity (lib/activities.js). It is created when the player starts (the fee is paid then) and finished once its
+// duration has passed with the player still beside the ring. Cooldowns, daily and weekly limits and stat budgets are all counted from these rows.
+model ActivityRun {
+  id          BigInt    @id @default(autoincrement())
+  characterId String
+  requestId   String
+  activityId  String
+  hubId       String
+  placeId     String
+  status      String // RUNNING | DONE | CANCELLED
+  startedAt   DateTime
+  endsAt      DateTime
+  finishedAt  DateTime?
+  gameWeek    Int
+  param       String? // the course code for a class, a study session or a test
+  delta       Json? // the stat changes that were really applied (what the budgets are counted from)
+
+  @@unique([characterId, requestId])
+  @@index([characterId, activityId, startedAt])
+  @@index([characterId, status])
 }
 
 enum JailStatus {
@@ -588,61 +611,4 @@ model CampusAssessment {
   score Int
   createdAt DateTime @default(now())
   @@unique([characterId, key])
-}
-
-// One row per clocked-in job shift (see lib/jobs.js). Partial unique indexes in the migration keep it to one active shift
-// and one shift per in-game day.
-model JobShift {
-  id          BigInt    @id @default(autoincrement())
-  characterId String
-  jobKey      String
-  shiftKey    String
-  gameDay     Int
-  gameWeek    Int
-  startedAt   DateTime
-  endsAt      DateTime
-  energyCost  Int
-  payKobo     BigInt
-  status      String    @default("ACTIVE")
-  claimedAt   DateTime?
-  requestId   String
-  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
-
-  @@unique([characterId, gameDay])
-  @@unique([characterId, requestId])
-  @@index([characterId, gameWeek])
-}
-
-// A timed on-site hustle (lib/hustleSites.js). One active run at a time (partial unique index in the migration).
-model HustleRun {
-  id          BigInt    @id @default(autoincrement())
-  characterId String
-  kind        String
-  placeId     String
-  startedAt   DateTime
-  endsAt      DateTime
-  energyCost  Int
-  caught      Boolean   @default(false)
-  payKobo     BigInt    @default(0)
-  status      String    @default("ACTIVE")
-  finishedAt  DateTime?
-  requestId   String
-  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
-
-  @@unique([characterId, requestId])
-}
-
-// A surprise test waiting at the student's faculty. Missing the week marks it MISSED (see lib/tick.js).
-model ClassTest {
-  id               BigInt    @id @default(autoincrement())
-  characterId      String
-  sessionStartWeek Int
-  gameWeek         Int
-  code             String
-  status           String    @default("PENDING")
-  score            Int?
-  takenAt          DateTime?
-  character        Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
-
-  @@unique([characterId, gameWeek])
 }

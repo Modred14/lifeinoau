@@ -1,3 +1,4 @@
+// src/app/api/action/route.js
 // app/api/action/route.js
 import { PrismaClient } from "@prisma/client";
 import { getUserId } from "@/lib/auth";
@@ -11,6 +12,8 @@ export async function POST(req) {
   if (!(await allowed(db, "act:" + uid, 60, 60000))) return tooMany();
   try {
     const b = await req.json().catch(() => ({}));
+    // The safe hustle is an activity at Oduduwa Hall (lib/activities.js): it has to be done there, standing at its ring, so it cannot be claimed from anywhere else.
+    if (b.action === "hustle") return Response.json({ error: "Do the Event Gig inside Oduduwa Hall. Open the map, go there and walk to the gold ring." }, { status: 409 });
     return Response.json(await doAction(db, uid, b.action, b.requestId));
   } catch (e) {
     if (e instanceof GameError)

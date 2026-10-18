@@ -8,17 +8,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "./Icon";
 import { Stick, Hold } from "./TripHud";
-import { panelFor } from "./PlacePanels";
 import { call } from "@/lib/client";
+import ActivityLayer from "./ActivityLayer";
 import { ICON_OF } from "@/lib3d/landmarks.js";
 import "./travel.css";
 
 export default function BuildingInside({ place, look = null, gender = "M", onLeave }) {
-  const [panel, setPanel] = useState(null), [people, setPeople] = useState(null), [status, setStatus] = useState("loading"), [info, setInfo] = useState(false), [room, setRoom] = useState(""), [near, setNear] = useState(null), [view, setView] = useState("follow"), [note, setNote] = useState("");
+  const [people, setPeople] = useState(null), [status, setStatus] = useState("loading"), [info, setInfo] = useState(false), [room, setRoom] = useState(""), [near, setNear] = useState(null), [view, setView] = useState("follow"), [note, setNote] = useState(""), [rings, setRings] = useState([]), [open, setOpen] = useState(null);
   const box = useRef(null), api = useRef(null), [input] = useState(() => ({ jx: 0, jy: 0, run: false, hold(v) { this.run = v; } })), router = useRouter(), leave = useRef(onLeave);
-  const panelOpen = useRef(false);
   useEffect(() => { leave.current = onLeave; });
-  useEffect(() => { panelOpen.current = !!panel; }, [panel]);
   useEffect(() => {
     let on = true; const load = async () => { const r = await call("/api/travel?at=" + encodeURIComponent(place.id)); if (on && !r.failed) setPeople(r.people ?? []); };
     load(); const t = setInterval(() => !document.hidden && load(), 12000); return () => { on = false; clearInterval(t); };
@@ -27,15 +25,18 @@ export default function BuildingInside({ place, look = null, gender = "M", onLea
     let dead = false, scene = null;
     (async () => {
       try {
-        const [{ buildInterior, PLAN_NOTE }, { createInteriorScene }] = await Promise.all([import("@/lib3d/interiors/index.js"), import("@/lib3d/interiors/scene.js")]);
-        const c = buildInterior(place); if (!c) { setStatus("none"); return; } setNote(PLAN_NOTE); if (dead || !box.current) return;
-        scene = await createInteriorScene(box.current, c, { look, gender, input, view: "follow", onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onHub: (h) => { if (h.act) { setPanel(h.act); return; } const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true); } });
+        const [{ buildInterior, classify, PLAN_NOTE }, { createInteriorScene }, { activityHubs }] = await Promise.all([import("@/lib3d/interiors/index.js"), import("@/lib3d/interiors/scene.js"), import("@/lib3d/interiors/activityHubs.js")]);
+        const c = buildInterior(place); if (!c) { setStatus("none"); return; } setNote(PLAN_NOTE);
+        // the activity rings: placed by the same code the server uses to check where you stand (lib3d/interiors/activityHubs.js), drawn teal
+        const list = activityHubs(c, classify(place.id, place.kind).spec).hubs.map((h) => ({ ...h, activity: h.id, tint: "#5fe3c0" })); c.hubs = [...c.hubs, ...list]; setRings(list); if (dead || !box.current) return;
+        scene = await createInteriorScene(box.current, c, { look, gender, input, view: "follow", onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onHub: (h) => { if (h.activity) { setOpen(h); return; } const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true); } });
         if (dead) { scene.dispose(); return; } api.current = scene; setStatus("ready");
       } catch (e) { console.warn("interior unavailable", e); if (!dead) setStatus("fallback"); }
     })();
     return () => { dead = true; api.current = null; scene?.dispose(); };
   }, [place.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { const k = (e) => { if (e.key !== "Escape") return; if (panelOpen.current) return; if (info) setInfo(false); else onLeave(); }; document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [onLeave, info]);
+  useEffect(() => { if (open && !(near && near.activity === open.activity)) setOpen(null); }, [near, open]); // walking away from a ring closes its panel
+  useEffect(() => { const k = (e) => { if (e.key !== "Escape") return; if (open) setOpen(null); else if (info) setInfo(false); else onLeave(); }; document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [onLeave, info, open]);
 
   const card = (
     <div className="bi" role="dialog" aria-modal="true" aria-label={`About ${place.name}`} data-over={status === "ready" ? "1" : undefined} onClick={(e) => { if (status === "ready" && e.target === e.currentTarget) setInfo(false); }}>
@@ -69,14 +70,14 @@ export default function BuildingInside({ place, look = null, gender = "M", onLea
             <button type="button" className="bi3-btn" aria-label="Switch between close view and top view" onClick={() => setView(api.current?.toggleView() ?? "follow")} data-sound="none"><Icon name={view === "follow" ? "eye" : "focus"} size={18} /></button>
             <button type="button" className="bi3-btn" aria-label="About this place" onClick={() => setInfo(true)} data-sound="none"><Icon name="users" size={18} /></button>
           </div>
-          {near && <button type="button" className="bi3-use" onClick={() => api.current?.use()} data-sound="none"><Icon name="sparkle" size={18} weight="fill" /> {near.label} <kbd>F</kbd></button>}
+          {near && !open && <button type="button" className={`bi3-use${near.activity ? " act" : ""}`} onClick={() => api.current?.use()} data-sound="none"><Icon name={near.activity ? "timer" : "sparkle"} size={18} weight="fill" /> {near.label} <kbd>F</kbd></button>}
+          <ActivityLayer api={api} rings={rings} open={open} ready onClose={() => setOpen(null)} onLeave={onLeave} />
           <p className="bi3-help">Walk with WASD or the stick · Shift to run · drag to look · V changes view · walk out of the door to leave</p>
           <Stick input={input} />
           <Hold className="th-btn th-run" label="Run" onDown={() => input.hold(true)} onUp={() => input.hold(false)}>RUN</Hold>
         </div>
       )}
       {info && card}
-      {panel && panelFor(panel, () => setPanel(null))}
     </div>
   );
 }

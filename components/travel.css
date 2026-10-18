@@ -105,24 +105,29 @@ body[data-trip] .nav, body[data-trip] .map-chrome { display: none !important; }
 .bi3-use kbd { font: 700 0.72rem ui-monospace, monospace; background: rgba(0, 0, 0, 0.14); border-radius: 6px; padding: 1px 6px; }
 .bi3-help { position: absolute; left: 0; right: 0; bottom: calc(var(--safe-b) + 6px); margin: 0; text-align: center; font-size: 0.7rem; color: rgba(255, 255, 255, 0.75); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); pointer-events: none; padding: 0 160px; }
 @media (max-width: 640px) { .bi3-help { display: none; } }
-/* in-building activity panels (components/PlacePanels.js): the event crew, the backstairs runs, the faculty desks */
-.pp { position: fixed; inset: 0; z-index: 60; display: grid; place-items: end center; padding: 16px; background: rgba(5, 8, 16, 0.55); backdrop-filter: blur(3px); animation: pp-in 200ms ease both; }
-.pp-card { position: relative; width: min(440px, 100%); max-height: min(82vh, 640px); overflow: auto; display: grid; gap: 10px; padding: 20px 20px 22px; border-radius: 24px; background: var(--glass, rgba(18, 24, 40, 0.96)); border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5); }
-.pp-card h2 { display: flex; align-items: center; gap: 8px; margin: 0; padding-right: 36px; font: 600 1.15rem var(--font-head); }
-.pp-card h3 { margin: 6px 0 0; font: 600 0.95rem var(--font-head); }
-.pp-card p { margin: 0; line-height: 1.45; }
-.pp-sub { font-size: 0.85rem; }
-.pp-x { position: absolute; top: 14px; right: 14px; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.08); color: inherit; }
-.pp-facts { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.pp-facts li, .pp-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); }
-.pp-facts li span { color: var(--muted); font-size: 0.85rem; }
-.pp-facts b[data-risk="High"] { color: var(--danger-text, #ff8a8a); } .pp-facts b[data-risk="Moderate"] { color: var(--warn-text, #f5b942); } .pp-facts b[data-risk="Low"] { color: var(--green-text, #4ade80); }
-.pp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.pp-list li > span[data-ok="1"] { color: var(--green-text, #4ade80); } .pp-list li > span[data-ok="open"] { color: var(--gold-text, #f5b942); }
-.pp-run { display: grid; gap: 8px; }
-.pp-why { padding: 10px 12px; border-radius: 12px; background: rgba(245, 185, 66, 0.12); color: var(--warn-text, #f5b942); font-size: 0.9rem; }
-.pp-ok { padding: 10px 12px; border-radius: 12px; background: rgba(74, 222, 128, 0.12); color: var(--green-text, #4ade80); }
-.pp .go.pp-danger { background: #b8322f; color: #fff; }
-.pp .row { display: flex; gap: 8px; flex-wrap: wrap; } .pp .row > button { flex: 1; min-height: 44px; }
-@keyframes pp-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .pp { animation: none; } }
+/* ---- building activities (components/ActivityLayer.js) ---- */
+.th .bi3-use.act { background: #5fe3c0; color: #04231b; }
+.th .bi3-use.act:hover:not(:disabled) { background: #8ff0d6; }
+.bi3-act { position: absolute; left: 50%; bottom: calc(var(--safe-b) + 40px); transform: translateX(-50%); width: min(420px, calc(100% - 24px)); background: rgba(13, 19, 33, 0.94); color: #fff; border: 1px solid rgba(95, 227, 192, 0.45); border-radius: 18px; padding: 14px 16px 16px; box-shadow: 0 14px 36px -10px rgba(0, 0, 0, 0.7); display: grid; gap: 10px; z-index: 5; animation: bi3-rise 0.18s ease-out; }
+@keyframes bi3-rise { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.bi3-act-h { display: flex; align-items: center; gap: 10px; }
+.bi3-act-h b { flex: 1; font-size: 1.02rem; }
+.bi3-act-h > svg { color: #5fe3c0; flex: none; }
+.th .bi3-x { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 12px; background: rgba(255, 255, 255, 0.08); color: #fff; border: 0; }
+.bi3-act-sub { margin: 0; font-size: 0.86rem; color: #cfe3ff; }
+.bi3-act-why { margin: 0; font-size: 0.86rem; color: #ffd0c4; background: rgba(255, 110, 80, 0.14); border: 1px solid rgba(255, 110, 80, 0.35); border-radius: 12px; padding: 8px 10px; }
+.bi3-act-done { margin: 0; font-size: 0.86rem; color: #b9ffe9; background: rgba(95, 227, 192, 0.12); border: 1px solid rgba(95, 227, 192, 0.35); border-radius: 12px; padding: 8px 10px; }
+.bi3-act-doing { margin: 0; font-size: 0.9rem; }
+.bi3-act-sel { display: grid; gap: 4px; font-size: 0.8rem; color: #cfe3ff; }
+.bi3-act-sel select { min-height: 44px; border-radius: 12px; background: rgba(255, 255, 255, 0.08); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2); padding: 0 10px; font: inherit; }
+.bi3-act-sel option { color: #111; }
+.bi3-act-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.th .bi3-b, .bi3-b { flex: 1; min-height: 46px; border-radius: 14px; border: 0; font-weight: 800; background: rgba(255, 255, 255, 0.12); color: #fff; padding: 0 14px; }
+.th .bi3-b.go, .bi3-b.go { background: #5fe3c0; color: #04231b; }
+.th .bi3-b.risk, .bi3-b.risk { background: #ff7a5c; color: #2a0900; }
+.bi3-b:disabled { opacity: 0.45; }
+.bi3-prog { height: 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+.bi3-prog i, .bi3-run i { display: block; height: 100%; background: #5fe3c0; transition: width 0.3s linear; }
+.bi3-run { position: absolute; left: 50%; bottom: calc(var(--safe-b) + 150px); transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 10px 16px 14px; border-radius: 999px; background: rgba(13, 19, 33, 0.9); color: #fff; font-weight: 700; overflow: hidden; z-index: 4; }
+.bi3-run i { position: absolute; left: 0; bottom: 0; height: 4px; }
+@media (prefers-reduced-motion: reduce) { .bi3-act { animation: none; } .bi3-prog i, .bi3-run i { transition: none; } }

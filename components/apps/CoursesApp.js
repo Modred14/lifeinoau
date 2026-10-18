@@ -46,54 +46,9 @@ export default function Courses() {
     if (ok) setFight(c);
   }
 
-  // Attending or studying shows at once (the meter, the "done this week" label, your energy) and is undone if the server refuses.
+  // Lectures and study sessions are done inside faculty buildings and lecture theatres (lib/activities.js); this screen only points the way.
   function act(action, code) {
-    const cost = d.costs[action],
-      c = d.courses.find((x) => x.code === code);
-    return run({
-      key: `course:${action}:${code}`,
-      router,
-      ok:
-        action === "attend"
-          ? `You sat through ${c.lecturer.name}'s lecture in ${code}.`
-          : `You studied ${code}.`,
-      request: () =>
-        call("/api/courses", { action, code, requestId: crypto.randomUUID() }),
-      effects: [
-        {
-          store,
-          patch: (x) => ({
-            ...x,
-            energy: Math.max(0, x.energy - cost),
-            courses: x.courses.map((y) =>
-              y.code !== code
-                ? y
-                : action === "attend"
-                  ? {
-                      ...y,
-                      attended: y.attended + 1,
-                      prep: Math.min(100, y.prep + 3),
-                      attendedThisWeek: true,
-                      attendancePct: Math.round(
-                        Math.min(1, (y.attended + 1) / Math.max(1, x.weeksElapsed)) * 100,
-                      ),
-                    }
-                  : {
-                      ...y,
-                      prep: Math.min(100, y.prep + 10),
-                      studiedThisWeek: true,
-                    },
-            ),
-          }),
-        },
-        {
-          store: game,
-          patch: bump(
-            action === "study" ? { energy: -cost, happiness: -2 } : { energy: -cost },
-          ),
-        },
-      ],
-    });
+    return toast.info(`${action === "attend" ? "Lectures" : "Study sessions"} happen inside your faculty building or a lecture theatre. Open the map, go there and walk to the gold ring.`);
   }
   if (!d)
     return loadFailed ? (
@@ -115,9 +70,8 @@ export default function Courses() {
       </p>
       {d.examToday ? (
         <p>
-          <b>Exam week.</b> Exams are sat in person, in the examination hall of
-          your own faculty{d.facultyPlace ? ` (${d.facultyPlace.name})` : ""}, before
-          the week ends. Your attendance and preparation so far decide your score.
+          <b>Exam today.</b> Sit it on the game screen before the week ends.
+          Your attendance and preparation so far decide your score.
         </p>
       ) : (
         <p className="mut">
@@ -146,16 +100,15 @@ export default function Courses() {
           <Meter label="Preparation" pct={c.prep} color="var(--gold-text)" />
           <div className="row" style={{ marginTop: 10 }}>
             <button
-              disabled={c.attendedThisWeek}
-              onClick={() => router.push("/map")}
-              title="Lectures are attended in person at your faculty"
+              disabled={c.attendedThisWeek || d.energy < d.costs.attend}
+              onClick={() => act("attend", c.code)}
             >
-              {c.attendedThisWeek ? "Lecture attended" : "Go to your faculty"}
+              Attend lecture
               <br />
               <span className="mut">
                 {c.attendedThisWeek
                   ? "done this week"
-                  : `${c.slot} · ${d.costs.attend} energy`}
+                  : `${d.costs.attend} energy`}
               </span>
             </button>
             <button
@@ -180,10 +133,8 @@ export default function Courses() {
       ))}
       {fight && <LectureFight course={fight} onClose={() => setFight(null)} />}
       <p className="mut">
-        Lectures, tests and exams happen in person: walk to {d.facultyPlace ? d.facultyPlace.name : "your faculty"} on
-        the map, go inside, and use the lecture hall on the lecture day (the
-        slot above is the start time; late students are admitted for a few
-        hours). Lecturers are fictional, and the courses are game content, not the
+        Lecture slots are for flavour: you can attend any time during the game
+        week. Lecturers are fictional, and the courses are game content, not the
         official OAU curriculum.
       </p>
     </>

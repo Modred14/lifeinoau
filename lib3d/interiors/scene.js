@@ -1,4 +1,5 @@
 // lib3d/interiors/scene.js
+// lib3d/interiors/scene.js
 // Draws a compiled interior (see compile.js) with three.js, lets the player walk through it, and puts people in it. Browser only.
 // Everything static (walls, floors, furniture) is merged into a handful of meshes per floor, so a whole faculty building is about 20 draw calls.
 // createInteriorScene() returns { dispose, ... }; dispose() frees every geometry, material, texture, avatar, listener and the renderer.
@@ -60,7 +61,7 @@ export async function createInteriorScene(container, c, opts = {}) {
   stage.setManual(true); stage.controls.enabled = false;
   scene.background = new THREE.Color(dark ? "#05060a" : "#a9cdea");
   const toDispose = [], texs = new Map(), mats = new Map(), batches = new Map(), anims = [], texts = [];
-  let alive = true, view = opts.view ?? "follow";
+  let alive = true, view = opts.view ?? "follow", pose = null, route = null; // route: an automatic walk to a ring { pts, i, done(ok) }; pose: avatar clips to try while standing still (an activity is running)
   const own = (o) => { toDispose.push(o); return o; };
   const tex = (name) => { if (!texs.has(name)) texs.set(name, own(SURFACE_TEX[name]())); return texs.get(name); };
   const material = (key) => {
@@ -169,8 +170,8 @@ export async function createInteriorScene(container, c, opts = {}) {
   void flicker;
 
   // ---- hubs: gold rings on the floor with a floating label ----
-  const hubObjs = c.hubs.map((h) => { const ring = new THREE.Mesh(own(new THREE.RingGeometry(0.42, 0.58, 28).rotateX(-Math.PI / 2)), own(new THREE.MeshBasicMaterial({ color: "#ffd24a", transparent: true, opacity: 0.9, toneMapped: false, side: THREE.DoubleSide }))); ring.position.set(h.x, fl(h.floor ?? 0) + 0.03, h.z); scene.add(ring);
-    const sp = new THREE.Sprite(own(new THREE.SpriteMaterial({ map: textTexture(h.label, { bg: "rgba(13,19,33,0.82)", fg: "#ffe9a6" }, 4.2), transparent: true, toneMapped: false, depthWrite: false }))); sp.scale.set(2.1, 0.5, 1); sp.position.set(h.x, fl(h.floor ?? 0) + 2.15, h.z); scene.add(sp); return { h, ring, sp, f: h.floor ?? 0 }; });
+  const hubObjs = c.hubs.map((h) => { const ring = new THREE.Mesh(own(new THREE.RingGeometry(0.42, 0.58, 28).rotateX(-Math.PI / 2)), own(new THREE.MeshBasicMaterial({ color: h.tint ?? "#ffd24a", transparent: true, opacity: 0.9, toneMapped: false, side: THREE.DoubleSide }))); ring.position.set(h.x, fl(h.floor ?? 0) + 0.03, h.z); scene.add(ring);
+    const sp = new THREE.Sprite(own(new THREE.SpriteMaterial({ map: textTexture(h.label, { bg: "rgba(13,19,33,0.82)", fg: h.tint ? "#b9ffe9" : "#ffe9a6" }, 4.2), transparent: true, toneMapped: false, depthWrite: false }))); sp.scale.set(2.1, 0.5, 1); sp.position.set(h.x, fl(h.floor ?? 0) + 2.15, h.z); scene.add(sp); return { h, ring, sp, f: h.floor ?? 0 }; });
 
   // ---- the player ----
   const input = opts.input ?? { jx: 0, jy: 0, run: false }, keys = new Set(), P = { x: c.spawn.x, z: c.spawn.z, y: 0, fl: 0, yaw: c.spawn.yaw ?? 0, moving: 0, run: false };
@@ -221,13 +222,19 @@ export async function createInteriorScene(container, c, opts = {}) {
     if (keys.has("q")) camYaw += dt * 1.8; if (keys.has("e")) camYaw -= dt * 1.8;
     const mag = Math.min(1, Math.hypot(mx, mz)); P.run = !!input.run || keys.has("shift");
     if (mag > 0.05 && !exited) {
+      if (route) { route.done(false); route = null; } // taking the controls ends an automatic walk
       const fx = Math.sin(camYaw), fz = Math.cos(camYaw), rx = -fz, rz = fx, dx = (fx * mz + rx * mx) / Math.hypot(mx, mz), dz = (fz * mz + rz * mx) / Math.hypot(mx, mz), sp = (P.run ? 3.7 : 1.9) * mag, total = sp * dt, steps = Math.max(1, Math.ceil(total / 0.08));
       for (let s = 0; s < steps; s++) movePlayer(c, P, (dx * total) / steps, (dz * total) / steps);
       let dh = Math.atan2(dx, dz) - P.yaw; dh = ((dh + Math.PI * 3) % (Math.PI * 2)) - Math.PI; P.yaw += dh * Math.min(1, dt * 12); P.moving = mag;
+    } else if (route && !exited) { // walking to a ring by itself, the way a player would
+      const [tx, tz] = route.pts[route.i], dx = tx - P.x, dz = tz - P.z, d = Math.hypot(dx, dz), step = 1.9 * dt;
+      if (d < 0.12) { route.i++; if (route.i >= route.pts.length) { const r = route; route = null; P.moving = 0; r.done(true); } }
+      else { const k = Math.min(step, d) / d, n = Math.max(1, Math.ceil(Math.min(step, d) / 0.08)); for (let q = 0; q < n; q++) movePlayer(c, P, (dx * k) / n, (dz * k) / n);
+        let dh = Math.atan2(dx, dz) - P.yaw; dh = ((dh + Math.PI * 3) % (Math.PI * 2)) - Math.PI; P.yaw += dh * Math.min(1, dt * 12); P.moving = 0.5; P.run = false; }
     } else P.moving = 0;
     if (P.fl !== shownFloor) { shownFloor = P.fl; setVis(); }
     player.position.set(P.x, P.y + 0.02, P.z); player.rotation.y = P.yaw;
-    if (avatar) { const want = P.moving > 0.05 ? (P.run ? "run" : "walk") : "idle"; if (want !== cur && avatar.has?.(want) && avatar.play(want, { fade: 0.25 })) cur = want; if (want !== "idle") avatar.setSpeed?.(Math.max(0.6, Math.min(1.6, P.moving * (P.run ? 1 : 1.05)))); avatar.update(t, dt); }
+    if (avatar) { const want = P.moving > 0.05 ? (P.run ? "run" : "walk") : pose ? (pose.find((n) => avatar.has?.(n)) ?? "idle") : "idle"; if (want !== cur && avatar.has?.(want) && avatar.play(want, { fade: 0.25 })) cur = want; if (pose && P.moving <= 0.05) avatar.setSpeed?.(1); else if (want !== "idle") avatar.setSpeed?.(Math.max(0.6, Math.min(1.6, P.moving * (P.run ? 1 : 1.05)))); avatar.update(t, dt); }
     // room name, hubs, exit
     const room = c.roomAt(P.x, P.z, P.fl); if ((room?.name ?? null) !== lastRoom) { lastRoom = room?.name ?? null; opts.onRoom?.(lastRoom); }
     let best = null, bd = 1.7; for (const h of hubObjs) { if (h.f !== P.fl) continue; const d = Math.hypot(h.h.x - P.x, h.h.z - P.z); if (d < bd) { bd = d; best = h; } } if (best !== near) { near = best; opts.onNear?.(near ? near.h : null); }
@@ -253,8 +260,10 @@ export async function createInteriorScene(container, c, opts = {}) {
   });
   setVis();
   const api = {
-    stage, setYaw(y) { camYaw = y; }, teleport(x, z, floor = 0) { P.x = x; P.z = z; P.fl = floor; P.y = c.floorY[floor] ?? 0; }, get view() { return view; }, get state() { return { x: P.x, z: P.z, y: P.y, floor: P.fl, yaw: P.yaw, people: people.length, exited }; }, setView(v) { view = v; setVis(); }, toggleView() { view = view === "follow" ? "overhead" : "follow"; setVis(); return view; }, use: activate,
-    dispose() { alive = false; window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); el.removeEventListener("pointerdown", pd); el.removeEventListener("pointermove", pm); el.removeEventListener("pointerup", pu); el.removeEventListener("pointercancel", pu); el.removeEventListener("wheel", wh);
+    stage, setYaw(y) { camYaw = y; }, teleport(x, z, floor = 0) { P.x = x; P.z = z; P.fl = floor; P.y = c.floorY[floor] ?? 0; }, get view() { return view; }, get state() { return { x: P.x, z: P.z, y: P.y, floor: P.fl, yaw: P.yaw, people: people.length, exited }; }, setView(v) { view = v; setVis(); }, toggleView() { view = view === "follow" ? "overhead" : "follow"; setVis(); return view; }, use: activate, setPose(list) { pose = list?.length ? list : null; },
+    /** Walk to a point on the current floor by the shortest clear path. Resolves true on arrival, false if it could not or you took the controls. */
+    walkTo(x, z) { return new Promise((resolve) => { if (route) route.done(false); const nv = c.navPlayer[P.fl], path = nv.path(P.x, P.z, x, z); if (!path || path.length < 1) { resolve(false); return; } route = { pts: [...path.slice(1), [x, z]], i: 0, done: resolve }; }); },
+    dispose() { alive = false; if (route) { route.done(false); route = null; } window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); el.removeEventListener("pointerdown", pd); el.removeEventListener("pointermove", pm); el.removeEventListener("pointerup", pu); el.removeEventListener("pointercancel", pu); el.removeEventListener("wheel", wh);
       for (const p of people) { scene.remove(p.av.root); p.av.dispose?.(); } people.length = 0; if (avatar) { player.remove(avatar.root); avatar.dispose?.(); avatar = null; }
       for (const o of toDispose) o.dispose?.(); toDispose.length = 0; for (const s of spots) s.L?.dispose?.(); scene.clear(); stage.dispose(); },
   };
