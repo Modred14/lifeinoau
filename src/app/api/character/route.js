@@ -1,3 +1,4 @@
+// src/app/api/character/route.js
 // app/api/character/route.js
 import { PrismaClient } from "@prisma/client";
 import { getUserId } from "@/lib/auth";
@@ -52,6 +53,7 @@ export async function POST(req) {
           lastParentCallWeek: week,
           joinedWeek: week,
           sessionStartWeek: week,
+          energyRefilledAt: new Date(), // a new player starts with the energy they were given; the daily refill begins tomorrow
           ...lifestyle(pers),
         },
       });

@@ -87,11 +87,18 @@ model Character {
   lastTickWeek       Int            @default(0) // last game week fully simulated for this player
   missedCallStreak   Int            @default(0)
   lastParentCallWeek Int            @default(0)
-  jailedUntil        DateTime?
+  jailedUntil        DateTime? // end of the Floor O (N-QRS Custody) sentence; while it is in the future the player is held at placeId "floor0"
   joinedWeek         Int            @default(1)
   strikes            Int            @default(0)
-  suspendedUntilWeek Int            @default(0)
+  suspendedUntilWeek Int            @default(0) // LEGACY (week based). No longer read: suspensions are the timestamps below
+  // Academic discipline. Real-time deadlines, enforced on the server: suspension is at most 2 hours, expulsion at most 5 hours.
+  suspendedAt        DateTime?
+  suspendedUntil     DateTime?
   expelled           Boolean        @default(false)
+  expelledAt         DateTime?
+  expelledUntil      DateTime? // when it ends the player starts again at 100L (lib/discipline.js)
+  restartWeek        Int            @default(0) // game week of the last restart after an expulsion; exam results before it no longer count towards CGPA
+  energyRefilledAt   DateTime? // energy is refilled once per in-game day; this is when it last was
   sessionStartWeek   Int            @default(1) // game week the current level began; sessions are 12 weeks
   failedSessions     Int            @default(0) // consecutive failed sessions (2 = academic withdrawal)
   graduated          Boolean        @default(false)
@@ -150,7 +157,8 @@ model GameClock {
   id        Int      @id @default(1)
   campusEpoch DateTime?
   campusStartWeek Int?
-  startedAt DateTime // week = floor((now - startedAt) / 1 day) + 1
+  startedAt DateTime // used only when campusEpoch is empty
+  // The clock is strictly 1:1 with real time: the week is campusStartWeek + floor((now - campusEpoch) / 7 days), the day is 24 hours from campusEpoch.
 }
 
 model Notification {
@@ -201,6 +209,7 @@ model FloorZero {
   releaseAt   DateTime
   bill        BigInt // kobo, fixed at arrest time so it cannot be gamed by moving money
   status      JailStatus @default(JAILED)
+  location    String     @default("floor0") // where the sentence is served: the map place id of Floor O (N-QRS Custody)
 
   @@index([characterId, status])
 }

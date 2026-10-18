@@ -1,3 +1,4 @@
+// components/apps/CoursesApp.js
 // components/apps/CoursesApp.js: lives inside the phone (see components/Phone.js)
 "use client";
 import { useState } from "react";
@@ -38,7 +39,7 @@ export default function Courses() {
     if (d.energy < 20) return toast.error("You are too tired to fight. Rest first.");
     const ok = await confirmAction({
       title: `Fight ${c.lecturer.name}?`,
-      message: `Beat them and there is an 80% chance the QRS van comes for you: they seize 30% of your cash, you get a strike, and you are driven to Floor O. Lose and you get hurt. Costs 20 energy. Once a week.`,
+      message: `Beat them and there is an 80% chance the N-QRS van comes for you: they seize 30% of your cash, you get a strike, and you are driven to Floor O (N-QRS Custody), where you serve your whole sentence. Lose and you get hurt. Costs 20 energy. Once a week.`,
       confirmLabel: "Fight",
       tone: "danger",
     });
@@ -171,7 +172,7 @@ export default function Courses() {
           <button type="button" style={{ marginTop: 8, width: "100%" }} onClick={() => startFight(c)}>
             Fight {c.lecturer.name}
             <br />
-            <span className="mut">20 energy. Risky: the QRS may come.</span>
+            <span className="mut">20 energy. Risky: N-QRS may come.</span>
           </button>
         </div>
       ))}

@@ -1,3 +1,4 @@
+// tests/relsvc.test.mjs
 import assert from "node:assert/strict";
 import { getRelationship, relate, decidePregnancy } from "../lib/relationshipService.js";
 import { makeDb } from "./fakedb.mjs";
@@ -18,7 +19,7 @@ function fixture({ paired = true, kind = "TALKING" } = {}) {
   const T = db.T();
   T.gameClock.push({ id: 1, startedAt: new Date(0), campusEpoch: new Date(), campusStartWeek: 8 });
   for (const [id, name, gender, hostel] of [["a", "Tunde", "M", "Awo"], ["z", "Zainab", "F", "Moremi"], ["x", "Seyi", "M", "Fajuyi"]]) {
-    T.character.push({ id, userId: "u_" + id, name, gender, hostel, expelled: false, graduated: false, suspendedUntilWeek: 0, jailedUntil: null, lastTickWeek: 8, joinedWeek: 1, sessionStartWeek: 1, level: 100, energy: 90, happiness: 50, popularity: 20, luck: 50, dependents: 0 });
+    T.character.push({ id, userId: "u_" + id, name, gender, hostel, expelled: false, graduated: false, suspendedUntilWeek: 0, energyRefilledAt: new Date(), jailedUntil: null, lastTickWeek: 8, joinedWeek: 1, sessionStartWeek: 1, level: 100, energy: 90, happiness: 50, popularity: 20, luck: 50, dependents: 0 });
     T.account.push({ id: "account_" + id, kind: "PLAYER", characterId: id, balance: 100_000_000n });
   }
   for (const name of ["VENUES", "CLINICS"]) T.account.push({ id: name, kind: "SYSTEM", systemName: name, balance: 0n });

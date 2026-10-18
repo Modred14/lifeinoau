@@ -158,7 +158,7 @@ export default function Admin() {
             <div>
               <b>{ov.jailed}</b>
               <br />
-              <span className="mut">in Floor O</span>
+              <span className="mut">in Floor O (N-QRS Custody)</span>
             </div>
             <div>
               <b>{ov.expelled}</b>

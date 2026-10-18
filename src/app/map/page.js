@@ -16,6 +16,8 @@ import { toast } from "@/lib/toast";
 import { game, useGame, run, cash } from "@/lib/gameStore";
 import { fareKobo, placeOf, ownsCar, driverActive, MODE_INFO } from "@/lib/travel.js";
 import { playSound } from "@/lib/sound";
+import { serverTime } from "@/lib/serverClock";
+import { CUSTODY_NAME } from "@/lib/discipline";
 
 const CampusMap = dynamic(() => import("@/components/CampusMap"), {
   ssr: false,
@@ -30,6 +32,8 @@ export default function MapPage() {
   const [data, setData] = useState(null), [sheet, setSheet] = useState(false), [trip, setTrip] = useState(null), [tripSt, setTripSt] = useState(null), [inside, setInside] = useState(null), [fade, setFade] = useState(false), [counts, setCounts] = useState({});
   const g = useGame(), ch = g?.character, here = ch ? placeOf(ch) : null, miniRef = useRef(null), previewRef = useRef(null), input = useRef({}).current, tripRef = useRef(null);
   tripRef.current = trip;
+  // Serving a sentence: held at Floor O (N-QRS Custody) and not allowed to travel. The server refuses every trip too; this only stops offering it.
+  const held = !!g?.floorZero && +new Date(g.floorZero.releaseAt) > serverTime();
   const refreshBb = () =>
     call("/api/billboards").then((r) => {
       if (!r.failed) setBb(r);
@@ -74,13 +78,14 @@ export default function MapPage() {
     );
   // Tapping a normal building goes straight to the "How do you want to go?" sheet, which carries the building's description.
   // Billboards (they have their own panel) and the place you are standing in still use the small info card.
-  const direct = !!(L && !trip && ch && L.located && L.id !== here && L.kind !== "billboard");
+  const direct = !!(L && !trip && ch && !held && L.located && L.id !== here && L.kind !== "billboard");
   const closeSheet = () => { setSheet(false); if (direct) setSel(null); };
   // ---- travelling ----
   // The trip starts the moment the player taps Go. The real players standing at the door are fetched alongside (handed over as a promise)
   // and drawn when the list arrives; if that request is slow or fails, the trip is not held up and the door is simply empty.
   function begin(mode, withDriver) {
     const dest = L; if (!dest) return; setSheet(false);
+    if (held) return toast.error(`You are held in ${CUSTODY_NAME}. You cannot travel until your sentence ends.`);
     const people = call("/api/travel?at=" + encodeURIComponent(dest.id)).then((r) => (r.failed ? [] : r.people ?? []));
     setTripSt(null); input.jx = input.jy = input.steer = input.gas = input.brake = 0; input.run = false;
     setTrip({ id: crypto.randomUUID(), from: here, to: dest.id, mode, driver: withDriver, look: ch?.look ?? null, gender: ch?.gender ?? "M", people, name: dest.name });
@@ -118,7 +123,7 @@ export default function MapPage() {
       <div className="trip-fade" data-on={fade ? "1" : undefined} aria-hidden="true" />
       {insidePlace && <BuildingInside place={insidePlace} look={ch?.look ?? null} gender={ch?.gender ?? "M"} onLeave={() => setInside(null)} />}
       {(sheet || direct) && L && <TravelSheet place={L} here={youPlace?.name} hasCar={ownsCar(ch)} driver={driverActive(ch, g?.week) ? { name: ch.driverName } : null} people={counts[L.id] ?? 0} onGo={begin} onClose={closeSheet} />}
-      {youPlace && !trip && <div className="map-here" role="status"><Icon name="pin" size={14} weight="fill" /> You are at <b>{youPlace.name}</b></div>}
+      {youPlace && !trip && <div className="map-here" role="status"><Icon name="pin" size={14} weight="fill" /> {held ? <>You are held in <b>{CUSTODY_NAME}</b> until your sentence ends</> : <>You are at <b>{youPlace.name}</b></>}</div>}
       <div
         className="map-chrome"
         style={{
@@ -169,7 +174,7 @@ export default function MapPage() {
             {counts[L.id] > 0 && <p className="mut"><Icon name="users" size={15} /> {counts[L.id]} player{counts[L.id] === 1 ? "" : "s"} here now</p>}
             <div className="row">
               {L.id === here ? (hasInterior(L.id, L.kind) ? <button type="button" className="go go-there" onClick={() => setInside(L.id)}><Icon name="door" size={18} /> Go inside</button> : <p className="mut"><Icon name="pin" size={15} /> You are here. This is an open-air place, so there are no rooms to enter.</p>)
-                : <button type="button" className="go go-there" disabled={!L.located || !ch} onClick={() => setSheet(true)}><Icon name="nav" size={18} weight="fill" /> {L.located ? "Go there" : "Not on the map yet"}</button>}
+                : <button type="button" className="go go-there" disabled={!L.located || !ch || held} onClick={() => setSheet(true)}><Icon name="nav" size={18} weight="fill" /> {held ? "Held in Floor O" : L.located ? "Go there" : "Not on the map yet"}</button>}
             </div>
             {L.actions?.length > 0 && (
               <div className="row">

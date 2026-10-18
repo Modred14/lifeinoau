@@ -1,3 +1,4 @@
+// src/app/home/page.js
 // src/app/play/page.js
 "use client";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -16,6 +17,9 @@ import { setBare, isBooted, markBooted } from "@/lib/ui";
 import { game, useGame, run as go, bump, cash, chain, deltas, canAfford } from "@/lib/gameStore";
 import { resolveAction, hustleBlock, safeHustleAt, bailFor, waitText, HUSTLE } from "@/lib/engine";
 import { confirmAction } from "@/lib/confirm";
+import { serverTime } from "@/lib/serverClock";
+import { isJailed, isSuspended, isExpelled } from "@/lib/discipline";
+import { Custody, Suspension, Expulsion } from "@/components/DisciplineScreens";
 import { fmtN } from "@/lib/classes";
 import "./play.css";
 
@@ -27,13 +31,13 @@ function View({ children }) {
 const usedHustle = (kind) => (s) => {
   const h = s.hustle;
   if (!h) return s;
-  const fresh = Date.now() >= h.resetsAt; // a screen that kept the old day: count from a clean day
+  const fresh = serverTime() >= h.resetsAt; // a screen that kept the old day: count from a clean day
   return {
     ...s,
     hustle:
       kind === "safe"
-        ? { ...h, safeLeft: Math.max(0, (fresh ? HUSTLE.safe.perDay : h.safeLeft) - 1), safeUsed: (fresh ? 0 : h.safeUsed) + 1, safeGapEndsAt: Date.now() + HUSTLE.safe.gapMs, ...(fresh ? { resetsAt: h.resetsAt + Math.ceil((Date.now() - h.resetsAt + 1) / 86_400_000) * 86_400_000 } : {}) }
-        : { ...h, riskyLeft: 0, riskyUsed: (fresh ? 0 : h.riskyUsed) + 1, ...(fresh ? { resetsAt: h.resetsAt + Math.ceil((Date.now() - h.resetsAt + 1) / 86_400_000) * 86_400_000 } : {}) },
+        ? { ...h, safeLeft: Math.max(0, (fresh ? HUSTLE.safe.perDay : h.safeLeft) - 1), safeUsed: (fresh ? 0 : h.safeUsed) + 1, safeGapEndsAt: serverTime() + HUSTLE.safe.gapMs, ...(fresh ? { resetsAt: h.resetsAt + Math.ceil((serverTime() - h.resetsAt + 1) / 86_400_000) * 86_400_000 } : {}) }
+        : { ...h, riskyLeft: 0, riskyUsed: (fresh ? 0 : h.riskyUsed) + 1, ...(fresh ? { resetsAt: h.resetsAt + Math.ceil((serverTime() - h.resetsAt + 1) / 86_400_000) * 86_400_000 } : {}) },
   };
 };
 
@@ -50,7 +54,7 @@ export default function Play() {
     [reveal, setReveal] = useState(null);
   const shown = useRef(new Set()),
     pending = useRef(0);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(serverTime());
 
   // Game notifications become persistent info toasts. Once the last one is closed they are marked read.
   const showNotes = useCallback((list) => {
@@ -115,31 +119,34 @@ export default function Play() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [view]); // a new screen always starts at its top
-  // The page only needs a ticking clock for the Floor O countdown and the hustle cooldowns: without either it never re-renders on a timer.
-  // The next moment something unlocks is also scheduled exactly, so a button comes back the second it is allowed.
-  const jailed = !!st?.floorZero,
+  // The page only needs a ticking clock while a penalty runs (Floor O, suspension, expulsion) or a hustle cooldown is counting: without any it never
+  // re-renders on a timer. The next moment something unlocks is also scheduled exactly, so a button comes back the second it is allowed.
+  // All of it is measured on the SERVER's clock (lib/serverClock.js), so two devices with different clocks show the same countdown.
+  const ch0 = st?.character,
+    jailed = !!st?.floorZero,
+    penalty = jailed || !!ch0?.suspendedUntil || (!!ch0?.expelled && !!ch0?.expelledUntil),
     hs = st?.hustle,
-    nextUnlock = hs ? Math.min(...[safeHustleAt(hs, Date.now()), hs.riskyLeft > 0 ? Infinity : hs.resetsAt].filter((t) => t > Date.now()), Infinity) : Infinity;
+    nextUnlock = hs ? Math.min(...[safeHustleAt(hs, serverTime()), hs.riskyLeft > 0 ? Infinity : hs.resetsAt].filter((t) => t > serverTime()), Infinity) : Infinity;
   useEffect(() => {
-    if (!jailed && nextUnlock === Infinity) return;
-    setNow(Date.now());
-    const t = setInterval(() => setNow(Date.now()), jailed ? 1000 : 15_000),
-      u = nextUnlock === Infinity ? null : setTimeout(() => setNow(Date.now()), Math.max(0, nextUnlock - Date.now()) + 100);
+    if (!penalty && nextUnlock === Infinity) return;
+    setNow(serverTime());
+    const t = setInterval(() => setNow(serverTime()), penalty ? 1000 : 15_000),
+      u = nextUnlock === Infinity ? null : setTimeout(() => setNow(serverTime()), Math.max(0, nextUnlock - serverTime()) + 100);
     return () => { clearInterval(t); clearTimeout(u); };
-  }, [jailed, nextUnlock]);
+  }, [penalty, nextUnlock]);
 
   useEffect(() => {
-    if (hs) setNow(Date.now()); // a fresh answer from the server: show cooldowns against the real time
+    if (hs) setNow(serverTime()); // a fresh answer from the server: show cooldowns against the server's time
   }, [hs]);
 
-  // The moment the sentence runs out, ask the server for the fresh state (it releases the player), so everything unlocks at once.
-  const releaseAt = st?.floorZero?.releaseAt;
+  // The moment a penalty ends (sentence, suspension, expulsion), ask the server for the fresh state: it releases or restarts the player,
+  // so everything unlocks at once. One timer for the soonest deadline, replaced (never added to) whenever the deadlines change.
+  const deadline = Math.min(...[st?.floorZero?.releaseAt, ch0?.suspendedUntil, ch0?.expelled ? ch0?.expelledUntil : null].filter(Boolean).map((d) => +new Date(d)).filter((t) => t > serverTime()), Infinity);
   useEffect(() => {
-    if (!releaseAt) return;
-    const ms = Math.max(0, new Date(releaseAt) - Date.now()) + 300;
-    const t = setTimeout(() => game.refresh(), ms);
+    if (deadline === Infinity) return;
+    const t = setTimeout(() => game.refresh(), Math.max(0, deadline - serverTime()) + 300);
     return () => clearTimeout(t);
-  }, [releaseAt]);
+  }, [deadline]);
 
   // Choosing a hostel: the game opens straight away. If the server refuses (or cannot be reached) the picker comes back with the reason.
   const chooseHostel = (h) => {
@@ -172,7 +179,7 @@ export default function Play() {
     const c = st.character,
       pred = resolveAction(c, action, () => 0); // the same rules the server uses, so rest and hustle are predicted exactly
     if (pred.error) return toast.error(pred.error);
-    const why = action === "hustle" && st.hustle ? hustleBlock("safe", st.hustle, Date.now()) : null; // the server decides; this only saves a round trip
+    const why = action === "hustle" && st.hustle ? hustleBlock("safe", st.hustle, serverTime()) : null; // the server decides; this only saves a round trip
     if (why) return toast.error(why);
     return go({
       key: "action:" + action,
@@ -199,12 +206,12 @@ export default function Play() {
   const risky = async () => {
     if (st.character.energy < HUSTLE.risky.energy)
       return toast.error("You are too tired for that. Rest first.");
-    const why = st.hustle ? hustleBlock("risky", st.hustle, Date.now()) : null; // the server decides; this only saves a round trip
+    const why = st.hustle ? hustleBlock("risky", st.hustle, serverTime()) : null; // the server decides; this only saves a round trip
     if (why) return toast.error(why);
     if (
       !(await confirmAction({
         title: "Risky hustle: VERY RISKY",
-        message: `You either make ${fmtN(HUSTLE.risky.min)} to ${fmtN(HUSTLE.risky.max)}, or N-QRS catches you and you go to Floor O for ${HUSTLE.risky.jailMin} to ${HUSTLE.risky.jailMax} minutes. You can only try once a day.`,
+        message: `You either make ${fmtN(HUSTLE.risky.min)} to ${fmtN(HUSTLE.risky.max)}, or N-QRS catches you and you serve ${HUSTLE.risky.jailMin} to ${HUSTLE.risky.jailMax} minutes inside Floor O (N-QRS Custody). You can only try once a day.`,
         confirmLabel: "Take the risk",
         tone: "danger",
       }))
@@ -223,7 +230,7 @@ export default function Play() {
         r.caught
           ? {
               bad: true,
-              text: `N-QRS HAS CAUGHT YOU. They seized ${naira(r.seizedKobo)} and you are in Floor O. Bail starts at ${naira(r.billKobo)}.${r.expelled ? " You have been expelled." : r.suspended ? " You are suspended for 2 weeks." : ""}`,
+              text: `N-QRS HAS CAUGHT YOU. They seized ${naira(r.seizedKobo)} and you are in Floor O (N-QRS Custody). Bail starts at ${naira(r.billKobo)}.${r.expelled ? " You have been expelled for 5 hours." : r.suspended ? " You are suspended for 2 hours." : ""}`,
             }
           : { text: `The hustle paid ${naira(r.earnedKobo)}. N-QRS is watching.`, sound: "coin" },
     });
@@ -271,7 +278,7 @@ export default function Play() {
         toast.success(`Your parent sent you ${naira(r.gift)}.`, { sound: "coin" }),
     });
   const bail = () => {
-    if (!canAfford(bailFor(st.floorZero.releaseAt, Date.now())))
+    if (!canAfford(bailFor(st.floorZero.releaseAt, serverTime())))
       return toast.error("You cannot afford the bail. Wait out your sentence.");
     return go({
       key: "bail",
@@ -281,9 +288,9 @@ export default function Play() {
       ok: "Bail paid. You're free.",
       sound: "coin",
       request: () => call("/api/floor0/pay", {}),
-      // the money leaves the wallet at once (taken back if refused), but the Floor O screen only lifts when the server confirms
+      // the money leaves the wallet at once (taken back if refused), but the custody screen only lifts when the server confirms
       effects: [
-        { store: game, patch: (s) => (s.floorZero ? cash(-bailFor(s.floorZero.releaseAt, Date.now()))(s) : s) },
+        { store: game, patch: (s) => (s.floorZero ? cash(-bailFor(s.floorZero.releaseAt, serverTime()))(s) : s) },
       ],
       after: () => [{ store: game, patch: (s) => ({ ...s, floorZero: null }) }],
     });
@@ -367,22 +374,25 @@ export default function Play() {
         </div>
       </View>
     );
-  if (c.expelled)
+  // A player in custody is held INSIDE Floor O: they do not get the home room. (Expelled players in custody are told about both.)
+  if (isJailed(c, now) && st.floorZero)
     return (
       <View key={view}>
-        <div className="gh-end gh-bad">
-          <span className="gh-endico">
-            <Icon name="warn" size={34} />
-          </span>
-          <h1>Your story ends here</h1>
-          <p className="mut">
-            You were expelled or withdrawn. Final CGPA so far:{" "}
-            {a.cgpa ?? "none"}.
-          </p>
-        </div>
+        <Custody st={st} now={now} busy={busy} bail={bail} />
       </View>
     );
-
+  if (isExpelled(c, now))
+    return (
+      <View key={view}>
+        <Expulsion c={c} a={a} now={now} />
+      </View>
+    );
+  if (isSuspended(c, now))
+    return (
+      <View key={view}>
+        <Suspension c={c} now={now} />
+      </View>
+    );
   const hsNow = st.hustle,
     safeWhy = hsNow ? hustleBlock("safe", hsNow, now) : null,
     riskyWhy = hsNow ? hustleBlock("risky", hsNow, now) : null,
