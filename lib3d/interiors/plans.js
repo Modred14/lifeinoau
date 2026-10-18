@@ -113,6 +113,12 @@ export function faculty(spec, place) {
   void g; const lobby = p.byId.get("lobby"); p.enter("lobby", "s", (lobby.x0 + lobby.x1) / 2, 2.2);
   const names = (fl) => p.rooms.filter((r) => r.floor === fl && r.kind !== "stair").map((r) => r.id);
   const lectureRooms = p.rooms.filter((r) => r.floor === 0 && /^g[ns]/.test(r.id)).map((r) => r.id);
+  // Academics are done in person: the entrance desk, then the lecture hall (attendance), the test hall and the examination hall (components/PlacePanels.js)
+  const halls = p.rooms.filter((r) => r.floor === 0 && /^gn/.test(r.id)), spot = (r, i, n) => [(r.x0 + r.x1) / 2 + (n > 1 ? (i - (n - 1) / 2) * 2.4 : 0), r.z1 - 1.3];
+  p.hub(lobby.x1 - 2.6, lobby.z0 + 1.8, "Entrance desk: timetable and notices", 0, 0, "faculty");
+  [["Lecture hall: take a seat", "lecture", halls[0]], ["Test hall: class test", "test", halls[1] ?? halls[0]], ["Examination hall", "exam", halls[2] ?? halls[halls.length - 1]]].forEach(([label, act, room], i, all) => {
+    if (!room) return; const same = all.filter((q) => q[2] === room), [x, z] = spot(room, same.indexOf(all[i]), same.length); p.hub(x, z, label, 0, 0, act);
+  });
   crowd(p, "student", 5, ["gcorr", "lobby", ...lectureRooms.slice(0, 2)], 0);
   if (floors > 1) { corridorBlock(p, { x0: 0, z0: 0, floor: 1, key: "u", nD, sD, cw: 2.6, north: specs(D.n1), south: [{ stair: true, id: "stair", w: 2.0 }, ...specs(D.s1)] }); crowd(p, "student", 3, ["ucorr", ...names(1).filter((i) => i.startsWith("un")).slice(0, 2)], 1); crowd(p, "staff", 1, ["ucorr"], 1); }
   return p;
@@ -161,6 +167,7 @@ export function ceremonial(spec, place) {
   for (let b = 0; b < nb; b++) F.add("seatblock", aisle + b * (bw + aisle) + bw / 2, top + (rows * 0.95) / 2, { w: bw, d: rows * 0.95, rows, color: b === 1 ? "#1d5f4a" : "#174a3a" });
   F.person("staff", W / 2 - 1.2, 3.0, { face: "front", mode: "stand", }); for (let k = 0; k < 8; k++) F.person(k % 3 ? "celebrant" : "student", aisle + (k % nb) * (bw + aisle) + 1.0 + (k >> 1), top + (k % 4) * 0.95 + 0.1, { face: "back", mode: "sit" });
   const fr = frame(p, p.byId.get("foyer"), "n"); fr.add("reception", W * 0.28, 4.2, { w: 3.2, sign: "Events desk", color: "#1d3b2f" }); fr.hub(W * 0.28, 3.2, "Events and tickets", 0); fr.wall("notice", W * 0.3, { label: "Convocation" }); fr.wall("notice", W * 0.7, { label: "Events" }); fr.add("plant", 1.0, 4.4); fr.add("plant", W - 1.0, 4.4);
+  fr.add("reception", W * 0.88, 4.2, { w: 2.6, sign: "Stewards' desk", color: "#7a1f2b" }); fr.hub(W * 0.88, 3.2, "Stewards' desk: join the event crew", 0, "crew");
   fr.add("display", 14.5, 4.4, { w: 1.4, color: "#d9a441" }); fr.add("display", 20, 4.4, { w: 1.4, color: "#d9a441" }); fr.add("waitchairs", W * 0.74, 4.8, { w: 2.4, turn: PI }); fr.add("waitchairs", W * 0.12, 4.8, { w: 2.4, turn: PI });
   crowd(p, "celebrant", 4, ["foyer", "hall"], 0); crowd(p, "student", 3, ["foyer"], 0); return p;
 }
@@ -225,6 +232,7 @@ export function sub(spec, place) {
   p.enter("lobby", "s", 18, 2.6);
   const fl = frame(p, lounge, "n"); fl.add("tv", 10.5, 0.05, { w: 2.2 }); fl.add("sofa", 8.0, 3.2, { w: 2.0, turn: PI, color: "#3b6fc4" }); fl.add("sofa", 13.0, 3.2, { w: 2.0, turn: PI, color: "#b8473b" }); fl.add("loungeTable", 10.5, 2.0, {});
   fl.add("pingpong", 3.2, 8.4, { turn: PI / 2 }); fl.add("foosball", 6.9, 9.2, {}); fl.add("roundtable", 12.0, 8.8, { w: 2.0, chairs: 4 }); fl.add("roundtable", 17.0, 8.8, { w: 2.0, chairs: 4, chairColor: "#d9a441" }); fl.wall("notice", 19.0, { label: "Union notices" }); fl.add("plant", 20.0, 2.5); fl.add("plant", 0.6, 12.8);
+  fl.hub(19.3, 11.8, "Back stairwell: backstairs runs", 0, "backstairs");
   fl.person("student", 10.5, 3.2, { face: "back", mode: "sit" }); fl.person("student", 3.2, 6.9, { face: "back" }); fl.person("student", 3.2, 10.0, { face: "front" });
   const fa = frame(p, assembly, "n"); fa.add("stage", 7.5, 1.8, { w: 9, d: 3.4, h: 0.8 }); fa.add("banner", 7.5, 0.4, { w: 8, y: 2.6, hh: 1.2, label: "STUDENTS' UNION", color: "#1d5f4a" }); fa.add("podium", 7.5, 2.0, { lift: 0.8, solid: false });
   for (let r = 0; r < 4; r++) for (let c = 0; c < 2; c++) fa.add("waitchairs", 4.0 + c * 6.0, 5.4 + r * 1.2, { w: 4.4, turn: 0 }); fa.person("student", 7.5, 2.4, { face: "front", mode: "stand" }); fa.person("student", 4.0, 5.6, { face: "back", mode: "sit" });

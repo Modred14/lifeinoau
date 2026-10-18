@@ -157,3 +157,10 @@
 .ph[data-app]:has(.pa-content > .ph-spin):not(:has(.pa-content > :not(.ph-spin, .top))) .pa-back { color: #fff; }
 .ph[data-app]:has(.pa-content > .ph-spin):not(:has(.pa-content > :not(.ph-spin, .top))) .ph-spin { --spin: #fff; --spin-track: rgba(255, 255, 255, 0.28); }
 .ph[data-app]:has(.pa-content > .ph-spin):not(:has(.pa-content > :not(.ph-spin, .top))) .ph-spin { min-height: min(540px, calc(100dvh - 250px)); }
+/* the Jobs app's shift desk */
+.shift-on { display: grid; gap: 8px; }
+.shift-bar { height: 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.shift-bar > i { display: block; height: 100%; border-radius: inherit; background: var(--green-text, #4ade80); transition: width 900ms linear; }
+.shift-opt .go { white-space: nowrap; }
+.shift-why { color: var(--warn-text, #f5b942); }
+@media (prefers-reduced-motion: reduce) { .shift-bar > i { transition: none; } }

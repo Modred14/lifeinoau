@@ -14,6 +14,7 @@ import { ITEMS, MAX_ITEMS, roomScore, sellKobo, priceKobo } from "@/lib/furnitur
 import { roomFor, autoPlace } from "@/lib/room.js";
 import { fmtN } from "@/lib/classes.js";
 import { bailFor, HUSTLE } from "@/lib/engine.js";
+import { SLEEP, wakeResult, minutesAsleep, minutesToFull } from "@/lib/sleep.js";
 import { Icon } from "./Icon";
 import BuySheet from "./BuySheet";
 import "./game-home.css";
@@ -51,8 +52,9 @@ export default function GameHome({
   st,
   now,
   busy,
-  actions,
-  exam,
+  onSleep,
+  onWake,
+  onCall,
   bail,
   left,
 }) {
@@ -76,6 +78,31 @@ export default function GameHome({
     [rd?.room, c.hostel],
   ); // eslint-disable-line react-hooks/exhaustive-deps
   const items = rd?.items ?? [];
+  // ---- sleeping. The server keeps when you lay down and works out the energy when you wake; what is shown here is only an estimate from the same rules.
+  const [use, setUse] = useState(null),
+    sleeping = !!st.sleep,
+    bedItem = sleeping ? items.find((i) => String(i.id) === String(st.sleep.bedId)) : null,
+    sleepRateOf = (key) => SLEEP.perGameMinute * (SLEEP.beds[key] ?? 1) * (c.personalities?.includes("Introvert") ? SLEEP.introvert : 1),
+    sleptMin = sleeping ? minutesAsleep(st.sleep.since, now) : 0,
+    rest = sleeping ? wakeResult(c, bedItem?.key ?? "single_bed", st.sleep.since, now) : null,
+    fmtHours = (m) => (m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`);
+  const lieDown = async (u) => {
+    setUse(null);
+    const res = await onSleep(u.id);
+    if (!res?.failed) api.current?.goToBed(u.id); // the avatar walks to the bed and lies down once the server has put you to bed
+  };
+  const wakeNow = async () => {
+    const res = await onWake();
+    if (!res?.failed) api.current?.wakeUp();
+  };
+  // came back to the page while asleep: lie in the bed straight away (the room and the character may still be loading, so keep trying for a few seconds)
+  useEffect(() => {
+    if (!sleeping || !st.sleep.bedId) return;
+    let tries = 0, t;
+    const attempt = () => { if (api.current?.isSleepBusy?.() || api.current?.lieInBed(st.sleep.bedId) || ++tries > 20) return; t = setTimeout(attempt, 400); };
+    attempt();
+    return () => clearTimeout(t);
+  }, [sleeping, st.sleep?.bedId, items.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const fail = useCallback(
     (r) =>
       r.status === 401
@@ -281,6 +308,7 @@ export default function GameHome({
           selected={selected}
           onSelect={setSelected}
           onMove={onMove}
+          onUse={(u) => !buying && setUse(u)}
           apiRef={api}
           tool={tool}
         />
@@ -341,25 +369,20 @@ export default function GameHome({
                   <Icon name="warn" size={22} />
                 </span>
                 <div>
-                  <h2 id="ex-h">Exam today</h2>
-                  <p>Sit it before the week ends.</p>
+                  <h2 id="ex-h">Exam week</h2>
+                  <p>
+                    Exams are sat in person. Go to the examination hall of your
+                    own faculty ({c.faculty}) before the week ends.
+                  </p>
                 </div>
                 <div className="gx-alert-acts">
                   <button
                     type="button"
                     className="go"
-                    disabled={busy || stopped}
-                    onClick={() => exam(false)}
+                    disabled={stopped}
+                    onClick={() => router.push("/map")}
                   >
-                    Sit honestly
-                  </button>
-                  <button
-                    type="button"
-                    className="gx-risk"
-                    disabled={busy || stopped}
-                    onClick={() => exam(true)}
-                  >
-                    Try to cheat
+                    Open the map
                   </button>
                 </div>
               </section>
@@ -504,29 +527,45 @@ export default function GameHome({
         </section>
       )}
 
-      {/* right: what will you do */}
-      {!buying && (
-        <nav className="gx-do" aria-label="What will you do?">
-          {actions.map((x) => (
-            <button
-              key={x.id}
-              type="button"
-              className="gx-act"
-              data-tone={x.tone}
-              disabled={busy || stopped || x.off}
-              onClick={x.run}
-              title={x.off && x.why && !x.free ? x.why : x.note}
-            >
-              <span className="gx-act-ico">
-                <Icon name={x.icon} size={22} />
-              </span>
-              <span className="gx-act-txt">
-                <b>{x.name}</b>
-                <span>{x.off && x.why && !x.free ? x.why : x.note}</span>
-              </span>
-            </button>
-          ))}
-        </nav>
+      {/* the room itself is the menu: tap your bed to sleep, tap the phone on your desk or bedside table to call home */}
+      {!buying && use && !sleeping && (
+        <section className="gx-use" role="dialog" aria-labelledby="use-h">
+          <button type="button" className="gx-use-x" aria-label="Close" onClick={() => setUse(null)}>
+            <Icon name="close" size={16} />
+          </button>
+          {use.kind === "bed" ? (
+            <>
+              <h2 id="use-h"><Icon name="moon" size={18} /> {ITEMS[use.key]?.name ?? "Your bed"}</h2>
+              <p>Lie down and sleep. You wake up with more energy the longer you sleep, up to 100. Energy now {c.energy}/100.</p>
+              <p className="mut">
+                About {Math.round(60 * sleepRateOf(use.key))} energy an hour
+                {c.energy < 100 ? `, full in about ${fmtHours(minutesToFull(c, use.key))}` : ""}.
+              </p>
+              <button type="button" className="go" disabled={busy || stopped || c.energy >= SLEEP.stopAt - 4} onClick={() => lieDown(use)}>
+                {c.energy >= SLEEP.stopAt - 4 ? "Not tired" : "Go to sleep"}
+              </button>
+            </>
+          ) : (
+            <>
+              <h2 id="use-h"><Icon name="call" size={18} /> Call home</h2>
+              <p>{st.calledThisWeek ? "You have already called home this week." : "Ring your parent. Once a week."}</p>
+              <button type="button" className="go" disabled={busy || stopped || st.calledThisWeek} onClick={() => { setUse(null); onCall(); }}>
+                {st.calledThisWeek ? "Done this week" : "Call parent"}
+              </button>
+            </>
+          )}
+        </section>
+      )}
+      {!buying && sleeping && (
+        <section className="gx-sleep" role="status" aria-live="polite">
+          <h2><Icon name="moon" size={18} /> Sleeping</h2>
+          <p className="gx-sleep-t num">{fmtHours(sleptMin)} asleep</p>
+          <p>
+            Energy {c.energy} <span className="mut">→</span> <b>{rest.energy}</b>
+            {rest.restored > 0 ? <span className="mut"> (+{rest.restored} so far)</span> : <span className="mut"> (rest at least {SLEEP.minMinutes} minutes to feel it)</span>}
+          </p>
+          <button type="button" className="go" disabled={busy} onClick={wakeNow}>Wake up</button>
+        </section>
       )}
 
       {/* home: a small label; buy: the shop */}

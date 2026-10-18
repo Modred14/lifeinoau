@@ -1,5 +1,5 @@
 // lib3d/mapExtras.js
-// Game places the OpenStreetMap render does not show: Ojaja, Akintola, the Postgraduate hall, Floor O, the three clubs and the ten billboards.
+// Game places the OpenStreetMap render does not show: Ojaja, Akintola, the Postgraduate hall, six faculty buildings, Floor O, the three clubs and the ten billboards.
 // They are merged onto the real map data when it loads (withExtras), so public/data/oau-campus.json stays exactly as the generator wrote it.
 // Positions are GAME PLACEMENTS in the same metre grid as the real data (x east, z south). Each one was checked to sit clear of every
 // real building, road, lake and wood on the map, but nobody has surveyed where these places really are, and the map says so (conf "game").
@@ -45,6 +45,14 @@ const BUILDINGS = [
   { id: "h_ojaja", name: "Ojaja", kind: "hostel", tier: 1, x: -628, z: 1030, w: 60, d: 26, h: 16, shape: "L", wall: "#e9e2d0", roof: "#6b5a46" },
   { id: "h_akintola", name: "Akintola Hall", kind: "hostel", tier: 1, x: 1000, z: -230, w: 52, d: 22, h: 12 },
   { id: "h_pg", name: "Murtala Muhammed Postgraduate Hall", kind: "hostel", tier: 1, x: -740, z: -20, w: 48, d: 20, h: 11 },
+  // Faculty buildings the real-map render does not show. Every OAU Life faculty needs a real place to walk to (lib/faculty.js), so these six are GAME PLACEMENTS:
+  // each sits in clear space (6 m or more from every building, road, lake, wood, pitch and car park on the map) near the part of campus it belongs with.
+  { id: "f_science", name: "Faculty of Science", kind: "faculty", tier: 2, x: 553.9, z: -124.9, w: 40, d: 26, h: 12, wall: "#e7dfcf", roof: "#5a6b7a" },
+  { id: "f_technology", name: "Faculty of Technology", kind: "faculty", tier: 2, x: 742.7, z: -542.9, w: 46, d: 28, h: 12, wall: "#dcdcd2", roof: "#6a5a4c" },
+  { id: "f_cs", name: "Faculty of Computer Science", kind: "faculty", tier: 2, x: 647.6, z: 132.8, w: 36, d: 24, h: 12, wall: "#d8e0e8", roof: "#3a4a63" },
+  { id: "f_edm", name: "Environmental Design and Management", kind: "faculty", tier: 2, x: -439.3, z: -210.9, w: 40, d: 24, h: 12, wall: "#e9e0cc", roof: "#7a5c3c" },
+  { id: "f_agric", name: "Faculty of Agriculture", kind: "faculty", tier: 2, x: 1100, z: -300, w: 44, d: 26, h: 9, wall: "#e4e2c8", roof: "#587a4a" },
+  { id: "f_health", name: "College of Health Sciences", kind: "faculty", tier: 2, x: -763.4, z: -228.1, w: 48, d: 28, h: 12, wall: "#eceae4", roof: "#4a7a8a" },
   { id: "floor0", name: "Floor O (N-QRS Custody)", kind: "jail", tier: 1, x: 200, z: 95, w: 30, d: 22, h: 3.5, wall: "#8d99a8", roof: "#b8322f" },
   { id: "club_quantum", name: "Quantum", kind: "club", tier: 1, x: -276.8, z: 873.8, w: 30, d: 20, h: 9, wall: "#5b4a8a", roof: "#2a1d45", neon: "#38e8ff" },
   { id: "club_0203", name: "0203", kind: "club", tier: 1, x: -200, z: 880, w: 30, d: 20, h: 9, wall: "#7a3f6e", roof: "#2a1d45", neon: "#ff4fd8" },

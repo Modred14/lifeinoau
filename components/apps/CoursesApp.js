@@ -115,8 +115,9 @@ export default function Courses() {
       </p>
       {d.examToday ? (
         <p>
-          <b>Exam today.</b> Sit it on the game screen before the week ends.
-          Your attendance and preparation so far decide your score.
+          <b>Exam week.</b> Exams are sat in person, in the examination hall of
+          your own faculty{d.facultyPlace ? ` (${d.facultyPlace.name})` : ""}, before
+          the week ends. Your attendance and preparation so far decide your score.
         </p>
       ) : (
         <p className="mut">
@@ -145,15 +146,16 @@ export default function Courses() {
           <Meter label="Preparation" pct={c.prep} color="var(--gold-text)" />
           <div className="row" style={{ marginTop: 10 }}>
             <button
-              disabled={c.attendedThisWeek || d.energy < d.costs.attend}
-              onClick={() => act("attend", c.code)}
+              disabled={c.attendedThisWeek}
+              onClick={() => router.push("/map")}
+              title="Lectures are attended in person at your faculty"
             >
-              Attend lecture
+              {c.attendedThisWeek ? "Lecture attended" : "Go to your faculty"}
               <br />
               <span className="mut">
                 {c.attendedThisWeek
                   ? "done this week"
-                  : `${d.costs.attend} energy`}
+                  : `${c.slot} · ${d.costs.attend} energy`}
               </span>
             </button>
             <button
@@ -178,8 +180,10 @@ export default function Courses() {
       ))}
       {fight && <LectureFight course={fight} onClose={() => setFight(null)} />}
       <p className="mut">
-        Lecture slots are for flavour: you can attend any time during the game
-        week. Lecturers are fictional, and the courses are game content, not the
+        Lectures, tests and exams happen in person: walk to {d.facultyPlace ? d.facultyPlace.name : "your faculty"} on
+        the map, go inside, and use the lecture hall on the lecture day (the
+        slot above is the start time; late students are admitted for a few
+        hours). Lecturers are fictional, and the courses are game content, not the
         official OAU curriculum.
       </p>
     </>

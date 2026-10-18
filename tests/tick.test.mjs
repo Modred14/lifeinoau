@@ -70,15 +70,25 @@ function run(name, char, results, daysAgo, PEND = [], BIZ = []) {
         ),
     },
   };
+  const CT = []; // surprise tests waiting at the faculty (see lib/facultyService.js)
+  tx.classTest = {
+    findMany: async ({ where }) => CT.filter((t) => t.status === where.status && t.gameWeek < where.gameWeek.lt),
+    findFirst: async ({ where }) => CT.find((t) => t.gameWeek === where.gameWeek) ?? null,
+    create: async ({ data }) => { CT.push({ id: CT.length + 1, ...data }); return data; },
+    update: async ({ where, data }) => Object.assign(CT.find((t) => t.id === where.id), data),
+  };
   const db = {
     gameClock: {
       findUnique: async () => ({
-        startedAt: new Date(Date.now() - daysAgo * 864e5),
+        startedAt: new Date(Date.now() - daysAgo * 7 * 864e5), // one "day" of this test is one game week now that the clock is 1:1 with real time
+        campusEpoch: null,
+        energyRefilledAt: null,
       }),
     },
     character: tx.character, // catchUp's fast path reads the character outside the transaction
     $transaction: async (f) => f(tx),
   };
+  tx.gameClock = db.gameClock;
   const cap0 = BIZ.map((b) => b.capital);
   return catchUp(db, "c1").then((r) => {
     BIZ.forEach((b, i) => {

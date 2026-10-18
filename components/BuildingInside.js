@@ -8,14 +8,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "./Icon";
 import { Stick, Hold } from "./TripHud";
+import { panelFor } from "./PlacePanels";
 import { call } from "@/lib/client";
 import { ICON_OF } from "@/lib3d/landmarks.js";
 import "./travel.css";
 
 export default function BuildingInside({ place, look = null, gender = "M", onLeave }) {
-  const [people, setPeople] = useState(null), [status, setStatus] = useState("loading"), [info, setInfo] = useState(false), [room, setRoom] = useState(""), [near, setNear] = useState(null), [view, setView] = useState("follow"), [note, setNote] = useState("");
+  const [panel, setPanel] = useState(null), [people, setPeople] = useState(null), [status, setStatus] = useState("loading"), [info, setInfo] = useState(false), [room, setRoom] = useState(""), [near, setNear] = useState(null), [view, setView] = useState("follow"), [note, setNote] = useState("");
   const box = useRef(null), api = useRef(null), [input] = useState(() => ({ jx: 0, jy: 0, run: false, hold(v) { this.run = v; } })), router = useRouter(), leave = useRef(onLeave);
+  const panelOpen = useRef(false);
   useEffect(() => { leave.current = onLeave; });
+  useEffect(() => { panelOpen.current = !!panel; }, [panel]);
   useEffect(() => {
     let on = true; const load = async () => { const r = await call("/api/travel?at=" + encodeURIComponent(place.id)); if (on && !r.failed) setPeople(r.people ?? []); };
     load(); const t = setInterval(() => !document.hidden && load(), 12000); return () => { on = false; clearInterval(t); };
@@ -26,13 +29,13 @@ export default function BuildingInside({ place, look = null, gender = "M", onLea
       try {
         const [{ buildInterior, PLAN_NOTE }, { createInteriorScene }] = await Promise.all([import("@/lib3d/interiors/index.js"), import("@/lib3d/interiors/scene.js")]);
         const c = buildInterior(place); if (!c) { setStatus("none"); return; } setNote(PLAN_NOTE); if (dead || !box.current) return;
-        scene = await createInteriorScene(box.current, c, { look, gender, input, view: "follow", onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onHub: (h) => { const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true); } });
+        scene = await createInteriorScene(box.current, c, { look, gender, input, view: "follow", onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onHub: (h) => { if (h.act) { setPanel(h.act); return; } const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true); } });
         if (dead) { scene.dispose(); return; } api.current = scene; setStatus("ready");
       } catch (e) { console.warn("interior unavailable", e); if (!dead) setStatus("fallback"); }
     })();
     return () => { dead = true; api.current = null; scene?.dispose(); };
   }, [place.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { const k = (e) => { if (e.key !== "Escape") return; if (info) setInfo(false); else onLeave(); }; document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [onLeave, info]);
+  useEffect(() => { const k = (e) => { if (e.key !== "Escape") return; if (panelOpen.current) return; if (info) setInfo(false); else onLeave(); }; document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [onLeave, info]);
 
   const card = (
     <div className="bi" role="dialog" aria-modal="true" aria-label={`About ${place.name}`} data-over={status === "ready" ? "1" : undefined} onClick={(e) => { if (status === "ready" && e.target === e.currentTarget) setInfo(false); }}>
@@ -73,6 +76,7 @@ export default function BuildingInside({ place, look = null, gender = "M", onLea
         </div>
       )}
       {info && card}
+      {panel && panelFor(panel, () => setPanel(null))}
     </div>
   );
 }

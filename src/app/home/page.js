@@ -15,32 +15,16 @@ import { Icon } from "@/components/Icon";
 
 import GameHome from "@/components/GameHome";
 import { setBare, isBooted, markBooted } from "@/lib/ui";
-import { game, useGame, run as go, bump, cash, chain, deltas, canAfford } from "@/lib/gameStore";
-import { resolveAction, hustleBlock, safeHustleAt, bailFor, waitText, HUSTLE } from "@/lib/engine";
-import { confirmAction } from "@/lib/confirm";
+import { game, useGame, run as go, bump, cash, chain, canAfford } from "@/lib/gameStore";
+import { bailFor } from "@/lib/engine";
 import { serverTime } from "@/lib/serverClock";
 import { isJailed, isSuspended, isExpelled } from "@/lib/discipline";
 import { Custody, Suspension, Expulsion } from "@/components/DisciplineScreens";
-import { fmtN } from "@/lib/classes";
 import "./play.css";
 
 function View({ children }) {
   return <div className="gh-view">{children}</div>;
 }
-
-/** Show one more hustle used today, until the server's own count arrives. */
-const usedHustle = (kind) => (s) => {
-  const h = s.hustle;
-  if (!h) return s;
-  const fresh = serverTime() >= h.resetsAt; // a screen that kept the old day: count from a clean day
-  return {
-    ...s,
-    hustle:
-      kind === "safe"
-        ? { ...h, safeLeft: Math.max(0, (fresh ? HUSTLE.safe.perDay : h.safeLeft) - 1), safeUsed: (fresh ? 0 : h.safeUsed) + 1, safeGapEndsAt: serverTime() + HUSTLE.safe.gapMs, ...(fresh ? { resetsAt: h.resetsAt + Math.ceil((serverTime() - h.resetsAt + 1) / 86_400_000) * 86_400_000 } : {}) }
-        : { ...h, riskyLeft: 0, riskyUsed: (fresh ? 0 : h.riskyUsed) + 1, ...(fresh ? { resetsAt: h.resetsAt + Math.ceil((serverTime() - h.resetsAt + 1) / 86_400_000) * 86_400_000 } : {}) },
-  };
-};
 
 export default function Play() {
   const router = useRouter();
@@ -120,25 +104,19 @@ export default function Play() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [view]); // a new screen always starts at its top
-  // The page only needs a ticking clock while a penalty runs (Floor O, suspension, expulsion) or a hustle cooldown is counting: without any it never
-  // re-renders on a timer. The next moment something unlocks is also scheduled exactly, so a button comes back the second it is allowed.
-  // All of it is measured on the SERVER's clock (lib/serverClock.js), so two devices with different clocks show the same countdown.
+  // The page only needs a ticking clock while a penalty runs (Floor O, suspension, expulsion) or the player is asleep (the energy estimate grows):
+  // without either it never re-renders on a timer. All of it is measured on the SERVER's clock (lib/serverClock.js), so two devices with
+  // different clocks show the same countdown.
   const ch0 = st?.character,
     jailed = !!st?.floorZero,
     penalty = jailed || !!ch0?.suspendedUntil || (!!ch0?.expelled && !!ch0?.expelledUntil),
-    hs = st?.hustle,
-    nextUnlock = hs ? Math.min(...[safeHustleAt(hs, serverTime()), hs.riskyLeft > 0 ? Infinity : hs.resetsAt].filter((t) => t > serverTime()), Infinity) : Infinity;
+    asleep = !!st?.sleep;
   useEffect(() => {
-    if (!penalty && nextUnlock === Infinity) return;
+    if (!penalty && !asleep) return;
     setNow(serverTime());
-    const t = setInterval(() => setNow(serverTime()), penalty ? 1000 : 15_000),
-      u = nextUnlock === Infinity ? null : setTimeout(() => setNow(serverTime()), Math.max(0, nextUnlock - serverTime()) + 100);
-    return () => { clearInterval(t); clearTimeout(u); };
-  }, [penalty, nextUnlock]);
-
-  useEffect(() => {
-    if (hs) setNow(serverTime()); // a fresh answer from the server: show cooldowns against the server's time
-  }, [hs]);
+    const t = setInterval(() => setNow(serverTime()), penalty ? 1000 : 10_000);
+    return () => clearInterval(t);
+  }, [penalty, asleep]);
 
   // The moment a penalty ends (sentence, suspension, expulsion), ask the server for the fresh state: it releases or restarts the player,
   // so everything unlocks at once. One timer for the soonest deadline, replaced (never added to) whenever the deadlines change.
@@ -173,89 +151,30 @@ export default function Play() {
     });
   };
 
-  // ---- Instant actions. Each one changes the screen and shows its message at once, then asks the server in the background.
-  // If the server refuses, that one change is taken back and the reason is shown. Amounts nobody can know in advance (a random
-  // payout, the result of an exam) are filled in the moment the server answers; the energy they cost is shown immediately.
-  const act = (action) => {
-    const c = st.character,
-      pred = resolveAction(c, action, () => 0); // the same rules the server uses, so rest and hustle are predicted exactly
-    if (pred.error) return toast.error(pred.error);
-    const why = action === "hustle" && st.hustle ? hustleBlock("safe", st.hustle, serverTime()) : null; // the server decides; this only saves a round trip
-    if (why) return toast.error(why);
-    return go({
-      key: "action:" + action,
-      router,
-      ok:
-        action === "rest"
-          ? "You rested and feel better."
-          : "Safe hustle done. Cash added.",
-      sound: action === "rest" ? undefined : "coin",
-      sensitive: action === "hustle", // it pays money: "cash added" is only said once the server has paid
-      pending: "Hustling…",
-      request: () =>
-        call("/api/action", { action, requestId: crypto.randomUUID() }),
-      effects: [
-        { store: game, patch: bump(deltas(c, pred.stats)) },
-        action === "hustle" ? { store: game, patch: usedHustle("safe") } : null, // the cooldown starts on screen at once (the server keeps the real count)
-      ],
-      after:
-        action === "hustle"
-          ? (r) => [{ store: game, patch: cash(r.earnedKobo ?? 0) }]
-          : undefined,
-    });
-  };
-  const risky = async () => {
-    if (st.character.energy < HUSTLE.risky.energy)
-      return toast.error("You are too tired for that. Rest first.");
-    const why = st.hustle ? hustleBlock("risky", st.hustle, serverTime()) : null; // the server decides; this only saves a round trip
-    if (why) return toast.error(why);
-    if (
-      !(await confirmAction({
-        title: "Risky hustle: VERY RISKY",
-        message: `You either make ${fmtN(HUSTLE.risky.min)} to ${fmtN(HUSTLE.risky.max)}, or N-QRS catches you and you serve ${HUSTLE.risky.jailMin} to ${HUSTLE.risky.jailMax} minutes inside Floor O (N-QRS Custody). You can only try once a day.`,
-        confirmLabel: "Take the risk",
-        tone: "danger",
-      }))
-    )
-      return;
-    return go({
-      key: "risky",
-      router,
-      request: () => call("/api/risky", { requestId: crypto.randomUUID() }),
-      effects: [
-        { store: game, patch: bump({ energy: -HUSTLE.risky.energy, suspicion: 15 }) },
-        { store: game, patch: usedHustle("risky") },
-      ],
-      after: (r) => (!r.caught && r.earnedKobo ? [{ store: game, patch: cash(r.earnedKobo) }] : []),
-      okLate: (r) =>
-        r.caught
-          ? {
-              bad: true,
-              text: `N-QRS HAS CAUGHT YOU. They seized ${naira(r.seizedKobo)} and you are in Floor O (N-QRS Custody). Bail starts at ${naira(r.billKobo)}.${r.expelled ? " You have been expelled for 5 hours." : r.suspended ? " You are suspended for 2 hours." : ""}`,
-            }
-          : { text: `The hustle paid ${naira(r.earnedKobo)}. N-QRS is watching.`, sound: "coin" },
-    });
-  };
-  const exam = (cheat) =>
+  // ---- Rest, the hustles and the exam are not buttons any more: you sleep in your bed, work the Oduduwa Hall crew and the SUB backstairs in
+  // person, and sit exams at your own faculty. What is left here is what the room itself offers: lying down, waking up and the phone by your bed.
+  // Sleeping is decided by the server: it stores when you lay down and works out your energy from that moment when you wake.
+  const sleepIn = (bedId) =>
     go({
-      key: "exam",
+      key: "sleep",
       router,
-      request: () =>
-        call("/api/exam", { cheat, requestId: crypto.randomUUID() }),
-      effects: [
-        {
-          store: game,
-          patch: chain(bump({ energy: -20 }), (s) => ({
-            ...s,
-            academics: { ...s.academics, satThisWeek: true },
-          })),
-        },
-      ],
+      sensitive: true,
+      pending: "Getting into bed…",
+      request: () => call("/api/sleep", { action: "start", bedId, requestId: crypto.randomUUID() }),
+      effects: [],
+      after: (r) => [{ store: game, patch: (s) => ({ ...s, sleep: { since: r.serverNow ?? serverTime(), bedId: String(bedId), serverNow: serverTime() } }) }],
+    });
+  const wakeUp = () =>
+    go({
+      key: "wake",
+      router,
+      sensitive: true,
+      pending: "Waking up…",
+      request: () => call("/api/sleep", { action: "wake", requestId: crypto.randomUUID() }),
+      effects: [],
+      after: (r) => [{ store: game, patch: (s) => ({ ...s, sleep: null, character: { ...s.character, energy: r.energy ?? s.character.energy, health: r.health ?? s.character.health } }) }],
       okLate: (r) => ({
-        bad: r.caught,
-        text: r.caught
-          ? `Caught cheating. Score ${r.score}, grade point ${r.gradePoint}.`
-          : `Score ${r.score}, grade point ${r.gradePoint}.`,
+        text: r.restored > 0 ? `You slept ${Math.floor(r.minutes / 60)}h ${String(r.minutes % 60).padStart(2, "0")}m and feel better. Energy +${r.restored}.` : "You only dozed. Sleep longer to feel it.",
       }),
     });
   const call_ = () =>
@@ -394,52 +313,6 @@ export default function Play() {
         <Suspension c={c} now={now} />
       </View>
     );
-  const hsNow = st.hustle,
-    safeWhy = hsNow ? hustleBlock("safe", hsNow, now) : null,
-    riskyWhy = hsNow ? hustleBlock("risky", hsNow, now) : null,
-    safeLeft = hsNow ? (now >= hsNow.resetsAt ? HUSTLE.safe.perDay : hsNow.safeLeft) : null,
-    // short versions of the two messages, for the small action tiles (the toast gets the full sentence)
-    safeTile = safeWhy && `${safeLeft <= 0 ? "Both used today" : "Cooldown"}. Back in ${waitText(safeHustleAt(hsNow, now) - now)}`,
-    riskyTile = riskyWhy && `Tried today. Back in ${waitText(hsNow.resetsAt - now)}`;
-  const ACTIONS = [
-    {
-      id: "rest",
-      icon: "moon",
-      name: "Rest",
-      note: "Free. Win back energy.",
-      run: () => act("rest"),
-      off: false,
-    },
-    {
-      id: "hustle",
-      icon: "hustle",
-      name: "Safe hustle",
-      note: `${HUSTLE.safe.energy} energy. ${fmtN(HUSTLE.safe.min)} to ${fmtN(HUSTLE.safe.max)}.${safeLeft != null ? ` ${safeLeft} left today.` : ""}`,
-      run: () => act("hustle"),
-      off: c.energy < HUSTLE.safe.energy || !!safeWhy,
-      why: c.energy < HUSTLE.safe.energy ? `Needs ${HUSTLE.safe.energy} energy` : safeTile,
-    },
-    {
-      id: "risky",
-      icon: "dice",
-      name: "Risky hustle",
-      note: `VERY RISKY — ${fmtN(HUSTLE.risky.min)}–${fmtN(HUSTLE.risky.max)}`,
-      run: risky,
-      off: c.energy < HUSTLE.risky.energy || !!riskyWhy,
-      why: c.energy < HUSTLE.risky.energy ? `Needs ${HUSTLE.risky.energy} energy` : riskyTile,
-      tone: "risk",
-    },
-    {
-      id: "call",
-      icon: "call",
-      name: "Call parent",
-      note: st.calledThisWeek ? "Done for this week." : "Once a week.",
-      run: call_,
-      off: st.calledThisWeek,
-      why: "Done this week",
-      free: true,
-    },
-  ];
   return (
     <GameHome
       key="game"
@@ -447,8 +320,9 @@ export default function Play() {
       now={now}
       busy={busy}
       left={left}
-      actions={ACTIONS}
-      exam={exam}
+      onSleep={sleepIn}
+      onWake={wakeUp}
+      onCall={call_}
       bail={bail}
     />
   );

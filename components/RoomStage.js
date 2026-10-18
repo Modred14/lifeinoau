@@ -5,9 +5,9 @@ import { Icon } from "./Icon";
 
 /** The 3D room. It owns the canvas and a small tool bar that floats above the selected piece of furniture.
  *  `apiRef.current` gives the parent the scene's methods (rotateView, pulse, rotateSelected). */
-export default function RoomStage({ room, items, look, gender, mode, selected, onSelect, onMove, apiRef, tool }) {
+export default function RoomStage({ room, items, look, gender, mode, selected, onSelect, onMove, onUse, onAsleep, onAwake, apiRef, tool }) {
   const box = useRef(null), bar = useRef(null), scene = useRef(null), cbs = useRef({}), [ready, setReady] = useState(false), [failed, setFailed] = useState(false);
-  cbs.current = { onSelect, onMove };
+  cbs.current = { onSelect, onMove, onUse, onAsleep, onAwake };
   const roomKey = room ? `${room.w}x${room.d}:${room.theme}:${room.layout ?? ""}:${room.grime ?? 0}` : "", lookKey = JSON.stringify([look ?? null, gender]);
 
   useEffect(() => {
@@ -15,7 +15,7 @@ export default function RoomStage({ room, items, look, gender, mode, selected, o
     (async () => {
       try {
         const { createRoomScene } = await import("../lib3d/room.js"); if (!alive) return;
-        s = createRoomScene(box.current, { onSelect: (id) => cbs.current.onSelect?.(id), onMove: (id, p) => cbs.current.onMove?.(id, p) });
+        s = createRoomScene(box.current, { onSelect: (id) => cbs.current.onSelect?.(id), onMove: (id, p) => cbs.current.onMove?.(id, p), onUse: (u) => cbs.current.onUse?.(u), onAsleep: (id) => cbs.current.onAsleep?.(id), onAwake: () => cbs.current.onAwake?.() });
         s.attachToolbar(bar.current); scene.current = s; if (apiRef) apiRef.current = s; setReady(true);
       } catch (e) { console.error("3D room unavailable", e); if (alive) setFailed(true); }
     })();

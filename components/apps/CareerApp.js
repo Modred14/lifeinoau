@@ -1,19 +1,26 @@
 // components/apps/CareerApp.js: lives inside the phone (see components/Phone.js)
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { call, naira } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { game, run, cash, bump, canAfford, useResource } from "@/lib/gameStore";
 import { confirmAction } from "@/lib/confirm";
+import { serverTime } from "@/lib/serverClock";
+import { waitText } from "@/lib/engine";
 import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
 
 const k = (n) => "₦" + n.toLocaleString("en-NG");
+const hhmm = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const SHIFT_ICON = { morning: "☀", night: "☾" };
 
 export default function Career() {
   // Kept between visits: reopening is instant and refreshes quietly. Everything you do here shows at once and is undone if refused.
   const { d, store, load, loadFailed, router } = useResource("/api/career");
   const [tab, setTab] = useState("jobs");
+  // A ticking clock for the shift desk. It is the SERVER's clock (lib/serverClock.js), so two devices agree; the server decides everything that matters.
+  const [now, setNow] = useState(() => serverTime());
+  useEffect(() => { const t = setInterval(() => setNow(serverTime()), 1000); return () => clearInterval(t); }, []);
   const [form, setForm] = useState({ type: "", name: "" }),
     [amt, setAmt] = useState({});
 
@@ -39,26 +46,16 @@ export default function Career() {
   });
   const job = (action, extra) => {
     const j = d.job;
-    if (action === "work") {
-      if (game.get() && game.get().character.energy < j.energy)
-        return toast.error("You are too tired for a shift.");
-      return go("/api/career/job", { action }, {
-        local: (x) => ({
-          ...x,
-          job: {
-            ...x.job,
-            xp: x.job.xp + 1,
-            level: Math.min(10, Math.floor((x.job.xp + 1) / 5)),
-            shiftsToNext: x.job.shiftsToNext <= 1 ? 5 : x.job.shiftsToNext - 1,
-            shiftsThisWeek: x.job.shiftsThisWeek + 1,
-          },
-        }),
-        me: bump({ energy: -j.energy }), // the pay is random: it is added the moment the server says how much
-        after: (r) => [{ store: game, patch: cash(r.paidKobo ?? 0) }],
+    // Shifts are decided by the server: clock in (start), clock out and collect (claim) or walk off (abandon). Nothing is paid or taken here
+    // until it answers, and the answer is whatever the server worked out from its own clock.
+    if (action === "start" || action === "claim" || action === "abandon")
+      return go("/api/career/job", { action, ...extra }, {
+        pending: action === "claim" ? "Clocking out…" : action === "start" ? "Clocking in…" : "Leaving the shift…",
         okLate: (r) =>
-          `Shift done. You earned ${naira(r.paidKobo)}.${r.levelUp ? ` You reached job level ${r.levelUp}!` : ""}`,
-      });
-    }
+          action === "claim"
+            ? r.duplicate ? "That shift was already paid." : `Shift done. You earned ${naira(r.paidKobo)}.${r.levelUp ? ` You reached job level ${r.levelUp}!` : ""}`
+            : r.note ?? "Done.",
+      }).then((res) => { if (!res?.failed) { load(); game.refresh?.(); } return res; }); // the server's view: new shift state, energy and cash
     if (action === "quit")
       return go("/api/career/job", { action }, {
         ok: "You quit your job.",
@@ -161,44 +158,75 @@ export default function Career() {
 
       {tab === "jobs" && (
         <>
-          {j && (
-            <div className="card">
-              <div className="top">
-                <h2>{j.title}</h2>
-                <span className="mut">job level {j.level}</span>
+          {j && (() => {
+            const act = j.active, gmin = (d.gameMinute + Math.floor((now - d.serverNow) / 60000)) % 1440;
+            const left = act ? Math.max(0, act.endsAt - now) : 0, pct = act ? Math.min(100, Math.round(((now - act.startedAt) / (act.endsAt - act.startedAt)) * 100)) : 0;
+            const nextIn = j.nextShiftAt ? Math.max(0, j.nextShiftAt - now) : 0;
+            return (
+              <div className="card shift-desk">
+                <div className="top">
+                  <h2>{j.title}</h2>
+                  <span className="mut">job level {j.level}</span>
+                </div>
+                <p className="mut">
+                  Game time <b className="num">{hhmm(gmin)}</b> · {j.shiftsThisWeek} of {j.maxShifts} shifts this week · {j.shiftsToNext} more for the next level
+                </p>
+                {act ? (
+                  <div className="shift-on" role="status" aria-live="polite">
+                    <b>{SHIFT_ICON[act.shift]} {act.shift === "night" ? "Night" : "Morning"} shift in progress</b>
+                    <div className="shift-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><i style={{ width: pct + "%" }} /></div>
+                    <p className="mut">
+                      Clocked in {hhmm(Math.floor(((act.startedAt - d.serverNow) / 60000 + d.gameMinute + 1440 * 2) % 1440))} · ends {hhmm(Math.floor(((act.endsAt - d.serverNow) / 60000 + d.gameMinute + 1440 * 2) % 1440))} ·{" "}
+                      {left > 0 ? `${waitText(left)} left` : "finished"} · pays {naira(act.payKobo)}
+                    </p>
+                    <div className="row">
+                      <button className="go" disabled={left > 0} onClick={() => job("claim")}>{left > 0 ? `Clock out in ${waitText(left)}` : `Clock out and collect ${naira(act.payKobo)}`}</button>
+                      {left > 0 && (
+                        <button
+                          onClick={async () => {
+                            if (await confirmAction({ title: "Walk off the shift?", message: "You get no pay, the energy is gone and today's shift is used up.", confirmLabel: "Walk off", cancelLabel: "Stay", tone: "danger" })) job("abandon");
+                          }}
+                        >
+                          Walk off
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {j.shifts.map((sh) => (
+                      <div className="led shift-opt" key={sh.key}>
+                        <span>
+                          {SHIFT_ICON[sh.key]} <b>{sh.label}</b>
+                          <br />
+                          <span className="mut">
+                            Clock in {sh.window} · {sh.hours} hours · {sh.energy} energy · {k(sh.payMin)}–{k(sh.payMax)}
+                          </span>
+                          {sh.blocked && <><br /><span className="mut shift-why">{sh.blocked}</span></>}
+                        </span>
+                        <button className="go" disabled={!!sh.blocked} onClick={() => job("start", { shift: sh.key })}>Clock in</button>
+                      </div>
+                    ))}
+                    {j.workedToday && (
+                      <p className="mut">
+                        You have worked today. Next shift opens at the start of tomorrow{nextIn > 0 ? `, in ${waitText(nextIn)}` : ""}.
+                      </p>
+                    )}
+                  </>
+                )}
+                <div className="row">
+                  <button
+                    disabled={!!act}
+                    onClick={async () => {
+                      if (await confirmAction({ title: "Quit your job?", message: "You lose your job experience.", confirmLabel: "Quit job", cancelLabel: "Keep job", tone: "danger" })) job("quit");
+                    }}
+                  >
+                    Quit
+                  </button>
+                </div>
               </div>
-              <p className="mut">
-                {j.shiftsThisWeek} of {j.maxShifts} shifts this week ·{" "}
-                {j.shiftsToNext} more for the next level · each shift costs{" "}
-                {j.energy} energy
-              </p>
-              <div className="row">
-                <button
-                  className="go"
-                  disabled={j.shiftsThisWeek >= j.maxShifts}
-                  onClick={() => job("work")}
-                >
-                  Work a shift
-                </button>
-                <button
-                  onClick={async () => {
-                    if (
-                      await confirmAction({
-                        title: "Quit your job?",
-                        message: "You lose your job experience.",
-                        confirmLabel: "Quit job",
-                        cancelLabel: "Keep job",
-                        tone: "danger",
-                      })
-                    )
-                      job("quit");
-                  }}
-                >
-                  Quit
-                </button>
-              </div>
-            </div>
-          )}
+            );
+          })()}
           <div className="card">
             <b>{j ? "Switch job (resets experience)" : "Pick a job"}</b>
             {d.jobs.map((x) => (
@@ -207,12 +235,12 @@ export default function Career() {
                   {x.title}
                   <br />
                   <span className="mut">
-                    {k(x.payMin)}–{k(x.payMax)} a shift · {x.energy} energy
+                    {k(x.payMin)}–{k(x.payMax)} a shift · {x.hours}h · {x.energy} energy · {x.shifts.map((q) => (q === "night" ? "night" : "morning")).join(" / ")}
                     {x.locked ? ` · ${x.locked}` : ""}
                   </span>
                 </span>
                 <button
-                  disabled={!!x.locked || j?.key === x.key}
+                  disabled={!!x.locked || j?.key === x.key || !!j?.active}
                   onClick={() => job("pick", { job: x.key })}
                 >
                   {j?.key === x.key ? "Current" : "Take"}
@@ -220,8 +248,7 @@ export default function Career() {
               </div>
             ))}
             <p className="mut">
-              Pay grows 12% for every job level. Five shifts use most of your
-              energy, so there is a trade-off with studying.
+              One shift a day, five a week. Night shifts pay 25% more and tire you more. Pay grows 12% for every job level.
             </p>
           </div>
         </>

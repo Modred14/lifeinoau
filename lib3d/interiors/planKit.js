@@ -28,7 +28,8 @@ export class Plan {
   enter(room, side, pos, w = 2.0) { this.entrance = { room, side, pos, w }; return this; }
   item(type, x, z, ry = 0, o = {}) { dimsOf({ type, ...o }); this.items.push({ type, x, z, ry, ...o }); return this; }
   npc(role, o = {}) { this.npcs.push({ role, mode: "wander", ...o }); return this; }
-  hub(x, z, label, action = 0, floor = 0) { this.hubs.push({ x, z, label, action, floor }); return this; }
+  /** A ring on the floor you can use. `action` indexes the place's page links; `act` (optional) opens an in-building activity instead (components/PlacePanels.js). */
+  hub(x, z, label, action = 0, floor = 0, act = null) { this.hubs.push(act ? { x, z, label, action, floor, act } : { x, z, label, action, floor }); return this; }
   frame(room, back = "n") { return frame(this, typeof room === "string" ? this.byId.get(room) : room, back); }
   /** A straight stair in its own narrow room. `low` is the end the ground-floor door is at ("n" or "s"). Returns { ground, upper } room ids. */
   stairwell(id, x, z0, z1, low = "n", o = {}) {
@@ -53,7 +54,7 @@ export function frame(p, room, back = "n") {
     row(type, u0, u1, v, n, o = {}) { for (let i = 0; i < n; i++) F.add(type, n === 1 ? (u0 + u1) / 2 : u0 + ((u1 - u0) * i) / (n - 1), v, { ...o, n: i }); return F; },
     /** Someone standing (or sitting) at (u, v). `face`: "front" looks at the door wall, "back" at the back wall, or an angle. */
     person(role, u, v, o = {}) { const [x, z] = to(u, v), face = o.face ?? "front", yaw = typeof face === "number" ? face : face === "front" ? ry0 : ry0 + PI; p.npc(role, { room: room.id, floor: room.floor, x, z, yaw, mode: o.mode ?? "stand", ...(o.pool ? { pool: o.pool } : {}) }); return F; },
-    hub(u, v, label, action = 0) { const [x, z] = to(u, v); p.hub(x, z, label, action, room.floor); return F; },
+    hub(u, v, label, action = 0, act = null) { const [x, z] = to(u, v); p.hub(x, z, label, action, room.floor, act); return F; },
   };
   return F;
 }

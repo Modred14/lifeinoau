@@ -29,14 +29,15 @@ const C = {
 };
 const L = [],
   AL = [],
-  BZ = [];
+  BZ = [],
+  JS = []; // job shifts (the full shift rules are tested against a real database in tests/pg/jobs.pg.mjs)
 let bid = 1n;
 const sys = { WORLD: A.W, BUSINESS: A.B };
 const tx = {
   $queryRaw: async () => [],
   gameClock: {
     findUnique: async () => ({
-      startedAt: new Date(Date.now() - (week - 1) * 864e5 - 1000),
+      startedAt: new Date(Date.now() - 8 * 3600e3), // 08:00 on day 1 of the game clock: the morning shift window is open
     }),
   },
   character: {
@@ -79,6 +80,13 @@ const tx = {
       AL.filter((a) => a.action == where.action && a.gameWeek == where.gameWeek)
         .length,
   },
+  jobShift: {
+    findFirst: async ({ where = {} } = {}) => JS.find((x) => (!where.status || x.status === where.status) && (where.gameDay == null || x.gameDay === where.gameDay)) ?? null,
+    count: async () => JS.length,
+    create: async ({ data }) => { JS.push({ id: BigInt(JS.length + 1), status: "ACTIVE", ...data }); return data; },
+    updateMany: async ({ where, data }) => { const x = JS.find((q) => q.id === where.id && q.status === where.status); if (x) Object.assign(x, data); return { count: x ? 1 : 0 }; },
+  },
+  hustleRun: { findFirst: async () => null },
   business: {
     count: async () => BZ.filter((b) => b.status == "ACTIVE").length,
     create: async ({ data }) => {
@@ -138,27 +146,19 @@ await t("pick Developer (Law student, 100L)", () =>
 await t("pick Vendor", () =>
   jobAction(db, "u1", { action: "pick", job: "vendor", requestId: rq() }),
 );
-for (let i = 1; i <= 6; i++) {
-  C.energy = 100;
-  await t(`vendor shift ${i}`, () =>
-    jobAction(db, "u1", { action: "work", requestId: rq() }),
-  );
-}
-console.log("     job xp", C.jobXp, "| job level up at 5 shifts");
-const same = rq();
 C.energy = 100;
-AL.length = 0;
-await jobAction(db, "u1", { action: "work", requestId: same });
-const xp = C.jobXp;
-await t("replay a shift request", () =>
-  jobAction(db, "u1", { action: "work", requestId: same }),
-);
-console.log("     xp unchanged:", C.jobXp === xp);
-C.energy = 5;
-AL.length = 0;
-await t("shift while exhausted", () =>
-  jobAction(db, "u1", { action: "work", requestId: rq() }),
-);
+await t("clock in: night shift at 08:00 (window opens 18:00)", () => jobAction(db, "u1", { action: "start", shift: "night", requestId: rq() }));
+const same = rq();
+await t("clock in: morning shift", () => jobAction(db, "u1", { action: "start", shift: "morning", requestId: same }));
+await t("replay the same clock-in request", () => jobAction(db, "u1", { action: "start", shift: "morning", requestId: same }));
+console.log("     one shift row:", JS.length === 1, "| energy taken once:", C.energy === 85);
+await t("a second shift while on shift", () => jobAction(db, "u1", { action: "start", shift: "morning", requestId: rq() }));
+await t("claim before the shift ends", () => jobAction(db, "u1", { action: "claim", requestId: rq() }));
+JS[0].endsAt = new Date(Date.now() - 1000);
+await t("claim after it ends", () => jobAction(db, "u1", { action: "claim", requestId: rq() }));
+await t("claim again", () => jobAction(db, "u1", { action: "claim", requestId: rq() }));
+console.log("     job xp", C.jobXp, "| paid once:", L.filter((e) => /shift/.test(e.memo)).length === 1);
+await t("a second shift the same in-game day", () => jobAction(db, "u1", { action: "start", shift: "morning", requestId: rq() }));
 C.energy = 100;
 // ----- businesses
 await t("start business at 100L", () =>

@@ -164,3 +164,13 @@
   .bs-card { width: 168px; padding: 8px; } .bs-thumb { height: 84px; } .bs-thumb img { width: 84px; height: 84px; }
   .bs-buy { min-height: 38px; } .bs-own { top: 12px; left: 12px; }
 }
+/* the room is the menu: what tapping the bed or the phone offers, and the sleeping panel */
+.gx-use, .gx-sleep { position: absolute; z-index: 6; left: var(--edge); right: var(--edge); bottom: calc(var(--nav-h) + 22px); max-width: 380px; margin: 0 auto; display: grid; gap: 8px; padding: 16px 18px; border-radius: 22px; background: var(--glass); backdrop-filter: blur(18px) saturate(1.35); -webkit-backdrop-filter: blur(18px) saturate(1.35); border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35); animation: gx-in 260ms var(--ease) both; }
+.gx-use h2, .gx-sleep h2 { display: flex; align-items: center; gap: 8px; margin: 0; font: 600 1.05rem var(--font-head); }
+.gx-use p, .gx-sleep p { margin: 0; font-size: 0.9rem; line-height: 1.4; }
+.gx-use .go, .gx-sleep .go { min-height: 46px; margin-top: 4px; }
+.gx-use-x { position: absolute; top: 10px; right: 10px; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.08); color: inherit; }
+.gx-sleep { text-align: center; }
+.gx-sleep h2 { justify-content: center; }
+.gx-sleep-t { font: 600 1.7rem/1.1 var(--font-head); letter-spacing: -0.02em; }
+@media (prefers-reduced-motion: reduce) { .gx-use, .gx-sleep { animation: none; } }
