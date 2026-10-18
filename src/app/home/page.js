@@ -1,5 +1,4 @@
 // src/app/home/page.js
-// src/app/play/page.js
 "use client";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -14,7 +13,7 @@ import { Icon } from "@/components/Icon";
 
 import GameHome from "@/components/GameHome";
 import { setBare, isBooted, markBooted } from "@/lib/ui";
-import { game, useGame, run as go, bump, cash, chain, deltas, canAfford } from "@/lib/gameStore";
+import { game, useGame, run as go, begin, finish, bump, cash, chain, deltas, canAfford } from "@/lib/gameStore";
 import { HUSTLE_NAMES } from "@/lib/activities";
 import { resolveAction, hustleBlock, safeHustleAt, bailFor, waitText, HUSTLE } from "@/lib/engine";
 import { confirmAction } from "@/lib/confirm";
@@ -22,6 +21,7 @@ import { serverTime } from "@/lib/serverClock";
 import { isJailed, isSuspended, isExpelled } from "@/lib/discipline";
 import { Custody, Suspension, Expulsion } from "@/components/DisciplineScreens";
 import { fmtN } from "@/lib/classes";
+import { wakeResult } from "@/lib/sleep";
 import "./play.css";
 
 function View({ children }) {
@@ -226,6 +226,44 @@ export default function Play() {
         BigInt(r.gift) > 0n &&
         toast.success(`Your parent sent you ${naira(r.gift)}.`, { sound: "coin" }),
     });
+
+  // ---- Sleeping. GameHome calls onSleep only once the character is lying on the bed, and onWake as soon as the player starts to get up.
+  // Both change the screen at once (taken back if the server refuses) and return the answer, so GameHome knows whether it failed.
+  const sleep_ = async (bedId) => {
+    const since = serverTime(),
+      handles = begin([{ store: game, patch: (s) => ({ ...s, sleep: { bedId: String(bedId), since } }) }]); // lying in bed shows at once
+    const res = await finish(
+      handles,
+      await call("/api/sleep", { action: "start", bedId: String(bedId), requestId: crypto.randomUUID() }),
+    );
+    if (res.failed) {
+      if (res.status === 401) loggedOut(router);
+      else notifyError(res, "You could not go to sleep. Please try again.");
+      return res;
+    }
+    game.refresh(); // the server's own start time replaces ours
+    return res;
+  };
+  const wake_ = async () => {
+    const s0 = game.get(),
+      sl = s0?.sleep,
+      r = sl ? wakeResult(s0.character, "single_bed", sl.since, serverTime()) : null; // the same rule the server uses (every bed sleeps at the same speed)
+    const handles = begin([
+      {
+        store: game,
+        patch: (s) => ({ ...s, sleep: null, character: r ? { ...s.character, energy: r.energy, health: r.health } : s.character }),
+      },
+    ]);
+    const res = await finish(handles, await call("/api/sleep", { action: "wake", requestId: crypto.randomUUID() }));
+    if (res.failed) {
+      if (res.status === 401) loggedOut(router);
+      else notifyError(res, "You could not wake up. Please try again.");
+      return res;
+    }
+    game.refresh(); // the server's real energy and health
+    return res;
+  };
+
   const bail = () => {
     if (!canAfford(bailFor(st.floorZero.releaseAt, serverTime())))
       return toast.error("You cannot afford the bail. Wait out your sentence.");
@@ -259,7 +297,7 @@ export default function Play() {
     setView("reveal");
   }
 
- if (view === "loading") return <Loader fullscreen label="Loading your life" />;
+  if (view === "loading") return <Loader fullscreen label="Loading your life" />;
   // if (view === "error")
   //   return (
   //     <View key={view}>
@@ -342,52 +380,8 @@ export default function Play() {
         <Suspension c={c} now={now} />
       </View>
     );
-  const hsNow = st.hustle,
-    safeWhy = hsNow ? hustleBlock("safe", hsNow, now) : null,
-    riskyWhy = hsNow ? hustleBlock("risky", hsNow, now) : null,
-    safeLeft = hsNow ? (now >= hsNow.resetsAt ? HUSTLE.safe.perDay : hsNow.safeLeft) : null,
-    // short versions of the two messages, for the small action tiles (the toast gets the full sentence)
-    safeTile = safeWhy && `${safeLeft <= 0 ? "Both used today" : "Cooldown"}. Back in ${waitText(safeHustleAt(hsNow, now) - now)}`,
-    riskyTile = riskyWhy && `Tried today. Back in ${waitText(hsNow.resetsAt - now)}`;
-  const ACTIONS = [
-    {
-      id: "rest",
-      icon: "moon",
-      name: "Rest",
-      note: "Free. Win back energy.",
-      run: () => act("rest"),
-      off: false,
-    },
-    {
-      id: "hustle",
-      icon: "hustle",
-      name: HUSTLE_NAMES.safe,
-      note: `At Oduduwa Hall. ${HUSTLE.safe.energy} energy. ${fmtN(HUSTLE.safe.min)} to ${fmtN(HUSTLE.safe.max)}.${safeLeft != null ? ` ${safeLeft} left today.` : ""}`,
-      run: () => goTo(HUSTLE_NAMES.safe, "Oduduwa Hall"),
-      off: c.energy < HUSTLE.safe.energy || !!safeWhy,
-      why: c.energy < HUSTLE.safe.energy ? `Needs ${HUSTLE.safe.energy} energy` : safeTile,
-    },
-    {
-      id: "risky",
-      icon: "dice",
-      name: HUSTLE_NAMES.risky,
-      note: `At the SUB. VERY RISKY — ${fmtN(HUSTLE.risky.min)}–${fmtN(HUSTLE.risky.max)}`,
-      run: () => goTo(HUSTLE_NAMES.risky, "the Student Union Building"),
-      off: c.energy < HUSTLE.risky.energy || !!riskyWhy,
-      why: c.energy < HUSTLE.risky.energy ? `Needs ${HUSTLE.risky.energy} energy` : riskyTile,
-      tone: "risk",
-    },
-    {
-      id: "call",
-      icon: "call",
-      name: "Call parent",
-      note: st.calledThisWeek ? "Done for this week." : "Once a week.",
-      run: call_,
-      off: st.calledThisWeek,
-      why: "Done this week",
-      free: true,
-    },
-  ];
+  // The old action tiles (rest, hustles, call) now live in the room itself: tap the bed to sleep, the phone to call home, and go to the
+  // map for hustles and exams. GameHome no longer takes `actions` or `exam`, so they are not passed.
   return (
     <GameHome
       key="game"
@@ -395,9 +389,10 @@ export default function Play() {
       now={now}
       busy={busy}
       left={left}
-      actions={ACTIONS}
-      exam={exam}
       bail={bail}
+      onSleep={sleep_}
+      onWake={wake_}
+      onCall={call_}
     />
   );
 }

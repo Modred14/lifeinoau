@@ -14,7 +14,8 @@ import { ITEMS, MAX_ITEMS, roomScore, sellKobo, priceKobo } from "@/lib/furnitur
 import { roomFor, autoPlace } from "@/lib/room.js";
 import { fmtN } from "@/lib/classes.js";
 import { bailFor, HUSTLE } from "@/lib/engine.js";
-import { SLEEP, wakeResult, minutesAsleep, minutesToFull } from "@/lib/sleep.js";
+import { SLEEP, wakeResult, msToFull, toMs } from "@/lib/sleep.js";
+import { serverTime } from "@/lib/serverClock";
 import { Icon } from "./Icon";
 import BuySheet from "./BuySheet";
 import "./game-home.css";
@@ -78,23 +79,71 @@ export default function GameHome({
     [rd?.room, c.hostel],
   ); // eslint-disable-line react-hooks/exhaustive-deps
   const items = rd?.items ?? [];
-  // ---- sleeping. The server keeps when you lay down and works out the energy when you wake; what is shown here is only an estimate from the same rules.
-  const [use, setUse] = useState(null),
+
+  // ---- sleeping.
+  // Tapping the bed makes the character walk over, sit, and lie down AT ONCE: nothing waits for the server. Only when the character is
+  // lying down is the server told (the 30 seconds start then, on the server's clock too). If it refuses, the character gets up and
+  // the reason is shown. While asleep, energy fills at a steady rate (100 in 30 seconds) and the screen shows it live; the server works
+  // out the real result when you wake, from the same rule (lib/sleep.js). You wake by yourself when you are full or after 30 seconds, by
+  // pressing Wake up, or by tapping the floor (you sit up, stand, and walk to where you tapped).
+  const [use, setUse] = useState(null), // the bed / phone the player tapped, waiting for "Go to sleep"
+    [going, setGoing] = useState(null), // id of the bed the character is walking to / lying down on, before the server has been told
+    [clock, setClock] = useState(() => serverTime()),
     sleeping = !!st.sleep,
     bedItem = sleeping ? items.find((i) => String(i.id) === String(st.sleep.bedId)) : null,
-    sleepRateOf = (key) => SLEEP.perGameMinute * (SLEEP.beds[key] ?? 1) * (c.personalities?.includes("Introvert") ? SLEEP.introvert : 1),
-    sleptMin = sleeping ? minutesAsleep(st.sleep.since, now) : 0,
-    rest = sleeping ? wakeResult(c, bedItem?.key ?? "single_bed", st.sleep.since, now) : null,
-    fmtHours = (m) => (m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`);
-  const lieDown = async (u) => {
+    bedKey = bedItem?.key ?? "single_bed",
+    since = sleeping ? toMs(st.sleep.since) : 0,
+    rest = sleeping ? wakeResult(c, bedKey, since, clock) : null, // what waking right now would give
+    endMs = sleeping ? msToFull(c, bedKey) : 0, // how long this sleep lasts: until full, never more than 30 seconds
+    elapsedMs = sleeping ? Math.max(0, clock - since) : 0,
+    secsLeft = Math.max(0, Math.ceil((endMs - elapsedMs) / 1000)),
+    pct = endMs > 0 ? Math.min(100, Math.round((elapsedMs / endMs) * 100)) : 100,
+    live = rest ? { ...c, energy: rest.energy, health: rest.health } : c; // the needs shown on the screen follow the sleep as it goes
+  // a quick clock only while asleep, so energy climbs smoothly without the whole page ticking the rest of the time
+  useEffect(() => {
+    if (!sleeping) return;
+    setClock(serverTime());
+    const t = setInterval(() => setClock(serverTime()), 250);
+    return () => clearInterval(t);
+  }, [sleeping]);
+  useEffect(() => {
+    if (sleeping) setGoing(null); // the server's answer (or the optimistic state) has arrived
+  }, [sleeping]);
+
+  const lieDown = (u) => {
     setUse(null);
-    const res = await onSleep(u.id);
-    if (!res?.failed) api.current?.goToBed(u.id); // the avatar walks to the bed and lies down once the server has put you to bed
+    if (api.current?.goToBed(u.id)) setGoing(u.id); // walk, sit, lie: starts this instant
+    else toast.error("Your character is not ready yet. Try again in a moment.");
   };
-  const wakeNow = async () => {
-    const res = await onWake();
-    if (!res?.failed) api.current?.wakeUp();
+  // the character is now lying on the bed: only NOW is the server told
+  const onAsleep = async (id) => {
+    const res = await onSleep(id);
+    if (res?.failed) {
+      api.current?.wakeUp(); // refused: get up again (the page already showed why)
+      setGoing(null);
+    }
   };
+  const waking = useRef(false);
+  /** Wake up. `visual` is false when the scene has already started the get-up itself (the player tapped the floor). */
+  const wakeNow = async (visual = true) => {
+    if (waking.current) return;
+    waking.current = true;
+    if (visual) api.current?.wakeUp(); // sit up, stand: the screen does not wait for the server
+    await onWake();
+    waking.current = false;
+  };
+  // asleep for the whole sleep (or full): get up by yourself, once per sleep
+  const autoWoke = useRef(false);
+  useEffect(() => {
+    if (!sleeping) {
+      autoWoke.current = false;
+      return;
+    }
+    if (!autoWoke.current && elapsedMs >= endMs) {
+      autoWoke.current = true;
+      wakeNow();
+    }
+  }, [sleeping, elapsedMs, endMs]); // eslint-disable-line react-hooks/exhaustive-deps
   // came back to the page while asleep: lie in the bed straight away (the room and the character may still be loading, so keep trying for a few seconds)
   useEffect(() => {
     if (!sleeping || !st.sleep.bedId) return;
@@ -269,7 +318,7 @@ export default function GameHome({
     sellLabel:
       BigInt(sel.paidKobo) > 0n ? fmtN(sellKobo(sel.paidKobo) / 100n) : null,
   };
-  const status = statusOf(c),
+  const status = statusOf(live),
     score = roomScore(items),
     mood =
       c.happiness >= 80
@@ -308,7 +357,10 @@ export default function GameHome({
           selected={selected}
           onSelect={setSelected}
           onMove={onMove}
-          onUse={(u) => !buying && setUse(u)}
+          onUse={(u) => !buying && !sleeping && !going && setUse(u)}
+          onAsleep={onAsleep}
+          onWakeTap={() => wakeNow(false)}
+          onSleepCancel={() => setGoing(null)}
           apiRef={api}
           tool={tool}
         />
@@ -479,7 +531,7 @@ export default function GameHome({
             </button>
             <div className="gx-needs">
               {NEEDS.map(([n, k, ic]) => {
-                const v = c[k],
+                const v = live[k], // while asleep, Energy and Health climb here as you sleep
                   tone =
                     k === "suspicion"
                       ? v >= 60
@@ -528,7 +580,7 @@ export default function GameHome({
       )}
 
       {/* the room itself is the menu: tap your bed to sleep, tap the phone on your desk or bedside table to call home */}
-      {!buying && use && !sleeping && (
+      {!buying && use && !sleeping && !going && (
         <section className="gx-use" role="dialog" aria-labelledby="use-h">
           <button type="button" className="gx-use-x" aria-label="Close" onClick={() => setUse(null)}>
             <Icon name="close" size={16} />
@@ -536,10 +588,9 @@ export default function GameHome({
           {use.kind === "bed" ? (
             <>
               <h2 id="use-h"><Icon name="moon" size={18} /> {ITEMS[use.key]?.name ?? "Your bed"}</h2>
-              <p>Lie down and sleep. You wake up with more energy the longer you sleep, up to 100. Energy now {c.energy}/100.</p>
+              <p>Lie down and sleep. Your energy fills up while you sleep, up to 100. Energy now {c.energy}/100.</p>
               <p className="mut">
-                About {Math.round(60 * sleepRateOf(use.key))} energy an hour
-                {c.energy < 100 ? `, full in about ${fmtHours(minutesToFull(c, use.key))}` : ""}.
+                {c.energy < 100 ? `Full in about ${Math.ceil(msToFull(c, use.key) / 1000)} seconds.` : "You are fully rested."} Tap the floor any time to get up.
               </p>
               <button type="button" className="go" disabled={busy || stopped || c.energy >= SLEEP.stopAt - 4} onClick={() => lieDown(use)}>
                 {c.energy >= SLEEP.stopAt - 4 ? "Not tired" : "Go to sleep"}
@@ -556,15 +607,31 @@ export default function GameHome({
           )}
         </section>
       )}
+      {!buying && going && !sleeping && (
+        <section className="gx-sleep" role="status" aria-live="polite">
+          <h2><Icon name="moon" size={18} /> Going to bed</h2>
+          <p className="mut">Tap the floor to cancel.</p>
+        </section>
+      )}
       {!buying && sleeping && (
         <section className="gx-sleep" role="status" aria-live="polite">
           <h2><Icon name="moon" size={18} /> Sleeping</h2>
-          <p className="gx-sleep-t num">{fmtHours(sleptMin)} asleep</p>
+          <p className="gx-sleep-t num">{secsLeft > 0 ? `Wakes in ${secsLeft}s` : "Waking up…"}</p>
           <p>
-            Energy {c.energy} <span className="mut">→</span> <b>{rest.energy}</b>
-            {rest.restored > 0 ? <span className="mut"> (+{rest.restored} so far)</span> : <span className="mut"> (rest at least {SLEEP.minMinutes} minutes to feel it)</span>}
+            Energy {c.energy} <span className="mut">→</span> <b>{rest.energy}</b> <span className="mut">/ 100</span>
           </p>
-          <button type="button" className="go" disabled={busy} onClick={wakeNow}>Wake up</button>
+          <div
+            className="gx-bar gx-bar--gold"
+            role="progressbar"
+            aria-label="Sleep progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={pct}
+          >
+            <i style={{ width: pct + "%" }} />
+          </div>
+          <p className="mut">Tap the floor to get up and walk.</p>
+          <button type="button" className="go" disabled={busy} onClick={() => wakeNow()}>Wake up</button>
         </section>
       )}
 

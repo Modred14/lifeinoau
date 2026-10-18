@@ -4,6 +4,10 @@
 //
 //   const room = createRoomScene(container, { onSelect(id|null), onMove(id, {x, z, rot}), onReady() });
 //   room.setRoom({ w, d, theme }); room.setItems(items); room.setAvatar(look, gender); room.setMode("home" | "buy");
+//
+// Sleep callbacks: onAsleep(id) the character is lying on the bed; onAwake() it is standing again beside the bed;
+// onWakeTap() the player tapped the floor to get up (the get-up has already started); onSleepCancel() the player tapped the
+// floor while the character was still walking to the bed.
 import * as THREE from "three";
 import { createStage } from "./stage.js";
 import { createAvatar } from "./avatar/loadAvatar.js";
@@ -748,34 +752,54 @@ export function createRoomScene(container, cb = {}) {
     }
   }
 
-  // ----- sleeping: the character walks to the bed, lies down on the mattress and breathes (the normal idle clip), then gets up beside it -----
+  // ----- sleeping: walk to the bed, sit on it, lie down. To wake: sit up, stand, then walk to where the player tapped -----
+  // There is no sit animation in the avatar library, so sitting is the normal idle pose lowered onto the bed and leaned back a little
+  // (the legs are inside the mattress). Every step is a smooth blend, so the character never jumps from one place to another.
   const USE_KIND = { iron_bunk: "bed", single_bed: "bed", double_bed: "bed", nightstand: "phone", desk: "phone" };
   const BED_TOP = { iron_bunk: 0.5, single_bed: 0.62, double_bed: 0.62 }; // height of the mattress top, from the furniture models
+  const HIP = 1.0, SIT_TILT = 0.3; // hip height of the character, and how far its back leans when sitting up (radians)
   const ease = (x) => x * x * (3 - 2 * x);
-  /** Where the character's origin (the feet) goes to lie on this bed: head to the headboard (local -Z), body on its back. */
-  function lyingPose(it) {
-    const t = it.t ?? targetOf(it.data), oz = UNIT_HEIGHT - 0.85; // head over the pillow (local -0.85), feet near the foot of the bed
-    return { x: t.x + Math.sin(t.yaw) * oz, y: (BED_TOP[it.data.key] ?? 0.6) + 0.12, z: t.z + Math.cos(t.yaw) * oz, yaw: t.yaw };
+  const mix = (a, b, k) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, z: a.z + (b.z - a.z) * k, yaw: lerpAngle(a.yaw, b.yaw, k), th: a.th + (b.th - a.th) * k });
+  /** Where the character goes when its body is tipped back by `th` (0 = upright, PI/2 = flat on its back) with the hips resting on the mattress. */
+  function bedPose(it, th) {
+    const t = it.t ?? targetOf(it.data), back = UNIT_HEIGHT - 0.85 - HIP + HIP * Math.sin(th);
+    return { x: t.x + Math.sin(t.yaw) * back, z: t.z + Math.cos(t.yaw) * back, y: (BED_TOP[it.data.key] ?? 0.6) + 0.12 - HIP * Math.cos(th), yaw: t.yaw, th };
   }
   function sleepStep(dt) {
     const s = me.sleep; if (!s) return;
-    if (s.stage === "walk" && !me.path.length && !me.moving) { s.stage = "lie"; s.t = 0; }
-    else if (s.stage === "lie") { s.t += dt / 0.9; if (s.t >= 1) { s.t = 1; s.stage = "asleep"; cb.onAsleep?.(s.id); } }
-    else if (s.stage === "rise") { s.t += dt / 0.8; if (s.t >= 1) { me.sleep = null; avRoot.rotation.x = 0; cb.onAwake?.(); } }
+    const adv = (secs, next) => { s.t += dt / secs; if (s.t >= 1) { s.t = 0; s.stage = next; return true; } return false; };
+    switch (s.stage) {
+      case "walk": if (!me.path.length && !me.moving) { s.stage = "sit"; s.t = 0; } break; // arrived beside the bed
+      case "sit": adv(0.9, "settle"); break;
+      case "settle": adv(0.5, "lie"); break;
+      case "lie": if (adv(1.1, "asleep")) cb.onAsleep?.(s.id); break;
+      case "up": adv(1.0, "rest"); break; // lying -> sitting
+      case "rest": adv(0.5, "stand"); break;
+      case "stand": if (adv(0.9, "done")) finishWake(); break; // sitting -> standing beside the bed
+    }
+  }
+  function finishWake() {
+    const tg = me.sleep?.target; me.sleep = null; avRoot.rotation.x = 0;
+    cb.onAwake?.();
+    if (tg) walkTo(tg[0], tg[1]); // then walk to where the player tapped
   }
   function applySleepPose() {
     const s = me.sleep; avRoot.rotation.order = "YXZ";
     if (!s || s.stage === "walk") { avRoot.rotation.x = 0; return; }
     const it = items.get(s.id); if (!it) { me.sleep = null; avRoot.rotation.x = 0; return; }
-    const p = lyingPose(it), k = s.stage === "lie" ? ease(s.t) : s.stage === "rise" ? 1 - ease(s.t) : 1;
-    avRoot.position.set(me.x + (p.x - me.x) * k, p.y * k, me.z + (p.z - me.z) * k);
-    avRoot.rotation.y = lerpAngle(me.yaw, p.yaw, k);
-    avRoot.rotation.x = (-Math.PI / 2) * k;
+    const sit = bedPose(it, SIT_TILT), stand = { x: me.x, y: 0, z: me.z, yaw: me.yaw, th: 0 }, k = ease(Math.min(1, s.t)), span = Math.PI / 2 - SIT_TILT;
+    const p = s.stage === "sit" ? mix(stand, sit, k)
+      : s.stage === "settle" || s.stage === "rest" ? sit
+      : s.stage === "lie" ? bedPose(it, SIT_TILT + span * k)
+      : s.stage === "up" ? bedPose(it, Math.PI / 2 - span * k)
+      : s.stage === "stand" ? mix(sit, stand, k)
+      : bedPose(it, Math.PI / 2); // asleep
+    avRoot.position.set(p.x, p.y, p.z); avRoot.rotation.y = p.yaw; avRoot.rotation.x = -p.th;
   }
-  /** Walk to the bed, then lie down. Returns false if there is no such bed or no character yet. */
+  /** Walk to the bed, then sit and lie down. Returns false if there is no such bed or no character yet. */
   function goToBed(id) {
-    const it = items.get(String(id)); if (!it || !av || USE_KIND[it.data.key] !== "bed") return false;
-    me.sleep = { id: String(id), stage: "walk", t: 0 };
+    const it = items.get(String(id)); if (!it || !av || me.sleep || USE_KIND[it.data.key] !== "bed") return false;
+    me.sleep = { id: String(id), stage: "walk", t: 0, target: null };
     const t = it.t ?? targetOf(it.data); walkTo(Math.floor(t.x + W / 2), Math.floor(t.z + D / 2)); // the bed is blocked, so this lands on the nearest free cell beside it
     return true;
   }
@@ -783,10 +807,18 @@ export function createRoomScene(container, cb = {}) {
   function lieInBed(id) {
     const it = items.get(String(id)); if (!it || !av) return false;
     const t = it.t ?? targetOf(it.data), c = nearestFree([Math.floor(t.x + W / 2), Math.floor(t.z + D / 2)], blocked()), [x, z] = cellWorld(...c);
-    me.x = x; me.z = z; me.path = []; me.sleep = { id: String(id), stage: "asleep", t: 1 };
+    me.x = x; me.z = z; me.path = []; me.sleep = { id: String(id), stage: "asleep", t: 1, target: null };
     return true;
   }
-  function wakeUp() { if (me.sleep?.stage !== "asleep") return false; me.sleep = { ...me.sleep, stage: "rise", t: 0 }; return true; }
+  /** Sit up, stand, then (if `cell` is given) walk to that cell. Does nothing unless the character is lying asleep or already getting up. */
+  function wakeUp(cell) {
+    const s = me.sleep; if (!s) return false;
+    if (s.stage === "asleep") { me.sleep = { ...s, stage: "up", t: 0, target: cell ?? null }; return true; }
+    if (s.stage === "up" || s.stage === "rest" || s.stage === "stand") { if (cell) s.target = cell; return true; } // already getting up: just change where to go
+    return false;
+  }
+  /** Stop going to bed while the character is still walking to it. */
+  function cancelSleep() { if (me.sleep?.stage !== "walk") return false; me.sleep = null; me.path = []; return true; }
 
   // ----- the character -----
   const blocked = () => blockedCells(placedList());
@@ -1041,9 +1073,16 @@ export function createRoomScene(container, cb = {}) {
     // tapping the bed or the phone asks the screen what to do (sleep / call home); the screen decides, the server enforces
     const used = d.id && items.get(d.id), kind = used && USE_KIND[used.data.key];
     if (kind) { cb.onUse?.({ id: d.id, key: used.data.key, kind }); return; }
-    if (me.sleep) return; // nobody wanders off while lying in bed
-    if (d.f && Math.abs(d.f.x) < W / 2 && Math.abs(d.f.z) < D / 2)
-      walkTo(Math.floor(d.f.x + W / 2), Math.floor(d.f.z + D / 2));
+    const onFloor = d.f && Math.abs(d.f.x) < W / 2 && Math.abs(d.f.z) < D / 2,
+      cell = onFloor ? [Math.floor(d.f.x + W / 2), Math.floor(d.f.z + D / 2)] : null;
+    if (me.sleep) {
+      if (!cell) return;
+      if (me.sleep.stage === "asleep") { if (wakeUp(cell)) cb.onWakeTap?.(); } // tapped the floor: sit up, stand, walk there
+      else if (me.sleep.stage === "walk") { if (cancelSleep()) { cb.onSleepCancel?.(); walkTo(...cell); } } // changed their mind on the way
+      else wakeUp(cell); // already getting up: just change where to go (ignored while settling into bed)
+      return;
+    }
+    if (cell) walkTo(...cell);
   }
 
   // ----- frame -----
@@ -1211,6 +1250,7 @@ export function createRoomScene(container, cb = {}) {
     goToBed,
     lieInBed,
     wakeUp,
+    cancelSleep,
     isAsleep: () => me.sleep?.stage === "asleep",
     isSleepBusy: () => !!me.sleep,
     attachToolbar: (e) => {
