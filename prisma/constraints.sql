@@ -32,3 +32,9 @@ ALTER TABLE "Bond" ADD CONSTRAINT bond_affection_range CHECK (affection BETWEEN 
 ALTER TABLE "Bond" ADD CONSTRAINT bond_kind_valid CHECK (kind IN ('TALKING','BESTIE','SNEAKY','BABE','ENGAGED','EX'));
 ALTER TABLE "LoveRequest" ADD CONSTRAINT loverequest_status_valid CHECK (status IN ('PENDING','ACCEPTED','DECLINED','CANCELLED','EXPIRED'));
 CREATE UNIQUE INDEX one_pending_love_request ON "LoveRequest" ("bondId", kind) WHERE status = 'PENDING';
+-- Lecturer encounters (see migration 20261018000000_lecture_encounters): one open encounter per player, one running N-QRS response per lecture room.
+ALTER TABLE "LectureEncounter" ADD CONSTRAINT lectureencounter_status_valid CHECK (status IN ('OPEN', 'SETTLED', 'EXPIRED'));
+ALTER TABLE "LectureEncounter" ADD CONSTRAINT lectureencounter_outcome_valid CHECK (outcome IS NULL OR outcome IN ('LOST', 'ESCAPED', 'ARRESTED'));
+ALTER TABLE "LectureEncounter" ADD CONSTRAINT lectureencounter_response_state_valid CHECK ("responseState" IS NULL OR "responseState" IN ('ACTIVE', 'DONE'));
+CREATE UNIQUE INDEX one_open_lecture_encounter ON "LectureEncounter" ("characterId") WHERE status = 'OPEN';
+CREATE UNIQUE INDEX one_active_lecture_response ON "LectureEncounter" ("venueId", "roomId") WHERE "responseState" = 'ACTIVE';

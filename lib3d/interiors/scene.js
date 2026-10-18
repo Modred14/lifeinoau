@@ -6,7 +6,8 @@
 import * as THREE from "three";
 import { createStage } from "../stage.js";
 import { createAvatar } from "../avatar/loadAvatar.js";
-import { createNpc, npcSpec, hashSeed } from "../avatar/npc.js";
+import { createNpc, npcSpec, hashSeed, lecturerSpec } from "../avatar/npc.js";
+import { incidentFrame } from "./lectureEncounter.js";
 import { ITEMS, dimsOf } from "./items.js";
 import { movePlayer, rayClip, EXIT_DEPTH, DOOR_H } from "./compile.js";
 
@@ -175,7 +176,7 @@ export async function createInteriorScene(container, c, opts = {}) {
 
   // ---- the player ----
   const input = opts.input ?? { jx: 0, jy: 0, run: false }, keys = new Set(), P = { x: c.spawn.x, z: c.spawn.z, y: 0, fl: 0, yaw: c.spawn.yaw ?? 0, moving: 0, run: false };
-  let shownFloor = 0, camYaw = P.yaw, camPitch = 0.4, camDist = 3.4, near = null, lastRoom = null, exited = false, cur = null, vp = null;
+  let locked = false, shownFloor = 0, camYaw = P.yaw, camPitch = 0.4, camDist = 3.4, near = null, lastRoom = null, exited = false, cur = null, vp = null;
   const player = new THREE.Group(); scene.add(player);
   let avatar = null; createAvatar(opts.look ?? null, opts.gender ?? "M").then((av) => { if (!alive) { av.dispose(); return; } avatar = av; player.add(av.root); }).catch(() => {
     if (!alive) return; const m = new THREE.Mesh(own(new THREE.CapsuleGeometry(0.25, 1.1, 4, 8).translate(0, 0.8, 0)), own(new THREE.MeshStandardMaterial({ color: "#2f62c4" }))); player.add(m); });
@@ -188,18 +189,25 @@ export async function createInteriorScene(container, c, opts = {}) {
   const wh = (e) => { camDist = Math.max(1.6, Math.min(10, camDist * (1 + Math.sign(e.deltaY) * 0.08))); };
   el.addEventListener("pointerdown", pd); el.addEventListener("pointermove", pm); el.addEventListener("pointerup", pu); el.addEventListener("pointercancel", pu); el.addEventListener("wheel", wh, { passive: true });
 
-  function activate() { if (near) opts.onHub?.(near.h); }
+  function activate() { if (near && !locked) opts.onHub?.(near.h); }
   const setClip = (av, name, o) => { if (!av || !av.has?.(name)) return false; return av.play(name, o); };
 
   // ---- people ----
-  const people = [], spec = c.npcs; let loadIdx = 0;
+  const people = [], spec = c.npcs, lecturers = (opts.lecturers ?? []).filter((l) => spec[l.npcIndex]); let loadIdx = 0;
   const startNpc = async (n, i) => {
     const role = NPC_ROLE[n.role] ?? "student", seed = `${c.id}:${i}`;
-    try { const av = await createNpc(npcSpec(seed, { role, gender: hashSeed(seed) & 1 ? "F" : "M" })); if (!alive) { av.dispose(); return; }
-      const p = { av, n, x: n.x, z: n.z, yaw: n.yaw ?? 0, f: n.floor ?? 0, path: null, pi: 0, wait: Math.random() * 3, clip: null, mode: n.mode, ph: Math.random() * 6.28, h: hashSeed(seed) >>> 0 }; people.push(p); scene.add(av.root); place(p);
+    const lec = lecturers.find((l) => l.npcIndex === i); // a lecturer of the player's: the same person as in the fight, with their name above them
+    try { const av = await createNpc(lec ? lecturerSpec(lec.name, lec.difficulty) : npcSpec(seed, { role, gender: hashSeed(seed) & 1 ? "F" : "M" })); if (!alive) { av.dispose(); return; }
+      if (lec) { const tag = new THREE.Sprite(own(new THREE.SpriteMaterial({ map: textTexture(lec.name, { bg: "rgba(13,19,33,0.82)", fg: "#ffe9a6" }, 4.6), transparent: true, toneMapped: false, depthWrite: false }))); tag.scale.set(1.9, 0.41, 1); tag.position.set(0, (av.height ?? 1.75) + 0.45, 0); av.root.add(tag); }
+      const p = { i, av, n, x: n.x, z: n.z, yaw: n.yaw ?? 0, f: n.floor ?? 0, path: null, pi: 0, wait: Math.random() * 3, clip: null, mode: n.mode, ph: Math.random() * 6.28, h: hashSeed(seed) >>> 0 }; people.push(p); scene.add(av.root); place(p);
       const pick = n.mode === "sit" ? "sit" : n.mode === "dance" ? "cheer" : ["idle", "idle", "talk", "phone", "lookAround"][p.h % 5]; if (!setClip(av, pick, { fade: 0 })) setClip(av, "idle", { fade: 0 }); p.clip = pick; if (n.mode === "dance") av.setSpeed?.(0.9 + (p.h % 5) * 0.1);
     } catch { /* this person just does not appear */ }
   };
+  // each of the player's lecturers who stands in this building gets a ring to walk up to them (the server decides if the confrontation is allowed)
+  for (const l of lecturers) { const n = spec[l.npcIndex], fx = Math.sin(n.yaw ?? 0), fz = Math.cos(n.yaw ?? 0), h = { x: n.x + fx * 1.4, z: n.z + fz * 1.4, label: `Confront ${l.name}`, action: "lecture", code: l.code, floor: n.floor ?? 0, lecturer: l };
+    const ring = new THREE.Mesh(own(new THREE.RingGeometry(0.42, 0.58, 28).rotateX(-Math.PI / 2)), own(new THREE.MeshBasicMaterial({ color: "#ff6a4a", transparent: true, opacity: 0.9, toneMapped: false, side: THREE.DoubleSide }))); ring.position.set(h.x, fl(h.floor) + 0.03, h.z); scene.add(ring);
+    const sp = new THREE.Sprite(own(new THREE.SpriteMaterial({ map: textTexture(h.label, { bg: "rgba(60,16,12,0.86)", fg: "#ffd6cc" }, 4.8), transparent: true, toneMapped: false, depthWrite: false }))); sp.scale.set(2.4, 0.5, 1); sp.position.set(h.x, fl(h.floor) + 2.15, h.z); scene.add(sp); hubObjs.push({ h, ring, sp, f: h.floor }); }
+
   const place = (p) => { p.av.root.position.set(p.x, fl(p.f) + 0.02, p.z); p.av.root.rotation.y = p.yaw; };
   (async () => { const worker = async () => { while (alive && loadIdx < spec.length) { const i = loadIdx++; await startNpc(spec[i], i); } }; await Promise.all([worker(), worker(), worker()]); })();
   const stepNpc = (p, t, dt) => {
@@ -213,6 +221,33 @@ export async function createInteriorScene(container, c, opts = {}) {
     } else if (p.mode === "dance") p.av.root.position.y = fl(p.f) + 0.02 + Math.abs(Math.sin(t * 5 + p.ph)) * 0.03;
   };
 
+  // ---- the N-QRS response ----
+  // The picture of an incident comes from lectureEncounter.js (a pure function of server time since the fight was settled); this only draws it.
+  let inc = null, incSeq = 0;
+  const OFFICER_LOD = { shadowAt: 0, halfAt: 8, hideAt: 40 }, nearestPath = (a, b) => { const pth = c.nav?.[0]?.path?.(a[0], a[1], b[0], b[1]); return pth && pth.length > 1 ? pth : [a, b]; };
+  const stopIncident = () => { if (!inc) return; const k = inc; inc = null; for (const cop of k.cops) if (cop.av) { scene.remove(cop.av.root); cop.av.dispose?.(); } const lp = people.find((q) => q.i === k.npcIndex); if (lp) { lp.av.root.rotation.order = "XYZ"; lp.av.root.rotation.set(0, lp.yaw, 0); place(lp); } if (k.outcome !== "ARRESTED") locked = false; opts.onFade?.(0); };
+  /** Plays the response for a settled fight: { id, outcome, settledAt (server ms), clock: () => server ms now, npcIndex }. Safe to call again for the same id (a reconnect). */
+  function playIncident(o) {
+    if (inc?.id === o.id) return true; stopIncident(); if (o.outcome === "LOST" || !spec[o.npcIndex]) return false;
+    const n = spec[o.npcIndex], fx = Math.sin(n.yaw ?? 0), fz = Math.cos(n.yaw ?? 0), stand = [n.x + fx * 1.1, n.z + fz * 1.1], spot = [n.x + fx * 2.5, n.z + fz * 2.5], inside = [c.spawn.x, c.spawn.z];
+    const door = c.porch ? [c.porch.axis === "x" ? c.porch.pos : c.porch.line, c.porch.axis === "x" ? c.porch.line : c.porch.pos] : inside, far = c.porch ? [door[0] + c.porch.out[0] * 16, door[1] + c.porch.out[1] * 16] : inside;
+    if (route) { route.done(false); route = null; } pose = null; P.x = spot[0]; P.z = spot[1]; P.fl = 0; P.y = fl(0); // you were standing in front of the lecturer when it happened
+    const from = o.outcome === "ARRESTED" ? spot : stand, inbound = [far, door, ...nearestPath(inside, stand)], outbound = [from, ...nearestPath(from, inside).slice(1), door, far];
+    const id = ++incSeq; inc = { id: o.id, seq: id, outcome: o.outcome, npcIndex: o.npcIndex, clock: o.clock, settledAt: o.settledAt, inbound, doorAt: Math.hypot(door[0] - far[0], door[1] - far[1]), outbound, lecturerAt: [n.x, n.z], playerAt: spot, cops: [{}, {}], ended: false, fade: 0 };
+    if (o.outcome === "ARRESTED") locked = true; input.jx = input.jy = 0;
+    [["a", "M"], ["b", "F"]].forEach(async ([k, g], i) => { try { const av = await createNpc(npcSpec("dsa:" + k, { gender: g, role: "officer" })); if (!alive || !inc || inc.seq !== id) { av.dispose(); return; } av.root.visible = false; scene.add(av.root); inc.cops[i].av = av; } catch { /* that officer does not appear */ } });
+    return true;
+  }
+  const stepIncident = (t, dt) => {
+    if (!inc) return; const k = inc, f = incidentFrame({ outcome: k.outcome, elapsedMs: k.clock() - k.settledAt, inbound: k.inbound, doorAt: k.doorAt, outbound: k.outbound, lecturerAt: k.lecturerAt, playerAt: k.playerAt });
+    f.officers.forEach((o, i) => { const cop = k.cops[i]; if (!cop?.av) return; const r = cop.av.root; r.visible = o.visible; if (!o.visible) return; r.position.set(o.x, fl(0) + 0.02, o.z); r.rotation.y = o.yaw;
+      const want = o.walking ? "walk" : "idle"; if (cop.clip !== want && setClip(cop.av, want, { fade: 0.2 })) cop.clip = want; cop.av.tick(t, dt, Math.hypot(o.x - camera.position.x, o.z - camera.position.z), OFFICER_LOD); });
+    const lp = people.find((q) => q.i === k.npcIndex); if (lp) { const r = lp.av.root; if (f.lecturer === "down") { r.rotation.order = "YXZ"; r.rotation.set(-Math.PI / 2, lp.yaw, 0); r.position.set(lp.x, fl(lp.f) + 0.16, lp.z); } else if (r.rotation.x !== 0) { r.rotation.order = "XYZ"; r.rotation.set(0, lp.yaw, 0); place(lp); } }
+    if (f.player) { P.x = f.player.x; P.z = f.player.z; P.yaw = f.player.yaw; P.moving = f.player.walking ? 0.5 : 0; P.run = false; }
+    if (Math.abs(f.fade - k.fade) > 0.04 || (f.fade === 0 && k.fade !== 0)) { k.fade = f.fade; opts.onFade?.(f.fade); }
+    if (f.done && !k.ended) { k.ended = true; opts.onIncidentEnd?.({ id: k.id, outcome: k.outcome }); if (k.outcome !== "ARRESTED") stopIncident(); }
+  };
+
   // ---- the frame ----
   const v3 = new THREE.Vector3(), look = new THREE.Vector3(), camPos = new THREE.Vector3(); let camInit = false;
   const setVis = () => { for (let f = 0; f < c.floors; f++) { groups[f].visible = f <= P.fl; for (const m of ceilMeshes[f]) m.visible = !(view === "overhead" && f >= P.fl); } for (const m of canopyMeshes) m.visible = view !== "overhead"; };
@@ -221,17 +256,18 @@ export async function createInteriorScene(container, c, opts = {}) {
     let mx = (input.jx ?? 0), mz = (input.jy ?? 0); if (keys.has("a") || keys.has("arrowleft")) mx -= 1; if (keys.has("d") || keys.has("arrowright")) mx += 1; if (keys.has("w") || keys.has("arrowup")) mz += 1; if (keys.has("s") || keys.has("arrowdown")) mz -= 1;
     if (keys.has("q")) camYaw += dt * 1.8; if (keys.has("e")) camYaw -= dt * 1.8;
     const mag = Math.min(1, Math.hypot(mx, mz)); P.run = !!input.run || keys.has("shift");
-    if (mag > 0.05 && !exited) {
+    if (mag > 0.05 && !exited && !locked) {
       if (route) { route.done(false); route = null; } // taking the controls ends an automatic walk
       const fx = Math.sin(camYaw), fz = Math.cos(camYaw), rx = -fz, rz = fx, dx = (fx * mz + rx * mx) / Math.hypot(mx, mz), dz = (fz * mz + rz * mx) / Math.hypot(mx, mz), sp = (P.run ? 3.7 : 1.9) * mag, total = sp * dt, steps = Math.max(1, Math.ceil(total / 0.08));
       for (let s = 0; s < steps; s++) movePlayer(c, P, (dx * total) / steps, (dz * total) / steps);
       let dh = Math.atan2(dx, dz) - P.yaw; dh = ((dh + Math.PI * 3) % (Math.PI * 2)) - Math.PI; P.yaw += dh * Math.min(1, dt * 12); P.moving = mag;
-    } else if (route && !exited) { // walking to a ring by itself, the way a player would
+    } else if (route && !exited && !locked) { // walking to a ring by itself, the way a player would
       const [tx, tz] = route.pts[route.i], dx = tx - P.x, dz = tz - P.z, d = Math.hypot(dx, dz), step = 1.9 * dt;
       if (d < 0.12) { route.i++; if (route.i >= route.pts.length) { const r = route; route = null; P.moving = 0; r.done(true); } }
       else { const k = Math.min(step, d) / d, n = Math.max(1, Math.ceil(Math.min(step, d) / 0.08)); for (let q = 0; q < n; q++) movePlayer(c, P, (dx * k) / n, (dz * k) / n);
         let dh = Math.atan2(dx, dz) - P.yaw; dh = ((dh + Math.PI * 3) % (Math.PI * 2)) - Math.PI; P.yaw += dh * Math.min(1, dt * 12); P.moving = 0.5; P.run = false; }
     } else P.moving = 0;
+    stepIncident(t, dt);
     if (P.fl !== shownFloor) { shownFloor = P.fl; setVis(); }
     player.position.set(P.x, P.y + 0.02, P.z); player.rotation.y = P.yaw;
     if (avatar) { const want = P.moving > 0.05 ? (P.run ? "run" : "walk") : pose ? (pose.find((n) => avatar.has?.(n)) ?? "idle") : "idle"; if (want !== cur && avatar.has?.(want) && avatar.play(want, { fade: 0.25 })) cur = want; if (pose && P.moving <= 0.05) avatar.setSpeed?.(1); else if (want !== "idle") avatar.setSpeed?.(Math.max(0.6, Math.min(1.6, P.moving * (P.run ? 1 : 1.05)))); avatar.update(t, dt); }
@@ -260,10 +296,10 @@ export async function createInteriorScene(container, c, opts = {}) {
   });
   setVis();
   const api = {
-    stage, setYaw(y) { camYaw = y; }, teleport(x, z, floor = 0) { P.x = x; P.z = z; P.fl = floor; P.y = c.floorY[floor] ?? 0; }, get view() { return view; }, get state() { return { x: P.x, z: P.z, y: P.y, floor: P.fl, yaw: P.yaw, people: people.length, exited }; }, setView(v) { view = v; setVis(); }, toggleView() { view = view === "follow" ? "overhead" : "follow"; setVis(); return view; }, use: activate, setPose(list) { pose = list?.length ? list : null; },
+    stage, setYaw(y) { camYaw = y; }, teleport(x, z, floor = 0) { P.x = x; P.z = z; P.fl = floor; P.y = c.floorY[floor] ?? 0; }, get view() { return view; }, get state() { return { x: P.x, z: P.z, y: P.y, floor: P.fl, yaw: P.yaw, people: people.length, exited }; }, setView(v) { view = v; setVis(); }, toggleView() { view = view === "follow" ? "overhead" : "follow"; setVis(); return view; }, use: activate, playIncident, stopIncident, get incident() { return inc ? { id: inc.id, outcome: inc.outcome } : null }, setPose(list) { pose = list?.length ? list : null; },
     /** Walk to a point on the current floor by the shortest clear path. Resolves true on arrival, false if it could not or you took the controls. */
     walkTo(x, z) { return new Promise((resolve) => { if (route) route.done(false); const nv = c.navPlayer[P.fl], path = nv.path(P.x, P.z, x, z); if (!path || path.length < 1) { resolve(false); return; } route = { pts: [...path.slice(1), [x, z]], i: 0, done: resolve }; }); },
-    dispose() { alive = false; if (route) { route.done(false); route = null; } window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); el.removeEventListener("pointerdown", pd); el.removeEventListener("pointermove", pm); el.removeEventListener("pointerup", pu); el.removeEventListener("pointercancel", pu); el.removeEventListener("wheel", wh);
+    dispose() { alive = false; stopIncident(); if (route) { route.done(false); route = null; } window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); el.removeEventListener("pointerdown", pd); el.removeEventListener("pointermove", pm); el.removeEventListener("pointerup", pu); el.removeEventListener("pointercancel", pu); el.removeEventListener("wheel", wh);
       for (const p of people) { scene.remove(p.av.root); p.av.dispose?.(); } people.length = 0; if (avatar) { player.remove(avatar.root); avatar.dispose?.(); avatar = null; }
       for (const o of toDispose) o.dispose?.(); toDispose.length = 0; for (const s of spots) s.L?.dispose?.(); scene.clear(); stage.dispose(); },
   };

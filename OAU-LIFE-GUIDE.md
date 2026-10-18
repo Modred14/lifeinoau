@@ -253,14 +253,22 @@ or API call can shorten or skip a running one. When an expulsion ends the player
 CGPA counted from the restart (`Character.restartWeek`; older exam results are kept, they just stop counting). The account, money, home, businesses, relationships, messages and
 achievements are untouched, and the weeks spent expelled are not caught up. Energy refills to 100 once per in-game day (`energyRefilledAt`), not in the weekly catch-up.
 
-**Fighting a lecturer.** On the Courses app, "Fight <lecturer>" (20 energy, once per week, behind a confirm) opens a full-screen 3D brawl
-(`components/LectureFight.js`, scene in `lib3d/lectureScene.js`). It plays itself (auto-fight) so you watch your character beat the lecturer, and you can
-take control at any moment (Punch / Kick / Block / Dodge buttons, or Space-J / K / hold L / S-D, T toggles auto). The brawl is `lib/fightSim.js`
-(pure, tested in `tests/fight.test.mjs`). The browser reports who won; `lib/fight.js` + `lib/fightService.js` decide the cost.
-If you lose: -20 health, -10 happiness, -5 popularity. If you win: **80% the QRS van comes** (`DSA_CATCH_PERCENT`): the cutscene shows the van arriving with sirens,
-officers chasing you down, carrying you into the van and driving you through the Floor O gate; the normal arrest rules apply (30% of cash seized, bill,
-sentence, a strike, reason "Beat up <lecturer>"). The other 20% you run away (+15 happiness, +8 popularity, +25 suspicion). The cutscenes are pure functions of
-time (`seek(name, t)` jumps to any moment) and have a Skip button.
+**Fighting a lecturer.** Every lecturer stands in a real lecture room (`lib/lectureVenues.js`: your four courses get four different rooms, in your faculty
+building first and then the big lecture theatres; the Courses app shows where, with a "Show on map" link). To confront one you travel to that building, go in,
+and walk up to the lecturer (the red ring with their name): the server checks from what it recorded (your last trip ended at that building and it heard
+from you there in the last 4 minutes, not in custody, suspended or expelled, 20 energy, once a week, nobody else's N-QRS response running in that room) and opens a
+10 minute **encounter** (`POST /api/lecture {action:"approach"}`, `lib/lectureService.js`, table `LectureEncounter`). The full-screen 3D brawl
+(`components/LectureFight.js`, `lib3d/lectureScene.js`, rules `lib/fightSim.js`, tested in `tests/fight.test.mjs`) is played against that encounter and
+`POST /api/fight` is refused without it. The browser reports who won; `lib/fight.js` + `lib/fightService.js` decide the cost and settle everything in ONE transaction.
+- **You lose:** -20 health, -10 happiness, -5 popularity. Nobody comes.
+- **You win, and slip away (20%):** +15 happiness, +8 popularity, +25 suspicion. N-QRS still arrives, rescues the lecturer, finds nobody to arrest and leaves (39 s).
+- **You win and N-QRS catches you (80%):** they arrive, **rescue the lecturer**, apprehend **you** and walk you out to Floor O (57 s). The usual arrest rules apply
+  (30% of cash seized, bill, sentence served inside Floor O, a strike, reason "Beat up <lecturer>"). The lecturer is never the one arrested.
+The response is a **timeline stamped by the server** from the moment the fight was settled (`lib/lectureResponse.js`); `lib3d/interiors/lectureEncounter.js`
+turns server time into where everyone stands and `lib3d/interiors/scene.js` draws it, so a refresh, a second tab or a reconnect resumes at the right moment
+(the state answer carries `lectureIncident`, and the map reopens the room) and nothing can restart or repeat it. Only one response can run per lecture room
+(partial unique index `one_active_lecture_response`), one open encounter per player (`one_open_lecture_encounter`), and one fight per week; a repeated fight request returns the
+recorded result (`duplicate: true`) instead of arresting again. Migration: `20261018000000_lecture_encounters`.
 
 **Parties.** Each of 0203, Royal Divas and Quantum hosts one party per week (price roughly ₦8k to ₦30k, limited
 capacity). One night out per player per week, with a random outcome on the night.
@@ -399,6 +407,8 @@ Run them all with `npm test`. Each file prints what it checked.
 |---|---|
 | `tick.test.mjs` | Weekly catch-up: sessions, withdrawal, graduation, childcare, pregnancy, businesses, no free energy |
 | `campus-clock.test.mjs` | The strict 1:1 clock: week and day boundaries derived from stored timestamps |
+| `lecture.test.mjs` | Lecture rooms and venues, the encounter, the N-QRS response timeline, one arrest per fight, no duplicate responses, replays and concurrent requests |
+| `lectureScene.test.mjs` | Where everyone stands during the response (pure), and every lecture room reachable from the front door |
 | `discipline.test.mjs` | 2 hour suspension, 5 hour expulsion and restart at 100L, daily energy, Floor O (N-QRS Custody): no escape, messaging allowed, persistence, auto-release, server-clock countdowns |
 | `p2p.test.mjs` | Player-to-player transfers, fee, replays |
 | `rl.test.mjs` | Rate limiter |

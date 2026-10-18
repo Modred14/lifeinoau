@@ -249,6 +249,35 @@ model FloorZero {
   @@index([characterId, status])
 }
 
+// A player confronting the lecturer of one of their courses, in that lecturer's lecture room (lib/lectureService.js, lib/lectureResponse.js).
+// OPEN from the moment the player approaches the lecturer until the fight is recorded, then SETTLED with an outcome. When the lecturer was knocked out
+// the row also holds the N-QRS response: when it reached the door and when it is over (server timestamps; every screen derives the sequence from them).
+model LectureEncounter {
+  id             BigInt    @id @default(autoincrement())
+  characterId    String
+  requestId      String // the approach request: repeating it returns the same encounter
+  courseCode     String
+  lecturerKey    String
+  lecturerName   String
+  venueId        String // map place id of the building the lecture room is in
+  roomId         String // the room inside that building
+  npcIndex       Int       @default(0) // which person in the interior plan is the lecturer
+  status         String    @default("OPEN") // OPEN | SETTLED | EXPIRED
+  outcome        String? // LOST | ESCAPED | ARRESTED, once settled
+  startedAt      DateTime  @default(now())
+  expiresAt      DateTime // an encounter not fought by now lapses
+  settledAt      DateTime?
+  qrsArriveAt    DateTime? // N-QRS reaches the door (ESCAPED and ARRESTED only)
+  responseEndsAt DateTime? // the response is over: the lecturer is secured and, when ARRESTED, the player has been taken to Floor O
+  responseState  String? // ACTIVE while the response runs: at most one per lecture room (see the migration), then DONE
+  floorZeroId    BigInt? // the custody record, when ARRESTED
+  result         Json? // what the player is shown afterwards: cash seized, bail, sentence end, strikes
+
+  @@unique([characterId, requestId])
+  @@index([characterId, status])
+  @@index([venueId, roomId, responseState])
+}
+
 model ExamResult {
   id          BigInt  @id @default(autoincrement())
   characterId String

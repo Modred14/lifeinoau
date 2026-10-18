@@ -38,3 +38,7 @@
 .lf-card .lf-go { background: #15803d; color: #fff; }
 .lf-card[data-tone="bad"] .lf-go { background: #c4202b; }
 @media (prefers-reduced-motion: reduce) { .lf-cap, .lf-card { animation: none; } }
+/* the result card shown over the lecture room after N-QRS has finished there (components/BuildingInside.js) */
+.lf-after { position: fixed; inset: 0; z-index: 90; pointer-events: none; }
+.lf-after .lf-card { pointer-events: auto; }
+.bi3-fade { position: fixed; inset: 0; z-index: 80; background: #000; pointer-events: none; }

@@ -10,7 +10,7 @@ import * as THREE from "three";
 import { createStage } from "./stage.js";
 import { makeFigure, pose, CHANNELS } from "./toonFigure.js";
 import { createAvatar } from "./avatar/loadAvatar.js";
-import { createNpc, npcSpec } from "./avatar/npc.js";
+import { createNpc, npcSpec, lecturerSpec } from "./avatar/npc.js";
 import { makeAvatarFigure } from "./avatar/figureRig.js";
 import { makeDsaVan, VAN } from "./dsaVan.js";
 import { buildWorld, ROAD_Z } from "./lectureWorld.js";
@@ -91,9 +91,7 @@ export async function createLectureScene(container, opts = {}) {
           holder.remove(toon.root); toon.dispose(); holder.add(fig.root); f.impl = fig; } catch (e) { console.warn("lecture scene: using the simple figure:", e); } } };
     toDispose.push(f); people.push(f); return f;
   };
-  const staff = (name) => { const h = hash(name), skins = Object.keys(SKIN_TONES); return { h, skin: skins[h % skins.length] }; };
-  const lecSpec = (() => { const { h, skin } = staff(lecturer.name), big = lecturer.difficulty > 1.3;
-    return npcSpec("lecturer:" + lecturer.name, { gender: "M", role: "staff", force: { bodyWidth: big ? 1.14 : 1.05, colors: { top: big ? "#7a1f33" : SHIRTS[h % SHIRTS.length], bottom: "#23262d" }, look: { skin, hair: "lowcut" } } }); })();
+  const lecSpec = lecturerSpec(lecturer.name, lecturer.difficulty); // the same person the lecture room shows
   const player = person({ skin: SKIN_TONES[look.skin], top: COLORS[look.top], bottom: COLORS[look.bottom], hair: hairFor(look.hair), width: gender === "F" ? 0.93 : 1, scale: look.height === "tall" ? 1 : look.height === "short" ? 0.9 : 0.95, long: false },
     () => createAvatar(look, gender)); // the player's own character, exactly as they made it
   const lec = person(lecturerLook(lecturer.name, lecturer.difficulty), () => createNpc(lecSpec));

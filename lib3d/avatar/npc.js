@@ -79,3 +79,12 @@ export async function createNpc(specOrSeed, opts = {}) {
   return av;
 }
 export { OUTFITS, COLORS };
+const LECTURER_SHIRTS = ["#4a6b8a", "#6b4a2e", "#3d6b55", "#7a5a8a", "#8a7a3c", "#5a6f93"];
+/**
+ * The person a named lecturer is: the SAME spec wherever they appear (the fight scene and the lecture room they teach in), derived from their name alone.
+ * `difficulty` above 1.3 makes the big, red-shirted one.
+ */
+export function lecturerSpec(name, difficulty = 1) {
+  const h = hashSeed(String(name)) >>> 0, skins = Object.keys(SKIN_TONES), skin = skins[h % skins.length], big = difficulty > 1.3;
+  return npcSpec("lecturer:" + name, { gender: "M", role: "staff", force: { bodyWidth: big ? 1.14 : 1.05, colors: { top: big ? "#7a1f33" : LECTURER_SHIRTS[h % LECTURER_SHIRTS.length], bottom: "#23262d" }, look: { skin, hair: "lowcut" } } });
+}

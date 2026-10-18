@@ -15,8 +15,13 @@ import "./lecture-fight.css";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** `course` is one entry from /api/courses: { code, difficulty, lecturer: { name } }. `onClose` runs when the player is done. */
-export default function LectureFight({ course, onClose }) {
+/**
+ * `course` is { code, difficulty, lecturer: { name } }. `encounter` is what POST /api/lecture (approach) returned: the fight is only accepted by the server
+ * against that open encounter, so it can only start from the lecture room. `onClose` runs when the player is done.
+ * With `onSettled`, a WIN does not play the van and Floor O scenes here: the result (with the N-QRS response timeline) is handed to the lecture room, which acts
+ * it out in the room itself and then shows the result card. A loss is shown here as before.
+ */
+export default function LectureFight({ course, encounter = null, onSettled = null, onClose }) {
   const router = useRouter(),
     st = useGame(),
     box = useRef(null),
@@ -39,10 +44,10 @@ export default function LectureFight({ course, onClose }) {
 
   // ---- tell the server how the brawl went, then play what happened ----
   const settle = useCallback(async () => {
-    const send = async () => call("/api/fight", { code: course.code, report: report.current, requestId: reqId.current });
+    const send = async () => call("/api/fight", { code: course.code, report: report.current, requestId: reqId.current, encounterId: encounter?.id });
     setPhase("cut");
     let [res] = await Promise.all([send(), sleep(1700)]); // a beat of silence over the knocked-out lecturer
-    while (alive.current && (res.failed || res.duplicate)) {
+    while (alive.current && (res.failed || (res.duplicate && !res.incident))) {
       if (res.status === 401) return loggedOut(router);
       const retry = await new Promise((resolve) => setResult({ error: res.duplicate ? "That fight was already recorded. Check your status on the game screen." : res.error || "We could not record the fight.", retry: res.duplicate ? null : () => resolve(true), done: () => resolve(false) }));
       if (!retry) return close();
@@ -50,11 +55,12 @@ export default function LectureFight({ course, onClose }) {
     }
     if (!alive.current) return;
     const s = scene.current, play = async (n) => { if (s && alive.current) await s.play(n); };
+    if (res.won && onSettled) { refreshGame(); onSettled(res); return; } // the lecture room plays what N-QRS does
     if (res.won && res.caught) { await play("dsa"); if (!skipAll.current) await play("floor0"); }
     else if (res.won) await play("escape");
     else await play("lost");
     if (alive.current) { setCap(null); setResult(res); setPhase("result"); refreshGame(); if (res.caught) playSound("warn"); }
-  }, [course.code, router, close, refreshGame]);
+  }, [course.code, encounter?.id, onSettled, router, close, refreshGame]);
 
   // ---- build the scene ----
   useEffect(() => setMounted(true), []);
@@ -143,7 +149,7 @@ export default function LectureFight({ course, onClose }) {
   return createPortal(ui, document.body);
 }
 
-function ResultCard({ res, name, onClose }) {
+export function ResultCard({ res, name, onClose }) {
   if (res.error)
     return (
       <div className="lf-card" role="alertdialog"><h2>Could not record it</h2><p>{res.error}</p>
@@ -158,9 +164,9 @@ function ResultCard({ res, name, onClose }) {
         <p>You knocked out {name} and N-QRS caught you ({DSA_CATCH_PERCENT}% chance, and the dice said yes).</p>
         <ul><li>Cash seized: <b>{naira(res.seizedKobo)}</b></li><li>Bill to leave early: <b>{naira(res.billKobo)}</b></li>{mins && <li>Sentence: about <b>{mins} min</b></li>}<li>Strikes: <b>{res.strikes}</b>{res.expelled ? " (expelled for 5 hours)" : res.suspended ? " (suspended for 2 hours)" : ""}</li></ul>
       </>)}
-      {escaped && <p>You knocked out {name} and left before the N-QRS van arrived. Happiness and fame up, but your suspicion jumped.</p>}
+      {escaped && <p>You knocked out {name} and slipped away. N-QRS came, rescued {name}, found nobody to arrest and left. Happiness and fame up, but your suspicion jumped.</p>}
       {!res.won && <p>{name} beat you and carried on with the class. Your health and happiness took a hit.</p>}
-      <button type="button" className="lf-go" onClick={onClose}>{caught ? "Go to the game" : "Back to class"}</button>
+      <button type="button" className="lf-go" onClick={onClose}>{caught ? "Go to Floor O" : "Back to class"}</button>
     </div>
   );
 }
