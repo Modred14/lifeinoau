@@ -19,6 +19,8 @@
 .rs[data-ready="1"] .rs-canvas { opacity: 1; }
 .rs-canvas canvas { cursor: default; }
 .rs-loading { position: absolute; inset: 0; display: flex; gap: 12px; align-items: center; justify-content: center; color: var(--muted); font-size: 0.95rem; pointer-events: none; }
+.rs-err { flex-direction: column; gap: 14px; text-align: center; padding: 0 28px; pointer-events: none; }
+.rs-err button { pointer-events: auto; }
 .rs-spin { width: 18px; height: 18px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.18); border-top-color: var(--green-text); animation: rs-rot 800ms linear infinite; }
 @keyframes rs-rot { to { transform: rotate(360deg); } }
 

@@ -9,6 +9,8 @@ import { Icon } from "@/components/Icon";
 import BillboardPanel from "@/components/BillboardPanel";
 import TravelSheet from "@/components/TravelSheet";
 import TripHud from "@/components/TripHud";
+import PlaceActivities from "@/components/PlaceActivities";
+import { featuresAt } from "@/lib/features.js";
 import BuildingInside from "@/components/BuildingInside";
 import { hasInterior } from "@/lib3d/interiors/registry.js";
 import { call, naira } from "@/lib/client";
@@ -29,7 +31,7 @@ export default function MapPage() {
     [places, setPlaces] = useState([]),
     [q, setQ] = useState("");
   const [bb, setBb] = useState(null);
-  const [data, setData] = useState(null), [sheet, setSheet] = useState(false), [trip, setTrip] = useState(null), [tripSt, setTripSt] = useState(null), [inside, setInside] = useState(null), [fade, setFade] = useState(false), [counts, setCounts] = useState({});
+  const [data, setData] = useState(null), [sheet, setSheet] = useState(false), [trip, setTrip] = useState(null), [tripSt, setTripSt] = useState(null), [inside, setInside] = useState(null), [fade, setFade] = useState(false), [counts, setCounts] = useState({}), [focus, setFocus] = useState(null), [want, setWant] = useState(null);
   const g = useGame(), ch = g?.character, here = ch ? placeOf(ch) : null, miniRef = useRef(null), previewRef = useRef(null), input = useRef({}).current, tripRef = useRef(null);
   tripRef.current = trip;
   // Serving a sentence: held at Floor O (N-QRS Custody) and not allowed to travel. The server refuses every trip too; this only stops offering it.
@@ -51,6 +53,16 @@ export default function MapPage() {
     return () => {
       on = false;
     };
+  }, []);
+  // The OAU Guide sends the player here with ?to=<place>&do=<activity> (or, when the map is already open, an "oau:goto" event):
+  // open that place's panel and highlight the activity.
+  useEffect(() => {
+    const apply = (to, act) => { if (!to) return; setSel(to); setWant(act || null); };
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("to")) { apply(q.get("to"), q.get("do")); window.history.replaceState(null, "", "/map"); }
+    const h = (e) => apply(e.detail?.to, e.detail?.act);
+    window.addEventListener("oau:goto", h);
+    return () => window.removeEventListener("oau:goto", h);
   }, []);
   useEffect(() => {
     if (!list) return;
@@ -83,12 +95,12 @@ export default function MapPage() {
   // ---- travelling ----
   // The trip starts the moment the player taps Go. The real players standing at the door are fetched alongside (handed over as a promise)
   // and drawn when the list arrives; if that request is slow or fails, the trip is not held up and the door is simply empty.
-  function begin(mode, withDriver) {
+  function begin(mode, withDriver, act = null) {
     const dest = L; if (!dest) return; setSheet(false);
     if (held) return toast.error(`You are held in ${CUSTODY_NAME}. You cannot travel until your sentence ends.`);
     const people = call("/api/travel?at=" + encodeURIComponent(dest.id)).then((r) => (r.failed ? [] : r.people ?? []));
     setTripSt(null); input.jx = input.jy = input.steer = input.gas = input.brake = 0; input.run = false;
-    setTrip({ id: crypto.randomUUID(), from: here, to: dest.id, mode, driver: withDriver, look: ch?.look ?? null, gender: ch?.gender ?? "M", car: ch?.activeCar || "", carColor: ch?.activeCarColor || "", people, name: dest.name });
+    setTrip({ id: crypto.randomUUID(), from: here, to: dest.id, mode, driver: withDriver, act, look: ch?.look ?? null, gender: ch?.gender ?? "M", car: ch?.activeCar || "", carColor: ch?.activeCarColor || "", people, name: dest.name });
     setSel(null);
   }
   async function pay() { // the vehicle has stopped: the fare leaves the wallet now, and you are at the new place
@@ -98,7 +110,7 @@ export default function MapPage() {
     return !res.failed;
   }
   function entered() { // only enclosed buildings open an interior; open-air places (billboards, grounds, statues, gates...) just end the trip with you standing there
-    const t = tripRef.current, p = t ? find(t.to) : null, indoors = !!p && hasInterior(p.id, p.kind); setFade(true); setTimeout(() => { if (t && indoors) setInside(t.to); else if (t) setSel(t.to); setTrip(null); setFade(false); }, 520); }
+    const t = tripRef.current, p = t ? find(t.to) : null, indoors = !!p && hasInterior(p.id, p.kind); setFade(true); setTimeout(() => { if (t && indoors) { setFocus(t.act ?? null); setInside(t.to); } else if (t) setSel(t.to); setTrip(null); setFade(false); }, 520); }
   const tripEnded = (why) => { setTrip(null); if (why === "error") toast.error("The trip could not start. Try again."); };
   const tripPlace = trip ? find(trip.to) : null, insidePlace = inside ? find(inside) : null;
   return (
@@ -121,8 +133,8 @@ export default function MapPage() {
       </div>
       {trip && <TripHud trip={trip} placeName={trip.name} st={tripSt} input={input} miniRef={miniRef} previewRef={previewRef} onCancel={() => setTrip(null)} />}
       <div className="trip-fade" data-on={fade ? "1" : undefined} aria-hidden="true" />
-      {insidePlace && <BuildingInside place={insidePlace} look={ch?.look ?? null} gender={ch?.gender ?? "M"} onLeave={() => setInside(null)} />}
-      {(sheet || direct) && L && <TravelSheet place={L} here={youPlace?.name} hasCar={ownsCar(ch)} driver={driverActive(ch, g?.week) ? { name: ch.driverName } : null} people={counts[L.id] ?? 0} onGo={begin} onClose={closeSheet} />}
+      {insidePlace && <BuildingInside place={insidePlace} look={ch?.look ?? null} gender={ch?.gender ?? "M"} focus={focus} onLeave={() => { setInside(null); setFocus(null); }} />}
+      {(sheet || direct) && L && <TravelSheet place={L} here={youPlace?.name} hasCar={ownsCar(ch)} driver={driverActive(ch, g?.week) ? { name: ch.driverName } : null} people={counts[L.id] ?? 0} distanceM={youPlace && L.located && youPlace.located ? Math.round(Math.hypot(L.x - youPlace.x, L.z - youPlace.z)) : null} character={ch} balanceKobo={g?.balanceKobo ?? null} jailed={held} highlight={want} onGo={begin} onClose={() => { closeSheet(); setWant(null); }} />}
       {youPlace && !trip && <div className="map-here" role="status"><Icon name="pin" size={14} weight="fill" /> {held ? <>You are held in <b>{CUSTODY_NAME}</b> until your sentence ends</> : <>You are at <b>{youPlace.name}</b></>}</div>}
       <div
         className="map-chrome"
@@ -176,6 +188,7 @@ export default function MapPage() {
               {L.id === here ? (hasInterior(L.id, L.kind) ? <button type="button" className="go go-there" onClick={() => setInside(L.id)}><Icon name="door" size={18} /> Go inside</button> : <p className="mut"><Icon name="pin" size={15} /> You are here. This is an open-air place, so there are no rooms to enter.</p>)
                 : <button type="button" className="go go-there" disabled={!L.located || !ch || held} onClick={() => setSheet(true)}><Icon name="nav" size={18} weight="fill" /> {held ? "Held in Floor O" : L.located ? "Go there" : "Not on the map yet"}</button>}
             </div>
+            {L.kind !== "billboard" && (() => { const fa = featuresAt(L.id, L.kind); return L.id === here ? <PlaceActivities activities={fa.activities} extra={fa.extra} links={[]} character={ch} balanceKobo={g?.balanceKobo ?? null} jailed={held} here highlight={want} actionLabel="Go inside and start" onDo={(a) => { setFocus(a.act); setInside(L.id); }} /> : null; })()}
             {L.actions?.length > 0 && (
               <div className="row">
                 {L.actions.map((a) => (

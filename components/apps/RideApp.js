@@ -9,7 +9,7 @@ import { Icon } from "../Icon";
 import { confirmAction } from "@/lib/confirm";
 import { toast } from "@/lib/toast";
 import { game, run, cash, canAfford, useResource } from "@/lib/gameStore";
-import CarPreview from "../CarPreview";
+import CarPreview from "../Carpreview";
 import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
 import "./ride-app.css";

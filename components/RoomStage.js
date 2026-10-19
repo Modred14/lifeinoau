@@ -7,7 +7,7 @@ import { Icon } from "./Icon";
  *  `apiRef.current` gives the parent the scene's methods (rotateView, pulse, rotateSelected, goToBed, wakeUp, cancelSleep, ...).
  *  Sleep callbacks: onAsleep(id) the character is lying down; onAwake() fully standing again; onWakeTap() the player tapped the floor
  *  to get up (the scene already runs the get-up); onSleepCancel() the player tapped the floor while still walking to the bed. */
-export default function RoomStage({ room, items, look, gender, mode, selected, onSelect, onMove, onUse, onAsleep, onAwake, onWakeTap, onSleepCancel, apiRef, tool }) {
+export default function RoomStage({ room, items, roomError, onRetry, look, gender, mode, selected, onSelect, onMove, onUse, onAsleep, onAwake, onWakeTap, onSleepCancel, apiRef, tool }) {
   const box = useRef(null), bar = useRef(null), scene = useRef(null), cbs = useRef({}), [ready, setReady] = useState(false), [failed, setFailed] = useState(false);
   cbs.current = { onSelect, onMove, onUse, onAsleep, onAwake, onWakeTap, onSleepCancel };
   const roomKey = room ? `${room.w}x${room.d}:${room.theme}:${room.layout ?? ""}:${room.grime ?? 0}` : "", lookKey = JSON.stringify([look ?? null, gender]);
@@ -33,15 +33,17 @@ export default function RoomStage({ room, items, look, gender, mode, selected, o
   }, [apiRef]);
 
   useEffect(() => { if (ready && room) scene.current.setRoom(room); }, [ready, roomKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (ready && room) scene.current.setItems(items ?? []); }, [ready, items, roomKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (ready && room && items) scene.current.setItems(items); }, [ready, items, roomKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (ready) scene.current.setAvatar(look ?? undefined, gender); }, [ready, lookKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (ready) scene.current.setMode(mode); }, [ready, mode]);
   useEffect(() => { if (ready) scene.current.select(selected ?? null, true); }, [ready, selected]);
 
   return (
-    <div className="rs" data-ready={ready ? "1" : "0"}>
+    <div className="rs" data-ready={ready && room && items ? "1" : "0"}>
       <div ref={box} className="rs-canvas" role="img" aria-label="Your room in 3D. Drag to look around. In Buy mode, drag furniture to move it." />
-      {!ready && !failed && <div className="rs-loading" aria-busy="true"><span className="rs-spin" />Setting up your room</div>}
+      {/* the room is only drawn when the 3D scene AND the room's data (size, look and furniture) are both here: never a half-furnished room */}
+      {(!ready || !room || !items) && !failed && !roomError && <div className="rs-loading" aria-busy="true" role="status"><span className="rs-spin" />Setting up your room</div>}
+      {roomError && !room && !failed && <div className="rs-loading rs-err" role="alert"><span>{roomError}</span><button type="button" className="go" onClick={() => onRetry?.()}>Try again</button></div>}
       {failed && <div className="rs-loading">Your room could not load on this device.</div>}
       <div ref={bar} className="rs-tb" data-on="0">
         {tool && (

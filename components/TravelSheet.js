@@ -7,12 +7,15 @@ import { Icon } from "./Icon";
 import { naira } from "@/lib/client";
 import { MODES, MODE_INFO, fareKobo, RIDE_SECONDS } from "@/lib/travel.js";
 import { canAfford } from "@/lib/gameStore";
+import PlaceActivities from "./PlaceActivities";
+import { featuresAt } from "@/lib/features.js";
 import "./travel.css";
 
-export default function TravelSheet({ place, here, hasCar, driver, people, onGo, onClose }) {
+export default function TravelSheet({ place, here, hasCar, driver, people, distanceM = null, character = null, balanceKobo = null, jailed = false, highlight = null, onGo, onClose }) {
   // `place.blurb` is the short description of the building; it shows under the title so the sheet can replace the info card.
   const [mode, setMode] = useState("trek"), [withDriver, setWithDriver] = useState(true);
   const fare = fareKobo(mode), poor = fare > 0n && !canAfford(fare), useDriver = mode === "car" && !!driver && withDriver;
+  const { activities, extra } = featuresAt(place.id, place.kind);
   const sub = (m) => (m === "car" ? (!hasCar ? "No car" : driver ? `${RIDE_SECONDS.driver}s with driver` : "You drive") : MODE_INFO[m].sub);
   return (
     <div className="ts-scrim" onClick={onClose}>
@@ -24,6 +27,10 @@ export default function TravelSheet({ place, here, hasCar, driver, people, onGo,
           <button type="button" className="ghost ts-x" aria-label="Close" onClick={onClose}><Icon name="close" /></button>
         </header>
         {place.blurb && <p className="ts-blurb">{place.blurb}</p>}
+        <p className="ts-info">
+          <span><Icon name="pin" size={14} weight="fill" /> {here ? `From ${here}` : "From where you are"}{distanceM != null ? `, about ${distanceM} m away` : ""}</span>
+          <span><Icon name="coins" size={14} /> Fares: {MODES.filter((m) => m !== "car" || hasCar).map((m) => `${MODE_INFO[m].name} ${fareKobo(m) === 0n ? "free" : naira(fareKobo(m).toString())}`).join(" · ")}</span>
+        </p>
         <div className="ts-modes" role="radiogroup" aria-label="How to travel">
           {MODES.map((m) => {
             const off = m === "car" && !hasCar, price = fareKobo(m);
@@ -46,7 +53,10 @@ export default function TravelSheet({ place, here, hasCar, driver, people, onGo,
         )}
         {mode === "trek" && <p className="ts-note">You walk it yourself. A map at the top shows the way, and you meet other players on the road.</p>}
         {(mode === "keke" || mode === "bus") && <p className="ts-note">Sit back: the {MODE_INFO[mode].name.toLowerCase()} takes {RIDE_SECONDS[mode]} seconds. The fare is paid when you get there.</p>}
-        <button type="button" className="go ts-go" disabled={poor} data-sound="confirm" onClick={() => onGo(mode, useDriver)}>
+        <PlaceActivities activities={activities} extra={extra} links={place.actions ?? []} character={character} balanceKobo={balanceKobo} jailed={jailed} here={false} highlight={highlight}
+          actionLabel={poor ? "Go and start (not enough for the fare)" : `Go and start · ${fare === 0n ? "Free" : naira(fare.toString())}`}
+          onDo={(a) => { if (!poor) onGo(mode, useDriver, a.act); }} />
+        <button type="button" className="go ts-go" disabled={poor} data-sound="confirm" onClick={() => onGo(mode, useDriver, null)}>
           {poor ? `You need ${naira(fare.toString())}` : `Go · ${fare === 0n ? "Free" : naira(fare.toString())}`}
         </button>
       </div>

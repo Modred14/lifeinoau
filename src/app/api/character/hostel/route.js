@@ -1,8 +1,9 @@
-// app/api/character/hostel/route.js
+// src/app/api/character/hostel/route.js
 import { PrismaClient } from "@prisma/client";
 import { getUserId } from "@/lib/auth";
 import { allowed, tooMany } from "@/lib/ratelimit";
 import { allowedHostels } from "@/lib/rules";
+import { chooseHostelWithRoom } from "@/lib/roomService";
 export const dynamic = "force-dynamic"; // never cache API responses
 const db = (globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } }));
 // Step 2 of 2: choose a hostel after the reveal. Allowed only once, validated against the saved class.
@@ -31,11 +32,15 @@ export async function POST(req) {
       },
       { status: 400 },
     );
-  const r = await db.character.updateMany({
-    where: { id: c.id, hostel: "" },
-    data: { hostel },
-  }); // guards a double-click race
-  return r.count
+  // The hostel and the furniture it comes with are saved together, so the room is complete the moment the home exists.
+  let saved;
+  try {
+    saved = await chooseHostelWithRoom(db, c.id, hostel);
+  } catch (e) {
+    console.error(e);
+    return Response.json({ error: "Something went wrong. Try again." }, { status: 500 });
+  }
+  return saved
     ? Response.json({ ok: true })
     : Response.json(
         { error: "You already chose where to live." },

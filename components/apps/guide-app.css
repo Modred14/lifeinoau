@@ -1,0 +1,42 @@
+/* components/apps/guide-app.css: the OAU Guide app inside the phone. Same card look as the other apps; mobile first. */
+.gd { display: grid; gap: 10px; padding-top: 2px; }
+.gd-search { display: flex; align-items: center; gap: 8px; padding: 0 14px; border-radius: 14px; background: var(--surface); color: var(--muted); }
+.gd-search input { flex: 1; min-width: 0; height: 44px; border: 0; background: transparent; color: var(--text); font-size: 16px; outline: none; }
+.gd-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 4px; scrollbar-width: none; }
+.gd-tabs::-webkit-scrollbar { display: none; }
+.gd-tabs button { flex: none; padding: 8px 14px; min-height: 38px; border: 0; border-radius: 999px; background: var(--surface); color: var(--muted); font: 600 0.84rem var(--font-body, inherit); white-space: nowrap; }
+.gd-tabs button[aria-selected="true"] { background: #1b1f2a; color: #fff; }
+.gd-tabs button[data-risk="1"][aria-selected="true"] { background: #b8322f; }
+.gd-intro { margin: 2px 2px 0; color: var(--muted); font-size: 0.9rem; }
+.gd-count, .gd-empty { margin: 4px 2px; font-size: 0.88rem; }
+.gd-h { margin: 14px 2px 2px; font: 700 0.95rem var(--font-head); letter-spacing: -0.01em; }
+.gd-alert { display: flex; gap: 10px; align-items: flex-start; margin: 2px 0; padding: 11px 13px; border-radius: 16px; background: #ffe9e6; color: #7a1d17; font-size: 0.86rem; }
+.gd-alert--ok { background: #e3f6ea; color: #17633a; }
+.gd-card { display: grid; gap: 8px; padding: 14px 16px; border-radius: 20px; background: var(--surface); color: var(--text); }
+.gd-card[data-risk="risky"] { box-shadow: inset 4px 0 0 #e0483f; }
+.gd-card[data-status="partial"] { box-shadow: inset 4px 0 0 #e7a82b; }
+.gd-card header { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; flex-wrap: wrap; }
+.gd-card h3 { margin: 0; font: 700 1.02rem var(--font-head); letter-spacing: -0.01em; }
+.gd-card p { margin: 0; font-size: 0.9rem; }
+.gd-tags { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.gd-tag { font-style: normal; font-size: 0.68rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: #e6ecf5; color: #36507a; white-space: nowrap; }
+.gd-tag[data-k="risky"] { background: #ffd9d5; color: #8a1f18; }
+.gd-tag[data-k="legit"], .gd-tag[data-k="guaranteed"] { background: #dff5e7; color: #17633a; }
+.gd-tag[data-k="variable"], .gd-tag[data-k="partial"] { background: #ffefc2; color: #8a5a00; }
+.gd-note, .gd-why { display: flex; gap: 6px; align-items: flex-start; color: #8a5a00; font-size: 0.82rem !important; }
+.gd-why { color: #8a1f18; }
+.gd-where { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 0.84rem !important; }
+.gd-facts b { display: block; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.gd-facts ul { margin: 2px 0 0; padding-left: 18px; font-size: 0.86rem; }
+.gd-facts[data-tone="good"] b { color: #17633a; } .gd-facts[data-tone="bad"] b { color: #b8322f; }
+.gd-steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 0.88rem; }
+.gd-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.gd-btns button { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 14px; width: auto; }
+.gd-place { border-radius: 16px; background: var(--surface); overflow: hidden; }
+.gd-prow { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 0; background: transparent; color: var(--text); text-align: left; min-height: 56px; }
+.gd-pico { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: #e6ecf5; color: #36507a; flex: none; }
+.gd-ptxt { display: grid; min-width: 0; flex: 1; } .gd-ptxt b { font-size: 0.95rem; } .gd-ptxt small { color: var(--muted); font-size: 0.76rem; }
+.gd-pbody { display: grid; gap: 8px; padding: 0 14px 14px; } .gd-pbody p { margin: 0; font-size: 0.88rem; }
+.gd-acts { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.gd-acts li { display: grid; gap: 1px; padding: 8px 10px; border-radius: 12px; background: rgba(0,0,0,0.04); font-size: 0.88rem; }
+.gd-acts li[data-risk="risky"] { background: #ffe9e6; } .gd-acts small { color: var(--muted); }

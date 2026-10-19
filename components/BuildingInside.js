@@ -18,7 +18,7 @@ import ActivityLayer from "./ActivityLayer";
 import { ICON_OF } from "@/lib3d/landmarks.js";
 import "./travel.css";
 
-export default function BuildingInside({ place, look = null, gender = "M", onLeave, onCustody = null }) {
+export default function BuildingInside({ place, look = null, gender = "M", focus = null, onLeave, onCustody = null }) {
   const [people, setPeople] = useState(null), [status, setStatus] = useState("loading"), [info, setInfo] = useState(false), [room, setRoom] = useState(""), [near, setNear] = useState(null), [view, setView] = useState("follow"), [note, setNote] = useState(""), [rings, setRings] = useState([]), [open, setOpen] = useState(null);
   // the lecturers who teach in this building, the confrontation in progress, and the N-QRS response being acted out (all decided by the server: /api/lecture)
   const [fight, setFight] = useState(null), [incident, setIncident] = useState(null), [after, setAfter] = useState(null), [fade, setFade] = useState(0), lec = useRef({ courses: [] }), played = useRef(null);
@@ -71,6 +71,15 @@ export default function BuildingInside({ place, look = null, gender = "M", onLea
     const arrested = incident?.outcome === "ARRESTED"; setAfter(null); setIncident(null); setFade(0); game.refresh(); api.current?.stopIncident();
     if (arrested) { if (onCustody) onCustody(); else onLeave(); }
   };
+  // Arrived from "Go and start" on the map: walk to the ring of that activity, then open its panel once the character stands at it.
+  const goal = useRef(null), pendingOpen = useRef(null);
+  useEffect(() => {
+    if (!focus || !sceneReady || !api.current || goal.current === focus) return;
+    const ring = rings.find((r) => r.act === focus); goal.current = focus; if (!ring) return; // the building has no such ring: just stay at the door
+    api.current.walkTo(ring.x, ring.z).then((ok) => { if (ok === false) toast.info("Walk to the glowing ring to start it."); });
+    pendingOpen.current = ring;
+  }, [focus, sceneReady, rings]);
+  useEffect(() => { if (pendingOpen.current && near && near.activity === pendingOpen.current.activity) { setOpen(pendingOpen.current); pendingOpen.current = null; } }, [near]);
   useEffect(() => { if (open && !(near && near.activity === open.activity)) setOpen(null); }, [near, open]); // walking away from a ring closes its panel
   useEffect(() => { const k = (e) => { if (e.key !== "Escape") return; if (open) setOpen(null); else if (info) setInfo(false); else onLeave(); }; document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [onLeave, info, open]);
 

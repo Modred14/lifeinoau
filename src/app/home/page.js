@@ -15,6 +15,7 @@ import { Icon } from "@/components/Icon";
 import GameHome from "@/components/GameHome";
 import { setBare, isBooted, markBooted } from "@/lib/ui";
 import { game, useGame, run as go, begin, finish, bump, cash, chain, deltas, canAfford } from "@/lib/gameStore";
+import { holdRoomUntil } from "@/lib/roomGate";
 import { HUSTLE_NAMES } from "@/lib/activities";
 import { resolveAction, hustleBlock, safeHustleAt, bailFor, waitText, HUSTLE } from "@/lib/engine";
 import { confirmAction } from "@/lib/confirm";
@@ -158,7 +159,8 @@ export default function Play() {
       key: "hostel",
       router,
       ok: `You moved into ${h}. Welcome home.`,
-      request: () => call("/api/character/hostel", { hostel: h }),
+      // the room is only asked for once this request has finished: the server creates the home and its furniture in it
+      request: () => holdRoomUntil(call("/api/character/hostel", { hostel: h })),
       effects: hasState
         ? [{ store: game, patch: (s) => ({ ...s, hostels: null, character: { ...s.character, hostel: h } }) }]
         : [],

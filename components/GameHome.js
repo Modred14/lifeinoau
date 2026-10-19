@@ -160,13 +160,28 @@ export default function GameHome({
     [router],
   );
 
+  // The room is drawn only once its data has arrived (room + furniture together). Until then the stage shows "Setting up your room";
+  // if the data cannot be fetched it shows the reason and a Retry button, never an empty room. A failed fetch is retried a few times
+  // on its own (a dropped connection); the furniture then appears by itself when the answer comes, with no reload.
+  const [roomErr, setRoomErr] = useState(null), alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const loadRoom = useCallback(async () => {
-    const r = await roomStore.refresh();
-    if (r.failed && (r.status === 401 || !roomStore.get())) fail(r);
+    setRoomErr(null);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const r = await roomStore.refresh();
+      if (!alive.current) return;
+      if (!r.failed || roomStore.get()) return; // loaded (or we already hold a copy and only a refresh failed)
+      if (r.status === 401) return fail(r);
+      if (r.aborted) return;
+      if (attempt === 3 || (r.status >= 400 && r.status < 500 && r.status !== 409 && r.status !== 408 && r.status !== 429)) { setRoomErr(r.error || "Your room could not be loaded."); return; }
+      await new Promise((ok) => setTimeout(ok, 800 * 2 ** attempt)); // only after a failure: wait a little longer each time
+      if (!alive.current) return;
+    }
   }, [fail]);
   useEffect(() => {
     loadRoom();
   }, [loadRoom]);
+  const roomReady = !!(rd?.room && rd?.items);
   useEffect(() => () => setPlayMode("home"), []); // leaving the screen always leaves Buy mode
   useEffect(() => {
     if (!buying) setSelected(null);
@@ -349,8 +364,10 @@ export default function GameHome({
       </div>
       <div className="gx-scene">
         <RoomStage
-          room={room}
-          items={items}
+          room={roomReady ? rd.room : null}
+          items={roomReady ? rd.items : null}
+          roomError={roomReady ? null : roomErr}
+          onRetry={loadRoom}
           look={c.look ?? undefined}
           gender={c.gender}
           mode={mode}
@@ -650,7 +667,7 @@ export default function GameHome({
         <BuySheet
           items={items}
           balanceKobo={rd?.balanceKobo ?? st.balanceKobo}
-          busy={busy}
+          busy={busy || !roomReady}
           onBuy={buy}
           onPlace={place}
           collapsed={collapsed}
