@@ -69,5 +69,6 @@ export const ANIMATIONS = {
   cheer: ["cheer", "celebrate", "victory"],
   lookAround: ["look_around", "lookaround", "idle_look"],
   no: ["no", "headshake", "head_shake", "disagree"],
+  listen: ["listen"], write: ["write"], eatSit: ["eat_sit"], shop: ["shop", "browse"], work: ["work"], pray: ["pray"], present: ["present", "teach"], sleepLie: ["sleep_lie"],
   idleEmote: ["idle_emote", "emote_idle", "idle_dance", "belle"], // the automatic emote when the player has done nothing for a while (built in code if no clip is installed)
 };

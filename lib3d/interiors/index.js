@@ -15,4 +15,4 @@ export function buildPlan(place) {
   const plan = gen(c.spec, { name: place.name ?? place.id, ...place }); plan.id = place.id; plan.title = place.name ?? plan.title; plan.family = c.spec.t; plan.note = PLAN_NOTE; return plan;
 }
 /** The plan, compiled into walls, colliders and navigation. Null for outdoor places. */
-export function buildInterior(place) { const plan = buildPlan(place); return plan ? compile(plan) : null; }
+export function buildInterior(place) { const plan = buildPlan(place); return plan ? compile(plan) : null; }export { isOpenSpace, buildOpenInterior, OPEN_SPACES } from "./openSpaces.js";

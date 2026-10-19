@@ -13,6 +13,7 @@ import PlaceActivities from "@/components/PlaceActivities";
 import { featuresAt } from "@/lib/features.js";
 import BuildingInside from "@/components/BuildingInside";
 import { hasInterior } from "@/lib3d/interiors/registry.js";
+import { isOpenSpace } from "@/lib3d/interiors/openSpaces.js";
 import { call, naira } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { game, useGame, run, cash } from "@/lib/gameStore";
@@ -111,7 +112,7 @@ export default function MapPage() {
     return !res.failed;
   }
   function entered() { // only enclosed buildings open an interior; open-air places (billboards, grounds, statues, gates...) just end the trip with you standing there
-    const t = tripRef.current, p = t ? find(t.to) : null, indoors = !!p && hasInterior(p.id, p.kind); setFade(true); setTimeout(() => { if (t && indoors) { setFocus(t.act ?? null); setInside(t.to); } else if (t) setSel(t.to); setTrip(null); setFade(false); }, 520); }
+    const t = tripRef.current, p = t ? find(t.to) : null, indoors = !!p && (hasInterior(p.id, p.kind) || isOpenSpace(p.id)); setFade(true); setTimeout(() => { if (t && indoors) { setFocus(t.act ?? null); setInside(t.to); } else if (t) setSel(t.to); setTrip(null); setFade(false); }, 520); }
   const tripEnded = (why) => { setTrip(null); if (why === "error") toast.error("The trip could not start. Try again."); };
   const tripPlace = trip ? find(trip.to) : null, insidePlace = inside ? find(inside) : null;
   return (
@@ -186,7 +187,7 @@ export default function MapPage() {
             )}
             {counts[L.id] > 0 && <p className="mut"><Icon name="users" size={15} /> {counts[L.id]} player{counts[L.id] === 1 ? "" : "s"} here now</p>}
             <div className="row">
-              {L.id === here ? (hasInterior(L.id, L.kind) ? <button type="button" className="go go-there" onClick={() => setInside(L.id)}><Icon name="door" size={18} /> Go inside</button> : <p className="mut"><Icon name="pin" size={15} /> You are here. This is an open-air place, so there are no rooms to enter.</p>)
+              {L.id === here ? (hasInterior(L.id, L.kind) || isOpenSpace(L.id) ? <button type="button" className="go go-there" onClick={() => setInside(L.id)}><Icon name={isOpenSpace(L.id) ? "users" : "door"} size={18} /> {isOpenSpace(L.id) ? "Hang out here" : "Go inside"}</button> : <p className="mut"><Icon name="pin" size={15} /> You are here. This is an open-air place, so there are no rooms to enter.</p>)
                 : <button type="button" className="go go-there" disabled={!L.located || !ch || held} onClick={() => setSheet(true)}><Icon name="nav" size={18} weight="fill" /> {held ? "Held in Floor O" : L.located ? "Go there" : "Not on the map yet"}</button>}
             </div>
             {L.kind !== "billboard" && (() => { const fa = featuresAt(L.id, L.kind); return L.id === here ? <PlaceActivities activities={fa.activities} extra={fa.extra} links={[]} character={ch} balanceKobo={g?.balanceKobo ?? null} jailed={held} here highlight={want} actionLabel="Go inside and start" onDo={(a) => { setFocus(a.act); setInside(L.id); }} /> : null; })()}

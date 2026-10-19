@@ -8,6 +8,7 @@ import { withExtras } from "../lib3d/mapExtras.js";
 import { classify, buildInterior } from "../lib3d/interiors/index.js";
 import { activityHubs, MIN_GAP } from "../lib3d/interiors/activityHubs.js";
 import { ACTIVITIES, MAP, BUDGET, PRESENCE, STAT_KEYS, HUSTLE_NAMES, activitiesFor, effectsOf, budgeted, spentOf, unmet, cooldownEnd, stepAllowed, nearHub, apply, worthless } from "../lib/activities.js";
+import { ACTIVITY_SECONDS, ACTIVITY_MS } from "../lib/activityTime.js";
 import { makeDb } from "./fakedb.mjs";
 import * as G from "../lib/gameService.js";
 import * as S from "../lib/activityService.js";
@@ -68,7 +69,7 @@ for (const [id, a] of Object.entries(ACTIVITIES)) {
 
 // ============================================================================================================== 2. the rules
 const me = { energy: 50, health: 50, happiness: 50, academics: 50, popularity: 50, personalities: [] };
-assert.deepEqual(effectsOf(me, ACTIVITIES.sleep_bed).d, { health: 2, energy: 50 }, "sleep fills the bar to 100"); assert.equal(ACTIVITIES.sleep_bed.sec, 30, "a sleep lasts 30 seconds"); assert.equal(effectsOf({ ...me, energy: 0 }, ACTIVITIES.bunk_rest).d.energy, 100, "0 to 100 percent");
+assert.deepEqual(effectsOf(me, ACTIVITIES.sleep_bed).d, { health: 2, energy: 50 }, "sleep fills the bar to 100"); assert.equal(ACTIVITIES.sleep_bed.sec, ACTIVITY_SECONDS, "a sleep lasts one activity length"); assert.equal(effectsOf({ ...me, energy: 0 }, ACTIVITIES.bunk_rest).d.energy, 100, "0 to 100 percent");
 assert.equal(effectsOf({ ...me, personalities: ["Introvert"] }, ACTIVITIES.union_meeting).d.popularity, undefined, "an Introvert gains nothing from a 1-point social gain");
 assert.equal(effectsOf({ ...me, personalities: ["Extrovert"] }, ACTIVITIES.union_meeting).d.popularity, 2);
 assert.equal(effectsOf({ ...me, personalities: ["Party Animal"] }, ACTIVITIES.dance).d.happiness, 6);
@@ -191,13 +192,13 @@ try {
   { const w = world({ hostel: "Fajuyi", energy: 20, placeId: "h_awo" }); const h = ringOf("h_awo", "sleep_bed"); await go(w, "h_awo", h);
     const e = await err(S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) })); assert.ok(e && /not your room/i.test(e.message), "you cannot sleep in someone else's hall"); }
   { const w = world({ energy: 20, placeId: "blk_1a" }); const h = ringOf("blk_1a", "bunk_rest"); await go(w, "blk_1a", h); const s = await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); assert.ok(s.started, "anyone can rest on a block bunk"); }
-  // sleeping from empty: 0 to 100 in one 30 second sleep, and it does not use up the day's energy allowance
+  // sleeping from empty: 0 to 100 in one 15 second sleep, and it does not use up the day's energy allowance
   { const w = world({ energy: 0, hostel: "Awo", placeId: "h_awo" }); const h = ringOf("h_awo", "sleep_bed"); await go(w, "h_awo", h);
-    await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); clock += 30_000 + 100; const f = await S.finishActivity(w.db, "u1", { requestId: req(), ...at(h) });
+    await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); clock += ACTIVITY_MS + 100; const f = await S.finishActivity(w.db, "u1", { requestId: req(), ...at(h) });
     assert.equal(f.applied.energy, 100); assert.equal(w.c.energy, 100); assert.equal(w.T.activityRun[0].delta.energy, undefined, "sleep does not count against the energy allowance");
     // up to 6 sleeps a day
-    for (let i = 0; i < 5; i++) { clock += 61_000; w.c.energy = 10; await S.report(w.db, "u1", at(h)); await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); clock += 30_100; await S.finishActivity(w.db, "u1", { requestId: req(), ...at(h) }); }
-    clock += 61_000; w.c.energy = 10; await S.report(w.db, "u1", at(h)); const e = await err(S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) })); assert.ok(e && /times today/.test(e.message), "six sleeps a day at most"); chk("a sleep takes 30 seconds and refills energy", true); }
+    for (let i = 0; i < 5; i++) { clock += 61_000; w.c.energy = 10; await S.report(w.db, "u1", at(h)); await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); clock += ACTIVITY_MS + 100; await S.finishActivity(w.db, "u1", { requestId: req(), ...at(h) }); }
+    clock += 61_000; w.c.energy = 10; await S.report(w.db, "u1", at(h)); const e = await err(S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) })); assert.ok(e && /times today/.test(e.message), "six sleeps a day at most"); chk("a sleep takes 15 seconds and refills energy", true); }
 
   // ---- paying: fees go through the ledger, and a player who cannot pay starts nothing
   { const w = world({ energy: 50, placeId: "new_bukateria" }); const h = ringOf("new_bukateria", "eat_meal"); await go(w, "new_bukateria", h); const before = w.bal();
@@ -249,8 +250,8 @@ try {
   { const w = world(); const h = ringOf("oduduwa", "event_gig"); await go(w, "oduduwa", h);
     for (const bad of ["", "nope", "event_gig", "event_gig:99", "__proto__:0", "sleep_bed:0"]) { const e = await err(S.startActivity(w.db, "u1", { hubId: bad, requestId: req(), ...at(h) })); assert.ok(e, `"${bad}" is refused`); }
     const e = await err(S.startActivity(w.db, "u1", { hubId: h.id, requestId: "x", ...at(h) })); assert.ok(e && e.status === 400, "a missing requestId is refused"); assert.equal(w.T.activityRun.length, 0); }
-  // a place that stays outdoors has no rings, whatever the player says
-  { const w = world({ placeId: "main_bowl" }); const e = await err(S.report(w.db, "u1", { x: 0, z: 0, floor: 0 })); assert.ok(e && /not inside a building/.test(e.message)); }
+  // a place that stays outdoors (a gate; open spaces such as the Main Bowl accept a position but still have no rings) refuses a position
+  { const w = world({ placeId: "gate" }); const e = await err(S.report(w.db, "u1", { x: 0, z: 0, floor: 0 })); assert.ok(e && /not inside a building/.test(e.message)); }
 } finally { Date.now = realNow; }
 
 console.log(bad ? `\n${bad} check(s) failed` : "\nAll activity checks passed"); process.exit(bad ? 1 : 0);

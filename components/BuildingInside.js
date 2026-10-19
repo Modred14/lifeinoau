@@ -46,13 +46,13 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
     let dead = false, scene = null;
     (async () => {
       try {
-        const [{ buildInterior, classify, PLAN_NOTE }, { createInteriorScene }, { activityHubs }] = await Promise.all([import("@/lib3d/interiors/index.js"), import("@/lib3d/interiors/scene.js"), import("@/lib3d/interiors/activityHubs.js")]);
-        const c = buildInterior(place); if (!c) { setStatus("none"); return; } setNote(PLAN_NOTE);
+        const [{ buildInterior, buildOpenInterior, classify, PLAN_NOTE }, { createInteriorScene }, { activityHubs }] = await Promise.all([import("@/lib3d/interiors/index.js"), import("@/lib3d/interiors/scene.js"), import("@/lib3d/interiors/activityHubs.js")]);
+        const c = buildInterior(place) ?? buildOpenInterior(place); if (!c) { setStatus("none"); return; } setNote(c.plan?.family === "open" ? "An open space: students, and the real players who are here, share it with you." : PLAN_NOTE);
         const L = await call("/api/lecture?at=" + encodeURIComponent(place.id)); if (!L.failed) { lec.current = L; if (L.incident?.active && L.incident.venue.placeId === place.id) setIncident(L.incident); } // a response already under way (you came back to this screen): picked up below
         const lecturers = (lec.current.courses ?? []).map((x) => ({ code: x.code, name: x.lecturer.name, difficulty: x.lecturer.difficulty, npcIndex: x.venue.npcIndex }));
         // the activity rings: placed by the same code the server uses to check where you stand (lib3d/interiors/activityHubs.js), drawn teal
         const list = activityHubs(c, classify(place.id, place.kind).spec).hubs.map((h) => ({ ...h, activity: h.id, tint: "#5fe3c0" })); c.hubs = [...c.hubs, ...list]; setRings(list); if (dead || !box.current) return;
-        scene = await createInteriorScene(box.current, c, { look, gender, selfName: selfRef.current, input, view: "follow", lecturers, onFade: setFade, onIncidentEnd: (e) => setAfter(e), onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onHub: (h) => { if (h.action === "lecture") { confrontRef.current?.(h.lecturer.code); return; } if (h.activity) { setOpen(h); return; } const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true); } });
+        scene = await createInteriorScene(box.current, c, { look, gender, selfName: selfRef.current, input, view: "follow", lecturers, onFade: setFade, onIncidentEnd: (e) => setAfter(e), onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onChat: (m) => { toast.info(`${m.name}: ${m.line}`); setTimeout(() => { if (!dead) toast.info(`${m.name}: ${m.reply}`); }, 2600); }, onHub: (h) => { if (h.action === "lecture") { confrontRef.current?.(h.lecturer.code); return; } if (h.activity) { setOpen(h); return; } const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true); } });
         if (dead) { scene.dispose(); return; } api.current = scene; if (peopleRef.current) scene.setRemotePlayers(peopleRef.current); setStatus("ready"); setSceneReady(true);
       } catch (e) { console.warn("interior unavailable", e); if (!dead) setStatus("fallback"); }
     })();

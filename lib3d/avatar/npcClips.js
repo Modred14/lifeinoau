@@ -190,3 +190,5 @@ export function npcClips(root, gender = "F", existing = []) {
   }
   return cache.get(gender).filter((c) => !have.has(c.name.toLowerCase())).map((c) => c.clone());
 }
+// shared with activityClips.js (the same baking helpers, so both sets of clips fit the body the same way)
+export { bake, legs, arms, spine, dir, NEED, FPS, TAU };

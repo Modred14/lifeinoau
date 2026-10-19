@@ -7,6 +7,8 @@ import * as THREE from "three";
 import { createStage } from "../stage.js";
 import { createAvatar } from "../avatar/loadAvatar.js";
 import { createNpc, npcSpec, hashSeed, lecturerSpec } from "../avatar/npc.js";
+import { planFor, clipAt } from "../avatar/activityPlans.js";
+import { studentName, greetLine, chatLine } from "../../lib/socialTalk.js";
 import { incidentFrame } from "./lectureEncounter.js";
 import { ITEMS, dimsOf } from "./items.js";
 import { movePlayer, rayClip, EXIT_DEPTH, DOOR_H } from "./compile.js";
@@ -183,6 +185,41 @@ export async function createInteriorScene(container, c, opts = {}) {
   const player = new THREE.Group(); scene.add(player);
   let avatar = null; createAvatar(opts.look ?? null, opts.gender ?? "M").then((av) => { if (!alive) { av.dispose(); return; } avatar = av; player.add(av.root); }).catch(() => {
     if (!alive) return; const m = new THREE.Mesh(own(new THREE.CapsuleGeometry(0.25, 1.1, 4, 8).translate(0, 0.8, 0)), own(new THREE.MeshStandardMaterial({ color: "#2f62c4" }))); player.add(m); });
+  // ---- acting an activity out: the right clip, a turn towards what you are working at, and a seat or a bed under you ----
+  // Only the picture moves: P (the position the server checks against the ring) never changes; the body glides back onto a chair, or onto a bed, and glides out again.
+  let act = null; const SEAT_BACK = 0.26, props = {};
+  const turnTo = (a, b, k) => { let d = b - a; d = ((d + Math.PI * 3) % (Math.PI * 2)) - Math.PI; return a + d * Math.min(1, k); };
+  const smooth = (x) => x * x * (3 - 2 * x);
+  const prop = (kind) => { if (props[kind]) return props[kind]; const g = new THREE.Group(), M = (col) => own(new THREE.MeshStandardMaterial({ color: col, roughness: 0.8 })), add = (w, h, d, x, y, z, col) => { const m = new THREE.Mesh(own(new THREE.BoxGeometry(w, h, d)), M(col)); m.position.set(x, y, z); m.castShadow = true; g.add(m); };
+    if (kind === "chair") { add(0.42, 0.05, 0.42, 0, 0.43, 0, "#3e6fb5"); add(0.42, 0.42, 0.04, 0, 0.67, -0.2, "#3e6fb5"); for (const [x, z] of [[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]]) add(0.04, 0.42, 0.04, x, 0.21, z, "#2b2f3a"); }
+    else { add(0.9, 0.14, 2.0, 0, 0.3, 0, "#f0eadc"); add(0.9, 0.3, 2.0, 0, 0.15, 0, "#4a3b2a"); add(0.5, 0.12, 0.34, 0, 0.44, -0.78, "#fbfbf6"); }
+    g.visible = false; scene.add(g); return (props[kind] = g); };
+  const nearestItem = (types, max) => { let best = null, bd = max; for (const it of c.items) { if ((it.floor ?? 0) !== P.fl || !types.includes(it.type)) continue; const d = Math.hypot(it.x - P.x, it.z - P.z); if (d < bd) { bd = d; best = it; } } return best; };
+  const beginAct = (id) => {
+    const plan = planFor(id); act = { plan, t: 0, k: 0, off: false, yaw: null, bed: null, y0: P.y };
+    if (plan.seat === "lie") { const b = nearestItem(["bed", "bunk", "cot", "sofa"], 3.2); act.bed = b ? { x: b.x, z: b.z, ry: b.ry ?? 0, top: b.type === "sofa" ? 0.45 : 0.55 } : null; act.prop = b ? null : prop("bed"); }
+    else if (plan.face.length) { const f = nearestItem(plan.face, 7); if (f) act.yaw = Math.atan2(f.x - P.x, f.z - P.z); }
+    if (plan.seat === "chair") act.prop = prop("chair");
+  };
+  const endAct = () => { if (act) act.off = true; };
+  const stepAct = (dt) => { // returns true while an activity is still being acted out (including the stand-up)
+    if (!act) return false; const still = P.moving <= 0.05;
+    if (!act.off && !still) act.off = true; // walking away ends it
+    act.k += ((act.off ? 0 : 1) - act.k) * Math.min(1, dt * (act.off ? 6 : 3));
+    if (!act.off && still && act.yaw != null) P.yaw = turnTo(P.yaw, act.yaw, dt * 5);
+    if (act.off && act.k < 0.02) { if (act.prop) act.prop.visible = false; if (avatar) { avatar.root.rotation.set(0, 0, 0); avatar.root.position.set(0, 0, 0); } act = null; return false; }
+    return true;
+  };
+  const drawAct = () => { // after player.position / rotation are set for this frame
+    if (!act || !avatar) return; const k = smooth(Math.min(1, act.k)), fx = Math.sin(P.yaw), fz = Math.cos(P.yaw);
+    if (act.plan.seat === "chair") { player.position.x -= fx * SEAT_BACK * k; player.position.z -= fz * SEAT_BACK * k; const g = act.prop; g.visible = k > 0.15; g.position.set(P.x - fx * SEAT_BACK, fl(P.fl), P.z - fz * SEAT_BACK); g.rotation.y = P.yaw; g.scale.setScalar(0.4 + 0.6 * k); }
+    else if (act.plan.seat === "lie") {
+      const tx = act.bed ? act.bed.x : P.x, tz = act.bed ? act.bed.z : P.z, ry = act.bed ? act.bed.ry : P.yaw, top = act.bed ? act.bed.top : 0.6;
+      player.position.x += (tx - P.x) * k; player.position.z += (tz - P.z) * k; player.position.y += (top + 0.08) * k; player.rotation.y = turnTo(P.yaw, ry, k);
+      avatar.root.rotation.order = "YXZ"; avatar.root.rotation.x = (-Math.PI / 2) * k; avatar.root.position.z = (avatar.height ?? 1.7) * 0.5 * k;
+      if (act.prop) { const g = act.prop; g.visible = k > 0.15; g.position.set(P.x, fl(P.fl), P.z); g.rotation.y = P.yaw; }
+    }
+  };
   const onKey = (e, down) => { if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName ?? "")) return; const k = e.key.toLowerCase(); if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", "shift", "q", "e"].includes(k)) { down ? keys.add(k) : keys.delete(k); e.preventDefault?.(); }
     if (down && (k === "f" || k === "enter" || k === " ")) { activate(); e.preventDefault?.(); } if (down && k === "v") api.toggleView(); };
   const kd = (e) => onKey(e, true), ku = (e) => onKey(e, false); window.addEventListener("keydown", kd); window.addEventListener("keyup", ku);
@@ -192,7 +229,9 @@ export async function createInteriorScene(container, c, opts = {}) {
   const wh = (e) => { camDist = Math.max(1.6, Math.min(10, camDist * (1 + Math.sign(e.deltaY) * 0.08))); };
   el.addEventListener("pointerdown", pd); el.addEventListener("pointermove", pm); el.addEventListener("pointerup", pu); el.addEventListener("pointercancel", pu); el.addEventListener("wheel", wh, { passive: true });
 
-  function activate() { if (near && !locked) opts.onHub?.(near.h); }
+  let chatSelf = null; const greets = new Map();
+  function chatWith(i) { const p = people.find((q) => q.i === i); if (!p || p.chat) return; p.chat = { t: 0 }; chatSelf = { t: 0, i }; const n = (greets.get(i) ?? 0) + 1; greets.set(i, n); opts.onChat?.({ name: p.n.studentName ?? "Student", line: greetLine(p.seed, n), reply: chatLine(p.seed, n) }); }
+  function activate() { if (!near || locked) return; if (near.h.action === "chat") { chatWith(near.h.npcIndex); return; } opts.onHub?.(near.h); }
   const setClip = (av, name, o) => { if (!av || !av.has?.(name)) return false; return av.play(name, o); };
 
   // ---- people ----
@@ -202,8 +241,9 @@ export async function createInteriorScene(container, c, opts = {}) {
     const lec = lecturers.find((l) => l.npcIndex === i); // a lecturer of the player's: the same person as in the fight, with their name above them
     try { const av = await createNpc(lec ? lecturerSpec(lec.name, lec.difficulty) : npcSpec(seed, { role, gender: hashSeed(seed) & 1 ? "F" : "M" })); if (!alive) { av.dispose(); return; }
       if (lec) { const tag = new THREE.Sprite(own(new THREE.SpriteMaterial({ map: textTexture(lec.name, { bg: "rgba(13,19,33,0.82)", fg: "#ffe9a6" }, 4.6), transparent: true, toneMapped: false, depthWrite: false }))); tag.scale.set(1.9, 0.41, 1); tag.position.set(0, (av.height ?? 1.75) + 0.45, 0); av.root.add(tag); }
-      const p = { i, av, n, x: n.x, z: n.z, yaw: n.yaw ?? 0, f: n.floor ?? 0, path: null, pi: 0, wait: Math.random() * 3, clip: null, mode: n.mode, ph: Math.random() * 6.28, h: hashSeed(seed) >>> 0 }; people.push(p); scene.add(av.root); place(p);
-      const pick = n.mode === "sit" ? "sit" : n.mode === "dance" ? "cheer" : ["idle", "idle", "talk", "phone", "lookAround"][p.h % 5]; if (!setClip(av, pick, { fade: 0 })) setClip(av, "idle", { fade: 0 }); p.clip = pick; if (n.mode === "dance") av.setSpeed?.(0.9 + (p.h % 5) * 0.1);
+      if (n.social && !lec) { const nm = studentName(seed), tg = new THREE.Sprite(own(new THREE.SpriteMaterial({ map: textTexture(nm, { bg: "rgba(20,28,40,0.55)", fg: "#cdd7e6" }, 3.2), transparent: true, toneMapped: false, depthWrite: false }))); tg.scale.set(1.25, 0.27, 1); tg.position.set(0, (av.height ?? 1.75) + 0.3, 0); av.root.add(tg); n.studentName = nm; }
+      const p = { i, av, n, seed, x: n.x, z: n.z, yaw: n.yaw ?? 0, f: n.floor ?? 0, path: null, pi: 0, wait: Math.random() * 3, clip: null, mode: n.mode, ph: Math.random() * 6.28, h: hashSeed(seed) >>> 0 }; people.push(p); scene.add(av.root); place(p);
+      const pick = n.clips?.length ? n.clips[p.h % n.clips.length] : n.mode === "talk" ? "talk" : lec || n.role === "lecturer" ? "present" : n.mode === "sit" ? ["sit", "listen", "write", "listen", "read"][p.h % 5] : n.mode === "dance" ? "cheer" : ["idle", "idle", "talk", "phone", "lookAround"][p.h % 5]; if (!setClip(av, pick, { fade: 0 })) setClip(av, "idle", { fade: 0 }); p.clip = pick; p.base = pick; if (n.mode === "dance") av.setSpeed?.(0.9 + (p.h % 5) * 0.1);
     } catch { /* this person just does not appear */ }
   };
   // each of the player's lecturers who stands in this building gets a ring to walk up to them (the server decides if the confrontation is allowed)
@@ -214,6 +254,10 @@ export async function createInteriorScene(container, c, opts = {}) {
   const place = (p) => { p.av.root.position.set(p.x, fl(p.f) + 0.02, p.z); p.av.root.rotation.y = p.yaw; };
   (async () => { const worker = async () => { while (alive && loadIdx < spec.length) { const i = loadIdx++; await startNpc(spec[i], i); } }; await Promise.all([worker(), worker(), worker()]); })();
   const stepNpc = (p, t, dt) => {
+    if (p.chat) { // being greeted by the player: turn to face them, wave, then talk, then go back to what they were doing
+      p.chat.t += dt; p.yaw = turnTo(p.yaw, Math.atan2(P.x - p.x, P.z - p.z), dt * 6); const cl = p.chat.t < 1.8 ? "greet" : "talk"; if (p.clip !== cl) { setClip(p.av, cl, { fade: 0.25 }); p.clip = cl; } place(p);
+      if (p.chat.t > 4.5) { p.chat = null; p.clip = null; if (p.base && p.mode !== "wander" && p.mode !== "talk") { setClip(p.av, p.base, { fade: 0.3 }); p.clip = p.base; } } return; }
+    if (p.mode === "talk") { const gn = p.n.gn ?? 2, who = Math.floor(t / 4 + (p.n.group ?? 0) * 0.6) % gn, cl = who === (p.n.gi ?? 0) ? "talk" : "idle"; if (p.clip !== cl) { setClip(p.av, cl, { fade: 0.35 }); p.clip = cl; } return; }
     if (p.mode === "wander") {
       if (p.path) { const [tx, tz] = p.path[p.pi], dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz), step = 0.95 * dt;
         if (Math.hypot(P.x - p.x, P.z - p.z) < 0.7 && p.f === P.fl && Math.hypot(P.x - (p.x + dx / (d || 1) * 0.5), P.z - (p.z + dz / (d || 1) * 0.5)) < 0.7) { if (p.clip !== "idle") { setClip(p.av, "idle", { fade: 0.2 }); p.clip = "idle"; } return; }
@@ -277,10 +321,15 @@ export async function createInteriorScene(container, c, opts = {}) {
     stepIncident(t, dt);
     if (P.fl !== shownFloor) { shownFloor = P.fl; setVis(); }
     player.position.set(P.x, P.y + 0.02, P.z); player.rotation.y = P.yaw;
-    if (avatar) { const want = P.moving > 0.05 ? (P.run ? "run" : "walk") : pose ? (pose.find((n) => avatar.has?.(n)) ?? "idle") : "idle"; if (want !== cur && avatar.has?.(want) && avatar.play(want, { fade: 0.25 })) cur = want; if (pose && P.moving <= 0.05) avatar.setSpeed?.(1); else if (want !== "idle") avatar.setSpeed?.(Math.max(0.6, Math.min(1.6, P.moving * (P.run ? 1 : 1.05)))); avatar.update(t, dt); }
+    const acting = stepAct(dt); drawAct();
+    if (chatSelf) { const q = people.find((o) => o.i === chatSelf.i); chatSelf.t += dt; if (P.moving > 0.05 || !q || chatSelf.t > 4.5) chatSelf = null; else P.yaw = turnTo(P.yaw, Math.atan2(q.x - P.x, q.z - P.z), dt * 6); }
+    if (avatar) { const want = P.moving > 0.05 ? (P.run ? "run" : "walk") : chatSelf ? (chatSelf.t < 1.8 ? "greet" : "talk") : act && !act.off ? clipAt(act.plan, act.t, (n) => avatar.has?.(n)) : pose && !acting ? (pose.find((n) => avatar.has?.(n)) ?? "idle") : "idle"; if (want !== cur && avatar.has?.(want) && avatar.play(want, { fade: act ? 0.4 : 0.25 })) cur = want; if (pose && P.moving <= 0.05) avatar.setSpeed?.(1); else if (want !== "idle") avatar.setSpeed?.(Math.max(0.6, Math.min(1.6, P.moving * (P.run ? 1 : 1.05)))); avatar.update(t, dt); }
     // room name, hubs, exit
     const room = c.roomAt(P.x, P.z, P.fl); if ((room?.name ?? null) !== lastRoom) { lastRoom = room?.name ?? null; opts.onRoom?.(lastRoom); }
-    let best = null, bd = 1.7; for (const h of hubObjs) { if (h.f !== P.fl) continue; const d = Math.hypot(h.h.x - P.x, h.h.z - P.z); if (d < bd) { bd = d; best = h; } } if (best !== near) { near = best; opts.onNear?.(near ? near.h : null); }
+    let best = null, bd = 1.7; for (const h of hubObjs) { if (h.f !== P.fl) continue; const d = Math.hypot(h.h.x - P.x, h.h.z - P.z); if (d < bd) { bd = d; best = h; } }
+    if (!best && !act && !chatSelf) { let sp = null, sd = 2.0; for (const q of people) { if (!q.n.social || q.f !== P.fl || q.chat) continue; const d = Math.hypot(q.x - P.x, q.z - P.z); if (d < sd) { sd = d; sp = q; } }
+      if (sp) { sp.hubObj ??= { h: { action: "chat", npcIndex: sp.i, label: `Greet ${sp.n.studentName ?? "student"}`, x: 0, z: 0 }, f: sp.f, ring: { visible: false, material: { opacity: 1 }, scale: { setScalar() {} } }, sp: { visible: false } }; sp.hubObj.h.x = sp.x; sp.hubObj.h.z = sp.z; best = sp.hubObj; } }
+    if (best !== near) { near = best; opts.onNear?.(near ? near.h : null); }
     for (const h of hubObjs) { const on = h.f <= P.fl && Math.hypot(h.h.x - P.x, h.h.z - P.z) < 9 && h.f === P.fl; h.ring.visible = on; h.sp.visible = on; h.ring.material.opacity = h === near ? 1 : 0.55 + Math.sin(t * 3) * 0.2; h.ring.scale.setScalar(h === near ? 1.12 : 1); }
     if (!exited && P.fl === 0 && c.porch && c.outsideDepth(P.x, P.z) > EXIT_DEPTH) { exited = true; opts.onExit?.(); }
     // people
@@ -304,7 +353,7 @@ export async function createInteriorScene(container, c, opts = {}) {
   });
   setVis();
   const api = {
-    stage, setYaw(y) { camYaw = y; }, teleport(x, z, floor = 0) { P.x = x; P.z = z; P.fl = floor; P.y = c.floorY[floor] ?? 0; }, get view() { return view; }, get state() { return { x: P.x, z: P.z, y: P.y, floor: P.fl, yaw: P.yaw, people: people.length, exited }; }, setView(v) { view = v; setVis(); }, toggleView() { view = view === "follow" ? "overhead" : "follow"; setVis(); return view; }, use: activate, playIncident, stopIncident, get incident() { return inc ? { id: inc.id, outcome: inc.outcome } : null }, setPose(list) { pose = list?.length ? list : null; },
+    stage, setYaw(y) { camYaw = y; }, teleport(x, z, floor = 0) { P.x = x; P.z = z; P.fl = floor; P.y = c.floorY[floor] ?? 0; }, get view() { return view; }, get state() { return { x: P.x, z: P.z, y: P.y, floor: P.fl, yaw: P.yaw, people: people.length, exited }; }, setView(v) { view = v; setVis(); }, toggleView() { view = view === "follow" ? "overhead" : "follow"; setVis(); return view; }, use: activate, playIncident, stopIncident, get incident() { return inc ? { id: inc.id, outcome: inc.outcome } : null }, setPose(list, id) { pose = list?.length ? list : null; endAct(); if (pose && id) { act = null; beginAct(id); } },
     /** The real players in this building (from /api/travel?at=): each { id, name, gender, look, level, faculty, x, z, floor, anim? }. Anyone not in the list is removed. */
     setRemotePlayers(list) { remote.sync(list, { x: P.x, z: P.z }); }, get remoteIds() { return remote.ids(); },
     /** Walk to a point on the current floor by the shortest clear path. Resolves true on arrival, false if it could not or you took the controls. */

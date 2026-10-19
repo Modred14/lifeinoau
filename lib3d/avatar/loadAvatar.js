@@ -20,6 +20,7 @@ import {
 import { createAnimator, createFace, resolveClip } from "./animation.js";
 import { buildIdleEmoteClip } from "./idleEmote.js";
 import { npcClips } from "./npcClips.js";
+import { activityClips } from "./activityClips.js";
 
 const loader = new GLTFLoader(),
   gltfCache = new Map(),
@@ -240,7 +241,8 @@ async function loadModel(look, gender, opt = {}) {
     opt.colors?.bottom ?? COLORS[look.bottom] ?? COLORS.khaki,
     opt.colors?.topDark ?? null,
   );
-  if (opt.npc) clips.push(...npcClips(root, gender, clips));
+  if (opt.npc || opt.actor) clips.push(...npcClips(root, gender, clips)); // crowd and player: sit, phone, talk, run ...
+  clips.push(...activityClips(root, gender, clips)); // listen, write, type, read, eat, drink, greet, shop, work ... (one per kind of activity)
   if (!resolveClip(clips, "idleEmote")) { // no authored emote installed: build it from the skeleton
     try { const emote = buildIdleEmoteClip(root); if (emote) clips.push(emote); } catch (e) { console.warn("idle emote unavailable:", e); }
   }
@@ -265,12 +267,12 @@ async function loadModel(look, gender, opt = {}) {
 export async function createAvatar(
   lookIn,
   gender = "F",
-  { preferModel = true, lod = false, npc = false, bodyWidth = 1, colors = null, skinHex = null } = {},
+  { preferModel = true, lod = false, npc = false, actor = true, bodyWidth = 1, colors = null, skinHex = null } = {},
 ) {
   const look = cleanLook(lookIn, gender);
   if (preferModel) {
     try {
-      const m = await loadModel(look, gender, { lod, npc, bodyWidth, colors, skinHex });
+      const m = await loadModel(look, gender, { lod, npc, actor, bodyWidth, colors, skinHex });
       if (m)
         return {
           kind: "glb",

@@ -200,7 +200,7 @@ export default function Career() {
                           {SHIFT_ICON[sh.key]} <b>{sh.label}</b>
                           <br />
                           <span className="mut">
-                            Clock in {sh.window} · {sh.hours} hours · {sh.energy} energy · {k(sh.payMin)}–{k(sh.payMax)}
+                            Clock in {sh.window} · {sh.seconds} seconds · {sh.energy} energy · {k(sh.payMin)}–{k(sh.payMax)}
                           </span>
                           {sh.blocked && <><br /><span className="mut shift-why">{sh.blocked}</span></>}
                         </span>
@@ -235,7 +235,7 @@ export default function Career() {
                   {x.title}
                   <br />
                   <span className="mut">
-                    {k(x.payMin)}–{k(x.payMax)} a shift · {x.hours}h · {x.energy} energy · {x.shifts.map((q) => (q === "night" ? "night" : "morning")).join(" / ")}
+                    {k(x.payMin)}–{k(x.payMax)} a shift · {x.seconds}s · {x.energy} energy · {x.shifts.map((q) => (q === "night" ? "night" : "morning")).join(" / ")}
                     {x.locked ? ` · ${x.locked}` : ""}
                   </span>
                 </span>

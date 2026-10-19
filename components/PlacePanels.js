@@ -93,7 +93,7 @@ export function HustlePanel({ kind, onClose }) {
           <ul className="pp-facts">
             <li><span>Pay</span><b>{k(d.payMin)} to {k(d.payMax)}</b></li>
             <li><span>Energy</span><b>{d.energy}</b></li>
-            <li><span>Time on site</span><b>{d.durationGameMinutes} minutes</b></li>
+            <li><span>Time on site</span><b>{d.durationSeconds} seconds</b></li>
             <li><span>Today</span><b>{d.left} of {d.perDay} left</b></li>
             {d.risk && <li><span>N-QRS patrol</span><b data-risk={d.risk}>{d.risk}</b></li>}
             {d.gapHours && <li><span>Gap between runs</span><b>{d.gapHours} hours</b></li>}
@@ -102,7 +102,7 @@ export function HustlePanel({ kind, onClose }) {
             <div className="pp-run" role="status" aria-live="polite">
               <b>{crew ? "On shift with the crew" : "The handoff is on"}</b>
               <div className="shift-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><i style={{ width: pct + "%" }} /></div>
-              <p className="mut">{left > 0 ? `${waitText(left)} to go. Stay at ${d.where}: leaving ends the run with no pay.` : "Done. Finish up to see how it went."}</p>
+              <p className="mut">{left > 0 ? `${Math.ceil(left / 1000)}s to go. Stay at ${d.where}: leaving ends the run with no pay.` : "Done. Finish up to see how it went."}</p>
               <div className="row">
                 <button type="button" className="go" disabled={busy || left > 0} onClick={() => act("finish")}>{crew ? "Collect your pay" : "See how it went"}</button>
                 <button type="button" disabled={busy} onClick={async () => { if (await confirmAction({ title: "Walk away?", message: "No pay, and the energy and today's attempt are already spent.", confirmLabel: "Walk away", cancelLabel: "Stay", tone: "danger" })) act("abandon"); }}>Walk away</button>

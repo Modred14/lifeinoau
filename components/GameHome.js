@@ -82,9 +82,9 @@ export default function GameHome({
 
   // ---- sleeping.
   // Tapping the bed makes the character walk over, sit, and lie down AT ONCE: nothing waits for the server. Only when the character is
-  // lying down is the server told (the 30 seconds start then, on the server's clock too). If it refuses, the character gets up and
-  // the reason is shown. While asleep, energy fills at a steady rate (100 in 30 seconds) and the screen shows it live; the server works
-  // out the real result when you wake, from the same rule (lib/sleep.js). You wake by yourself when you are full or after 30 seconds, by
+  // lying down is the server told (the 15 seconds start then, on the server's clock too). If it refuses, the character gets up and
+  // the reason is shown. While asleep, energy fills at a steady rate (100 in 15 seconds) and the screen shows it live; the server works
+  // out the real result when you wake, from the same rule (lib/sleep.js). You wake by yourself when you are full or after 15 seconds, by
   // pressing Wake up, or by tapping the floor (you sit up, stand, and walk to where you tapped).
   const [use, setUse] = useState(null), // the bed / phone the player tapped, waiting for "Go to sleep"
     [going, setGoing] = useState(null), // id of the bed the character is walking to / lying down on, before the server has been told
@@ -94,7 +94,7 @@ export default function GameHome({
     bedKey = bedItem?.key ?? "single_bed",
     since = sleeping ? toMs(st.sleep.since) : 0,
     rest = sleeping ? wakeResult(c, bedKey, since, clock) : null, // what waking right now would give
-    endMs = sleeping ? msToFull(c, bedKey) : 0, // how long this sleep lasts: until full, never more than 30 seconds
+    endMs = sleeping ? msToFull(c, bedKey) : 0, // how long this sleep lasts: until full, never more than 15 seconds
     elapsedMs = sleeping ? Math.max(0, clock - since) : 0,
     secsLeft = Math.max(0, Math.ceil((endMs - elapsedMs) / 1000)),
     pct = endMs > 0 ? Math.min(100, Math.round((elapsedMs / endMs) * 100)) : 100,

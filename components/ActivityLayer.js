@@ -9,6 +9,8 @@ import { call, naira, notifyError } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { confirmAction } from "@/lib/confirm";
 import { game } from "@/lib/gameStore";
+import { serverTime } from "@/lib/serverClock";
+import { ACTIVITY_SECONDS } from "@/lib/activityTime";
 import { HUSTLE } from "@/lib/engine";
 import { PRESENCE, waitShort } from "@/lib/activities";
 import { Icon } from "./Icon";
@@ -19,7 +21,7 @@ const needsCourse = (k) => k === "course_attend" || k === "course_study" || k ==
 
 /** `api` is a ref to the 3D scene, `rings` the activity rings drawn in it, `open` the ring whose panel is showing, `onClose` closes it, `onLeave` leaves the building. */
 export default function ActivityLayer({ api, rings, open, onClose, onLeave, ready }) {
-  const [st, setSt] = useState(null), [run, setRun] = useState(null), [busy, setBusy] = useState(false), [course, setCourse] = useState(""), [tick, setTick] = useState(Date.now()), [done, setDone] = useState(null);
+  const [st, setSt] = useState(null), [run, setRun] = useState(null), [busy, setBusy] = useState(false), [course, setCourse] = useState(""), [tick, setTick] = useState(() => serverTime()), [done, setDone] = useState(null);
   const runRef = useRef(null), finishing = useRef(false), e0 = useRef(0); // e0: energy when the run began (for the rising bar while sleeping)
   const pos = () => { const s = api.current?.state; return s ? { x: s.x, z: s.z, floor: s.floor } : null; };
   const ring = (id) => rings.find((r) => r.activity === id);
@@ -61,8 +63,8 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
   useEffect(() => {
     if (!run) return; const h = ring(run.hubId);
     const t = setInterval(() => {
-      setTick(Date.now()); const p = pos(); if (p && h && Math.hypot(p.x - h.x, p.z - h.z) > 1.4) { call("/api/activity", { op: "cancel" }); stop("You walked away, so it stopped."); refresh(); return; }
-      if (Date.now() >= run.endsAt + 150) finish();
+      setTick(serverTime()); const p = pos(); if (p && h && Math.hypot(p.x - h.x, p.z - h.z) > 1.4) { call("/api/activity", { op: "cancel" }); stop("You walked away, so it stopped."); refresh(); return; }
+      if (serverTime() >= run.endsAt + 150) finish();
     }, 250);
     return () => clearInterval(t);
   }, [run]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -81,7 +83,7 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
     const r = await call("/api/activity", { op: "start", hubId: info.id, requestId: crypto.randomUUID(), ...p2, param: param ?? (needsCourse(info.kind) ? course : undefined) });
     setBusy(false); if (r.failed) { notifyError(r); refresh(); return; }
     if (r.duplicate) { refresh(); return; }
-    e0.current = startE ?? st?.energy ?? 0; const cur = { id: "", activityId: r.activityId, hubId: info.id, endsAt: r.endsAt, startedAt: Date.now() }; runRef.current = cur; setRun(cur); setTick(Date.now()); api.current?.setPose(r.anim);
+    e0.current = startE ?? st?.energy ?? 0; const cur = { id: "", activityId: r.activityId, hubId: info.id, endsAt: r.endsAt, startedAt: r.endsAt - (r.sec ?? ACTIVITY_SECONDS) * 1000 }; runRef.current = cur; setRun(cur); setTick(serverTime()); api.current?.setPose(r.anim, r.activityId);
     if (r.paid) game.refresh();
   };
   const cancel = async () => { await call("/api/activity", { op: "cancel" }); stop("You stopped. A fee already paid is not refunded."); refresh(); };
