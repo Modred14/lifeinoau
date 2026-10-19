@@ -18,16 +18,29 @@ import ActivityLayer from "./ActivityLayer";
 import { ICON_OF } from "@/lib3d/landmarks.js";
 import "./travel.css";
 
-export default function BuildingInside({ place, look = null, gender = "M", focus = null, onLeave, onCustody = null }) {
+export default function BuildingInside({ place, look = null, gender = "M", focus = null, selfName = "", onLeave, onCustody = null }) {
   const [people, setPeople] = useState(null), [status, setStatus] = useState("loading"), [info, setInfo] = useState(false), [room, setRoom] = useState(""), [near, setNear] = useState(null), [view, setView] = useState("follow"), [note, setNote] = useState(""), [rings, setRings] = useState([]), [open, setOpen] = useState(null);
   // the lecturers who teach in this building, the confrontation in progress, and the N-QRS response being acted out (all decided by the server: /api/lecture)
   const [fight, setFight] = useState(null), [incident, setIncident] = useState(null), [after, setAfter] = useState(null), [fade, setFade] = useState(0), lec = useRef({ courses: [] }), played = useRef(null);
   const [sceneReady, setSceneReady] = useState(false), confrontRef = useRef(null);
   const box = useRef(null), api = useRef(null), [input] = useState(() => ({ jx: 0, jy: 0, run: false, hold(v) { this.run = v; } })), router = useRouter(), leave = useRef(onLeave);
   useEffect(() => { leave.current = onLeave; });
+  const peopleRef = useRef(null), selfRef = useRef(selfName); selfRef.current = selfName;
+  // who else is in here: the list, and (for those who have reported where they stand) their avatars and name tags in the 3D room. Asked every few seconds,
+  // and at once when the tab comes back, so someone who left or disconnected drops out of the room within moments.
   useEffect(() => {
-    let on = true; const load = async () => { const r = await call("/api/travel?at=" + encodeURIComponent(place.id)); if (on && !r.failed) setPeople(r.people ?? []); };
-    load(); const t = setInterval(() => !document.hidden && load(), 12000); return () => { on = false; clearInterval(t); };
+    let on = true; const load = async () => {
+      const r = await call("/api/travel?at=" + encodeURIComponent(place.id)); if (!on || r.failed) return;
+      const list = (r.people ?? []).filter((p) => p.name.toLowerCase() !== String(selfRef.current).toLowerCase()); // you are never in your own list
+      peopleRef.current = list; setPeople(list); api.current?.setRemotePlayers(list);
+    };
+    load(); const t = setInterval(() => !document.hidden && load(), 4000), v = () => !document.hidden && load(); document.addEventListener("visibilitychange", v);
+    return () => { on = false; clearInterval(t); document.removeEventListener("visibilitychange", v); };
+  }, [place.id]);
+  // stepping out (door, button, Escape, closing the tab): tell the server at once, so nobody keeps seeing you inside
+  useEffect(() => {
+    const bye = () => fetch("/api/travel", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "leave" }) }).catch(() => {});
+    window.addEventListener("pagehide", bye); return () => { window.removeEventListener("pagehide", bye); bye(); };
   }, [place.id]);
   useEffect(() => { // the 3D interior: built when you arrive, freed when you leave
     let dead = false, scene = null;
@@ -39,8 +52,8 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
         const lecturers = (lec.current.courses ?? []).map((x) => ({ code: x.code, name: x.lecturer.name, difficulty: x.lecturer.difficulty, npcIndex: x.venue.npcIndex }));
         // the activity rings: placed by the same code the server uses to check where you stand (lib3d/interiors/activityHubs.js), drawn teal
         const list = activityHubs(c, classify(place.id, place.kind).spec).hubs.map((h) => ({ ...h, activity: h.id, tint: "#5fe3c0" })); c.hubs = [...c.hubs, ...list]; setRings(list); if (dead || !box.current) return;
-        scene = await createInteriorScene(box.current, c, { look, gender, input, view: "follow", lecturers, onFade: setFade, onIncidentEnd: (e) => setAfter(e), onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onHub: (h) => { if (h.action === "lecture") { confrontRef.current?.(h.lecturer.code); return; } if (h.activity) { setOpen(h); return; } const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true); } });
-        if (dead) { scene.dispose(); return; } api.current = scene; setStatus("ready"); setSceneReady(true);
+        scene = await createInteriorScene(box.current, c, { look, gender, selfName: selfRef.current, input, view: "follow", lecturers, onFade: setFade, onIncidentEnd: (e) => setAfter(e), onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onHub: (h) => { if (h.action === "lecture") { confrontRef.current?.(h.lecturer.code); return; } if (h.activity) { setOpen(h); return; } const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true); } });
+        if (dead) { scene.dispose(); return; } api.current = scene; if (peopleRef.current) scene.setRemotePlayers(peopleRef.current); setStatus("ready"); setSceneReady(true);
       } catch (e) { console.warn("interior unavailable", e); if (!dead) setStatus("fallback"); }
     })();
     return () => { dead = true; api.current = null; setSceneReady(false); scene?.dispose(); };

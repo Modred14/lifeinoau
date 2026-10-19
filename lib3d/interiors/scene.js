@@ -10,6 +10,8 @@ import { createNpc, npcSpec, hashSeed, lecturerSpec } from "../avatar/npc.js";
 import { incidentFrame } from "./lectureEncounter.js";
 import { ITEMS, dimsOf } from "./items.js";
 import { movePlayer, rayClip, EXIT_DEPTH, DOOR_H } from "./compile.js";
+import { createPlayerTags } from "../playerTags.js";
+import { createRemotePlayers } from "./remotePlayers.js";
 
 // ------------------------------------------------------------------------------------------------ textures
 
@@ -55,7 +57,8 @@ const NPC_ROLE = { staff: "staff", clerk: "staff", lecturer: "staff", pharmacist
 /**
  * @param container  element to draw into
  * @param c          compiled interior (buildInterior(place))
- * @param opts       { look, gender, input: {jx,jy,run}, view: "follow"|"overhead", onExit(), onHub(hub), onNear(hub|null), onRoom(name), onReady() }
+ * @param opts       { look, gender, input: {jx,jy,run}, view: "follow"|"overhead", onExit(), onHub(hub), onNear(hub|null), onRoom(name), onReady(),
+ *                 selfName, selfId (your own character: it never gets a name tag), onPickPlayer(pick) (default: opens the player menu) }
  */
 export async function createInteriorScene(container, c, opts = {}) {
   const dark = !!c.plan.style?.dark, stage = createStage(container, { shadows: false, fov: 55, far: 300, maxDpr: 1.5, exposure: dark ? 1.15 : 1.0 }), { scene, camera, renderer } = stage;
@@ -221,6 +224,10 @@ export async function createInteriorScene(container, c, opts = {}) {
     } else if (p.mode === "dance") p.av.root.position.y = fl(p.f) + 0.02 + Math.abs(Math.sin(t * 5 + p.ph)) * 0.03;
   };
 
+  // ---- other real players: avatars at the spots they reported, each with a name tag that opens the player menu. Never NPCs, never yourself. ----
+  const tags = createPlayerTags({ container, camera, selfName: opts.selfName ?? "", selfId: opts.selfId ?? "", onPick: opts.onPickPlayer, visible: (tg, cp, hp) => rayClip(c.wallsByFloor[P.fl] ?? [], cp.x, cp.z, hp.x, hp.z, 0) >= 0.97 }); // nobody is named through a wall
+  const remote = createRemotePlayers({ scene, makeAvatar: createAvatar, tags, floorY: fl, self: { id: opts.selfId ?? "", name: opts.selfName ?? "" } });
+
   // ---- the N-QRS response ----
   // The picture of an incident comes from lectureEncounter.js (a pure function of server time since the fight was settled); this only draws it.
   let inc = null, incSeq = 0;
@@ -293,13 +300,16 @@ export async function createInteriorScene(container, c, opts = {}) {
       const room2 = room ?? null, ceil = room2 ? fl(P.fl) + room2.h - 0.2 : fl(P.fl) + 3.2;
       camPos.set(P.x - fx * h * k, Math.min(ty + v * Math.max(k, 0.35), ceil), P.z - fz * h * k); look.set(P.x + fx * 0.5, ty - 0.1 - (1 - k) * 0.2, P.z + fz * 0.5); player.visible = camDist * k > 0.85; }
     if (!camInit) { camera.position.copy(camPos); camInit = true; } else camera.position.lerp(camPos, Math.min(1, dt * 14)); camera.lookAt(look); camera.fov = view === "overhead" ? 45 : 62; camera.updateProjectionMatrix(); void vp;
+    remote.update(t, dt, P); tags.update(); // after the camera has moved, so each name sits on its owner's head
   });
   setVis();
   const api = {
     stage, setYaw(y) { camYaw = y; }, teleport(x, z, floor = 0) { P.x = x; P.z = z; P.fl = floor; P.y = c.floorY[floor] ?? 0; }, get view() { return view; }, get state() { return { x: P.x, z: P.z, y: P.y, floor: P.fl, yaw: P.yaw, people: people.length, exited }; }, setView(v) { view = v; setVis(); }, toggleView() { view = view === "follow" ? "overhead" : "follow"; setVis(); return view; }, use: activate, playIncident, stopIncident, get incident() { return inc ? { id: inc.id, outcome: inc.outcome } : null }, setPose(list) { pose = list?.length ? list : null; },
+    /** The real players in this building (from /api/travel?at=): each { id, name, gender, look, level, faculty, x, z, floor, anim? }. Anyone not in the list is removed. */
+    setRemotePlayers(list) { remote.sync(list, { x: P.x, z: P.z }); }, get remoteIds() { return remote.ids(); },
     /** Walk to a point on the current floor by the shortest clear path. Resolves true on arrival, false if it could not or you took the controls. */
     walkTo(x, z) { return new Promise((resolve) => { if (route) route.done(false); const nv = c.navPlayer[P.fl], path = nv.path(P.x, P.z, x, z); if (!path || path.length < 1) { resolve(false); return; } route = { pts: [...path.slice(1), [x, z]], i: 0, done: resolve }; }); },
-    dispose() { alive = false; stopIncident(); if (route) { route.done(false); route = null; } window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); el.removeEventListener("pointerdown", pd); el.removeEventListener("pointermove", pm); el.removeEventListener("pointerup", pu); el.removeEventListener("pointercancel", pu); el.removeEventListener("wheel", wh);
+    dispose() { alive = false; remote.dispose(); tags.dispose(); stopIncident(); if (route) { route.done(false); route = null; } window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); el.removeEventListener("pointerdown", pd); el.removeEventListener("pointermove", pm); el.removeEventListener("pointerup", pu); el.removeEventListener("pointercancel", pu); el.removeEventListener("wheel", wh);
       for (const p of people) { scene.remove(p.av.root); p.av.dispose?.(); } people.length = 0; if (avatar) { player.remove(avatar.root); avatar.dispose?.(); avatar = null; }
       for (const o of toDispose) o.dispose?.(); toDispose.length = 0; for (const s of spots) s.L?.dispose?.(); scene.clear(); stage.dispose(); },
   };

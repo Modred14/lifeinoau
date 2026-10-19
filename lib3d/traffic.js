@@ -10,14 +10,6 @@ import { carBodyGeometry, CAR_WHEELS, CAR_WHEEL_R, CAR_COLORS, makeKeke, makeBus
 export const DENSITY = { cars: 6, kekes: 2, buses: 1, peds: 10 }; // within about 250 m of the camera
 
 
-/** A name floating above someone's head, as a sprite (metres). */
-export function nameTag(text, { color = "#ffffff", bg = "rgba(13,19,33,0.78)" } = {}) {
-  const c = document.createElement("canvas"); c.width = 256; c.height = 64; const g = c.getContext("2d");
-  g.font = "600 26px system-ui, sans-serif"; const w = Math.min(244, g.measureText(text).width + 28);
-  g.fillStyle = bg; g.beginPath(); g.roundRect((256 - w) / 2, 10, w, 44, 22); g.fill(); g.fillStyle = color; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(text.length > 16 ? text.slice(0, 15) + "…" : text, 128, 33);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, depthTest: false })); s.scale.set(2.4, 0.6, 1); s.renderOrder = 20; s.userData.dispose = () => { t.dispose(); s.material.dispose(); }; return s;
-}
-
 /** A walking figure made of boxes (for NPCs and for real players seen from a distance). Returns { root, pose(phase, amount) }. */
 export function makeWalker(skin, shirt, trouser) {
   const root = new THREE.Group(), m = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8 }), part = (w, h, d, x, y, z, c, pivotTop) => { const g = new THREE.BoxGeometry(w, h, d); if (pivotTop) g.translate(0, -h / 2, 0); const o = new THREE.Mesh(g, m(c)); o.position.set(x, y, z); o.castShadow = true; root.add(o); return o; };
@@ -30,9 +22,10 @@ const R = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^
 
 /**
  * parent: a group in metres. net: the road net. focus(): { x, z } the camera's ground point. hero(): { x, z, hx, hz, v } the player's own vehicle or person (cars keep clear of it).
+ * tags: an optional name-tag layer (lib3d/playerTags.js). Real players on the road get a tag that follows them; the NPC cars and walkers never do.
  * Returns { update(dt, t), setTravellers(list), dispose() }.
  */
-export function createTraffic({ parent, net, focus, hero, density = DENSITY, seed = 7 }) {
+export function createTraffic({ parent, net, focus, hero, density = DENSITY, seed = 7, tags = null }) {
   const rnd = R(seed), group = new THREE.Group(); parent.add(group);
   const disposables = [];
   // ---- cars: one instanced mesh for the paint, glass and lights, one for the wheels ----
@@ -94,16 +87,17 @@ export function createTraffic({ parent, net, focus, hero, density = DENSITY, see
     const now = performance.now(), seen = new Set();
     for (const t of list) {
       seen.add(t.id); let e = live.get(t.id);
-      if (!e) { const model = t.mode === "keke" ? makeKeke() : t.mode === "bus" ? makeBus() : t.mode === "car" ? makeCar() : null, walker = model ? null : makeWalker("#8d5a3b", "#2f62c4", "#1f2f55"), root = model ? model.root : new THREE.Group(), tag = nameTag(t.name, { bg: "rgba(21,128,61,0.88)" });
+      if (!e) { const model = t.mode === "keke" ? makeKeke() : t.mode === "bus" ? makeBus() : t.mode === "car" ? makeCar() : null, walker = model ? null : makeWalker("#8d5a3b", "#2f62c4", "#1f2f55"), root = model ? model.root : new THREE.Group(), tag = new THREE.Object3D();
         if (walker) { // on foot: the player's own look, drawn like everyone else, replaces the stand-in as soon as it has loaded
           e = { root, model, walker, tag, x: t.x, z: t.z, h: t.h, tx: t.x, tz: t.z, th: t.h, phase: 0, at: now };
           createNpc(npcSpec(t.id, { gender: t.gender === "F" ? "F" : "M", force: { look: t.look ?? undefined } }), { lod: false }).then((av) => { if (!live.has(t.id) || live.get(t.id) !== e || gone) { av.dispose(); return; } if (av.kind !== "glb") { av.dispose(); root.add(walker.root); return; } e.av = av; e.cur = null; root.add(av.root); }).catch(() => root.add(walker.root));
         }
-        tag.position.set(0, model ? model.height + 0.9 : 2.2, 0); root.add(tag); group.add(root); root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+        tag.position.set(0, model ? model.height + 0.9 : 2.2, 0); root.add(tag); group.add(root); tags?.set(t.id, { name: t.name, anchor: tag }); root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
         e = e ?? { root, model, walker, tag, x: t.x, z: t.z, h: t.h, tx: t.x, tz: t.z, th: t.h, phase: 0, at: now }; live.set(t.id, e); }
       Object.assign(e, { tx: t.x, tz: t.z, th: t.h, at: now, mode: t.mode });
+      tags?.set(t.id, { name: t.name, anchor: e.tag }); // a no-op for the same player; refuses anyone who may not carry a tag
     }
-    for (const [id, e] of live) if (!seen.has(id)) { group.remove(e.root); e.tag.userData.dispose(); if (e.av) e.av.dispose(); e.root.traverse((o) => { if (!e.av || !e.av.root.getObjectById(o.id)) o.geometry?.dispose?.(); }); live.delete(id); }
+    for (const [id, e] of live) if (!seen.has(id)) { group.remove(e.root); tags?.remove(id); if (e.av) e.av.dispose(); e.root.traverse((o) => { if (!e.av || !e.av.root.getObjectById(o.id)) o.geometry?.dispose?.(); }); live.delete(id); }
   }
 
   let spawnCool = 0, clock = 0;
@@ -140,6 +134,6 @@ export function createTraffic({ parent, net, focus, hero, density = DENSITY, see
       else if (e.av) { const v = d / Math.max(dt, 1e-3), want = v > 0.25 ? "walk" : "idle"; if (want !== e.cur && e.av.play(want, { fade: 0.3 })) e.cur = want; if (want === "walk") e.av.setSpeed(Math.max(0.5, Math.min(1.9, v / WALK_V))); e.av.update(clock, dt); e.av.root.position.y = 0.05; }
       else e.walker.pose((e.phase += d * 2.4), Math.min(1, d / dt / 1.2)); }
   }
-  function dispose() { gone = true; for (const e of live.values()) { e.tag.userData.dispose(); e.av?.dispose(); } for (const a of peds) a.npc?.dispose(); group.traverse((o) => { if (o.userData.npcMesh || o.isSkinnedMesh) return; o.geometry?.dispose?.(); }); disposables.forEach((g) => g.dispose()); bodies.dispose(); wheelsM.dispose(); parent.remove(group); }
+  function dispose() { gone = true; for (const [id, e] of live) { tags?.remove(id); e.av?.dispose(); } for (const a of peds) a.npc?.dispose(); group.traverse((o) => { if (o.userData.npcMesh || o.isSkinnedMesh) return; o.geometry?.dispose?.(); }); disposables.forEach((g) => g.dispose()); bodies.dispose(); wheelsM.dispose(); parent.remove(group); }
   return { update, setTravellers, dispose, peds /* read-only, for tests */ };
 }

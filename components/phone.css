@@ -164,3 +164,6 @@
 .shift-opt .go { white-space: nowrap; }
 .shift-why { color: var(--warn-text, #f5b942); }
 @media (prefers-reduced-motion: reduce) { .shift-bar > i { transition: none; } }.ph-ico[data-tone="lime"] { background: linear-gradient(165deg, #b8e35a, #5fa21e); } /* the OAU Guide app */
+
+/* Opened from a player's name tag while inside a building or on a trip (those screens sit at z-index 75 to 90): the phone must be on top of them. */
+.ph-scrim[data-over="1"] { z-index: 95; }

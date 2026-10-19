@@ -71,7 +71,7 @@ function Tile({ name, icon, tone, onClick, badge, first, sound }) {
 }
 
 /** The phone. A home screen with widgets, app icons and a dock. Tapping an app opens it on the same screen, nothing navigates away. */
-export default function Phone({ open, onClose, st, held = false, firstApp, initialApp, onShop, onLogout, loggingOut }) {
+export default function Phone({ open, onClose, st, held = false, firstApp, initialApp, initialWith = null, onShop, onLogout, loggingOut }) {
   const [now, setNow] = useState(() => serverDate());
   const [app, setApp] = useState(null);
   const unread = useChat((s) => s.unread); // pushed by the chat connection: nothing is polled for it any more
@@ -109,7 +109,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
   const Cur = cur?.C;
   return (
     <InPhone.Provider value={true}>
-    <div className="ph-scrim" onClick={onClose}>
+    <div className="ph-scrim" data-over={initialWith ? "1" : undefined} onClick={onClose}>
       <div className="ph" role="dialog" aria-modal="true" aria-label="Phone" data-app={app ?? undefined} onClick={(e) => e.stopPropagation()}>
         <div className="ph-screen">
           <div className="ph-status">
@@ -150,7 +150,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
           </div>
 
           {cur && (
-            <section className="pa" key={app} aria-label={cur.name}>
+            <section className="pa" key={app + (initialWith ?? "")} aria-label={cur.name}>
               {!cur.own && (
                 <header className="pa-bar">
                   <button type="button" className="pa-back" onClick={home} aria-label="Back to home screen">
@@ -160,7 +160,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
                 </header>
               )}
               <div className="pa-body">
-                {Cur ? (cur.own ? <Cur onHome={home} onClose={onClose} /> : <div className="pa-content"><Cur onOpenApp={setApp} onClose={onClose} /></div>) : <MessagesApp onHome={home} />}
+                {Cur ? (cur.own ? <Cur onHome={home} onClose={onClose} /> : <div className="pa-content"><Cur onOpenApp={setApp} onClose={onClose} /></div>) : <MessagesApp onHome={home} initialWho={app === "messages" ? initialWith : null} />}
               </div>
             </section>
           )}

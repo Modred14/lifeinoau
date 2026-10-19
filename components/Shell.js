@@ -8,6 +8,7 @@ import { call, naira, notifyError } from "@/lib/client";
 import { setPlayMode, usePlayMode, useBare, resetBoot } from "@/lib/ui";
 import { Icon } from "./Icon";
 import Phone from "./Phone";
+import PlayerMenu from "./PlayerMenu";
 import { useChat } from "@/lib/chat";
 import SoundToggle from "./SoundToggle";
 import { toast } from "@/lib/toast";
@@ -37,6 +38,7 @@ export default function Shell({ children }) {
     unreadChats = useChat((x) => x.unread),
     [phone, setPhone] = useState(false),
     [phoneApp, setPhoneApp] = useState(null),
+    [phoneWith, setPhoneWith] = useState(null), // a player to open a chat with (set when you tap "Message" on a name tag)
     [clock, setClock] = useState(null),
     opener = useRef(null),
     firstApp = useRef(null),
@@ -109,13 +111,27 @@ export default function Shell({ children }) {
     const open = () => {
       void game.refresh();
       setPhoneApp(null);
+      setPhoneWith(null);
+      setPhone(true);
+    };
+    // "Message" on a player's name tag: open the phone's Messages app on a chat with exactly that player
+    const message = (e) => {
+      const name = typeof e.detail?.name === "string" ? e.detail.name.trim() : "";
+      if (!name) return;
+      setPhoneApp("messages");
+      setPhoneWith(name);
       setPhone(true);
     };
     window.addEventListener("oau:phone", open);
-    return () => window.removeEventListener("oau:phone", open);
+    window.addEventListener("oau:message", message);
+    return () => {
+      window.removeEventListener("oau:phone", open);
+      window.removeEventListener("oau:message", message);
+    };
   }, []);
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("oau:phone-state", { detail: phone }));
+    if (!phone) setPhoneWith(null); // the next time the phone opens normally it is not tied to the last name tag
   }, [phone]);
   async function logout() {
     if (loggingOut) return;
@@ -264,6 +280,7 @@ export default function Shell({ children }) {
         held={held}
         firstApp={firstApp}
         initialApp={phoneApp}
+        initialWith={phoneWith}
         loggingOut={loggingOut}
         onLogout={logout}
         onClose={() => {
@@ -275,6 +292,7 @@ export default function Shell({ children }) {
           goBuy();
         }}
       />
+      {st && <PlayerMenu />}
     </>
   );
 }

@@ -173,8 +173,8 @@ const Banner = ({ kind }) => (
 );
 
 /* ============================== top level ============================== */
-export default function MessagesApp({ onHome }) {
-  const [who, setWho] = useState(null);
+export default function MessagesApp({ onHome, initialWho = null }) {
+  const [who, setWho] = useState(initialWho || null); // a name tag's "Message" opens straight into a chat with that player
   useEffect(() => {
     chat.setForeground(true);
     return () => chat.setForeground(false);

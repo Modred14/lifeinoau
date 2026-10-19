@@ -7,7 +7,8 @@ import * as THREE from "three";
 import { S } from "./campusReal.js";
 import { buildRoadNet, destinationOf, drivePlan, findPath, isRoad, drivable, walkable, nearestWalkable, Path } from "./roadnet.js";
 import { makeKeke, makeBus, makeVehicle, rollWheels } from "./vehicles.js";
-import { createTraffic, nameTag, makeWalker } from "./traffic.js";
+import { createTraffic, makeWalker } from "./traffic.js";
+import { createPlayerTags, isTaggable } from "./playerTags.js";
 import { createAvatar } from "./avatar/loadAvatar.js";
 import { paintBase, drawMini, drawPreview } from "./minimap.js";
 import { rideSeconds } from "../lib/travel.js";
@@ -54,6 +55,7 @@ function buildDoor(door) {
  *   from, to: place ids, mode: "trek"|"keke"|"bus"|"car", driver: boolean, look, gender, people: [{ name, gender, look }] or a Promise of that list (real players at the destination; the trip does not wait for it),
  *   input: { jx, jy, steer, gas, brake, run } (mutable; the on-screen controls write to it), miniCanvas(): canvas|null, previewCanvas(): canvas|null,
  *   onState(s), onArrive(): Promise<boolean>, onEnter(), onEnd(reason) }.
+ * o.selfName: your own character (it never gets a name tag). o.pollPeople(): optional, asked again every few seconds for the players at the destination.
  * Returns { setTravellers(list), pos(), route(), dispose(), horn() }. Resolves once the scene is set up.
  */
 export async function startTrip(env, o) {
@@ -89,14 +91,28 @@ export async function startTrip(env, o) {
   const avatarPhase = { p: 0 };
   if (mode !== "trek") { const m = mode === "keke" ? makeKeke() : mode === "bus" ? makeBus() : makeVehicle(o.car, o.carColor); vehicle = m; world.add(m.root); disposers.push(() => { world.remove(m.root); m.root.traverse((x) => x.geometry?.dispose?.()); }); }
 
-  // real players waiting around the destination
-  const there = [];
-  (async () => { const list = await (o.people ?? []); /* an array, or a promise of one: the trip never waits for it */ for (const p of list.slice(0, 8)) { if (!alive) return; try { const av = await createAvatar(p.look, p.gender), tag = nameTag(p.name, { bg: "rgba(21,128,61,0.88)" });
-    for (let k = 0; k < 14; k++) { const a = Math.random() * Math.PI * 2, r = 2.5 + Math.random() * 6, x = B.front.x + Math.cos(a) * r, z = B.front.z + Math.sin(a) * r; if (walkable(net, x, z) && !isRoad(net, x, z) || k === 13) { av.root.position.set(x, 0.1, z); av.root.rotation.y = Math.random() * 6.28; break; } }
-    tag.position.set(0, 2.2, 0); av.root.add(tag); av.play("idle"); world.add(av.root); there.push({ av, tag }); } catch { /* a player whose model fails to load is simply not drawn */ } } })();
-  disposers.push(() => { for (const t of there) { world.remove(t.av.root); t.tag.userData.dispose(); t.av.dispose(); } });
+  // name tags for real players (the ones waiting at the destination and the ones on the road); never for you, never for NPCs
+  const tags = createPlayerTags({ container: stage.renderer.domElement.parentElement, camera: stage.camera, selfName: o.selfName ?? "", unit: S, maxDist: 45, fadeFrom: 30 });
+  disposers.push(() => tags.dispose());
 
-  const traffic = createTraffic({ parent: world, net, focus: () => camPt, hero: () => hero });
+  // real players waiting around the destination: kept in step with the server's list, so one who leaves loses their avatar and name at once
+  const there = new Map(); // public id -> { av, anchor } (null while the avatar is still loading)
+  const dropThere = (id) => { const t = there.get(id); there.delete(id); tags.remove(id); if (t) { world.remove(t.av.root); t.av.dispose(); } };
+  const spotFor = (id) => { let h = 7; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; const a0 = (h % 628) / 100, r = 2.5 + ((h >>> 10) % 60) / 10;
+    for (let k = 0; k < 14; k++) { const a = a0 + k * 0.9, x = B.front.x + Math.cos(a) * r, z = B.front.z + Math.sin(a) * r; if ((walkable(net, x, z) && !isRoad(net, x, z)) || k === 13) return { x, z, yaw: (h % 360) * Math.PI / 180 }; } };
+  const addThere = async (p) => {
+    if (!alive || there.has(p?.id) || there.size >= 8 || !isTaggable(p, { name: o.selfName })) return;
+    there.set(p.id, null);
+    try { const av = await createAvatar(p.look, p.gender); if (!alive || !there.has(p.id)) { av.dispose(); return; }
+      const sp = spotFor(p.id), anchor = new THREE.Object3D(); anchor.position.set(0, 2.2, 0); av.root.add(anchor); av.root.position.set(sp.x, 0.1, sp.z); av.root.rotation.y = sp.yaw; av.play("idle"); world.add(av.root);
+      there.set(p.id, { av, anchor }); tags.set(p.id, { name: p.name, anchor, meta: { level: p.level, faculty: p.faculty } });
+    } catch { there.delete(p.id); /* a player whose model fails to load is simply not drawn */ } };
+  const syncThere = (list) => { const ids = new Set((list ?? []).map((p) => p?.id)); for (const id of [...there.keys()]) if (!ids.has(id)) dropThere(id); for (const p of (list ?? []).slice(0, 8)) addThere(p); };
+  (async () => { syncThere(await (o.people ?? [])); /* an array, or a promise of one: the trip never waits for it */ })();
+  const pollThere = o.pollPeople ? setInterval(async () => { try { const l = await o.pollPeople(); if (alive) syncThere(l); } catch { /* try again next time */ } }, 5000) : null;
+  disposers.push(() => { clearInterval(pollThere); for (const id of [...there.keys()]) dropThere(id); });
+
+  const traffic = createTraffic({ parent: world, net, focus: () => camPt, hero: () => hero, tags });
   disposers.push(() => traffic.dispose());
 
   // ---- state machine ----
@@ -184,7 +200,7 @@ export async function startTrip(env, o) {
   const off = stage.onFrame((tm, dt) => {
     if (!alive) return; update(dt); traffic.update(dt); rb.tex.offset.y -= dt * 1.6;
     beam.material.opacity = 0.2 + Math.sin(time * 3) * 0.08; ring.scale.setScalar(1 + Math.sin(time * 3) * 0.08); hornT = Math.max(0, hornT - dt);
-    follow(dt);
+    follow(dt); tags.update();
     // the little map and (when open) the full preview
     const live = { x: hero.x, z: hero.z, hx: hero.hx, hz: hero.hz, route: route, mode: mode === "car" && !auto ? "car" : mode, dest: { x: B.front.x, z: B.front.z }, from: { x: A.front.x, z: A.front.z } }, drive = mode !== "trek", mini = o.miniCanvas?.(), prev = o.previewCanvas?.();
     live.mode = drive ? "drive" : "trek"; if (mini) drawMini(mini, base, live); if (prev) drawPreview(prev, base, live);
