@@ -93,6 +93,24 @@ export default function MapPage() {
   // Billboards (they have their own panel) and the place you are standing in still use the small info card.
   const direct = !!(L && !trip && ch && !held && L.located && L.id !== here && L.kind !== "billboard");
   const closeSheet = () => { setSheet(false); if (direct) setSel(null); };
+  // ---- how long each way of going would take ----
+  // Worked out on this device from the road map (no network call): the road distance divided by the speed of the vehicle, plus the walk to and from it.
+  // They appear one by one as each is ready, and are worked out again whenever the destination, where you are, or whether a driver is hired changes.
+  const driverOn = !!ch && driverActive(ch, g?.week), [eta, setEta] = useState({}), sheetOpen = (sheet || direct) && !!L, etaTo = sheetOpen ? L.id : null;
+  useEffect(() => {
+    setEta({}); if (!etaTo || !data) return; let live = true;
+    (async () => {
+      const [{ loadServices }, { planTrip }, { resolvePlace }] = await Promise.all([import("@/lib3d/worldsvc.js"), import("@/lib3d/tripplan.js"), import("@/lib3d/travel.js")]);
+      const svc = await loadServices(data), from = resolvePlace(data, here) ?? resolvePlace(data, "senate"), to = resolvePlace(data, etaTo); if (!to) return;
+      const jobs = [["trek", false, "trek"], ["keke", false, "keke"], ["bus", false, "bus"], ["car", false, "car"], ...(driverOn ? [["car", true, "carDriver"]] : [])];
+      for (const [mode, drv, key] of jobs) {
+        await new Promise((r) => setTimeout(r, 0)); // let the screen breathe between the (quick) calculations
+        if (!live) return; let r; try { const t = planTrip(svc, { from, to, mode, driver: drv }); r = t.ok ? { ok: true, secs: t.secs, len: t.len, approx: t.approx } : { ok: false, reason: t.reason }; } catch { r = { ok: false, reason: "error" }; }
+        setEta((e) => ({ ...e, [key]: r }));
+      }
+    })().catch(() => {});
+    return () => { live = false; };
+  }, [etaTo, here, data, driverOn]); // eslint-disable-line react-hooks/exhaustive-deps
   // ---- travelling ----
   // The trip starts the moment the player taps Go. The real players standing at the door are fetched alongside (handed over as a promise)
   // and drawn when the list arrives; if that request is slow or fails, the trip is not held up and the door is simply empty.
@@ -114,6 +132,7 @@ export default function MapPage() {
   function entered() { // only enclosed buildings open an interior; open-air places (billboards, grounds, statues, gates...) just end the trip with you standing there
     const t = tripRef.current, p = t ? find(t.to) : null, indoors = !!p && (hasInterior(p.id, p.kind) || isOpenSpace(p.id)); setFade(true); setTimeout(() => { if (t && indoors) { setFocus(t.act ?? null); setInside(t.to); } else if (t) setSel(t.to); setTrip(null); setFade(false); }, 520); }
   const tripEnded = (why) => { setTrip(null); if (why === "error") toast.error("The trip could not start. Try again."); };
+  const tripNotice = (m) => toast.error(m); // a ride that cannot reach you, a way that is blocked: said plainly, and you can try again from the sheet
   const tripPlace = trip ? find(trip.to) : null, insidePlace = inside ? find(inside) : null;
   return (
     <>
@@ -131,12 +150,13 @@ export default function MapPage() {
           onTripArrive={pay}
           onTripEnter={entered}
           onTripEnd={tripEnded}
+          onTripNotice={tripNotice}
         />
       </div>
       {trip && <TripHud trip={trip} placeName={trip.name} st={tripSt} input={input} miniRef={miniRef} previewRef={previewRef} onCancel={() => setTrip(null)} />}
       <div className="trip-fade" data-on={fade ? "1" : undefined} aria-hidden="true" />
       {insidePlace && <BuildingInside place={insidePlace} look={ch?.look ?? null} gender={ch?.gender ?? "M"} focus={focus} selfName={ch?.name ?? ""} onLeave={() => { setInside(null); setFocus(null); }} />}
-      {(sheet || direct) && L && <TravelSheet place={L} here={youPlace?.name} hasCar={ownsCar(ch)} driver={driverActive(ch, g?.week) ? { name: ch.driverName } : null} people={counts[L.id] ?? 0} distanceM={youPlace && L.located && youPlace.located ? Math.round(Math.hypot(L.x - youPlace.x, L.z - youPlace.z)) : null} character={ch} balanceKobo={g?.balanceKobo ?? null} jailed={held} highlight={want} onGo={begin} onClose={() => { closeSheet(); setWant(null); }} />}
+      {(sheet || direct) && L && <TravelSheet place={L} here={youPlace?.name} hasCar={ownsCar(ch)} driver={driverActive(ch, g?.week) ? { name: ch.driverName } : null} people={counts[L.id] ?? 0} distanceM={youPlace && L.located && youPlace.located ? Math.round(Math.hypot(L.x - youPlace.x, L.z - youPlace.z)) : null} character={ch} balanceKobo={g?.balanceKobo ?? null} jailed={held} highlight={want} eta={eta} onGo={begin} onClose={() => { closeSheet(); setWant(null); }} />}
       {youPlace && !trip && <div className="map-here" role="status"><Icon name="pin" size={14} weight="fill" /> {held ? <>You are held in <b>{CUSTODY_NAME}</b> until your sentence ends</> : <>You are at <b>{youPlace.name}</b></>}</div>}
       <div
         className="map-chrome"

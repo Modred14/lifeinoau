@@ -301,6 +301,24 @@ and a total cap of ₦5M times your level number (100L = ₦5M, 200L = ₦10M an
 
 ---
 
+### Getting around the map (roads, vehicles and trips)
+
+A trip has **no fixed duration**. Its length is the road distance divided by the speed of what carries you, plus the walk to and from it. The numbers live in `lib/travel.js`
+(walking 2.6 m/s, running 5.5 m/s; keke 11 m/s, bus 9 m/s, a car with a driver 18 m/s; each with its own acceleration, braking and bend limit), and the travel sheet shows the
+estimate for every choice before you go. How it works:
+
+- **The road network** is `public/data/oau-roadgraph.json`, generated from the map's road polygons by `python3 tools/oau/roadgraph.py` (`npm run build:roads`; needs numpy,
+  scipy and scikit-image, the game itself does not). It holds the centrelines, the junctions and how wide each road is. Run it again whenever the roads or buildings in
+  `oau-campus.json` or `lib3d/mapExtras.js` change: `tests/roadgraph.test.mjs` fails when the file is out of date. `lib3d/roadgraph.js` turns it into two lanes per road
+  (traffic keeps right), curved turns through junctions, pavements, crossings and routing. Alleys too tight for a car become footpaths.
+- **What is solid** is `lib3d/collide.js`: every building and lake outline as exact edges, plus the walls and stage of the grounds, plus every vehicle as a box. People
+  (`lib3d/walker.js`, which also plans walking routes round buildings and parked cars) cannot enter any of it, and cars stay on the road.
+- **Traffic** is `lib3d/trafficsim.js` (pure logic; `lib3d/traffic.js` only draws it): vehicles follow lanes, keep their distance, give way at junctions and to the player.
+- **A trip** is planned by `lib3d/tripplan.js` (the route, the stopping places and the estimate) and run by `lib3d/tripflow.js` (a state machine: you walk to the vehicle, it
+  stops at the kerb, you board by its right-hand door, it drives the route, you get out and walk to the door). `lib3d/travel.js` draws it. The estimate and the trip use the same
+  motion rules, so on an empty road they agree to about 1%; other traffic adds a little, and the time shown while you travel is worked out again from where things are.
+- `lib/travel.js` also keeps `minTravelMs`, the soonest a trip could honestly be finished (distance over the vehicle's top speed), for any server check of arrivals.
+
 ## 4. Money rules (the part that must never break)
 
 - All money is **integer kobo** (1 naira = 100 kobo). No decimals touch the ledger.
@@ -420,3 +438,9 @@ Run them all with `npm test`. Each file prints what it checked.
 | `courses.test.mjs` | Curriculum, Boroks, attendance and study rules, effort-driven exams, course service |
 | `biz.test.mjs`, `career.test.mjs` | Business economics simulation, jobs and businesses service |
 | `market.test.mjs`, `inv.test.mjs` | Market simulation, buying and selling |
+| `travel.test.mjs` | Fares, vehicle speeds, driver plans, place ids, the road net and door positions |
+| `roadgraph.test.mjs` | The generated road graph is current; right-hand lanes, smooth turns, a car-sized box stays on the road and out of buildings, routing |
+| `collide.test.mjs` | Exact collision: no entering buildings at any speed or frame rate, no tunnelling, sliding along walls, vehicles are solid |
+| `trafficsim.test.mjs` | NPC traffic for minutes at several frame rates and places: on the road, in lane, no overlaps, no teleporting, no jams; the shared braking model |
+| `walker.test.mjs` | Walking routes round buildings and cars, same walk at any frame rate, the player taking over from the automatic walk |
+| `tripflow.test.mjs` | Whole journeys in every mode: boarding by the right-hand door, estimate vs real time, longer trips take longer, same at any frame rate, no teleporting, cancelling |

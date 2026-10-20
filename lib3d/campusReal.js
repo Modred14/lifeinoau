@@ -3,6 +3,7 @@
 // 1 scene unit = 10 m. Building heights are exaggerated by EX for readability; the true height of every building stays in the data.
 // Layout, footprints and road shapes come from the supplied OpenStreetMap render. Facades and roofs are generic, NOT photo-verified.
 import * as THREE from "three";
+import { buildRoadMeshes, ROAD_COLORS } from "./roadmesh.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { buildGround } from "./ground.js";
 import { buildEdges } from "./edges.js";
@@ -42,9 +43,10 @@ export function buildRealCampus(data, meta = {}) {
   // ---- ground: patchy grass and sand that fades into the sky-blue at its rim, so the map ends softly (ground.js). Water stays blue. ----
   const ground = buildGround(data, S); root.add(ground);
   const rimKeep = data.places.filter((p) => p.x < b.x0 + 60 || p.x > b.x1 - 60 || p.z < b.z0 + 60 || p.z > b.z1 - 160).map((p) => [p.x, p.z, 60]);
+  let roadFlat = null, roadSurface = null, tripOn = false;
   const edges = buildEdges(data, S, { keepOut: rimKeep }); root.add(edges.group); // roads that run off the map, and a belt of trees along its rim
   for (const m of [flat(data.areas.park, "#5aa064", 0.03, { layer: 2 }), flat(data.areas.sports, "#4c9a68", 0.035, { layer: 2 }), flat(data.areas.wood, "#2f6b3b", 0.04, { layer: 2 }),
-    flat(data.areas.pitch, "#2fb98a", 0.06, { layer: 3 }), flat(data.areas.water, "#2f6f95", 0.05, { layer: 3, rough: 0.15, metal: 0.2 }), flat(data.areas.parking, "#46505c", 0.06, { layer: 3 }), flat(data.roads, "#343b46", 0.08, { layer: 4 })]) if (m) root.add(m);
+    flat(data.areas.pitch, "#2fb98a", 0.06, { layer: 3 }), flat(data.areas.water, "#2f6f95", 0.05, { layer: 3, rough: 0.15, metal: 0.2 }), flat(data.areas.parking, "#46505c", 0.06, { layer: 3 }), (roadFlat = flat(data.roads, "#343b46", 0.08, { layer: 4 }))]) if (m) root.add(m);
 
   // ---- buildings: real footprints, merged into one wall mesh and one roof mesh ----
   const win = windowTextures(5), rep = 1 / (12 * S); for (const t of [win.map, win.emis]) t.repeat.set(rep, rep);
@@ -104,14 +106,26 @@ export function buildRealCampus(data, meta = {}) {
   let hereId = null; const setYou = (id) => { hereId = id; const L = resolve(id); if (!L) { here.visible = false; return; } here.visible = true; here.position.set(L.x, 0, L.z); hring.position.y = 0.22; hring.scale.setScalar(L.radius * 1.1); harrow.position.y = (L.pos?.y ?? 3) + 0.6; };
   const update = (t, dt = 0.016) => { bb.update(dt); const k = 0.35 + 0.65 * Math.max(0, Math.sin(t * 5)); glow.forEach((m) => m.color.setRGB(k, k * 0.23, k * 0.19)); if (sel.visible) { sel.material.opacity = 0.65 + Math.sin(t * 3) * 0.25; sel.rotation.z = t * 0.4; } if (here.visible) { harrow.position.y += Math.sin(t * 4) * 0.004; hring.rotation.z = t * 0.3; } };
   /** While a trip runs, the flat ground layers sit almost on the ground so cars and people do not look like they stand on slabs, and the map's labels get out of the way. */
-  const tripMode = (on) => { root.traverse((o) => { if (o.userData?.layerY != null) o.position.y = on ? o.userData.layerY * 0.12 : o.userData.layerY; }); edges.group.traverse((o) => { if (o.name === "road-stubs") { o.userData.layerY ??= o.position.y; o.position.y = on ? o.userData.layerY * 0.12 : o.userData.layerY; } }); };
+  const tripMode = (on) => { tripOn = on; root.traverse((o) => { if (o.userData?.layerY != null) o.position.y = on ? o.userData.layerY * 0.12 : o.userData.layerY; }); edges.group.traverse((o) => { if (o.name === "road-stubs") { o.userData.layerY ??= o.position.y; o.position.y = on ? o.userData.layerY * 0.12 : o.userData.layerY; } }); };
 
   /** Which place is under a raycaster? Returns a place id, "bld_<n>" for a building with no name, or null. */
   const pick = (ray) => { const bh = ray.intersectObjects(bb.meshes, false)[0], h0 = ray.intersectObjects([wallMesh, capMesh].filter(Boolean), false)[0]; if (bh && (!h0 || bh.distance <= h0.distance)) return bh.object.userData.placeId; const hit = ray.intersectObjects([wallMesh, capMesh].filter(Boolean), false)[0]; if (!hit) return null; const isW = hit.object === wallMesh, v = hit.face.a;
     const r = ranges.find((q) => (isW ? v >= q.s0 && v < q.s1 : v >= q.c0 && v < q.c1)); return r ? placeAt.get(r.bid)?.id ?? "bld_" + r.bid : null; };
   const extent = Math.max(x1 - x0, z1 - z0) / 2, dispose = () => { bb.dispose(); edges.dispose(); root.traverse((o) => { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : m ? [m] : []).forEach((q) => q.dispose()); }); win.map.dispose(); win.emis.dispose(); };
   const setBillboards = (list) => bb.setBoards(list);
-  return { root, anchors, places, pick, resolve, update, setSelected, setYou, tripMode, setTripMode: tripMode, setBillboards, dispose, bounds: { x0, x1, z0, z1 }, extent, attribution: data.meta.attribution,
+  /**
+   * Gives the roads their proper shape: carriageways of the real width with a pavement each side, kerbs, centre dashes, stop lines and crossings, all drawn
+   * from the road graph (the very geometry vehicles drive on and people collide with). The old flat road polygons stay underneath as paved apron.
+   * Pass null to go back to the plain polygons.
+   */
+  const setRoadGraph = (graph) => {
+    if (roadSurface) { root.remove(roadSurface); roadSurface.userData.dispose?.(); roadSurface = null; }
+    if (!graph) { if (roadFlat) { roadFlat.material.color.set("#343b46"); roadFlat.userData.layerY = 0.08; } tripMode(tripOn); return; }
+    roadSurface = buildRoadMeshes(graph, S, 0.08); root.add(roadSurface);
+    if (roadFlat) { roadFlat.material.color.set(ROAD_COLORS.apron); roadFlat.userData.layerY = 0.0754; }
+    tripMode(tripOn);
+  };
+  return { root, anchors, places, pick, resolve, update, setSelected, setYou, tripMode, setTripMode: tripMode, setRoadGraph, setBillboards, dispose, bounds: { x0, x1, z0, z1 }, extent, attribution: data.meta.attribution,
     camera: { home: { x: 0, z: 8, dist: 210, az: 0.7, pol: 0.95 }, min: 10, max: 520 } };
 }
 

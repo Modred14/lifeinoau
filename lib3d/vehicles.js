@@ -45,7 +45,7 @@ export const CAR_COLORS = ["#c0392b", "#2c5aa0", "#e8e8e8", "#1f1f23", "#4a4f57"
 export function makeCar(paint = "#1c1d21") {
   const root = new THREE.Group(), body = new THREE.Mesh(carBodyGeometry(paint, false), bodyMat()); body.castShadow = true; body.receiveShadow = true; root.add(body);
   const ws = wheels(root, CAR_WHEELS, CAR_WHEEL_R, 0.26);
-  return { root, wheels: ws, front: [ws[0], ws[1]], length: 4.5, width: 1.85, height: 1.5, door: { side: 1, z: 0.35 }, seatZ: 0 };
+  return { root, wheels: ws, front: [ws[0], ws[1]], length: 4.5, width: 1.85, height: 1.5, door: { side: -1, z: -0.5 }, seatZ: 0 };
 }
 
 // ---- the YK Autos cars (lib/cars.js ids -> a body shape) ----
@@ -106,7 +106,7 @@ export function makeVehicle(modelId, paint) {
   const sh = SHAPES[car.shape] ?? SHAPES.sedan, colour = car.fixedPaint ?? (paint || "#1c1d21");
   const root = new THREE.Group(), body = new THREE.Mesh(sh.body(colour), bodyMat()); body.castShadow = true; body.receiveShadow = true; root.add(body);
   const ws = wheels(root, [[-sh.wx, sh.wz[0]], [sh.wx, sh.wz[0]], [-sh.wx, sh.wz[1]], [sh.wx, sh.wz[1]]], sh.wr, 0.28);
-  return { root, wheels: ws, front: [ws[0], ws[1]], length: sh.L, width: sh.W, height: sh.H, door: { side: 1, z: car.shape === "supercar" ? 0.15 : 0.35 }, seatZ: car.shape === "supercar" ? -0.1 : 0 };
+  return { root, wheels: ws, front: [ws[0], ws[1]], length: sh.L, width: sh.W, height: sh.H, door: { side: -1, z: -0.5 }, seatZ: car.shape === "supercar" ? -0.1 : 0 };
 }
 
 /** A keke napep: yellow three-wheeler with a black canopy, open at the sides. */
@@ -126,10 +126,10 @@ export function makeKeke() {
     box(0.16, 0.16, 0.16, 0, 1.35, 0.3, "#6b4a35"),              // and head
   ], body = new THREE.Mesh(merged(p), bodyMat()); body.castShadow = true; body.receiveShadow = true; root.add(body);
   const ws = wheels(root, [[-0.62, -0.7], [0.62, -0.7], [0, 1.15]], 0.27, 0.16);
-  return { root, wheels: ws, front: [ws[2]], length: 2.8, width: 1.4, height: 2, door: { side: 1, z: -0.1 }, seatZ: -0.4, open: true };
+  return { root, wheels: ws, front: [ws[2]], length: 2.8, width: 1.4, height: 2, door: { side: -1, z: -0.45 }, seatZ: -0.4, open: true };
 }
 
-/** A danfo-style minibus: yellow with a black stripe, a row of windows, and a door on the right. */
+/** A danfo-style minibus: yellow with a black stripe, a row of windows, and a door on the right (a vehicle's own +x is its LEFT, so the right is -x). */
 export function makeBus() {
   const root = new THREE.Group(), Y = "#f0b81c", K = "#17181b", L = 6.4, W = 2.1, H = 2.0, p = [
     box(W, H, L, 0, 0.55 + H / 2, 0, Y),
@@ -140,10 +140,19 @@ export function makeBus() {
     box(0.5, 0.2, 0.08, -0.7, 0.9, L / 2 + 0.02, "#fff5c8"), box(0.5, 0.2, 0.08, 0.7, 0.9, L / 2 + 0.02, "#fff5c8"),
     box(0.45, 0.2, 0.08, -0.75, 0.95, -L / 2 - 0.02, "#c4161c"), box(0.45, 0.2, 0.08, 0.75, 0.95, -L / 2 - 0.02, "#c4161c"),
     box(W + 0.08, 0.2, 0.25, 0, 0.5, L / 2 - 0.05, "#202328"), box(W + 0.08, 0.2, 0.25, 0, 0.5, -L / 2 + 0.05, "#202328"),
-    box(0.04, 1.5, 1.0, W / 2 + 0.01, 1.35, 1.3, "#222a33"),                              // the door
+    box(0.04, 1.5, 1.0, -(W / 2 + 0.01), 1.35, 1.3, "#222a33"),                         // the door, on the right (the kerb side: traffic keeps right)
   ], body = new THREE.Mesh(merged(p), bodyMat()); body.castShadow = true; body.receiveShadow = true; root.add(body);
   const ws = wheels(root, [[-0.95, 2.0], [0.95, 2.0], [-0.95, -1.9], [0.95, -1.9]], 0.5, 0.32);
-  return { root, wheels: ws, front: [ws[0], ws[1]], length: L, width: W, height: 2.6, door: { side: 1, z: 1.3 }, seatZ: 0 };
+  return { root, wheels: ws, front: [ws[0], ws[1]], length: L, width: W, height: 2.6, door: { side: -1, z: 1.3 }, seatZ: 0 };
+}
+
+/**
+ * Puts a seated driver in a car or a bus, at `seat` ({ x, y, z } in the vehicle's own space: x is the LEFT, so the driver of a right-hand-traffic car sits at +x).
+ * (The keke already has its driver built in.) Returns the group, so the caller can remove it.
+ */
+export function addDriver(vehicle, seat, shirt = "#3b6ea5") {
+  const g = new THREE.Group(), parts = [box(0.44, 0.55, 0.26, 0, 0.3, 0, shirt), box(0.18, 0.14, 0.18, 0, 0.72, 0, "#6b4a35"), box(0.12, 0.3, 0.12, -0.14, 0.18, 0.22, shirt, -0.9), box(0.12, 0.3, 0.12, 0.14, 0.18, 0.22, shirt, -0.9)];
+  const m = new THREE.Mesh(merged(parts), bodyMat()); m.castShadow = true; g.add(m); g.position.set(seat.x, seat.y + 0.2, seat.z); vehicle.root.add(g); vehicle.driver = g; return g;
 }
 
 /** Spin a vehicle's wheels for the distance it just moved, and turn the front ones (radians) for steering. */

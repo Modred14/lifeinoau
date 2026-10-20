@@ -1,4 +1,4 @@
-{
+{ "//": "package.json",
   "name": "lifeinoau",
   "private": true,
   "type": "module",
@@ -9,7 +9,8 @@
     "seed": "node prisma/seed.js",
     "test": "node tests/run-all.mjs",
     "realtime": "node --env-file=.env realtime/server.js",
-    "test:chat": "node tests/e2e/chat.e2e.mjs"
+    "test:chat": "node tests/e2e/chat.e2e.mjs",
+    "build:roads": "node tools/oau/dump-merged.mjs /tmp/oau-merged.json && python3 tools/oau/roadgraph.py /tmp/oau-merged.json public/data/oau-roadgraph.json"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

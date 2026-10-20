@@ -1,9 +1,9 @@
 // lib3d/traffic.js
 // The life on the road during a trip: a few NPC cars, the odd keke and bus, some people walking, and the real players who are travelling at the same time.
-// It is deliberately sparse (the road is meant to feel lived in, not crowded). Everything follows the road by steering, so there are no routes to compute,
-// and anything that drifts too far from the camera is moved to a fresh spot near it. Metres, x east, z south, y up; nose towards +z like vehicles.js.
+// It is deliberately sparse (the road is meant to feel lived in, not crowded). What moves and where is decided by lib3d/trafficsim.js (vehicles follow lanes on the road
+// graph, give way at junctions and keep their distance); this file only draws it. Metres, x east, z south, y up; nose towards +z like vehicles.js.
 import * as THREE from "three";
-import { randomRoadNear, roadHalfWidth } from "./roadnet.js";
+import { createTrafficSim } from "./trafficsim.js";
 import { createNpc, npcSpec } from "./avatar/npc.js";
 import { carBodyGeometry, CAR_WHEELS, CAR_WHEEL_R, CAR_COLORS, makeKeke, makeBus, makeCar, rollWheels } from "./vehicles.js";
 
@@ -21,13 +21,15 @@ export function makeWalker(skin, shirt, trouser) {
 const R = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 
 /**
- * parent: a group in metres. net: the road net. focus(): { x, z } the camera's ground point. hero(): { x, z, hx, hz, v } the player's own vehicle or person (cars keep clear of it).
+ * parent: a group in metres. svc: the world services (lib3d/worldsvc.js: road graph and collision world). focus(): { x, z } the camera's ground point.
  * tags: an optional name-tag layer (lib3d/playerTags.js). Real players on the road get a tag that follows them; the NPC cars and walkers never do.
- * Returns { update(dt, t), setTravellers(list), dispose() }.
+ * Returns { update(dt), setTravellers(list), dispose(), sim }. `sim` is the traffic simulation: the trip uses it for the vehicle that carries the player,
+ * and tells it where the player is so vehicles give way to them.
  */
-export function createTraffic({ parent, net, focus, hero, density = DENSITY, seed = 7, tags = null }) {
+export function createTraffic({ parent, svc, focus, density = DENSITY, seed = 7, tags = null }) {
   const rnd = R(seed), group = new THREE.Group(); parent.add(group);
   const disposables = [];
+  const sim = createTrafficSim({ graph: svc.graph, world: svc.world, focus, rnd, density: { vehicles: density.cars + density.kekes + density.buses, peds: density.peds, limits: { car: density.cars, keke: density.kekes, bus: density.buses } } });
   // ---- cars: one instanced mesh for the paint, glass and lights, one for the wheels ----
   const nCars = density.cars, bodyGeo = carBodyGeometry("#ffffff", false), suvGeo = carBodyGeometry("#ffffff", true);
   const bodies = new THREE.InstancedMesh(bodyGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.2 }), Math.max(1, nCars));
@@ -38,48 +40,17 @@ export function createTraffic({ parent, net, focus, hero, density = DENSITY, see
   //      one that has wandered off is given a new face, clothes and build before it comes back, so the road never fills with the same few people. ----
   const nPed = density.peds, WALK_V = 1.4; // the walk clip's own pace in metres per second; playing it at speed/WALK_V stops the feet sliding
   let gone = false, npcSeq = seed * 1000;
-  const pedAnim = ["idle", "phone", "talk", "lookAround"]; // what a person does when they stop for a moment
-  const addNpc = (a, av) => { av.root.visible = false; av.root.position.set(0, -50, 0); group.add(av.root); a.npc = av; a.cur = null; };
-  const loadNpc = async (a) => { try { const av = await createNpc(npcSpec(++npcSeq, { role: rnd() < 0.08 ? "staff" : "student" })); if (gone) { av.dispose(); return null; } return av; } catch { return null; } };
-
-  // ---- agents ----
-  const mk = (kind) => ({ kind, on: false, x: 0, z: 0, hx: 1, hz: 0, v: 0, vmax: 8, look: 0, phase: rnd() * 6, side: rnd() < 0.5 ? 1 : -1, color: 0, suv: false, colors: [0, 0, 0, 0] });
-  const cars = Array.from({ length: nCars }, () => mk("car")), peds = Array.from({ length: nPed }, () => ({ ...mk("ped"), pause: 0, nextPause: 2 + rnd() * 12, act: "idle", cur: null, npc: null }));
-  peds.forEach(async (a) => { const av = await loadNpc(a); if (av) addNpc(a, av); }); // the walkers appear as their characters finish loading
-  const big = [...Array.from({ length: density.kekes }, () => { const a = mk("keke"); a.model = makeKeke(); return a; }), ...Array.from({ length: density.buses }, () => { const a = mk("bus"); a.model = makeBus(); return a; })];
-  for (const a of big) { a.model.root.visible = false; a.model.root.traverse((o) => { if (o.isMesh) o.castShadow = true; }); group.add(a.model.root); }
+  const addNpc = (s, av) => { av.root.visible = false; av.root.position.set(0, -50, 0); group.add(av.root); s.npc = av; s.cur = null; };
+  const loadNpc = async () => { try { const av = await createNpc(npcSpec(++npcSeq, { role: rnd() < 0.08 ? "staff" : "student" })); if (gone) { av.dispose(); return null; } return av; } catch { return null; } };
+  // a pool of characters; the simulation's pedestrians take one each while they are alive
+  const pedSlots = Array.from({ length: nPed }, () => ({ id: null, npc: null, cur: null, loading: false }));
+  pedSlots.forEach(async (s) => { const av = await loadNpc(); if (av) addNpc(s, av); }); // the walkers appear as their characters finish loading
+  // ---- keke and bus models: a pool, each taken by one simulated vehicle while it is alive ----
+  const pools = { keke: Array.from({ length: density.kekes }, () => ({ id: null, model: makeKeke() })), bus: Array.from({ length: density.buses }, () => ({ id: null, model: makeBus() })) };
+  for (const s of [...pools.keke, ...pools.bus]) { s.model.root.visible = false; s.model.root.traverse((o) => { if (o.isMesh) o.castShadow = true; }); group.add(s.model.root); }
+  const carSlots = Array.from({ length: nCars }, () => ({ id: null, phase: 0, color: CAR_COLORS[0] }));
   const tmp = new THREE.Matrix4(), base = new THREE.Matrix4(), loc = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), v3 = new THREE.Vector3(), sc = new THREE.Vector3(1, 1, 1), col = new THREE.Color();
   const hide = new THREE.Matrix4().makeScale(0, 0, 0);
-
-  function place(a, near, far) { // somewhere on the road, the right distance from the camera, heading the way the road runs
-    const f = focus(), p = randomRoadNear(net, rnd, f.x, f.z, near, far, 14); if (!p) return false;
-    let best = -1, bd = 0;
-    for (let k = 0; k < 8; k++) { const ang = (k / 8) * Math.PI * 2, hw = roadHalfWidth(net, p.x + Math.cos(ang) * 8, p.z + Math.sin(ang) * 8); if (hw > best) { best = hw; bd = ang; } }
-    if (best <= 0) return false; a.x = p.x; a.z = p.z; a.hx = Math.cos(bd); a.hz = Math.sin(bd); a.timer = 0; a.on = true;
-    a.vmax = a.kind === "ped" ? 1.1 + rnd() * 0.6 : a.kind === "bus" ? 6 + rnd() * 3 : a.kind === "keke" ? 6 + rnd() * 3 : 6 + rnd() * 5; a.v = a.vmax * 0.8; a.side = rnd() < 0.5 ? 1 : -1;
-    if (a.kind === "car") { a.suv = rnd() < 0.3; a.colors = [CAR_COLORS[Math.floor(rnd() * CAR_COLORS.length)]]; }
-    if (a.kind === "ped") { a.pause = 0; a.nextPause = 3 + rnd() * 14; if (a.npc && !a.loading) { a.loading = true; loadNpc(a).then((av) => { a.loading = false; if (!av) return; // swap in a new person only if the old one is not being looked at
-        if (a.npc && (!a.on || Math.hypot(a.x - focus().x, a.z - focus().z) > 60)) { group.remove(a.npc.root); a.npc.dispose(); addNpc(a, av); } else av.dispose(); }); } }
-    return true;
-  }
-  function steerTo(a, dt) { // keep to the road: look ahead along a few headings and lean towards the one with the most road under it
-    a.timer -= dt; if (a.timer > 0) return; a.timer = 0.25 + rnd() * 0.15;
-    const L = a.kind === "ped" ? 5 : 9, h0 = Math.atan2(a.hz, a.hx); let best = null, bs = -1e9;
-    for (const d of [-0.9, -0.45, 0, 0.45, 0.9]) { const ang = h0 + d, hw = roadHalfWidth(net, a.x + Math.cos(ang) * L, a.z + Math.sin(ang) * L); if (hw <= 0.5) continue; const s = Math.min(hw, 6) - Math.abs(d) * 1.2 + (d === 0 ? 1.4 : 0) + rnd() * 0.5; if (s > bs) { bs = s; best = ang; } }
-    a.want = best == null ? h0 + Math.PI : best; // a dead end: turn round
-  }
-  function advance(a, dt, others) {
-    if (a.kind === "ped") { // now and then someone stops to check their phone, chat or look around, then walks on
-      if (a.pause > 0) { a.pause -= dt; if (a.pause <= 0) a.nextPause = 15 + rnd() * 30; }
-      else { a.nextPause -= dt; if (a.nextPause <= 0 && a.v < 2) { a.pause = 4 + rnd() * 9; a.act = pedAnim[1 + Math.floor(rnd() * 3)]; } }
-    }
-    if (!(a.kind === "ped" && a.pause > 0)) steerTo(a, dt);
-    const h0 = Math.atan2(a.hz, a.hx); let dh = (((a.want ?? h0) - h0 + Math.PI * 3) % (Math.PI * 2)) - Math.PI; dh = Math.max(-1, Math.min(1, dh)) * Math.min(1, dt * (a.kind === "ped" ? 4 : 2.2)); a.hx = Math.cos(h0 + dh); a.hz = Math.sin(h0 + dh);
-    let target = a.kind === "ped" && a.pause > 0 ? 0 : a.vmax; const rx = -a.hz, rz = a.hx;
-    for (const o of others) { if (o === a || !o.on) continue; const dx = o.x - a.x, dz = o.z - a.z, f = dx * a.hx + dz * a.hz, s = Math.abs(dx * rx + dz * rz); if (f > 0 && f < 16 && s < 2.4 && o.hx * a.hx + o.hz * a.hz > 0.3) target = Math.min(target, f < 5 ? 0 : (o.v ?? 0) * 0.9); }
-    a.v += (target - a.v) * Math.min(1, dt * 2.5); a.x += a.hx * a.v * dt; a.z += a.hz * a.v * dt; a.phase += a.v * dt * (a.kind === "ped" ? 4.5 : 1);
-  }
-  const lane = (a) => { const hw = roadHalfWidth(net, a.x, a.z), off = a.kind === "ped" ? Math.max(0, hw * 0.7) * a.side : Math.min(1.6, hw * 0.45); return [a.x - a.hz * off, a.z + a.hx * off]; };
 
   // ---- real players on the road, drawn at the spot they last reported and eased towards each new one ----
   const live = new Map();
@@ -100,40 +71,43 @@ export function createTraffic({ parent, net, focus, hero, density = DENSITY, see
     for (const [id, e] of live) if (!seen.has(id)) { group.remove(e.root); tags?.remove(id); if (e.av) e.av.dispose(); e.root.traverse((o) => { if (!e.av || !e.av.root.getObjectById(o.id)) o.geometry?.dispose?.(); }); live.delete(id); }
   }
 
-  let spawnCool = 0, clock = 0;
+  let clock = 0;
+  /** Gives each live id a slot in `slots` (and frees the slots of ids that have gone). */
+  function assign(slots, ids) { const live = new Set(ids); for (const s of slots) if (s.id != null && !live.has(s.id)) s.id = null; for (const id of ids) if (!slots.some((s) => s.id === id)) { const s = slots.find((x) => x.id == null); if (s) { s.id = id; s.fresh = true; } } }
+
+  /** Advances the simulation and draws it. */
   function update(dt) {
-    clock += dt;
-    const f = focus(), hr = hero(), fast = (hr?.v ?? 0) > 22, all = [...cars, ...big, ...(hr ? [{ ...hr, on: true }] : [])];
-    spawnCool -= dt;
-    for (const a of [...cars, ...big, ...peds]) {
-      const far = Math.hypot(a.x - f.x, a.z - f.z);
-      if (!a.on || far > 300) { if (spawnCool <= 0 && place(a, 80, 230)) spawnCool = 0.15; else if (!a.on || far > 300) a.on = false; }
-      if (!a.on) continue;
-      if (a.kind === "ped") advance(a, dt, []); else advance(a, dt, all);
-      if (hr && a.kind !== "ped" && fast) { const dx = a.x - hr.x, dz = a.z - hr.z; if (dx * hr.hx + dz * hr.hz > 0 && Math.hypot(dx, dz) < 30 && Math.abs(dx * -hr.hz + dz * hr.hx) < 3.5) a.on = false; } // out of the way of a speeding ride
-      else if (hr && !fast && a.kind !== "ped") { const dx = a.x - hr.x, dz = a.z - hr.z, d = Math.hypot(dx, dz); if (d < 3.6) { a.x += (dx / (d || 1)) * (3.6 - d); a.z += (dz / (d || 1)) * (3.6 - d); a.v = Math.min(a.v, 1); } } // a gentle bump: they give way
-    }
+    clock += dt; sim.update(dt); const f = focus();
+    const npcs = sim.vehicles.filter((v) => v.role === "npc" && !v.custom && !v.done), byId = new Map(npcs.map((v) => [v.id, v]));
     // cars
-    cars.forEach((a, i) => { if (!a.on) { bodies.setMatrixAt(i, hide); for (let w = 0; w < 4; w++) wheelsM.setMatrixAt(i * 4 + w, hide); return; }
-      const [x, z] = lane(a); q.setFromAxisAngle(up, Math.atan2(a.hx, a.hz) + 0); base.compose(v3.set(x, 0.05, z), q, sc); bodies.setMatrixAt(i, base); bodies.setColorAt(i, col.set(a.colors[0]));
-      CAR_WHEELS.forEach(([wx, wz], w) => { tmp.makeRotationX(a.phase * 0.8); loc.makeTranslation(wx, CAR_WHEEL_R, wz).multiply(tmp); wheelsM.setMatrixAt(i * 4 + w, tmp.multiplyMatrices(base, loc)); }); });
+    assign(carSlots, npcs.filter((v) => v.kind === "car").map((v) => v.id));
+    carSlots.forEach((s, i) => { const a = s.id == null ? null : byId.get(s.id);
+      if (!a) { bodies.setMatrixAt(i, hide); for (let w = 0; w < 4; w++) wheelsM.setMatrixAt(i * 4 + w, hide); return; }
+      s.phase += (a.v * dt) / CAR_WHEEL_R; q.setFromAxisAngle(up, a.yaw); base.compose(v3.set(a.x, 0.05, a.z), q, sc); bodies.setMatrixAt(i, base); bodies.setColorAt(i, col.set(CAR_COLORS[Math.floor(a.tint * CAR_COLORS.length) % CAR_COLORS.length]));
+      CAR_WHEELS.forEach(([wx, wz], w) => { tmp.makeRotationX(s.phase); loc.makeTranslation(wx, CAR_WHEEL_R, wz).multiply(tmp); wheelsM.setMatrixAt(i * 4 + w, tmp.multiplyMatrices(base, loc)); }); });
     bodies.instanceMatrix.needsUpdate = true; wheelsM.instanceMatrix.needsUpdate = true; if (bodies.instanceColor) bodies.instanceColor.needsUpdate = true;
-    for (const a of big) { a.model.root.visible = a.on; if (!a.on) continue; const [x, z] = lane(a); a.model.root.position.set(x, 0.05, z); a.model.root.rotation.y = Math.atan2(a.hx, a.hz); rollWheels(a.model, a.v * dt); }
+    // kekes and buses
+    for (const kind of ["keke", "bus"]) { assign(pools[kind], npcs.filter((v) => v.kind === kind).map((v) => v.id));
+      for (const s of pools[kind]) { const a = s.id == null ? null : byId.get(s.id); s.model.root.visible = !!a; if (!a) continue; s.model.root.position.set(a.x, 0.05, a.z); s.model.root.rotation.y = a.yaw; rollWheels(s.model, a.v * dt); } }
     // people
-    peds.forEach((a) => { const av = a.npc; if (!av) return;
-      if (!a.on) { av.root.visible = false; return; }
-      const [x, z] = lane(a), dist = Math.hypot(a.x - f.x, a.z - f.z);
-      av.root.position.set(x, 0.1, z); av.root.rotation.y = Math.atan2(a.hx, a.hz);
-      const moving = a.v > 0.2, want = moving ? "walk" : a.pause > 0 ? a.act : "idle";
-      if (want !== a.cur && av.has(want) && av.play(want, { fade: 0.35 })) a.cur = want;
-      if (moving && a.cur === "walk") av.setSpeed(Math.max(0.5, Math.min(1.7, a.v / WALK_V)));
-      av.tick(clock, dt, dist); });
+    const peds = sim.peds, pById = new Map(peds.map((p) => [p.id, p]));
+    for (const s of pedSlots) if (s.id != null && !pById.has(s.id)) s.id = null;
+    for (const p of peds) if (!pedSlots.some((s) => s.id === p.id)) { const s = pedSlots.find((x) => x.id == null && x.npc); if (s) { s.id = p.id;
+      if (!s.loading) { s.loading = true; loadNpc().then((av) => { s.loading = false; if (!av) return; // swap in a new person only if the old one is not being looked at
+        const pp = pById.get(s.id); if (s.npc && (!pp || Math.hypot(pp.x - focus().x, pp.z - focus().z) > 60)) { group.remove(s.npc.root); s.npc.dispose(); addNpc(s, av); } else av.dispose(); }); } } }
+    for (const s of pedSlots) { const av = s.npc; if (!av) continue; const p = s.id == null ? null : pById.get(s.id);
+      if (!p) { av.root.visible = false; continue; }
+      const dist = Math.hypot(p.x - f.x, p.z - f.z); av.root.position.set(p.x, 0.1, p.z); av.root.rotation.y = Math.atan2(p.hx, p.hz);
+      const moving = p.v > 0.2 && !(p.pause > 0), want = moving ? "walk" : p.pause > 0 ? p.act : "idle";
+      if (want !== s.cur && av.has(want) && av.play(want, { fade: 0.35 })) s.cur = want;
+      if (moving && s.cur === "walk") av.setSpeed(Math.max(0.5, Math.min(1.7, p.v / WALK_V)));
+      av.tick(clock, dt, dist); }
     // real players: slide towards the latest reported spot (they report about every two seconds)
     for (const e of live.values()) { const k = Math.min(1, dt * 3), px = e.x, pz = e.z; e.x += (e.tx - e.x) * k; e.z += (e.tz - e.z) * k; let dh = ((e.th - e.h + Math.PI * 3) % (Math.PI * 2)) - Math.PI; e.h += dh * k; e.root.position.set(e.x, 0.05, e.z); e.root.rotation.y = e.h; const d = Math.hypot(e.x - px, e.z - pz);
       if (e.model) rollWheels(e.model, d);
       else if (e.av) { const v = d / Math.max(dt, 1e-3), want = v > 0.25 ? "walk" : "idle"; if (want !== e.cur && e.av.play(want, { fade: 0.3 })) e.cur = want; if (want === "walk") e.av.setSpeed(Math.max(0.5, Math.min(1.9, v / WALK_V))); e.av.update(clock, dt); e.av.root.position.y = 0.05; }
       else e.walker.pose((e.phase += d * 2.4), Math.min(1, d / dt / 1.2)); }
   }
-  function dispose() { gone = true; for (const [id, e] of live) { tags?.remove(id); e.av?.dispose(); } for (const a of peds) a.npc?.dispose(); group.traverse((o) => { if (o.userData.npcMesh || o.isSkinnedMesh) return; o.geometry?.dispose?.(); }); disposables.forEach((g) => g.dispose()); bodies.dispose(); wheelsM.dispose(); parent.remove(group); }
-  return { update, setTravellers, dispose, peds /* read-only, for tests */ };
+  function dispose() { gone = true; for (const [id, e] of live) { tags?.remove(id); e.av?.dispose(); } for (const s of pedSlots) s.npc?.dispose(); sim.dispose?.(); group.traverse((o) => { if (o.userData.npcMesh || o.isSkinnedMesh) return; o.geometry?.dispose?.(); }); disposables.forEach((g) => g.dispose()); bodies.dispose(); wheelsM.dispose(); parent.remove(group); }
+  return { update, setTravellers, dispose, sim, peds: pedSlots /* read-only, for tests */ };
 }

@@ -7,7 +7,7 @@ import { call, naira } from "@/lib/client";
 import { Icon } from "../Icon";
 import { confirmAction } from "@/lib/confirm";
 import { game, run, cash, canAfford, useResource } from "@/lib/gameStore";
-import { DRIVER_PLANS, driverNameFor, RIDE_SECONDS } from "@/lib/travel.js";
+import { DRIVER_PLANS, driverNameFor } from "@/lib/travel.js";
 import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
 import "./hire-app.css";
@@ -25,7 +25,7 @@ export default function HireApp({ onClose }) {
     const name = d.driver?.name ?? driverNameFor(game.get()?.character?.id ?? "");
     if (!(await confirmAction({
       title: d.driver ? `Keep ${d.driver.name} for ${p.weeks} more week${p.weeks === 1 ? "" : "s"}?` : `Hire ${name} for ${weeksText(p.weeks)}?`,
-      message: `You pay ${naira(p.priceKobo)} now. While ${d.driver?.name ?? name} works for you, trips in your own car take ${RIDE_SECONDS.driver} seconds and you do not have to drive. The ₦500 fuel for each trip is still paid when you arrive.`,
+      message: `You pay ${naira(p.priceKobo)} now. While ${d.driver?.name ?? name} works for you, your own car drives you along the road and you do not have to steer. The ₦500 fuel for each trip is still paid when you arrive.`,
       confirmLabel: `Pay ${naira(p.priceKobo)}`,
     }))) return;
     setBusy(p.weeks);
@@ -77,7 +77,7 @@ export default function HireApp({ onClose }) {
         </div>
       </div>
       <p className="hr-note">
-        With a driver, trips in your car take {RIDE_SECONDS.driver} seconds and you sit back. You pay the driver up front for a number of weeks (a week is 7 days); the ₦500 fuel is still paid on arrival.
+        With a driver, you sit back while your car drives you along the road, and it is the quickest way across campus. You pay the driver up front for a number of weeks (a week is 7 days); the ₦500 fuel is still paid on arrival.
       </p>
       {d.plans.map((p) => {
         const poor = !canAfford(p.priceKobo), per = Math.round(Number(BigInt(p.priceKobo) / 100n) / p.weeks), best = p.weeks === DRIVER_PLANS[DRIVER_PLANS.length - 1].weeks;
