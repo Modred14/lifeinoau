@@ -1,0 +1,689 @@
+From 9133071c15d2473a008e91dd72048f86890d9302 Mon Sep 17 00:00:00 2001
+From: claude <claude@example.com>
+Date: Tue, 20 Oct 2026 23:37:13 +0000
+Subject: [PATCH] Fix Jobs take-job crash and Love app load; distance-based
+ ride times (car 6-9s, bus 8-10s, keke 10-15s, walk to vehicle <=5s)
+
+---
+ OAU-LIFE-GUIDE.md                 |  9 +++--
+ components/apps/CareerApp.js      | 24 +++++--------
+ lib/relationshipService.js        | 30 +++++++++++-----
+ lib/travel.js                     | 24 +++++++++++--
+ lib3d/trafficsim.js               | 30 ++++++++++++++++
+ lib3d/tripflow.js                 | 34 ++++++++++--------
+ lib3d/tripplan.js                 | 25 ++++++++-----
+ lib3d/walker.js                   | 18 ++++++++++
+ src/app/api/relationship/route.js |  8 +++--
+ tests/fakedb.mjs                  | 15 ++++++++
+ tests/love.test.mjs               |  8 ++---
+ tests/relsvc.test.mjs             |  8 ++---
+ tests/travel-time.test.mjs        | 60 +++++++++++++++++++++++++++++++
+ tests/travel.test.mjs             |  8 +++--
+ tests/world-activities.test.mjs   |  4 +--
+ 15 files changed, 239 insertions(+), 66 deletions(-)
+ create mode 100644 tests/travel-time.test.mjs
+
+diff --git a/OAU-LIFE-GUIDE.md b/OAU-LIFE-GUIDE.md
+index aaadee2..6ecc64a 100644
+--- a/OAU-LIFE-GUIDE.md
++++ b/OAU-LIFE-GUIDE.md
+@@ -303,9 +303,12 @@ and a total cap of ₦5M times your level number (100L = ₦5M, 200L = ₦10M an
+ 
+ ### Getting around the map (roads, vehicles and trips)
+ 
+-A trip has **no fixed duration**. Its length is the road distance divided by the speed of what carries you, plus the walk to and from it. The numbers live in `lib/travel.js`
+-(walking 2.6 m/s, running 5.5 m/s; keke 11 m/s, bus 9 m/s, a car with a driver 18 m/s; each with its own acceleration, braking and bend limit), and the travel sheet shows the
+-estimate for every choice before you go. How it works:
++A driven ride (keke, bus, car with a driver) lasts a set time that **grows with the road distance** between the two stops, inside a window for each vehicle:
++**car with a driver 6 to 9 seconds, bus 8 to 10 seconds, keke 10 to 15 seconds** (`RIDE_SECONDS`, `rideSecondsFor()` in `lib/travel.js`: a hop of 150 m or less takes the low
++end, 2.4 km or more the high end, and everything between is spread evenly by distance). The vehicle still pulls away, slows for bends and junctions and brakes to a stop; that motion
++is recorded by `rideProfile()` in `lib3d/trafficsim.js` and played over exactly that time. **Walking to the vehicle never takes more than 5 seconds**: a kerb that is further than
++that is walked at a faster pace (`Walker.glide`), and the vehicle comes up the road in the same time. Your own car, which you steer, and the trek are not timed this way, and the
++walk from where you get out to the door is at the normal walking pace (2.6 m/s). The travel sheet shows the estimate for every choice before you go. How it works:
+ 
+ - **The road network** is `public/data/oau-roadgraph.json`, generated from the map's road polygons by `python3 tools/oau/roadgraph.py` (`npm run build:roads`; needs numpy,
+   scipy and scikit-image, the game itself does not). It holds the centrelines, the junctions and how wide each road is. Run it again whenever the roads or buildings in
+diff --git a/components/apps/CareerApp.js b/components/apps/CareerApp.js
+index 4af2f4e..e763ed5 100644
+--- a/components/apps/CareerApp.js
++++ b/components/apps/CareerApp.js
+@@ -61,22 +61,14 @@ export default function Career() {
+         ok: "You quit your job.",
+         local: (x) => ({ ...x, job: null }),
+       });
+-    const x = d.jobs.find((y) => y.key === extra.job),
+-      same = j?.key === x.key;
++    // Taking a job: the screen needs the server's full job card (the shift menu, today's limits, the clock), which only the server can work out.
++    // An optimistic patch with a half-built job object used to crash the screen (j.shifts was undefined), so the answer is awaited and the card is re-read.
++    const x = d.jobs.find((y) => y.key === extra?.job);
++    if (!x) return toast.error("That job is not available.");
+     return go("/api/career/job", { action, ...extra }, {
+-      ok: `You are now a ${x.title}.`,
+-      local: (v) => {
+-        const xp = same ? v.job.xp : 0;
+-        return {
+-          ...v,
+-          job: {
+-            key: x.key, title: x.title, xp, level: Math.min(10, Math.floor(xp / 5)),
+-            shiftsToNext: 5 - (xp % 5), shiftsThisWeek: v.job?.shiftsThisWeek ?? 0,
+-            maxShifts: v.job?.maxShifts ?? 5, energy: x.energy,
+-          },
+-        };
+-      },
+-    });
++      pending: `Taking the ${x.title} job…`,
++      okLate: (r) => r.note ?? `You are now a ${x.title}.`,
++    }).then((res) => { if (!res?.failed) { load(); game.refresh?.(); } return res; });
+   };
+   const biz = (action, id, extra = {}) => {
+     const b = d.businesses.find((y) => y.id === id),
+@@ -194,7 +186,7 @@ export default function Career() {
+                   </div>
+                 ) : (
+                   <>
+-                    {j.shifts.map((sh) => (
++                    {(j.shifts ?? []).map((sh) => (
+                       <div className="led shift-opt" key={sh.key}>
+                         <span>
+                           {SHIFT_ICON[sh.key]} <b>{sh.label}</b>
+diff --git a/lib/relationshipService.js b/lib/relationshipService.js
+index fd34f12..37657cc 100644
+--- a/lib/relationshipService.js
++++ b/lib/relationshipService.js
+@@ -8,6 +8,8 @@ import { transferInTx, InsufficientFunds } from "./ledger.js";
+ import { roll } from "./rng.js";
+ import { PRIVATE_HOMES, canLiveIn, movePricing } from "./rules.js";
+ import { roomAfterMove } from "./roomService.js";
++import { chatFor, insertMessage } from "./chatCore.js";
++import { KIND } from "./chatShared.js";
+ import {
+   ACTIVITY, INVITES, ASKS, COUPLE, LABEL, MAX_OPEN_REQUESTS, REQUEST_WEEKS, RECONCILE_WEEKS, CAUGHT, COST, PREGNANCY_RISK,
+   clamp, otherOf, pairIds, startKind, affectionNow, moodOf, progress, limitKey, doneThisWeek, whyNotActivity, whyNotAsk, catchChance, outcome, ringOf, REQUEST_TEXT, NOTES,
+@@ -56,6 +58,20 @@ function canMap(bond, me, them, week, p) {
+   return can;
+ }
+ 
++/**
++ * Who has this player really talked to (a text message each way)? Messages live in one Chat row per pair (aId < bId) and a Message only says which side
++ * sent it (fromA), so this reads the player's chats and then which sides have written in each. Money cards do not count as talking.
++ * `onlyWith` limits it to one other player. Returns the Set of the other players' ids.
++ */
++async function talkedWith(db, meId, onlyWith = null) {
++  const chats = await db.chat.findMany({ where: onlyWith ? { OR: [{ aId: meId, bId: onlyWith }, { aId: onlyWith, bId: meId }] } : { OR: [{ aId: meId }, { bId: meId }] }, select: { id: true, aId: true, bId: true }, orderBy: { lastAt: "desc" }, take: 400 });
++  if (!chats.length) return new Set();
++  const sides = await db.message.groupBy({ by: ["chatId", "fromA"], where: { chatId: { in: chats.map((x) => x.id) }, kind: KIND.TEXT } });
++  const seen = new Map();
++  for (const m of sides) { const e = seen.get(m.chatId) ?? { a: false, b: false }; if (m.fromA) e.a = true; else e.b = true; seen.set(m.chatId, e); }
++  return new Set(chats.filter((x) => { const e = seen.get(x.id); return e && e.a && e.b; }).map((x) => (x.aId === meId ? x.bId : x.aId)));
++}
++
+ export async function getRelationship(db, userId) {
+   const base = await db.character.findUnique({ where: { userId }, select: { id: true } });
+   if (!base) throw new GameError("Create a character first.", 404);
+@@ -100,10 +116,8 @@ export async function getRelationship(db, userId) {
+     });
+   }
+   // players you have really talked to (a message each way) and not started anything with yet
+-  const talked = await db.message.findMany({ where: { OR: [{ fromId: c.id }, { toId: c.id }] }, select: { fromId: true, toId: true }, orderBy: { createdAt: "desc" }, take: 800 });
+-  const sent = new Set(), got = new Set();
+-  for (const m of talked) { if (m.fromId === c.id) sent.add(m.toId); else got.add(m.fromId); }
+-  const have = new Set(ids), both = [...sent].filter((id) => got.has(id) && !have.has(id)).slice(0, 40);
++  const talked = await talkedWith(db, c.id);
++  const have = new Set(ids), both = [...talked].filter((id) => !have.has(id)).slice(0, 40);
+   let discover = [];
+   if (both.length) {
+     const [rows, blocks] = await Promise.all([
+@@ -220,8 +234,7 @@ export async function relate(db, userId, body = {}) {
+         if (await blockedPair(tx, c.id, them.id)) throw new GameError("You cannot do that with this player.", 403);
+         const [lowId, highId] = pairIds(c.id, them.id);
+         if (await tx.bond.findUnique({ where: { lowId_highId: { lowId, highId } } })) throw new GameError("You two are already in your Love lists.", 409);
+-        const [a, b] = await Promise.all([tx.message.count({ where: { fromId: c.id, toId: them.id } }), tx.message.count({ where: { fromId: them.id, toId: c.id } })]);
+-        if (!a || !b) throw new GameError("You can only start something with a player you have talked to. Message each other first.", 409);
++        if (!(await talkedWith(tx, c.id, them.id)).has(them.id)) throw new GameError("You can only start something with a player you have talked to. Message each other first.", 409);
+         const [mineN, theirsN] = await Promise.all([tx.bond.count({ where: mine(c.id) }), tx.bond.count({ where: mine(them.id) })]);
+         if (mineN >= 30) throw new GameError("Your Love list is full. Remove someone first.", 409);
+         if (theirsN >= 30) throw new GameError(`${them.name}'s Love list is full.`, 409);
+@@ -364,12 +377,13 @@ export async function relate(db, userId, body = {}) {
+         let fin;
+         try { fin = await finishActivity(tx, { c, them, bond, activity: action, week, tier: body.tier, payer: c, venues, key: `love:${c.id}:${requestId}`, solo: true }); }
+         catch (e) { if (e instanceof InsufficientFunds) throw new GameError("You cannot afford that.", 402); throw e; }
+-        if (text) await tx.message.create({ data: { fromId: c.id, toId: them.id, body: text } });
++        let sentMsg = null; // the note appears in their chat (one statement, in this same transaction)
++        if (text) { const chat = await chatFor(tx, c.id, them.id, { create: true, cache: false }); sentMsg = chat && await insertMessage(tx, chat, c, { kind: KIND.TEXT, body: text }); }
+         const label = { note: "sent a note", food: "bought food for", gift: "sent a gift to" }[action];
+         await memory(tx, bond.id, week, action === "note" ? `${c.name} sent ${them.name} a note.` : `${c.name} ${label} ${them.name}.`);
+         await note(tx, them.id, action === "note" ? `${c.name} sent you a note.` : action === "food" ? `${c.name} bought you food.` : `${c.name} sent you a gift.`);
+         const caught = await sneakyCheck(tx, { bond, actor: c, other: them, activity: action, solo: true, week });
+-        return { ok: true, note: { note: "Note sent.", food: `You bought ${them.name} food.`, gift: "They loved it." }[action], affection: fin.aff, caught };
++        return { ok: true, note: { note: "Note sent.", food: `You bought ${them.name} food.`, gift: "They loved it." }[action], affection: fin.aff, caught, notify: sentMsg ? { type: "msg", chat: sentMsg.chatId, id: sentMsg.id } : undefined };
+       }
+ 
+       if (action === "request") {
+diff --git a/lib/travel.js b/lib/travel.js
+index a391bcb..516a66d 100644
+--- a/lib/travel.js
++++ b/lib/travel.js
+@@ -30,6 +30,25 @@ export const VEHICLE = {
+   bus: { cruise: 9, accel: 1.2, brake: 2.4, lat: 2.0 },    // about 32 km/h
+   driver: { cruise: 18, accel: 2.6, brake: 3.2, lat: 2.8 },  // about 65 km/h
+ };
++// ---- how long a ride takes: it follows the distance, inside a fixed window for each vehicle ----
++// A driven ride (keke, bus, car with a driver) lasts a set number of seconds that grows with the road distance between the two stops: the shortest hop takes the
++// low end of the window, a trip across the whole campus the high end, and everything in between is spread evenly by distance. The vehicle still speeds up,
++// slows for bends and brakes to a stop (lib3d/trafficsim.js rideProfile); the whole motion is simply played at the pace that fits the window.
++/** [fastest, slowest] seconds for a ride, by vehicle: a driver's car is the quickest, then the bus, then the keke. */
++export const RIDE_SECONDS = { driver: [6, 9], bus: [8, 10], keke: [10, 15] };
++/** Road distances (metres) that map to the two ends of the window: at or below SHORT is the fastest, at or above LONG the slowest. */
++export const RIDE_SHORT_METRES = 150, RIDE_LONG_METRES = 2400;
++/** Walking to the vehicle never takes longer than this. A walk that would take longer is played at a faster pace so it still fits. */
++export const APPROACH_MAX_SECONDS = 4.4, APPROACH_GLIDE_ABOVE = 4, APPROACH_MIN_SECONDS = 2.5;
++/** Seconds a driven ride of `metres` road distance takes (kind: \"keke\" | \"bus\" | \"driver\"), or null for anything you steer yourself. */
++export function rideSecondsFor(kind, metres) {
++  const w = RIDE_SECONDS[kind]; if (!w) return null;
++  const f = Math.max(0, Math.min(1, ((Number.isFinite(metres) ? metres : 0) - RIDE_SHORT_METRES) / (RIDE_LONG_METRES - RIDE_SHORT_METRES)));
++  return w[0] + (w[1] - w[0]) * f;
++}
++/** How long the walk to the vehicle lasts: as long as walking takes, but never more than the cap (and the vehicle needs a moment to arrive). */
++export const approachSeconds = (walkSecs) => Math.min(APPROACH_MAX_SECONDS, Math.max(APPROACH_MIN_SECONDS, walkSecs));
++
+ /** Your own car, driven by you: the pace the estimate assumes (you may go faster or slower). */
+ export const OWN_CAR = { cruise: 16, accel: 2.6, brake: 3.2, lat: 2.8 };
+ /** Fixed bits of animation at each end of a trip: the camera settling in, and opening the door and stepping through it. */
+@@ -59,8 +78,9 @@ export const OWN_CAR_MAX = 22; // m/s, the most your own car can do (lib3d/tripf
+ export const TRAVEL_LIMITS = { walkMps: WALK_SPEED.run * 1.15, carMps: OWN_CAR_MAX * 1.1, rideMargin: 1.1, walkSlackM: 60, carSlackM: 80, rideSlackM: 650 };
+ /** The soonest (ms) a trip of `metres` (straight line between the two places) can be finished in, for this mode. 0 when it is too short to matter. */
+ export function minTravelMs(metres, mode, hasDriver = false) {
+-  const L = TRAVEL_LIMITS, prof = vehicleProfile(mode, hasDriver);
+-  const slack = prof ? L.rideSlackM : mode === "car" ? L.carSlackM : L.walkSlackM, speed = prof ? prof.cruise * L.rideMargin : mode === "car" ? L.carMps : L.walkMps;
++  const L = TRAVEL_LIMITS, kind = rideKind(mode, hasDriver);
++  if (kind) return Math.floor(rideSecondsFor(kind, Math.max(0, metres - L.rideSlackM)) * 1000);   // a ride takes at least its window's fastest time, longer the further it goes
++  const slack = mode === "car" ? L.carSlackM : L.walkSlackM, speed = mode === "car" ? L.carMps : L.walkMps;
+   return Math.floor((Math.max(0, metres - slack) / speed) * 1000);
+ }
+ 
+diff --git a/lib3d/trafficsim.js b/lib3d/trafficsim.js
+index ca4ed2c..cca9315 100644
+--- a/lib3d/trafficsim.js
++++ b/lib3d/trafficsim.js
+@@ -48,6 +48,31 @@ export function rideTime(route, { cruise, aMax, brake }, s0 = 0, v0 = 0) {
+   return t;
+ }
+ 
++/**
++ * The same motion as rideTime(), recorded, then played back over exactly `duration` seconds (or at its natural pace when `duration` is omitted).
++ * The shape of the ride is kept (it pulls away, slows for bends and junctions, brakes to a stop at the end); only its pace changes. at(t) -> { s, v }:
++ * how far along the route the vehicle is after t seconds of the ride, and how fast it is going. Returns null when the vehicle can never finish the route.
++ */
++export function rideProfile(route, { cruise, aMax, brake }, duration = null) {
++  let s = 0, v = 0, t = 0; const dt = 0.1, S = [0], V = [0];
++  while (t < 3600) {
++    const lim = Math.min(cruise, route.vAt(Math.min(route.len, s + 3 + v * 0.8))), acc = idmAccel(v, lim, aMax, brake, route.len - s, 0, 0.25);
++    v = Math.max(0, v + acc * dt); s = Math.min(route.len, s + v * dt); t += dt; S.push(s); V.push(v);
++    if (route.len - s < 0.8 && v < 0.3) break;
++    if (v < 0.01 && t > 5 && route.len - s > 5 && acc <= 0) return null;
++  }
++  S.push(route.len); V.push(0); t += dt;   // the last little bit: it comes to rest exactly at the end of the route
++  const raw = t, dur = duration ?? raw, k = raw / dur, n = S.length - 1;
++  return {
++    dur, raw,
++    at(u) {
++      if (u >= dur) return { s: route.len, v: 0 };   // exactly at rest at the end, with no rounding left over
++      const x = Math.max(0, Math.min(dur, u)) * k / dt, i = Math.min(n - 1, Math.floor(x)), f = Math.max(0, Math.min(1, x - i));
++      return { s: S[i] + (S[i + 1] - S[i]) * f, v: (V[i] + (V[i + 1] - V[i]) * f) * k };
++    },
++  };
++}
++
+ const angDiff = (a, b) => ((b - a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+ 
+ /** Closest point of path to (x, z) searching only arclength [s0, s1]: [s, distance]. Walks just that stretch, so it is cheap on a long route. */
+@@ -181,6 +206,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
+ 
+   // ---------- the step ----------
+   function stepVehicle(a, dt) {
++    if (a.kinematic) { a.stillFor = 0; return; }   // the player's ride is played from a recorded motion (placeAlong): the traffic model does not move it
+     const route = a.route, front = a.s + a.len / 2;
+     let v0 = Math.min(a.cruise, route.vAt(Math.min(route.len, a.s + 3 + a.v * 0.8)));
+     if (a.hold) v0 = 0;
+@@ -264,6 +290,10 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
+     addHero(kind, route, opts = {}) { const a = make(kind, route, { ...opts, role: "hero" }); a.custom = true; return a; },
+     /** Gives a vehicle a new route that starts exactly where it is now (the first lane of `route` must be the lane it is on). */
+     setRoute(a, route, opts = {}) { a.route = route; a.s = 0; a.si = 0; a.stopAt = opts.stopAt ?? null; a.res = null; a.waitSince = null; a.nextConn = null; a.stopLine = null; pose(a); },
++    /** Removes the traffic (not the player's vehicle) within r metres of a point, so a pickup vehicle can appear there straight away. */
++    clearSpot(x, z, r) { for (const b of vehicles) if (!b.done && b.role === "npc" && Math.hypot(b.x - x, b.z - z) < r) b.done = true; },
++    /** Puts a kinematic vehicle (a.kinematic = true) at `s` metres along its route, moving at `v`. The player's ride uses this so its duration is exact. */
++    placeAlong(a, s, v = 0) { a.s = Math.max(0, Math.min(a.route.len, s)); a.v = v; a.stillFor = 0; pose(a); },
+     remove(a) { a.done = true; world?.removeBody("veh" + a.id); const i = vehicles.indexOf(a); if (i >= 0) vehicles.splice(i, 1); },
+     /** The player's own car, the player on foot, or anything else vehicles must give way to. */
+     setExternal(id, b) { external.set(id, b); }, removeExternal(id) { external.delete(id); },
+diff --git a/lib3d/tripflow.js b/lib3d/tripflow.js
+index d2bfff3..c9b597c 100644
+--- a/lib3d/tripflow.js
++++ b/lib3d/tripflow.js
+@@ -10,7 +10,7 @@
+ // The person is a Walker (one controller for the stick, the keys and the automatic route, so they never fight). Vehicles are sim vehicles on the road graph.
+ // The journey time is whatever the motion adds up to; `eta` is the planner's arithmetic (tripplan.js) applied to where things are right now.
+ import { Walker, WALK_R } from "./walker.js";
+-import { KINDS, doorPoint, toWorld } from "./trafficsim.js";
++import { KINDS, doorPoint, toWorld, rideProfile } from "./trafficsim.js";
+ import { remainingSecs } from "./tripplan.js";
+ import { INTRO_SECONDS, BOARD_SECONDS, ALIGHT_SECONDS, OWN_CAR_MAX } from "../lib/travel.js";
+ import { boxesOverlap } from "./collide.js";
+@@ -27,7 +27,7 @@ export function createTripFlow(env, o) {
+   const driven = !!plan.driven, ownCar = mode === "car" && !plan.driven, vehicleTrip = mode !== "trek", kind = plan.kind;
+   const walker = new Walker(world, nav, { x: plan.start.x, z: plan.start.z, hx: 0, hz: 1 });
+   const S = { phase: "intro", t: 0, time: 0, eta: plan.secs, notice: null, ended: false, entered: false, doorK: 0, boardK: 0, alightK: 0, speed: 0 };
+-  let hero = null, own = null, spawnAt = 0, spawnTries = 0, waitedForVehicle = 0, boardFrom = null, alightTo = null, lastEta = -1, retargeted = false, approachDoor = null, departed = false, enterFrom = null, alightFrom = null;
++  let hero = null, own = null, inProf = null, heroT = 0, spawnAt = 0, spawnTries = 0, waitedForVehicle = 0, boardFrom = null, alightTo = null, lastEta = -1, retargeted = false, approachDoor = null, departed = false, enterFrom = null, alightFrom = null;
+   const person = { visible: true, seated: false, seat: null, x: plan.start.x, z: plan.start.z, hx: 0, hz: 1 };
+ 
+   const go = (p) => { S.phase = p; S.t = 0; };
+@@ -44,8 +44,10 @@ export function createTripFlow(env, o) {
+       hero = sim.addHero(kind, r, { s: plan.pick.s - s0, v: 0, hold: true, len: dims?.len, wid: dims?.wid, cruise: plan.profile.cruise, aMax: plan.profile.accel, brake: plan.profile.brake }); hero.color = "#1c1d21"; hero.ignoreExt = new Set(["player"]); return true;
+     }
+     const r = plan.inbound ?? graph.makeRoute([{ kind: "lane", id: plan.pick.lane.id, s0: Math.max(0, plan.pick.s - 3), s1: plan.pick.s }], plan.opts); if (!r) return false;
+-    const p0 = r.path.at(0, {}); if (!sim.spotFree(p0.x, p0.z, (dims?.len ?? def.len) + 4) && spawnTries++ < 600) return false;   // wait for a clear spot to appear
+-    hero = sim.addHero(kind, r, { v: 0, len: dims?.len, wid: dims?.wid, cruise: plan.profile.cruise, aMax: plan.profile.accel, brake: plan.profile.brake }); hero.ignoreExt = new Set(["player"]); return true;
++    const p0 = r.path.at(0, {}); const need = (dims?.len ?? def.len) + 4; if (!sim.spotFree(p0.x, p0.z, need)) { sim.clearSpot(p0.x, p0.z, need); if (!sim.spotFree(p0.x, p0.z, need) && spawnTries++ < 30) return false; }   // other traffic parked on the spot moves on at once, so the approach is never held up
++    hero = sim.addHero(kind, r, { v: 0, len: dims?.len, wid: dims?.wid, cruise: plan.profile.cruise, aMax: plan.profile.accel, brake: plan.profile.brake }); hero.ignoreExt = new Set(["player"]);
++    // the vehicle comes up the road in the time the approach lasts, whatever the distance (the walk to it is never longer than that)
++    inProf = rideProfile(r, plan.params, Math.max(0.5, plan.tVeh)); hero.kinematic = true; heroT = 0; return true;
+   }
+   const stoppedAtPickup = () => hero && hero.v < 0.2 && (ownCar || hero.s >= hero.route.len - 0.9);   // your own car is already parked there
+ 
+@@ -87,7 +89,7 @@ export function createTripFlow(env, o) {
+   function startApproach() {
+     go("approach"); approachDoor = plan.doorIn; walker.follow(plan.walkIn, { goal: plan.doorIn, tolerance: 0.4, onDone: (why) => { if (why === "blocked") { notice("You cannot get to the " + kindName() + " from here."); end("unreachable"); } } });
+     if (ownCar) spawnVehicle();
+-    spawnAt = driven ? Math.max(0, plan.parts.walkIn - plan.tVeh - 0.3) : 0;
++    spawnAt = 0;   // the vehicle sets off as you do, and both get there together
+   }
+   const seatLocal = () => (ownCar ? KINDS[kind].driver ?? KINDS[kind].seat : KINDS[kind].seat);   // you drive your own car; in everything else you are a passenger
+   const kindName = () => (mode === "car" ? "car" : mode);
+@@ -98,7 +100,7 @@ export function createTripFlow(env, o) {
+   function startBoard() { const hp = heroPose(); boardFrom = { x: walker.x, z: walker.z }; walker.cancelRoute(); walker.ignore = new Set([vehicleId()]); go("board"); person.seated = false; S.hx = hp.hx; }
+   function startRide() {
+     if (ownCar) { makeOwn(); go("drive"); return; }
+-    sim.setRoute(hero, plan.route, {}); hero.hold = false; hero.stopAt = null; go("ride");
++    sim.setRoute(hero, plan.route, {}); hero.hold = false; hero.stopAt = null; hero.kinematic = true; heroT = 0; go("ride");   // played over exactly the ride time the plan promised (plan.rideProf)
+   }
+   function arrive() {
+     go("paying"); const after = (ok) => { if (S.ended) return; if (ok === false) end("failed"); else startAlight(); };
+@@ -112,7 +114,7 @@ export function createTripFlow(env, o) {
+     walker.ignore = null; const r = nav.plan(walker.x, walker.z, plan.goal.x, plan.goal.z);
+     if (!r.ok) { notice("The way to the door is blocked."); end("unreachable"); return; }
+     go("walk"); walker.follow(r, { goal: plan.goal, tolerance: 0.45 });
+-    if (hero && driven) { hero.role = "npc"; hero.hold = false; hero.stopAt = null; hero.cruise = Math.min(hero.cruise, 9); sim.setRoute(hero, sim.wander(hero.laneId, hero.laneS, 600)); departed = true; }
++    if (hero && driven) { hero.kinematic = false; hero.role = "npc"; hero.hold = false; hero.stopAt = null; hero.cruise = Math.min(hero.cruise, 9); sim.setRoute(hero, sim.wander(hero.laneId, hero.laneS, 600)); departed = true; }
+   }
+ 
+   function update(dt, inp = {}) {
+@@ -122,13 +124,16 @@ export function createTripFlow(env, o) {
+       case "intro": walker.step(dt, null); if (S.t >= INTRO_SECONDS) { if (mode === "trek") go("trek"); else startApproach(); } break;
+       case "trek": walker.step(dt, walkIn); if (Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z) < 3.2) { walker.step(0.0001, null); arrive(); } break;
+       case "approach": {
+-        if (driven && !hero && S.t >= spawnAt) spawnVehicle(); walker.step(dt, walkIn);
++        if (driven && !hero && S.t >= spawnAt) spawnVehicle();
++        if (hero?.kinematic && inProf) { heroT += dt; const q = inProf.at(heroT); sim.placeAlong(hero, q.s, q.v); }
++        const gs = retargeted ? Math.max(plan.glide, 8) : plan.glide;   // once the vehicle has stopped, the last few metres to its real door are covered briskly too
++        if (gs > 0 && walker.following) walker.glide(dt, gs); else walker.step(dt, walkIn);   // a long way to the kerb is walked at the pace that fits the approach time
+         if (walker.off > 8 && walker.mode !== "manual" && walker.following) { const r = nav.plan(walker.x, walker.z, approachDoor.x, approachDoor.z); if (r.ok) walker.follow(r, { goal: approachDoor, tolerance: 0.4 }); }
+         if (hero) {
+-          if (stoppedAtPickup()) { if (!retargeted) { retargeted = true; retarget(); } const d = doorPoint({ ...heroPose(), kind }); if (Math.hypot(walker.x - d.x, walker.z - d.z) < 0.75) { startBoard(); break; } }
++          if (stoppedAtPickup() && (!hero.kinematic || heroT >= plan.tVeh - 0.05)) { if (!retargeted) { retargeted = true; retarget(); } const d = doorPoint({ ...heroPose(), kind }); if (Math.hypot(walker.x - d.x, walker.z - d.z) < 0.75) { startBoard(); break; } }
+           if (hero.stillFor > 20 && !stoppedAtPickup()) sim.clearAhead(hero);
+         }
+-        waitedForVehicle += dt; if (waitedForVehicle > plan.tVeh + plan.parts.walkIn + 90) { notice("The " + kindName() + " could not get to you. Try again."); end("unavailable"); }
++        waitedForVehicle += dt; if (waitedForVehicle > plan.tVeh + plan.parts.walkIn + 60) { notice("The " + kindName() + " could not get to you. Try again."); end("unavailable"); }
+         break; }
+       case "board": { // turn to the door, step through it and sit down
+         const hp = heroPose(), def = KINDS[kind], k = Math.min(1, S.t / BOARD_SECONDS); S.boardK = k; const door = doorPoint({ ...hp, kind }), seat = toWorld(hp, seatLocal()), m = Math.max(0, Math.min(1, (S.t - 0.55) / 1.2));
+@@ -138,8 +143,9 @@ export function createTripFlow(env, o) {
+         if (S.t >= BOARD_SECONDS) { walker.ignore = null; startRide(); } break; }
+       case "ride": {
+         if (!hero || hero.done) { notice("The ride ended unexpectedly."); end("failed"); break; }
+-        { const sp = toWorld(hero, seatLocal()); walker.x = sp.x; walker.z = sp.z; } if (hero.stillFor > 20) sim.clearAhead(hero);
+-        if (hero.s >= hero.route.len - 0.9 && hero.v < 0.25) { hero.hold = true; arrive(); } break; }
++        heroT += dt; { const q = plan.rideProf.at(heroT); sim.placeAlong(hero, q.s, q.v); }   // the ride is the recorded motion played over its set time
++        { const sp = toWorld(hero, seatLocal()); walker.x = sp.x; walker.z = sp.z; }
++        if (heroT >= plan.rideProf.dur) { sim.placeAlong(hero, hero.route.len, 0); hero.hold = true; arrive(); } break; }
+       case "drive": driveOwn(dt, inp); { const sp = toWorld(own, seatLocal()); walker.x = sp.x; walker.z = sp.z; }
+         if (Math.hypot(own.x - plan.drop.x, own.z - plan.drop.z) < ARRIVE_RADIUS && Math.abs(own.v) < 0.3) arrive(); break;
+       case "paying": break;
+@@ -167,9 +173,9 @@ export function createTripFlow(env, o) {
+     switch (ph) {
+       case "intro": return Math.max(0, plan.secs - S.t);
+       case "trek": return remainingSecs(plan, "trek", { walkLeft: Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z) * 1.1 });
+-      case "approach": { const vehLeft = hero ? (hero.s >= hero.route.len - 0.9 ? 0 : Math.max(0, plan.tVeh - (S.time - spawnAt))) : Math.max(0, spawnAt - S.t) + plan.tVeh; return remainingSecs(plan, "approach", { walkLeft, vehLeft }); }
++      case "approach": { const vehLeft = hero ? (hero.kinematic ? Math.max(0, plan.tVeh - heroT) : hero.s >= hero.route.len - 0.9 ? 0 : Math.max(0, plan.tVeh - (S.time - spawnAt))) : Math.max(0, spawnAt - S.t) + plan.tVeh, walkSecsLeft = plan.glide > 0 ? walkLeft / plan.glide : undefined; return remainingSecs(plan, "approach", { walkLeft, vehLeft, walkSecsLeft }); }
+       case "board": return remainingSecs(plan, "board", { boardLeft: Math.max(0, BOARD_SECONDS - S.t) });
+-      case "ride": return hero ? remainingSecs(plan, "ride", { rideS: hero.s, rideV: hero.v }) : 0;
++      case "ride": return hero ? remainingSecs(plan, "ride", { rideS: hero.s, rideV: hero.v, rideT: heroT }) : 0;
+       case "drive": return remainingSecs({ ...plan, route: plan.route }, "ride", { rideS: Math.min(plan.route.len, plan.route.path.nearest(own.x, own.z, 0, plan.route.len + 1)), rideV: Math.max(0, own.v) });
+       case "paying": case "alight": return remainingSecs(plan, "alight", { alightLeft: Math.max(0, ALIGHT_SECONDS - (ph === "alight" ? S.t : 0)) });
+       case "walk": return remainingSecs(plan, "walk", { walkLeft });
+diff --git a/lib3d/tripplan.js b/lib3d/tripplan.js
+index f1d96f6..c3544af 100644
+--- a/lib3d/tripplan.js
++++ b/lib3d/tripplan.js
+@@ -7,11 +7,13 @@
+ //   walking:    metres / WALK_SPEED               (lib/travel.js)
+ //   the ride:   rideTime() integrates the vehicle's real motion along its route: it speeds up at its own rate, slows for bends and junctions, brakes to stop
+ //               at the end. That is the same motion model the live vehicle runs (trafficsim.js idmAccel), so a ride on an empty road takes what is promised.
+-//   waiting:    the vehicle is sent so that it arrives when you do (or you wait for it, if it is slower than your walk).
++//   timing:     a driven ride lasts a set time for its vehicle that grows with the road distance (RIDE_SECONDS in lib/travel.js: car with a driver 6-9 s, bus 8-10 s,
++//               keke 10-15 s); rideProfile() plays the same speed-up / slow-for-bends / brake-to-stop motion over exactly that time.
++//   walking to the vehicle: never more than APPROACH_MAX_SECONDS (a longer walk is played at a faster pace); the vehicle is sent so that it arrives when you do.
+ // The only fixed times left are the animations at each end (INTRO_SECONDS, BOARD_SECONDS, ALIGHT_SECONDS, DOOR_SECONDS).
+ import { destinationOf } from "./roadnet.js";
+-import { KINDS, rideTime, doorPoint } from "./trafficsim.js";
+-import { WALK_SPEED, VEHICLE, OWN_CAR, BOARD_SECONDS, ALIGHT_SECONDS, INTRO_SECONDS, DOOR_SECONDS, rideKind } from "../lib/travel.js";
++import { KINDS, rideTime, rideProfile, doorPoint } from "./trafficsim.js";
++import { WALK_SPEED, VEHICLE, OWN_CAR, BOARD_SECONDS, ALIGHT_SECONDS, INTRO_SECONDS, DOOR_SECONDS, APPROACH_MAX_SECONDS, APPROACH_GLIDE_ABOVE, approachSeconds, rideSecondsFor, rideKind } from "../lib/travel.js";
+ 
+ const KIND_OF = { keke: "keke", bus: "bus", car: "car" };
+ /** How far up the road the vehicle starts, so it can be seen coming and arrives at a natural pace. */
+@@ -46,12 +48,18 @@ export function planTrip(svc, { from, to, mode, driver = false }) {
+   const route = graph.route(pick.lane.id, pick.s, drop.lane.id, drop.s, opts); if (!route) return fail("noroute", { ...base, pick, drop });
+   // a driven vehicle is sent from up the road; your own car is already waiting
+   const inbound = driven ? graph.upstreamRoute(pick.lane.id, pick.s, INBOUND_METRES[kind], () => 0.5, opts) : null;
+-  const tVeh = inbound ? rideTime(inbound, { cruise: profile.cruise, aMax: profile.accel, brake: profile.brake }) : 0;
+-  const tWalkIn = walkIn.len / WALK, ready = Math.max(tVeh, tWalkIn), ride = rideTime(route, { cruise: profile.cruise, aMax: profile.accel, brake: profile.brake }), tOut = walkOut.len / WALK;
++  const params = { cruise: profile.cruise, aMax: profile.accel, brake: profile.brake };
++  // the walk to the vehicle: as long as walking takes, but at most APPROACH_MAX_SECONDS (a longer walk is played faster: `glide` is that pace in m/s, 0 = just walk).
++  // A driven vehicle needs a moment to arrive, so the approach lasts at least APPROACH_MIN_SECONDS; it comes up the road in exactly that time.
++  const natWalkIn = walkIn.len / WALK, tWalkIn = Math.min(natWalkIn, APPROACH_MAX_SECONDS), glide = natWalkIn > APPROACH_GLIDE_ABOVE ? walkIn.len / tWalkIn : 0;
++  const ready = driven ? approachSeconds(natWalkIn) : tWalkIn, tVeh = driven ? ready : 0;
++  // the ride: a driven vehicle takes the time its distance earns (RIDE_SECONDS); your own car is estimated at its nominal pace, you steer it
++  const rideProf = driven ? rideProfile(route, params, rideSecondsFor(rideKind(mode, driver), route.len)) : null;
++  const ride = driven ? rideProf?.dur : rideTime(route, params), tOut = walkOut.len / WALK;
+   if (!Number.isFinite(ride)) return fail("noroute", { ...base, pick, drop });
+   const parts = { intro: INTRO_SECONDS, walkIn: tWalkIn, wait: Math.max(0, ready - tWalkIn), board: BOARD_SECONDS, ride, alight: ALIGHT_SECONDS, walkOut: tOut, door: DOOR_SECONDS };
+   const secs = Object.values(parts).reduce((a, b) => a + b, 0);
+-  return { ...base, ok: true, kind, def, profile, driven, opts, pick, drop, doorIn, doorOut, walkIn, walkOut, route, inbound, tVeh, parts, secs, len: route.len, approx: !driven };
++  return { ...base, ok: true, kind, def, profile, driven, opts, pick, drop, doorIn, doorOut, walkIn, walkOut, route, inbound, tVeh, params, rideProf, glide, parts, secs, len: route.len, approx: !driven };
+ }
+ 
+ /**
+@@ -60,11 +68,12 @@ export function planTrip(svc, { from, to, mode, driver = false }) {
+  */
+ export function remainingSecs(plan, phase, st = {}) {
+   const p = plan.parts, prof = plan.profile ? { cruise: plan.profile.cruise, aMax: plan.profile.accel, brake: plan.profile.brake } : null;
+-  const ride = () => (plan.route ? rideTime(plan.route, prof, st.rideS ?? 0, st.rideV ?? 0) : 0);
++  // a driven ride has a set duration (plan.rideProf), so what is left is that minus the time already ridden; your own car is worked out from where it is
++  const ride = () => (plan.rideProf ? Math.max(0, p.ride - (st.rideT ?? 0)) : plan.route ? rideTime(plan.route, prof, st.rideS ?? 0, st.rideV ?? 0) : 0);
+   switch (phase) {
+     case "intro": return plan.secs;
+     case "trek": return (st.walkLeft ?? plan.walk.len) / WALK + p.door;
+-    case "approach": return Math.max(st.vehLeft ?? 0, (st.walkLeft ?? 0) / WALK) + p.board + p.ride + p.alight + p.walkOut + p.door;
++    case "approach": return Math.max(st.vehLeft ?? 0, st.walkSecsLeft ?? (st.walkLeft ?? 0) / WALK) + p.board + p.ride + p.alight + p.walkOut + p.door;
+     case "board": return (st.boardLeft ?? p.board) + p.ride + p.alight + p.walkOut + p.door;
+     case "ride": case "drive": return ride() + p.alight + p.walkOut + p.door;
+     case "paying": case "alight": return (st.alightLeft ?? p.alight) + p.walkOut + p.door;
+diff --git a/lib3d/walker.js b/lib3d/walker.js
+index ac2ce26..f525bd4 100644
+--- a/lib3d/walker.js
++++ b/lib3d/walker.js
+@@ -109,6 +109,24 @@ export class Walker {
+   /** Puts the person somewhere (never into a wall), and stops them. */
+   place(x, z) { const p = this.world.pushOut(x, z, WALK_R, { ignore: this.ignore }); this.x = p.x; this.z = p.z; this.vx = this.vz = 0; this.speed = 0; }
+ 
++  /**
++   * Moves the person along the route they are following by `speed` m/s for dt seconds, at exactly that pace (no easing, no stick or keys): used when the walk to
++   * a vehicle has to fit in a few seconds however far the kerb is. The route was planned around everything solid, so nothing is walked through.
++   * Finishes the route like a normal walk does when the end is reached. Returns true while there is still route left.
++   */
++  glide(dt, speed) {
++    const P = this.path; if (!P) return false;
++    this.time += dt; const ox = this.x, oz = this.z, ds = Math.max(0, speed) * dt;
++    this.ps = Math.min(P.len, this.ps + ds); const q = pointAt(P, this.ps, {});
++    this.x = q.x; this.z = q.z; this.off = 0; this.mode = "auto"; this.lastProg = this.ps; this.lastProgAt = this.time;
++    const mx = this.x - ox, mz = this.z - oz, ml = Math.hypot(mx, mz);
++    if (ml > 1e-6) { this.hx = mx / ml; this.hz = mz / ml; this.vx = this.hx * speed; this.vz = this.hz * speed; this.speed = speed; }
++    this.blocked = false;
++    const end = P.pts.at(-1);
++    if (this.ps >= P.len - 1e-6 || Math.hypot(end[0] - this.x, end[1] - this.z) <= (this.tol ?? 0.35)) { this.vx = this.vz = 0; this.speed = 0; this._finish("arrived"); return false; }
++    return true;
++  }
++
+   /** Advances by dt seconds, in steps of at most 1/60 s so the result barely depends on frame rate. input: { dx, dz, mag (0..1), run }. Returns this. */
+   step(dt, input = null) {
+     const n = Math.max(1, Math.ceil(dt / (1 / 60))), h = dt / n; for (let i = 0; i < n; i++) this._sub(h, input); return this;
+diff --git a/src/app/api/relationship/route.js b/src/app/api/relationship/route.js
+index daf92e2..fc54889 100644
+--- a/src/app/api/relationship/route.js
++++ b/src/app/api/relationship/route.js
+@@ -1,5 +1,7 @@
+-// app/api/relationship/route.js
++// src/app/api/relationship/route.js
+ import { PrismaClient } from "@prisma/client";
++import { after } from "next/server";
++import { pingRealtime } from "@/lib/realtimeNotify";
+ import { getUserId } from "@/lib/auth";
+ import { allowed, tooMany } from "@/lib/ratelimit";
+ import { GameError } from "@/lib/gameService";
+@@ -28,7 +30,9 @@ export async function POST(req) {
+   if (!(await allowed(db, "rel:" + uid, 40, 60_000))) return tooMany();
+   try {
+     const b = await req.json().catch(() => ({}));
+-    return Response.json(await relate(db, uid, b));
++    const { notify, ...out } = await relate(db, uid, b);
++    if (notify) after(() => pingRealtime(notify)); // a note sent from Love shows up in their chat at once
++    return Response.json(out);
+   } catch (e) {
+     if (e instanceof GameError)
+       return Response.json({ error: e.message }, { status: e.status });
+diff --git a/tests/fakedb.mjs b/tests/fakedb.mjs
+index 0f26958..6f4ae40 100644
+--- a/tests/fakedb.mjs
++++ b/tests/fakedb.mjs
+@@ -34,6 +34,7 @@ export function makeDb(models, { unique = {}, defaults = {}, join = {} } = {}) {
+       findUnique: async ({ where }) => put(rows().find((r) => match(r, where)) ?? null) ?? null,
+       findFirst: async ({ where, orderBy } = {}) => put(sortBy(rows().filter((r) => match(r, where)), orderBy)[0] ?? null) ?? null,
+       findMany: async ({ where, orderBy, take } = {}) => sortBy(rows().filter((r) => match(r, where)), orderBy).slice(0, take ?? 1e9).map(put),
++      groupBy: async ({ by, where }) => { const seen = new Map(); for (const r of rows().filter((x) => match(x, where))) seen.set(by.map((k) => r[k]).join("|"), Object.fromEntries(by.map((k) => [k, r[k]]))); return [...seen.values()]; },
+       count: async ({ where } = {}) => rows().filter((r) => match(r, where)).length,
+       create: async ({ data }) => {
+         const u = unique[name]; if (u && rows().some((r) => u.every((k) => r[k] === data[k]))) { const e = new Error("Unique constraint"); e.code = "P2002"; throw e; }
+@@ -49,5 +50,19 @@ export function makeDb(models, { unique = {}, defaults = {}, join = {} } = {}) {
+   db.$queryRaw = async () => [];
+   db.$transaction = async (fn) => { const snap = structuredClone({ T, ids }); try { return await fn(db); } catch (e) { for (const k of Object.keys(T)) T[k].splice(0, T[k].length, ...snap.T[k]); ids = snap.ids; throw e; } };
+   db.T = () => T;
++  // The chat tables (models "chat" and "message"), as lib/chatCore.js uses them: one Chat row per pair (aId < bId), and a Message only says which side sent it (fromA).
++  // chatCore writes a message with ONE raw SQL statement and creates a chat with raw SQL too, so those two statements are understood here.
++  if (T.chat && T.message) {
++    db.$executeRaw = async (strings, aId, bId) => { if (strings.join("?").includes('INTO "Chat"') && !T.chat.some((c) => c.aId === aId && c.bId === bId)) T.chat.push({ id: ids.chat++, aId, bId, lastId: 0n }); return 1; };
++    db.$queryRaw = async (strings, ...v) => {
++      if (!strings.join("?").includes('INSERT INTO "Message"')) return [];
++      const [chatId, , toId, , fromId, , fromA, kind, body] = v;   // the order of the values in insertMessage()
++      const blocked = T.block?.some((b) => (b.blockerId === fromId && b.blockedId === toId) || (b.blockerId === toId && b.blockedId === fromId));
++      if (blocked || !T.chat.some((c) => c.id === chatId)) return [];
++      const row = { chatId, id: ids.message++, fromA, kind, body, createdAt: new Date() }; T.message.push(row); return [{ id: row.id, createdAt: row.createdAt }];
++    };
++    /** A text message from one player to another, as the chat stores it. */
++    db.say = (from, to, body = "hi") => { const [aId, bId] = from < to ? [from, to] : [to, from]; let c = T.chat.find((x) => x.aId === aId && x.bId === bId); if (!c) { c = { id: ids.chat++, aId, bId, lastId: 0n }; T.chat.push(c); } T.message.push({ chatId: c.id, id: ids.message++, fromA: from === aId, kind: 0, body, createdAt: new Date() }); };
++  }
+   return db;
+ }
+diff --git a/tests/love.test.mjs b/tests/love.test.mjs
+index dfc4160..84efe7e 100644
+--- a/tests/love.test.mjs
++++ b/tests/love.test.mjs
+@@ -38,7 +38,7 @@ const denies = async (label, fn, status) => { try { await fn(); chk(label + " (s
+ }
+ 
+ // ---------------- the service ----------------
+-const MODELS = ["character", "account", "bond", "loveRequest", "bondEvent", "message", "block", "notification", "actionLog", "ledgerEntry", "pregnancy", "gameClock", "roomItem", "achievement"];
++const MODELS = ["character", "account", "bond", "loveRequest", "bondEvent", "chat", "message", "block", "notification", "actionLog", "ledgerEntry", "pregnancy", "gameClock", "roomItem", "achievement"];
+ const db = makeDb(MODELS, {
+   defaults: { bond: { kind: "TALKING", prevKind: null, affection: 0, dates: 0, meals: 0, visits: 0, done: {}, everBabe: false, everEngaged: false, together: false, homeHostel: null, cheatedBy: null, cheatedWeek: null, lastCheater: null, strikes: 0, endedWeek: null, endedBy: null }, loveRequest: { status: "PENDING", variant: null }, pregnancy: { status: "PENDING" } },
+   unique: { actionLog: ["characterId", "requestId"], bond: ["lowId", "highId"] },
+@@ -54,7 +54,7 @@ const person = (id, name, gender, hostel) => {
+   T.account.push({ id: "acc_" + id, kind: "PLAYER", characterId: id, balance: 5_000_000_00n });
+ };
+ person("t", "Tunde", "M", "Awo"); person("z", "Zainab", "F", "Moremi"); person("a", "Amara", "F", "Mozambique"); person("s", "Seyi", "M", "Fajuyi"); person("k", "Kemi", "F", "Akintola");
+-const say = (from, to) => { T.message.push({ fromId: from, toId: to, body: "hi", createdAt: new Date() }); };
++const say = (from, to) => db.say(from, to);
+ const C = (id) => T.character.find((c) => c.id === id), bal = (id) => T.account.find((a) => a.id === "acc_" + id).balance;
+ const nextWeek = () => { T.gameClock[0].startedAt = new Date(T.gameClock[0].startedAt.getTime() - 7 * DAY); T.character.forEach((c) => { c.lastTickWeek = weekNow(); c.energy = 100; }); };
+ let q = 0; const rid = () => "req-" + String(++q).padStart(8, "0");
+@@ -111,7 +111,7 @@ chk("ready to be asked", zb.ready && zb.dates === 2 && zb.visits === 1 && zb.can
+ nextWeek();
+ await denies("a made-up note is refused", () => as("t", { action: "note", id: zb.id, line: 99 }), 400);
+ const msgs0 = T.message.length; await as("t", { action: "note", id: zb.id, line: 0 });
+-chk("a note goes into Messages", T.message.length === msgs0 + 1 && T.message.at(-1).toId === "z");
++chk("a note goes into Messages", T.message.length === msgs0 + 1 && T.message.at(-1).body === R.NOTES[0] && T.message.at(-1).fromA === true && T.message.at(-1).kind === 0);
+ await denies("note twice in a week", () => as("t", { action: "note", id: zb.id, line: 1 }), 409);
+ 
+ // babe: ask, decline, ask, accept
+@@ -207,7 +207,7 @@ await as("t", { action: "remove", id: sb.id }); chk("remove deletes the bond", !
+ const old = rid(); const kb = await (async () => { say("t", "k"); say("k", "t"); const r = await as("t", { action: "add", name: "Kemi" }); return r; })();
+ const r1 = await relate(db, U.t, { requestId: old, action: "note", id: kb.id, line: 0 });
+ const r2 = await relate(db, U.t, { requestId: old, action: "note", id: kb.id, line: 0 });
+-chk("a replayed request does nothing twice", r1.ok && r2.duplicate === true && T.message.filter((m) => m.body === R.NOTES[0] && m.toId === "k").length === 1);
++chk("a replayed request does nothing twice", r1.ok && r2.duplicate === true && T.message.filter((m) => m.body === R.NOTES[0] && m.chatId === T.chat.find((c) => [c.aId, c.bId].includes("k") && [c.aId, c.bId].includes("t")).id).length === 1);
+ const kd = await as("t", { action: "request", id: kb.id, kind: "DATE" });
+ C("k").jailedUntil = new Date(Date.now() + 3600e3);
+ await denies("they are in Floor O: they cannot answer", () => as("k", { action: "answer", id: kd.id, accept: true }));
+diff --git a/tests/relsvc.test.mjs b/tests/relsvc.test.mjs
+index cf69317..a04bbfb 100644
+--- a/tests/relsvc.test.mjs
++++ b/tests/relsvc.test.mjs
+@@ -7,7 +7,7 @@ import { NOTES } from "../lib/relationships.js";
+ let serial = 0;
+ const requestId = () => "relationship-request-" + ++serial;
+ function fixture({ paired = true, kind = "TALKING" } = {}) {
+-  const db = makeDb(["character", "account", "bond", "loveRequest", "bondEvent", "message", "block", "notification", "actionLog", "ledgerEntry", "pregnancy", "gameClock"], {
++  const db = makeDb(["character", "account", "bond", "loveRequest", "bondEvent", "chat", "message", "block", "notification", "actionLog", "ledgerEntry", "pregnancy", "gameClock"], {
+     unique: { actionLog: ["characterId", "requestId"], bond: ["lowId", "highId"], ledgerEntry: ["idempotencyKey"] },
+     defaults: {
+       bond: { kind: "TALKING", prevKind: null, affection: 0, dates: 0, meals: 0, visits: 0, done: {}, together: false, homeHostel: null, cheatedBy: null, strikes: 0, endedWeek: null, endedBy: null },
+@@ -40,9 +40,9 @@ async function unchangedAfterFailure(T, operation, status) {
+   await assert.rejects(getRelationship(db, "unknown"), { status: 404 });
+   await unchangedAfterFailure(T, () => relate(db, "u_a", { action: "add", name: "Zainab" }), 400);
+   await unchangedAfterFailure(T, () => act("a", { action: "add", name: "Zainab" }), 409);
+-  T.message.push({ fromId: "a", toId: "z", body: "Hi", createdAt: new Date() });
++  db.say("a", "z", "Hi");
+   await unchangedAfterFailure(T, () => act("a", { action: "add", name: "Zainab" }), 409);
+-  T.message.push({ fromId: "z", toId: "a", body: "Hello", createdAt: new Date() });
++  db.say("z", "a", "Hello");
+   assert.equal((await getRelationship(db, "u_a")).discover[0].name, "Zainab");
+   T.block.push({ blockerId: "z", blockedId: "a" });
+   assert.equal((await getRelationship(db, "u_a")).discover.length, 0);
+@@ -82,7 +82,7 @@ async function unchangedAfterFailure(T, operation, status) {
+   await unchangedAfterFailure(T, () => act("a", { action: "note", line: 99 }), 400);
+   await act("a", { action: "note", line: 0 });
+   assert.equal(T.message.at(-1).body, NOTES[0]);
+-  assert.equal(T.message.at(-1).toId, "z");
++  assert.equal(T.message.at(-1).fromA, true, "from Tunde (a) to Zainab (z): a sits first in the pair");
+ }
+ 
+ {
+diff --git a/tests/travel-time.test.mjs b/tests/travel-time.test.mjs
+new file mode 100644
+index 0000000..7e6273b
+--- /dev/null
++++ b/tests/travel-time.test.mjs
+@@ -0,0 +1,60 @@
++// tests/travel-time.test.mjs
++// Trip timing over the real campus map, run through the same planner and trip state machine the map page uses (headless, no drawing):
++//   car with a driver 6-9 s, bus 8-10 s, keke 10-15 s (the ride), growing with the road distance; the walk to the vehicle never longer than 5 s.
++import assert from "node:assert/strict";
++import fs from "node:fs";
++import { withExtras } from "../lib3d/mapExtras.js";
++import { buildServices } from "../lib3d/worldsvc.js";
++import { planTrip } from "../lib3d/tripplan.js";
++import { createTripFlow } from "../lib3d/tripflow.js";
++import { createTrafficSim, rideProfile } from "../lib3d/trafficsim.js";
++import { RIDE_SECONDS, rideSecondsFor } from "../lib/travel.js";
++
++const read = (f) => JSON.parse(fs.readFileSync(new URL("../public/data/" + f, import.meta.url), "utf8"));
++const svc = buildServices(withExtras(read("oau-campus.json")), read("oau-roadgraph.json"));
++const places = svc.data.places.filter((p) => p.x != null);
++let seed = 5; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
++const WINDOW = { keke: RIDE_SECONDS.keke, bus: RIDE_SECONDS.bus, car: RIDE_SECONDS.driver };
++const TOL = 0.2; // the ride is played in 1/30 s steps
++
++// a recorded ride plays over exactly the time asked for, starting and ending at rest, and never goes backwards
++{
++  const trip = planTrip(svc, { from: places[3], to: places[40], mode: "bus" });
++  const prof = rideProfile(trip.route, trip.params, 9);
++  assert.equal(prof.dur, 9); assert.equal(prof.at(0).s, 0); assert.equal(prof.at(0).v, 0);
++  assert.ok(Math.abs(prof.at(9).s - trip.route.len) < 1e-6 && prof.at(9).v === 0, "it comes to rest at the end of the route");
++  let last = -1; for (let t = 0; t <= 9; t += 0.05) { const s = prof.at(t).s; assert.ok(s >= last - 1e-9); last = s; }
++}
++
++const done = { keke: [], bus: [], car: [] }; let trips = 0, glided = 0;
++for (let i = 0; i < 60 && trips < 90; i++) {
++  const a = places[Math.floor(rnd() * places.length)], b = places[Math.floor(rnd() * places.length)]; if (a === b) continue;
++  for (const mode of ["keke", "bus", "car"]) {
++    const plan = planTrip(svc, { from: a, to: b, mode, driver: true }); if (!plan.ok) continue;
++    const [lo, hi] = WINDOW[mode];
++    // the plan: the ride is what the distance earns, the walk to the vehicle is capped
++    assert.ok(plan.parts.ride >= lo - 1e-9 && plan.parts.ride <= hi + 1e-9, `${mode} ${a.id}->${b.id}: planned ride ${plan.parts.ride} is inside ${lo}-${hi}`);
++    assert.ok(Math.abs(plan.parts.ride - rideSecondsFor(mode === "car" ? "driver" : mode, plan.len)) < 1e-9, "the ride time comes from the road distance");
++    assert.ok(plan.parts.walkIn + plan.parts.wait <= 5, `${mode} ${a.id}->${b.id}: approach ${plan.parts.walkIn + plan.parts.wait} is at most 5 s`);
++    // the trip itself, played out
++    const sim = createTrafficSim({ graph: svc.graph, world: svc.world, focus: () => a, rnd });
++    let end = null; const flow = createTripFlow({ svc, sim }, { plan, onArrive: () => true, onEnter() {}, onEnd: (w) => { end = w; }, onNotice() {} });
++    const secs = {}; let t = 0, last = "intro", since = 0;
++    while (t < 300 && !end && flow.state.phase !== "inside") {
++      flow.update(1 / 30, {}); sim.update(1 / 30); t += 1 / 30;
++      if (flow.state.phase !== last) { secs[last] = (secs[last] ?? 0) + (t - since); last = flow.state.phase; since = t; }
++    }
++    secs[last] = (secs[last] ?? 0) + (t - since);
++    assert.equal(end, null, `${mode} ${a.id}->${b.id} finished (${end})`); assert.equal(flow.state.phase, "inside", "the trip reached the door");
++    assert.ok(secs.ride >= lo - TOL && secs.ride <= hi + TOL, `${mode} ${a.id}->${b.id}: rode ${secs.ride?.toFixed(2)} s, window ${lo}-${hi}`);
++    assert.ok(secs.approach <= 5, `${mode} ${a.id}->${b.id}: walked to the vehicle in ${secs.approach?.toFixed(2)} s`);
++    if (plan.glide > 0) glided++; done[mode].push({ len: plan.len, ride: secs.ride }); trips++;
++  }
++}
++assert.ok(trips >= 60, "enough trips were tried across the map: " + trips); assert.ok(glided > 0, "some pickups were far enough to need the faster walk");
++// longer trips take longer (the shortest third against the longest third), for every vehicle
++for (const [mode, list] of Object.entries(done)) {
++  list.sort((x, y) => x.len - y.len); const n = Math.floor(list.length / 3), avg = (xs) => xs.reduce((s, r) => s + r.ride, 0) / xs.length;
++  assert.ok(avg(list.slice(-n)) > avg(list.slice(0, n)), `${mode}: far trips take longer than near ones`);
++}
++console.log(`travel timing passed: ${trips} trips over the campus map (keke 10-15 s, bus 8-10 s, car with driver 6-9 s, walk to the vehicle at most 5 s)`);
+diff --git a/tests/travel.test.mjs b/tests/travel.test.mjs
+index 689987e..f88d700 100644
+--- a/tests/travel.test.mjs
++++ b/tests/travel.test.mjs
+@@ -1,7 +1,7 @@
+ // tests/travel.test.mjs
+ // Travel rules (fares, ride times, car ownership, driver plans, place ids) and the road network over the real campus map. Pure Node.
+ import fs from "node:fs";
+-import { MODES, FARE_NAIRA, fareKobo, rideSeconds, ownsCar, driverPlan, DRIVER_PLANS, driverActive, homePlace, placeOf, isPlaceId } from "../lib/travel.js";
++import { MODES, FARE_NAIRA, fareKobo, rideSecondsFor, RIDE_SECONDS, ownsCar, driverPlan, DRIVER_PLANS, driverActive, homePlace, placeOf, isPlaceId } from "../lib/travel.js";
+ import { placeExists } from "../lib/travelService.js";
+ import { buildRoadNet, findPath, drivePlan, destinationOf, isRoad, nearestWalkable } from "../lib3d/roadnet.js";
+ import { withExtras } from "../lib3d/mapExtras.js";
+@@ -10,8 +10,10 @@ let bad = 0; const chk = (l, c) => { if (!c) bad++; console.log((c ? "OK  " : "F
+ chk("fares: trek free, keke 300, bus 200, car 500", FARE_NAIRA.trek === 0 && FARE_NAIRA.keke === 300 && FARE_NAIRA.bus === 200 && FARE_NAIRA.car === 500);
+ chk("fares are charged in kobo", fareKobo("keke") === 30000n && fareKobo("car") === 50000n && fareKobo("trek") === 0n && fareKobo("nope") === 0n);
+ chk("four modes", MODES.join() === "trek,keke,bus,car");
+-chk("ride seconds: keke 8, bus 10, car with driver 5", rideSeconds("keke", false) === 8 && rideSeconds("bus", false) === 10 && rideSeconds("car", true) === 5);
+-chk("you steer trek and your own car (no fixed time)", rideSeconds("trek", false) === null && rideSeconds("car", false) === null);
++chk("ride windows: car with a driver 6-9 s, bus 8-10 s, keke 10-15 s", RIDE_SECONDS.driver.join() === "6,9" && RIDE_SECONDS.bus.join() === "8,10" && RIDE_SECONDS.keke.join() === "10,15");
++chk("a short hop takes the low end and a trip across campus the high end", rideSecondsFor("keke", 50) === 10 && rideSecondsFor("keke", 5000) === 15 && rideSecondsFor("bus", 0) === 8 && rideSecondsFor("bus", 5000) === 10 && rideSecondsFor("driver", 0) === 6 && rideSecondsFor("driver", 5000) === 9);
++chk("ride time grows with distance and stays inside the window", [200, 600, 1200, 1800, 2300].every((m, i, a) => i === 0 || rideSecondsFor("keke", m) > rideSecondsFor("keke", a[i - 1])) && [0, 700, 1500, 9999].every((m) => rideSecondsFor("driver", m) >= 6 && rideSecondsFor("driver", m) <= 9));
++chk("you steer trek and your own car (no fixed time)", rideSecondsFor("trek", 500) === null && rideSecondsFor("car", 500) === null);
+ chk("only Nepos own a car", ownsCar({ transport: "Daddy Benz" }) && !ownsCar({ transport: "Keke" }) && !ownsCar(null));
+ chk("driver plans", driverPlan(1)?.naira === 10000 && driverPlan(3) === null && DRIVER_PLANS.length === 3);
+ chk("driver is active only until the paid week", driverActive({ driverName: "Musa", driverUntilWeek: 5 }, 5) && !driverActive({ driverName: "Musa", driverUntilWeek: 4 }, 5) && !driverActive({ driverUntilWeek: 9 }, 5));
+diff --git a/tests/world-activities.test.mjs b/tests/world-activities.test.mjs
+index dee9821..9692ee1 100644
+--- a/tests/world-activities.test.mjs
++++ b/tests/world-activities.test.mjs
+@@ -70,6 +70,6 @@ assert.ok(teachingOpen(8 * 60) && !teachingOpen(7 * 60 + 59) && !teachingOpen(18
+ 
+ // ---- travel speed: nobody gets anywhere faster than the distance allows
+ assert.equal(minTravelMs(0, "trek"), 0); assert.equal(minTravelMs(50, "trek"), 0, "short hops are never refused"); assert.ok(minTravelMs(1000, "trek") >= 90_000);
+-assert.ok(minTravelMs(2000, "car") < minTravelMs(2000, "trek"), "driving is faster than walking"); assert.ok(minTravelMs(3000, "keke") >= 5000 && minTravelMs(3000, "keke") <= 8000);
+-assert.ok(minTravelMs(3000, "car", true) >= 3000, "a driver's ride still takes its time");
++assert.ok(minTravelMs(2000, "car") < minTravelMs(2000, "trek"), "driving is faster than walking"); assert.ok(minTravelMs(3000, "keke") >= 10_000 && minTravelMs(3000, "keke") <= 15_000, "a keke ride takes 10-15 s");
++assert.ok(minTravelMs(3000, "car", true) >= 6000 && minTravelMs(3000, "car", true) <= 9000, "a driver's ride takes 6-9 s");
+ console.log("job shift, sleep, hustle site, faculty and travel rules passed");
+-- 
+2.43.0
+
