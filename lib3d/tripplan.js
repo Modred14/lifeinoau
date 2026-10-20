@@ -7,11 +7,13 @@
 //   walking:    metres / WALK_SPEED               (lib/travel.js)
 //   the ride:   rideTime() integrates the vehicle's real motion along its route: it speeds up at its own rate, slows for bends and junctions, brakes to stop
 //               at the end. That is the same motion model the live vehicle runs (trafficsim.js idmAccel), so a ride on an empty road takes what is promised.
-//   waiting:    the vehicle is sent so that it arrives when you do (or you wait for it, if it is slower than your walk).
+//   timing:     a driven ride lasts a set time for its vehicle that grows with the road distance (RIDE_SECONDS in lib/travel.js: car with a driver 6-9 s, bus 8-10 s,
+//               keke 10-15 s); rideProfile() plays the same speed-up / slow-for-bends / brake-to-stop motion over exactly that time.
+//   walking to the vehicle: never more than APPROACH_MAX_SECONDS (a longer walk is played at a faster pace); the vehicle is sent so that it arrives when you do.
 // The only fixed times left are the animations at each end (INTRO_SECONDS, BOARD_SECONDS, ALIGHT_SECONDS, DOOR_SECONDS).
 import { destinationOf } from "./roadnet.js";
-import { KINDS, rideTime, doorPoint } from "./trafficsim.js";
-import { WALK_SPEED, VEHICLE, OWN_CAR, BOARD_SECONDS, ALIGHT_SECONDS, INTRO_SECONDS, DOOR_SECONDS, rideKind } from "../lib/travel.js";
+import { KINDS, rideTime, rideProfile, doorPoint } from "./trafficsim.js";
+import { WALK_SPEED, VEHICLE, OWN_CAR, BOARD_SECONDS, ALIGHT_SECONDS, INTRO_SECONDS, DOOR_SECONDS, APPROACH_MAX_SECONDS, APPROACH_GLIDE_ABOVE, approachSeconds, rideSecondsFor, rideKind } from "../lib/travel.js";
 
 const KIND_OF = { keke: "keke", bus: "bus", car: "car" };
 /** How far up the road the vehicle starts, so it can be seen coming and arrives at a natural pace. */
@@ -46,12 +48,18 @@ export function planTrip(svc, { from, to, mode, driver = false }) {
   const route = graph.route(pick.lane.id, pick.s, drop.lane.id, drop.s, opts); if (!route) return fail("noroute", { ...base, pick, drop });
   // a driven vehicle is sent from up the road; your own car is already waiting
   const inbound = driven ? graph.upstreamRoute(pick.lane.id, pick.s, INBOUND_METRES[kind], () => 0.5, opts) : null;
-  const tVeh = inbound ? rideTime(inbound, { cruise: profile.cruise, aMax: profile.accel, brake: profile.brake }) : 0;
-  const tWalkIn = walkIn.len / WALK, ready = Math.max(tVeh, tWalkIn), ride = rideTime(route, { cruise: profile.cruise, aMax: profile.accel, brake: profile.brake }), tOut = walkOut.len / WALK;
+  const params = { cruise: profile.cruise, aMax: profile.accel, brake: profile.brake };
+  // the walk to the vehicle: as long as walking takes, but at most APPROACH_MAX_SECONDS (a longer walk is played faster: `glide` is that pace in m/s, 0 = just walk).
+  // A driven vehicle needs a moment to arrive, so the approach lasts at least APPROACH_MIN_SECONDS; it comes up the road in exactly that time.
+  const natWalkIn = walkIn.len / WALK, tWalkIn = Math.min(natWalkIn, APPROACH_MAX_SECONDS), glide = natWalkIn > APPROACH_GLIDE_ABOVE ? walkIn.len / tWalkIn : 0;
+  const ready = driven ? approachSeconds(natWalkIn) : tWalkIn, tVeh = driven ? ready : 0;
+  // the ride: a driven vehicle takes the time its distance earns (RIDE_SECONDS); your own car is estimated at its nominal pace, you steer it
+  const rideProf = driven ? rideProfile(route, params, rideSecondsFor(rideKind(mode, driver), route.len)) : null;
+  const ride = driven ? rideProf?.dur : rideTime(route, params), tOut = walkOut.len / WALK;
   if (!Number.isFinite(ride)) return fail("noroute", { ...base, pick, drop });
   const parts = { intro: INTRO_SECONDS, walkIn: tWalkIn, wait: Math.max(0, ready - tWalkIn), board: BOARD_SECONDS, ride, alight: ALIGHT_SECONDS, walkOut: tOut, door: DOOR_SECONDS };
   const secs = Object.values(parts).reduce((a, b) => a + b, 0);
-  return { ...base, ok: true, kind, def, profile, driven, opts, pick, drop, doorIn, doorOut, walkIn, walkOut, route, inbound, tVeh, parts, secs, len: route.len, approx: !driven };
+  return { ...base, ok: true, kind, def, profile, driven, opts, pick, drop, doorIn, doorOut, walkIn, walkOut, route, inbound, tVeh, params, rideProf, glide, parts, secs, len: route.len, approx: !driven };
 }
 
 /**
@@ -60,11 +68,12 @@ export function planTrip(svc, { from, to, mode, driver = false }) {
  */
 export function remainingSecs(plan, phase, st = {}) {
   const p = plan.parts, prof = plan.profile ? { cruise: plan.profile.cruise, aMax: plan.profile.accel, brake: plan.profile.brake } : null;
-  const ride = () => (plan.route ? rideTime(plan.route, prof, st.rideS ?? 0, st.rideV ?? 0) : 0);
+  // a driven ride has a set duration (plan.rideProf), so what is left is that minus the time already ridden; your own car is worked out from where it is
+  const ride = () => (plan.rideProf ? Math.max(0, p.ride - (st.rideT ?? 0)) : plan.route ? rideTime(plan.route, prof, st.rideS ?? 0, st.rideV ?? 0) : 0);
   switch (phase) {
     case "intro": return plan.secs;
     case "trek": return (st.walkLeft ?? plan.walk.len) / WALK + p.door;
-    case "approach": return Math.max(st.vehLeft ?? 0, (st.walkLeft ?? 0) / WALK) + p.board + p.ride + p.alight + p.walkOut + p.door;
+    case "approach": return Math.max(st.vehLeft ?? 0, st.walkSecsLeft ?? (st.walkLeft ?? 0) / WALK) + p.board + p.ride + p.alight + p.walkOut + p.door;
     case "board": return (st.boardLeft ?? p.board) + p.ride + p.alight + p.walkOut + p.door;
     case "ride": case "drive": return ride() + p.alight + p.walkOut + p.door;
     case "paying": case "alight": return (st.alightLeft ?? p.alight) + p.walkOut + p.door;

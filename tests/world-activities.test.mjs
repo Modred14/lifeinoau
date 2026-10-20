@@ -70,6 +70,6 @@ assert.ok(teachingOpen(8 * 60) && !teachingOpen(7 * 60 + 59) && !teachingOpen(18
 
 // ---- travel speed: nobody gets anywhere faster than the distance allows
 assert.equal(minTravelMs(0, "trek"), 0); assert.equal(minTravelMs(50, "trek"), 0, "short hops are never refused"); assert.ok(minTravelMs(1000, "trek") >= 90_000);
-assert.ok(minTravelMs(2000, "car") < minTravelMs(2000, "trek"), "driving is faster than walking"); assert.ok(minTravelMs(3000, "keke") >= 5000 && minTravelMs(3000, "keke") <= 8000);
-assert.ok(minTravelMs(3000, "car", true) >= 3000, "a driver's ride still takes its time");
+assert.ok(minTravelMs(2000, "car") < minTravelMs(2000, "trek"), "driving is faster than walking"); assert.ok(minTravelMs(3000, "keke") >= 10_000 && minTravelMs(3000, "keke") <= 15_000, "a keke ride takes 10-15 s");
+assert.ok(minTravelMs(3000, "car", true) >= 6000 && minTravelMs(3000, "car", true) <= 9000, "a driver's ride takes 6-9 s");
 console.log("job shift, sleep, hustle site, faculty and travel rules passed");

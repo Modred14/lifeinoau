@@ -7,7 +7,7 @@ import { NOTES } from "../lib/relationships.js";
 let serial = 0;
 const requestId = () => "relationship-request-" + ++serial;
 function fixture({ paired = true, kind = "TALKING" } = {}) {
-  const db = makeDb(["character", "account", "bond", "loveRequest", "bondEvent", "message", "block", "notification", "actionLog", "ledgerEntry", "pregnancy", "gameClock"], {
+  const db = makeDb(["character", "account", "bond", "loveRequest", "bondEvent", "chat", "message", "block", "notification", "actionLog", "ledgerEntry", "pregnancy", "gameClock"], {
     unique: { actionLog: ["characterId", "requestId"], bond: ["lowId", "highId"], ledgerEntry: ["idempotencyKey"] },
     defaults: {
       bond: { kind: "TALKING", prevKind: null, affection: 0, dates: 0, meals: 0, visits: 0, done: {}, together: false, homeHostel: null, cheatedBy: null, strikes: 0, endedWeek: null, endedBy: null },
@@ -40,9 +40,9 @@ async function unchangedAfterFailure(T, operation, status) {
   await assert.rejects(getRelationship(db, "unknown"), { status: 404 });
   await unchangedAfterFailure(T, () => relate(db, "u_a", { action: "add", name: "Zainab" }), 400);
   await unchangedAfterFailure(T, () => act("a", { action: "add", name: "Zainab" }), 409);
-  T.message.push({ fromId: "a", toId: "z", body: "Hi", createdAt: new Date() });
+  db.say("a", "z", "Hi");
   await unchangedAfterFailure(T, () => act("a", { action: "add", name: "Zainab" }), 409);
-  T.message.push({ fromId: "z", toId: "a", body: "Hello", createdAt: new Date() });
+  db.say("z", "a", "Hello");
   assert.equal((await getRelationship(db, "u_a")).discover[0].name, "Zainab");
   T.block.push({ blockerId: "z", blockedId: "a" });
   assert.equal((await getRelationship(db, "u_a")).discover.length, 0);
@@ -82,7 +82,7 @@ async function unchangedAfterFailure(T, operation, status) {
   await unchangedAfterFailure(T, () => act("a", { action: "note", line: 99 }), 400);
   await act("a", { action: "note", line: 0 });
   assert.equal(T.message.at(-1).body, NOTES[0]);
-  assert.equal(T.message.at(-1).toId, "z");
+  assert.equal(T.message.at(-1).fromA, true, "from Tunde (a) to Zainab (z): a sits first in the pair");
 }
 
 {

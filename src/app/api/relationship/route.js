@@ -1,5 +1,7 @@
-// app/api/relationship/route.js
+// src/app/api/relationship/route.js
 import { PrismaClient } from "@prisma/client";
+import { after } from "next/server";
+import { pingRealtime } from "@/lib/realtimeNotify";
 import { getUserId } from "@/lib/auth";
 import { allowed, tooMany } from "@/lib/ratelimit";
 import { GameError } from "@/lib/gameService";
@@ -28,7 +30,9 @@ export async function POST(req) {
   if (!(await allowed(db, "rel:" + uid, 40, 60_000))) return tooMany();
   try {
     const b = await req.json().catch(() => ({}));
-    return Response.json(await relate(db, uid, b));
+    const { notify, ...out } = await relate(db, uid, b);
+    if (notify) after(() => pingRealtime(notify)); // a note sent from Love shows up in their chat at once
+    return Response.json(out);
   } catch (e) {
     if (e instanceof GameError)
       return Response.json({ error: e.message }, { status: e.status });

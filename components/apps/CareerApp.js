@@ -61,22 +61,14 @@ export default function Career() {
         ok: "You quit your job.",
         local: (x) => ({ ...x, job: null }),
       });
-    const x = d.jobs.find((y) => y.key === extra.job),
-      same = j?.key === x.key;
+    // Taking a job: the screen needs the server's full job card (the shift menu, today's limits, the clock), which only the server can work out.
+    // An optimistic patch with a half-built job object used to crash the screen (j.shifts was undefined), so the answer is awaited and the card is re-read.
+    const x = d.jobs.find((y) => y.key === extra?.job);
+    if (!x) return toast.error("That job is not available.");
     return go("/api/career/job", { action, ...extra }, {
-      ok: `You are now a ${x.title}.`,
-      local: (v) => {
-        const xp = same ? v.job.xp : 0;
-        return {
-          ...v,
-          job: {
-            key: x.key, title: x.title, xp, level: Math.min(10, Math.floor(xp / 5)),
-            shiftsToNext: 5 - (xp % 5), shiftsThisWeek: v.job?.shiftsThisWeek ?? 0,
-            maxShifts: v.job?.maxShifts ?? 5, energy: x.energy,
-          },
-        };
-      },
-    });
+      pending: `Taking the ${x.title} job…`,
+      okLate: (r) => r.note ?? `You are now a ${x.title}.`,
+    }).then((res) => { if (!res?.failed) { load(); game.refresh?.(); } return res; });
   };
   const biz = (action, id, extra = {}) => {
     const b = d.businesses.find((y) => y.id === id),
@@ -194,7 +186,7 @@ export default function Career() {
                   </div>
                 ) : (
                   <>
-                    {j.shifts.map((sh) => (
+                    {(j.shifts ?? []).map((sh) => (
                       <div className="led shift-opt" key={sh.key}>
                         <span>
                           {SHIFT_ICON[sh.key]} <b>{sh.label}</b>

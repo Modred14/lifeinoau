@@ -109,6 +109,24 @@ export class Walker {
   /** Puts the person somewhere (never into a wall), and stops them. */
   place(x, z) { const p = this.world.pushOut(x, z, WALK_R, { ignore: this.ignore }); this.x = p.x; this.z = p.z; this.vx = this.vz = 0; this.speed = 0; }
 
+  /**
+   * Moves the person along the route they are following by `speed` m/s for dt seconds, at exactly that pace (no easing, no stick or keys): used when the walk to
+   * a vehicle has to fit in a few seconds however far the kerb is. The route was planned around everything solid, so nothing is walked through.
+   * Finishes the route like a normal walk does when the end is reached. Returns true while there is still route left.
+   */
+  glide(dt, speed) {
+    const P = this.path; if (!P) return false;
+    this.time += dt; const ox = this.x, oz = this.z, ds = Math.max(0, speed) * dt;
+    this.ps = Math.min(P.len, this.ps + ds); const q = pointAt(P, this.ps, {});
+    this.x = q.x; this.z = q.z; this.off = 0; this.mode = "auto"; this.lastProg = this.ps; this.lastProgAt = this.time;
+    const mx = this.x - ox, mz = this.z - oz, ml = Math.hypot(mx, mz);
+    if (ml > 1e-6) { this.hx = mx / ml; this.hz = mz / ml; this.vx = this.hx * speed; this.vz = this.hz * speed; this.speed = speed; }
+    this.blocked = false;
+    const end = P.pts.at(-1);
+    if (this.ps >= P.len - 1e-6 || Math.hypot(end[0] - this.x, end[1] - this.z) <= (this.tol ?? 0.35)) { this.vx = this.vz = 0; this.speed = 0; this._finish("arrived"); return false; }
+    return true;
+  }
+
   /** Advances by dt seconds, in steps of at most 1/60 s so the result barely depends on frame rate. input: { dx, dz, mag (0..1), run }. Returns this. */
   step(dt, input = null) {
     const n = Math.max(1, Math.ceil(dt / (1 / 60))), h = dt / n; for (let i = 0; i < n; i++) this._sub(h, input); return this;

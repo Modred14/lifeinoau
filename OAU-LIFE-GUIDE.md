@@ -303,9 +303,12 @@ and a total cap of ₦5M times your level number (100L = ₦5M, 200L = ₦10M an
 
 ### Getting around the map (roads, vehicles and trips)
 
-A trip has **no fixed duration**. Its length is the road distance divided by the speed of what carries you, plus the walk to and from it. The numbers live in `lib/travel.js`
-(walking 2.6 m/s, running 5.5 m/s; keke 11 m/s, bus 9 m/s, a car with a driver 18 m/s; each with its own acceleration, braking and bend limit), and the travel sheet shows the
-estimate for every choice before you go. How it works:
+A driven ride (keke, bus, car with a driver) lasts a set time that **grows with the road distance** between the two stops, inside a window for each vehicle:
+**car with a driver 6 to 9 seconds, bus 8 to 10 seconds, keke 10 to 15 seconds** (`RIDE_SECONDS`, `rideSecondsFor()` in `lib/travel.js`: a hop of 150 m or less takes the low
+end, 2.4 km or more the high end, and everything between is spread evenly by distance). The vehicle still pulls away, slows for bends and junctions and brakes to a stop; that motion
+is recorded by `rideProfile()` in `lib3d/trafficsim.js` and played over exactly that time. **Walking to the vehicle never takes more than 5 seconds**: a kerb that is further than
+that is walked at a faster pace (`Walker.glide`), and the vehicle comes up the road in the same time. Your own car, which you steer, and the trek are not timed this way, and the
+walk from where you get out to the door is at the normal walking pace (2.6 m/s). The travel sheet shows the estimate for every choice before you go. How it works:
 
 - **The road network** is `public/data/oau-roadgraph.json`, generated from the map's road polygons by `python3 tools/oau/roadgraph.py` (`npm run build:roads`; needs numpy,
   scipy and scikit-image, the game itself does not). It holds the centrelines, the junctions and how wide each road is. Run it again whenever the roads or buildings in

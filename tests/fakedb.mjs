@@ -34,6 +34,7 @@ export function makeDb(models, { unique = {}, defaults = {}, join = {} } = {}) {
       findUnique: async ({ where }) => put(rows().find((r) => match(r, where)) ?? null) ?? null,
       findFirst: async ({ where, orderBy } = {}) => put(sortBy(rows().filter((r) => match(r, where)), orderBy)[0] ?? null) ?? null,
       findMany: async ({ where, orderBy, take } = {}) => sortBy(rows().filter((r) => match(r, where)), orderBy).slice(0, take ?? 1e9).map(put),
+      groupBy: async ({ by, where }) => { const seen = new Map(); for (const r of rows().filter((x) => match(x, where))) seen.set(by.map((k) => r[k]).join("|"), Object.fromEntries(by.map((k) => [k, r[k]]))); return [...seen.values()]; },
       count: async ({ where } = {}) => rows().filter((r) => match(r, where)).length,
       create: async ({ data }) => {
         const u = unique[name]; if (u && rows().some((r) => u.every((k) => r[k] === data[k]))) { const e = new Error("Unique constraint"); e.code = "P2002"; throw e; }
@@ -49,5 +50,19 @@ export function makeDb(models, { unique = {}, defaults = {}, join = {} } = {}) {
   db.$queryRaw = async () => [];
   db.$transaction = async (fn) => { const snap = structuredClone({ T, ids }); try { return await fn(db); } catch (e) { for (const k of Object.keys(T)) T[k].splice(0, T[k].length, ...snap.T[k]); ids = snap.ids; throw e; } };
   db.T = () => T;
+  // The chat tables (models "chat" and "message"), as lib/chatCore.js uses them: one Chat row per pair (aId < bId), and a Message only says which side sent it (fromA).
+  // chatCore writes a message with ONE raw SQL statement and creates a chat with raw SQL too, so those two statements are understood here.
+  if (T.chat && T.message) {
+    db.$executeRaw = async (strings, aId, bId) => { if (strings.join("?").includes('INTO "Chat"') && !T.chat.some((c) => c.aId === aId && c.bId === bId)) T.chat.push({ id: ids.chat++, aId, bId, lastId: 0n }); return 1; };
+    db.$queryRaw = async (strings, ...v) => {
+      if (!strings.join("?").includes('INSERT INTO "Message"')) return [];
+      const [chatId, , toId, , fromId, , fromA, kind, body] = v;   // the order of the values in insertMessage()
+      const blocked = T.block?.some((b) => (b.blockerId === fromId && b.blockedId === toId) || (b.blockerId === toId && b.blockedId === fromId));
+      if (blocked || !T.chat.some((c) => c.id === chatId)) return [];
+      const row = { chatId, id: ids.message++, fromA, kind, body, createdAt: new Date() }; T.message.push(row); return [{ id: row.id, createdAt: row.createdAt }];
+    };
+    /** A text message from one player to another, as the chat stores it. */
+    db.say = (from, to, body = "hi") => { const [aId, bId] = from < to ? [from, to] : [to, from]; let c = T.chat.find((x) => x.aId === aId && x.bId === bId); if (!c) { c = { id: ids.chat++, aId, bId, lastId: 0n }; T.chat.push(c); } T.message.push({ chatId: c.id, id: ids.message++, fromA: from === aId, kind: 0, body, createdAt: new Date() }); };
+  }
   return db;
 }

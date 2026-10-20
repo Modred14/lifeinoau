@@ -48,6 +48,31 @@ export function rideTime(route, { cruise, aMax, brake }, s0 = 0, v0 = 0) {
   return t;
 }
 
+/**
+ * The same motion as rideTime(), recorded, then played back over exactly `duration` seconds (or at its natural pace when `duration` is omitted).
+ * The shape of the ride is kept (it pulls away, slows for bends and junctions, brakes to a stop at the end); only its pace changes. at(t) -> { s, v }:
+ * how far along the route the vehicle is after t seconds of the ride, and how fast it is going. Returns null when the vehicle can never finish the route.
+ */
+export function rideProfile(route, { cruise, aMax, brake }, duration = null) {
+  let s = 0, v = 0, t = 0; const dt = 0.1, S = [0], V = [0];
+  while (t < 3600) {
+    const lim = Math.min(cruise, route.vAt(Math.min(route.len, s + 3 + v * 0.8))), acc = idmAccel(v, lim, aMax, brake, route.len - s, 0, 0.25);
+    v = Math.max(0, v + acc * dt); s = Math.min(route.len, s + v * dt); t += dt; S.push(s); V.push(v);
+    if (route.len - s < 0.8 && v < 0.3) break;
+    if (v < 0.01 && t > 5 && route.len - s > 5 && acc <= 0) return null;
+  }
+  S.push(route.len); V.push(0); t += dt;   // the last little bit: it comes to rest exactly at the end of the route
+  const raw = t, dur = duration ?? raw, k = raw / dur, n = S.length - 1;
+  return {
+    dur, raw,
+    at(u) {
+      if (u >= dur) return { s: route.len, v: 0 };   // exactly at rest at the end, with no rounding left over
+      const x = Math.max(0, Math.min(dur, u)) * k / dt, i = Math.min(n - 1, Math.floor(x)), f = Math.max(0, Math.min(1, x - i));
+      return { s: S[i] + (S[i + 1] - S[i]) * f, v: (V[i] + (V[i + 1] - V[i]) * f) * k };
+    },
+  };
+}
+
 const angDiff = (a, b) => ((b - a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
 
 /** Closest point of path to (x, z) searching only arclength [s0, s1]: [s, distance]. Walks just that stretch, so it is cheap on a long route. */
@@ -181,6 +206,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
 
   // ---------- the step ----------
   function stepVehicle(a, dt) {
+    if (a.kinematic) { a.stillFor = 0; return; }   // the player's ride is played from a recorded motion (placeAlong): the traffic model does not move it
     const route = a.route, front = a.s + a.len / 2;
     let v0 = Math.min(a.cruise, route.vAt(Math.min(route.len, a.s + 3 + a.v * 0.8)));
     if (a.hold) v0 = 0;
@@ -264,6 +290,10 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     addHero(kind, route, opts = {}) { const a = make(kind, route, { ...opts, role: "hero" }); a.custom = true; return a; },
     /** Gives a vehicle a new route that starts exactly where it is now (the first lane of `route` must be the lane it is on). */
     setRoute(a, route, opts = {}) { a.route = route; a.s = 0; a.si = 0; a.stopAt = opts.stopAt ?? null; a.res = null; a.waitSince = null; a.nextConn = null; a.stopLine = null; pose(a); },
+    /** Removes the traffic (not the player's vehicle) within r metres of a point, so a pickup vehicle can appear there straight away. */
+    clearSpot(x, z, r) { for (const b of vehicles) if (!b.done && b.role === "npc" && Math.hypot(b.x - x, b.z - z) < r) b.done = true; },
+    /** Puts a kinematic vehicle (a.kinematic = true) at `s` metres along its route, moving at `v`. The player's ride uses this so its duration is exact. */
+    placeAlong(a, s, v = 0) { a.s = Math.max(0, Math.min(a.route.len, s)); a.v = v; a.stillFor = 0; pose(a); },
     remove(a) { a.done = true; world?.removeBody("veh" + a.id); const i = vehicles.indexOf(a); if (i >= 0) vehicles.splice(i, 1); },
     /** The player's own car, the player on foot, or anything else vehicles must give way to. */
     setExternal(id, b) { external.set(id, b); }, removeExternal(id) { external.delete(id); },

@@ -10,7 +10,7 @@
 // The person is a Walker (one controller for the stick, the keys and the automatic route, so they never fight). Vehicles are sim vehicles on the road graph.
 // The journey time is whatever the motion adds up to; `eta` is the planner's arithmetic (tripplan.js) applied to where things are right now.
 import { Walker, WALK_R } from "./walker.js";
-import { KINDS, doorPoint, toWorld } from "./trafficsim.js";
+import { KINDS, doorPoint, toWorld, rideProfile } from "./trafficsim.js";
 import { remainingSecs } from "./tripplan.js";
 import { INTRO_SECONDS, BOARD_SECONDS, ALIGHT_SECONDS, OWN_CAR_MAX } from "../lib/travel.js";
 import { boxesOverlap } from "./collide.js";
@@ -27,7 +27,7 @@ export function createTripFlow(env, o) {
   const driven = !!plan.driven, ownCar = mode === "car" && !plan.driven, vehicleTrip = mode !== "trek", kind = plan.kind;
   const walker = new Walker(world, nav, { x: plan.start.x, z: plan.start.z, hx: 0, hz: 1 });
   const S = { phase: "intro", t: 0, time: 0, eta: plan.secs, notice: null, ended: false, entered: false, doorK: 0, boardK: 0, alightK: 0, speed: 0 };
-  let hero = null, own = null, spawnAt = 0, spawnTries = 0, waitedForVehicle = 0, boardFrom = null, alightTo = null, lastEta = -1, retargeted = false, approachDoor = null, departed = false, enterFrom = null, alightFrom = null;
+  let hero = null, own = null, inProf = null, heroT = 0, spawnAt = 0, spawnTries = 0, waitedForVehicle = 0, boardFrom = null, alightTo = null, lastEta = -1, retargeted = false, approachDoor = null, departed = false, enterFrom = null, alightFrom = null;
   const person = { visible: true, seated: false, seat: null, x: plan.start.x, z: plan.start.z, hx: 0, hz: 1 };
 
   const go = (p) => { S.phase = p; S.t = 0; };
@@ -44,8 +44,10 @@ export function createTripFlow(env, o) {
       hero = sim.addHero(kind, r, { s: plan.pick.s - s0, v: 0, hold: true, len: dims?.len, wid: dims?.wid, cruise: plan.profile.cruise, aMax: plan.profile.accel, brake: plan.profile.brake }); hero.color = "#1c1d21"; hero.ignoreExt = new Set(["player"]); return true;
     }
     const r = plan.inbound ?? graph.makeRoute([{ kind: "lane", id: plan.pick.lane.id, s0: Math.max(0, plan.pick.s - 3), s1: plan.pick.s }], plan.opts); if (!r) return false;
-    const p0 = r.path.at(0, {}); if (!sim.spotFree(p0.x, p0.z, (dims?.len ?? def.len) + 4) && spawnTries++ < 600) return false;   // wait for a clear spot to appear
-    hero = sim.addHero(kind, r, { v: 0, len: dims?.len, wid: dims?.wid, cruise: plan.profile.cruise, aMax: plan.profile.accel, brake: plan.profile.brake }); hero.ignoreExt = new Set(["player"]); return true;
+    const p0 = r.path.at(0, {}); const need = (dims?.len ?? def.len) + 4; if (!sim.spotFree(p0.x, p0.z, need)) { sim.clearSpot(p0.x, p0.z, need); if (!sim.spotFree(p0.x, p0.z, need) && spawnTries++ < 30) return false; }   // other traffic parked on the spot moves on at once, so the approach is never held up
+    hero = sim.addHero(kind, r, { v: 0, len: dims?.len, wid: dims?.wid, cruise: plan.profile.cruise, aMax: plan.profile.accel, brake: plan.profile.brake }); hero.ignoreExt = new Set(["player"]);
+    // the vehicle comes up the road in the time the approach lasts, whatever the distance (the walk to it is never longer than that)
+    inProf = rideProfile(r, plan.params, Math.max(0.5, plan.tVeh)); hero.kinematic = true; heroT = 0; return true;
   }
   const stoppedAtPickup = () => hero && hero.v < 0.2 && (ownCar || hero.s >= hero.route.len - 0.9);   // your own car is already parked there
 
@@ -87,7 +89,7 @@ export function createTripFlow(env, o) {
   function startApproach() {
     go("approach"); approachDoor = plan.doorIn; walker.follow(plan.walkIn, { goal: plan.doorIn, tolerance: 0.4, onDone: (why) => { if (why === "blocked") { notice("You cannot get to the " + kindName() + " from here."); end("unreachable"); } } });
     if (ownCar) spawnVehicle();
-    spawnAt = driven ? Math.max(0, plan.parts.walkIn - plan.tVeh - 0.3) : 0;
+    spawnAt = 0;   // the vehicle sets off as you do, and both get there together
   }
   const seatLocal = () => (ownCar ? KINDS[kind].driver ?? KINDS[kind].seat : KINDS[kind].seat);   // you drive your own car; in everything else you are a passenger
   const kindName = () => (mode === "car" ? "car" : mode);
@@ -98,7 +100,7 @@ export function createTripFlow(env, o) {
   function startBoard() { const hp = heroPose(); boardFrom = { x: walker.x, z: walker.z }; walker.cancelRoute(); walker.ignore = new Set([vehicleId()]); go("board"); person.seated = false; S.hx = hp.hx; }
   function startRide() {
     if (ownCar) { makeOwn(); go("drive"); return; }
-    sim.setRoute(hero, plan.route, {}); hero.hold = false; hero.stopAt = null; go("ride");
+    sim.setRoute(hero, plan.route, {}); hero.hold = false; hero.stopAt = null; hero.kinematic = true; heroT = 0; go("ride");   // played over exactly the ride time the plan promised (plan.rideProf)
   }
   function arrive() {
     go("paying"); const after = (ok) => { if (S.ended) return; if (ok === false) end("failed"); else startAlight(); };
@@ -112,7 +114,7 @@ export function createTripFlow(env, o) {
     walker.ignore = null; const r = nav.plan(walker.x, walker.z, plan.goal.x, plan.goal.z);
     if (!r.ok) { notice("The way to the door is blocked."); end("unreachable"); return; }
     go("walk"); walker.follow(r, { goal: plan.goal, tolerance: 0.45 });
-    if (hero && driven) { hero.role = "npc"; hero.hold = false; hero.stopAt = null; hero.cruise = Math.min(hero.cruise, 9); sim.setRoute(hero, sim.wander(hero.laneId, hero.laneS, 600)); departed = true; }
+    if (hero && driven) { hero.kinematic = false; hero.role = "npc"; hero.hold = false; hero.stopAt = null; hero.cruise = Math.min(hero.cruise, 9); sim.setRoute(hero, sim.wander(hero.laneId, hero.laneS, 600)); departed = true; }
   }
 
   function update(dt, inp = {}) {
@@ -122,13 +124,16 @@ export function createTripFlow(env, o) {
       case "intro": walker.step(dt, null); if (S.t >= INTRO_SECONDS) { if (mode === "trek") go("trek"); else startApproach(); } break;
       case "trek": walker.step(dt, walkIn); if (Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z) < 3.2) { walker.step(0.0001, null); arrive(); } break;
       case "approach": {
-        if (driven && !hero && S.t >= spawnAt) spawnVehicle(); walker.step(dt, walkIn);
+        if (driven && !hero && S.t >= spawnAt) spawnVehicle();
+        if (hero?.kinematic && inProf) { heroT += dt; const q = inProf.at(heroT); sim.placeAlong(hero, q.s, q.v); }
+        const gs = retargeted ? Math.max(plan.glide, 8) : plan.glide;   // once the vehicle has stopped, the last few metres to its real door are covered briskly too
+        if (gs > 0 && walker.following) walker.glide(dt, gs); else walker.step(dt, walkIn);   // a long way to the kerb is walked at the pace that fits the approach time
         if (walker.off > 8 && walker.mode !== "manual" && walker.following) { const r = nav.plan(walker.x, walker.z, approachDoor.x, approachDoor.z); if (r.ok) walker.follow(r, { goal: approachDoor, tolerance: 0.4 }); }
         if (hero) {
-          if (stoppedAtPickup()) { if (!retargeted) { retargeted = true; retarget(); } const d = doorPoint({ ...heroPose(), kind }); if (Math.hypot(walker.x - d.x, walker.z - d.z) < 0.75) { startBoard(); break; } }
+          if (stoppedAtPickup() && (!hero.kinematic || heroT >= plan.tVeh - 0.05)) { if (!retargeted) { retargeted = true; retarget(); } const d = doorPoint({ ...heroPose(), kind }); if (Math.hypot(walker.x - d.x, walker.z - d.z) < 0.75) { startBoard(); break; } }
           if (hero.stillFor > 20 && !stoppedAtPickup()) sim.clearAhead(hero);
         }
-        waitedForVehicle += dt; if (waitedForVehicle > plan.tVeh + plan.parts.walkIn + 90) { notice("The " + kindName() + " could not get to you. Try again."); end("unavailable"); }
+        waitedForVehicle += dt; if (waitedForVehicle > plan.tVeh + plan.parts.walkIn + 60) { notice("The " + kindName() + " could not get to you. Try again."); end("unavailable"); }
         break; }
       case "board": { // turn to the door, step through it and sit down
         const hp = heroPose(), def = KINDS[kind], k = Math.min(1, S.t / BOARD_SECONDS); S.boardK = k; const door = doorPoint({ ...hp, kind }), seat = toWorld(hp, seatLocal()), m = Math.max(0, Math.min(1, (S.t - 0.55) / 1.2));
@@ -138,8 +143,9 @@ export function createTripFlow(env, o) {
         if (S.t >= BOARD_SECONDS) { walker.ignore = null; startRide(); } break; }
       case "ride": {
         if (!hero || hero.done) { notice("The ride ended unexpectedly."); end("failed"); break; }
-        { const sp = toWorld(hero, seatLocal()); walker.x = sp.x; walker.z = sp.z; } if (hero.stillFor > 20) sim.clearAhead(hero);
-        if (hero.s >= hero.route.len - 0.9 && hero.v < 0.25) { hero.hold = true; arrive(); } break; }
+        heroT += dt; { const q = plan.rideProf.at(heroT); sim.placeAlong(hero, q.s, q.v); }   // the ride is the recorded motion played over its set time
+        { const sp = toWorld(hero, seatLocal()); walker.x = sp.x; walker.z = sp.z; }
+        if (heroT >= plan.rideProf.dur) { sim.placeAlong(hero, hero.route.len, 0); hero.hold = true; arrive(); } break; }
       case "drive": driveOwn(dt, inp); { const sp = toWorld(own, seatLocal()); walker.x = sp.x; walker.z = sp.z; }
         if (Math.hypot(own.x - plan.drop.x, own.z - plan.drop.z) < ARRIVE_RADIUS && Math.abs(own.v) < 0.3) arrive(); break;
       case "paying": break;
@@ -167,9 +173,9 @@ export function createTripFlow(env, o) {
     switch (ph) {
       case "intro": return Math.max(0, plan.secs - S.t);
       case "trek": return remainingSecs(plan, "trek", { walkLeft: Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z) * 1.1 });
-      case "approach": { const vehLeft = hero ? (hero.s >= hero.route.len - 0.9 ? 0 : Math.max(0, plan.tVeh - (S.time - spawnAt))) : Math.max(0, spawnAt - S.t) + plan.tVeh; return remainingSecs(plan, "approach", { walkLeft, vehLeft }); }
+      case "approach": { const vehLeft = hero ? (hero.kinematic ? Math.max(0, plan.tVeh - heroT) : hero.s >= hero.route.len - 0.9 ? 0 : Math.max(0, plan.tVeh - (S.time - spawnAt))) : Math.max(0, spawnAt - S.t) + plan.tVeh, walkSecsLeft = plan.glide > 0 ? walkLeft / plan.glide : undefined; return remainingSecs(plan, "approach", { walkLeft, vehLeft, walkSecsLeft }); }
       case "board": return remainingSecs(plan, "board", { boardLeft: Math.max(0, BOARD_SECONDS - S.t) });
-      case "ride": return hero ? remainingSecs(plan, "ride", { rideS: hero.s, rideV: hero.v }) : 0;
+      case "ride": return hero ? remainingSecs(plan, "ride", { rideS: hero.s, rideV: hero.v, rideT: heroT }) : 0;
       case "drive": return remainingSecs({ ...plan, route: plan.route }, "ride", { rideS: Math.min(plan.route.len, plan.route.path.nearest(own.x, own.z, 0, plan.route.len + 1)), rideV: Math.max(0, own.v) });
       case "paying": case "alight": return remainingSecs(plan, "alight", { alightLeft: Math.max(0, ALIGHT_SECONDS - (ph === "alight" ? S.t : 0)) });
       case "walk": return remainingSecs(plan, "walk", { walkLeft });

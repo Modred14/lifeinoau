@@ -38,7 +38,7 @@ const denies = async (label, fn, status) => { try { await fn(); chk(label + " (s
 }
 
 // ---------------- the service ----------------
-const MODELS = ["character", "account", "bond", "loveRequest", "bondEvent", "message", "block", "notification", "actionLog", "ledgerEntry", "pregnancy", "gameClock", "roomItem", "achievement"];
+const MODELS = ["character", "account", "bond", "loveRequest", "bondEvent", "chat", "message", "block", "notification", "actionLog", "ledgerEntry", "pregnancy", "gameClock", "roomItem", "achievement"];
 const db = makeDb(MODELS, {
   defaults: { bond: { kind: "TALKING", prevKind: null, affection: 0, dates: 0, meals: 0, visits: 0, done: {}, everBabe: false, everEngaged: false, together: false, homeHostel: null, cheatedBy: null, cheatedWeek: null, lastCheater: null, strikes: 0, endedWeek: null, endedBy: null }, loveRequest: { status: "PENDING", variant: null }, pregnancy: { status: "PENDING" } },
   unique: { actionLog: ["characterId", "requestId"], bond: ["lowId", "highId"] },
@@ -54,7 +54,7 @@ const person = (id, name, gender, hostel) => {
   T.account.push({ id: "acc_" + id, kind: "PLAYER", characterId: id, balance: 5_000_000_00n });
 };
 person("t", "Tunde", "M", "Awo"); person("z", "Zainab", "F", "Moremi"); person("a", "Amara", "F", "Mozambique"); person("s", "Seyi", "M", "Fajuyi"); person("k", "Kemi", "F", "Akintola");
-const say = (from, to) => { T.message.push({ fromId: from, toId: to, body: "hi", createdAt: new Date() }); };
+const say = (from, to) => db.say(from, to);
 const C = (id) => T.character.find((c) => c.id === id), bal = (id) => T.account.find((a) => a.id === "acc_" + id).balance;
 const nextWeek = () => { T.gameClock[0].startedAt = new Date(T.gameClock[0].startedAt.getTime() - 7 * DAY); T.character.forEach((c) => { c.lastTickWeek = weekNow(); c.energy = 100; }); };
 let q = 0; const rid = () => "req-" + String(++q).padStart(8, "0");
@@ -111,7 +111,7 @@ chk("ready to be asked", zb.ready && zb.dates === 2 && zb.visits === 1 && zb.can
 nextWeek();
 await denies("a made-up note is refused", () => as("t", { action: "note", id: zb.id, line: 99 }), 400);
 const msgs0 = T.message.length; await as("t", { action: "note", id: zb.id, line: 0 });
-chk("a note goes into Messages", T.message.length === msgs0 + 1 && T.message.at(-1).toId === "z");
+chk("a note goes into Messages", T.message.length === msgs0 + 1 && T.message.at(-1).body === R.NOTES[0] && T.message.at(-1).fromA === true && T.message.at(-1).kind === 0);
 await denies("note twice in a week", () => as("t", { action: "note", id: zb.id, line: 1 }), 409);
 
 // babe: ask, decline, ask, accept
@@ -207,7 +207,7 @@ await as("t", { action: "remove", id: sb.id }); chk("remove deletes the bond", !
 const old = rid(); const kb = await (async () => { say("t", "k"); say("k", "t"); const r = await as("t", { action: "add", name: "Kemi" }); return r; })();
 const r1 = await relate(db, U.t, { requestId: old, action: "note", id: kb.id, line: 0 });
 const r2 = await relate(db, U.t, { requestId: old, action: "note", id: kb.id, line: 0 });
-chk("a replayed request does nothing twice", r1.ok && r2.duplicate === true && T.message.filter((m) => m.body === R.NOTES[0] && m.toId === "k").length === 1);
+chk("a replayed request does nothing twice", r1.ok && r2.duplicate === true && T.message.filter((m) => m.body === R.NOTES[0] && m.chatId === T.chat.find((c) => [c.aId, c.bId].includes("k") && [c.aId, c.bId].includes("t")).id).length === 1);
 const kd = await as("t", { action: "request", id: kb.id, kind: "DATE" });
 C("k").jailedUntil = new Date(Date.now() + 3600e3);
 await denies("they are in Floor O: they cannot answer", () => as("k", { action: "answer", id: kd.id, accept: true }));
