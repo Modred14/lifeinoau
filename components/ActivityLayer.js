@@ -1,5 +1,4 @@
 // components/ActivityLayer.js
-// components/ActivityLayer.js
 // What you can DO inside a building: the prompt beside a ring, the panel that starts an activity, the progress while it runs, and the result.
 // The rules (cost, time, limits) and the position check are on the server (lib/activityService.js); this only shows them and asks. It reports where
 // you stand every few seconds, and stops the activity the moment you walk away from the ring.
@@ -21,7 +20,7 @@ const needsCourse = (k) => k === "course_attend" || k === "course_study" || k ==
 
 /** `api` is a ref to the 3D scene, `rings` the activity rings drawn in it, `open` the ring whose panel is showing, `onClose` closes it, `onLeave` leaves the building. */
 export default function ActivityLayer({ api, rings, open, onClose, onLeave, ready }) {
-  const [st, setSt] = useState(null), [run, setRun] = useState(null), [busy, setBusy] = useState(false), [course, setCourse] = useState(""), [tick, setTick] = useState(() => serverTime()), [done, setDone] = useState(null);
+  const [st, setSt] = useState(null), [run, setRun] = useState(null), [busy, setBusy] = useState(false), [course, setCourse] = useState(""), [tick, setTick] = useState(() => serverTime()), [done, setDone] = useState(null), [fold, setFold] = useState(true); // the panel opens folded; the person unfolds it
   const runRef = useRef(null), finishing = useRef(false), e0 = useRef(0); // e0: energy when the run began (for the rising bar while sleeping)
   const pos = () => { const s = api.current?.state; return s ? { x: s.x, z: s.z, floor: s.floor } : null; };
   const ring = (id) => rings.find((r) => r.activity === id);
@@ -71,6 +70,7 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
 
   useEffect(() => () => { if (runRef.current) fetch("/api/activity", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "cancel" }) }).catch(() => {}); }, []); // leaving the building ends a running activity
 
+  useEffect(() => { setFold(true); }, [open?.activity]); // each ring's panel starts folded
   const info = open ? st?.hubs?.find((h) => h.id === open.activity) : null;
   const begin = async (param) => {
     if (!info || busy || run) return; const p = pos(); if (!p) return;
@@ -96,7 +96,14 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
       {run && !open && <div className="bi3-run" role="status"><Icon name={runInfo?.icon ?? "timer"} size={18} /><span>{runInfo?.doing ?? "Working…"} {runInfo?.full ? `Energy ${energyNow}%` : `${sec}s`}</span><i style={{ width: `${Math.min(100, (1 - sec / total) * 100)}%` }} /></div>}
       {open && (
         <div className="bi3-act" role="dialog" aria-label={open.label}>
-          <div className="bi3-act-h"><Icon name={info?.icon ?? "sparkle"} size={22} weight="fill" /><b>{open.label}</b><button type="button" className="bi3-x" aria-label="Close" onClick={onClose} data-sound="none"><Icon name="close" size={18} /></button></div>
+          <div className="bi3-act-h">
+            <button type="button" className="bi3-act-tg" aria-expanded={!fold} onClick={() => setFold((f) => !f)} data-sound="none">
+              <Icon name={info?.icon ?? "sparkle"} size={22} weight="fill" /><b>{open.label}</b><span className="bi3-chev" aria-hidden="true"><Icon name="down" size={16} /></span>
+            </button>
+            <button type="button" className="bi3-x" aria-label="Close" onClick={onClose} data-sound="none"><Icon name="close" size={18} /></button>
+            {run && <i className="bi3-act-bar" style={{ width: `${Math.min(100, (1 - sec / total) * 100)}%` }} />}
+          </div>
+          {!fold && <div className="bi3-act-b">
           {!st ? <p className="mut">Checking…</p> : !info ? <p className="mut">That is not available right now.</p> : (
             <>
               <p className="bi3-act-sub">{info.sub}</p>
@@ -112,13 +119,14 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
                   {needsCourse(info.kind) && (st.courses?.length ? <label className="bi3-act-sel"><span>Course</span><select value={course} onChange={(e) => setCourse(e.target.value)}>{st.courses.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.title}</option>)}</select></label> : <p className="mut">You have no courses at the moment.</p>)}
                   {done && !info.blocked && <p className="bi3-act-done">{done.text} {done.bits.join(" · ")}{done.capped ? " (you have gained all you can of some of that for now)" : ""}</p>}
                   <div className="bi3-act-btns">
-                    {info.kind === "exam" ? (<><button type="button" className="bi3-b go" disabled={!!info.blocked || busy} onClick={() => begin("")}>Sit honestly</button><button type="button" className="bi3-b risk" disabled={!!info.blocked || busy} onClick={() => begin("cheat")}>Try to cheat</button></>)
+                    {info.kind === "exam" ? (<><button type="button" className="bi3-b go" disabled={!!info.blocked || busy} onClick={() => begin("")}>Sit honestly</button><button type="button" className="bi3-b risk alt" disabled={!!info.blocked || busy} onClick={() => begin("cheat")}>Try to cheat</button></>)
                       : <button type="button" className={`bi3-b go${info.kind === "hustle_risky" ? " risk" : ""}`} disabled={!!info.blocked || busy || (needsCourse(info.kind) && !course)} onClick={() => begin()}>{busy ? "Starting…" : "Start"}</button>}
                   </div>
                 </>
               )}
             </>
           )}
+          </div>}
         </div>
       )}
     </>
