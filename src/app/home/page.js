@@ -268,7 +268,8 @@ export default function Play() {
   };
 
   const bail = () => {
-    if (!canAfford(bailFor(st.floorZero.releaseAt, serverTime())))
+    const until = st.floorZero?.releaseAt ?? st.character.jailedUntil;
+    if (!canAfford(bailFor(until, serverTime())))
       return toast.error("You cannot afford the bail. Wait out your sentence.");
     return go({
       key: "bail",
@@ -280,9 +281,9 @@ export default function Play() {
       request: () => call("/api/floor0/pay", {}),
       // the money leaves the wallet at once (taken back if refused), but the custody screen only lifts when the server confirms
       effects: [
-        { store: game, patch: (s) => (s.floorZero ? cash(-bailFor(s.floorZero.releaseAt, serverTime()))(s) : s) },
+        { store: game, patch: (s) => { const u = s.floorZero?.releaseAt ?? s.character?.jailedUntil; return u ? cash(-bailFor(u, serverTime()))(s) : s; } },
       ],
-      after: () => [{ store: game, patch: (s) => ({ ...s, floorZero: null }) }],
+      after: () => [{ store: game, patch: (s) => ({ ...s, floorZero: null, character: { ...s.character, jailedUntil: null } }) }],
     });
   };
 
@@ -341,7 +342,7 @@ export default function Play() {
   if (!st) return <Loader fullscreen label="Loading your life" />;
   const c = st.character,
     a = st.academics,
-    left = st.floorZero ? Math.max(0, new Date(st.floorZero.releaseAt) - now) : 0;
+    left = st.floorZero ? Math.max(0, new Date(st.floorZero.releaseAt) - now) : isJailed(c, now) ? Math.max(0, new Date(c.jailedUntil) - now) : 0;
   if (c.graduated)
     return (
       <View key={view}>
@@ -365,10 +366,11 @@ export default function Play() {
       </View>
     );
   // A player in custody is held INSIDE Floor O: they do not get the home room. (Expelled players in custody are told about both.)
-  if (isJailed(c, now) && st.floorZero)
+  // The deadline on the character decides this, not whether a FloorZero record came back with the state (the server also fills it in, this is the second guard).
+  if (isJailed(c, now))
     return (
       <View key={view}>
-        <Custody st={st} now={now} busy={busy} bail={bail} />
+        <Custody st={st.floorZero ? st : { ...st, floorZero: { startedAt: null, releaseAt: c.jailedUntil, location: "floor0", billKobo: "0" } }} now={now} busy={busy} bail={bail} />
       </View>
     );
   if (isExpelled(c, now))

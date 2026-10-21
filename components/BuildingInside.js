@@ -10,7 +10,7 @@ import { Icon } from "./Icon";
 import { Stick, Hold } from "./TripHud";
 import { call } from "@/lib/client";
 import { serverTime } from "@/lib/serverClock";
-import { game } from "@/lib/gameStore";
+import { game, useGame } from "@/lib/gameStore";
 import { confirmAction } from "@/lib/confirm";
 import { toast } from "@/lib/toast";
 import LectureFight, { ResultCard } from "./LectureFight";
@@ -18,6 +18,9 @@ import ActivityLayer from "./ActivityLayer";
 import ClubLayer from "./ClubLayer";
 import { isClub, clubStatus, HOURS_LABEL } from "@/lib/clubs.js";
 import { ICON_OF } from "@/lib3d/landmarks.js";
+import { CUSTODY_PLACE, CUSTODY_NAME, isJailed } from "@/lib/discipline";
+import { bailFor } from "@/lib/engine";
+import { naira } from "@/lib/client";
 import "./travel.css";
 
 export default function BuildingInside({ place, look = null, gender = "M", focus = null, selfName = "", onLeave, onCustody = null }) {
@@ -54,7 +57,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
         const lecturers = (lec.current.courses ?? []).map((x) => ({ code: x.code, name: x.lecturer.name, difficulty: x.lecturer.difficulty, npcIndex: x.venue.npcIndex }));
         // the activity rings: placed by the same code the server uses to check where you stand (lib3d/interiors/activityHubs.js), drawn teal
         const list = activityHubs(c, classify(place.id, place.kind).spec).hubs.map((h) => ({ ...h, activity: h.id, tint: "#5fe3c0" })); c.hubs = [...c.hubs, ...list]; setRings(list); if (dead || !box.current) return;
-        scene = await createInteriorScene(box.current, c, { look, gender, selfName: selfRef.current, club: isClub(place.id), barSpot: (() => { const b = list.find((h) => h.act === "club_drink"); return b ? { x: b.x, z: b.z } : null; })(), input, view: "follow", lecturers, onFade: setFade, onIncidentEnd: (e) => setAfter(e), onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onChat: (m) => { toast.info(`${m.name}: ${m.line}`); setTimeout(() => { if (!dead) toast.info(`${m.name}: ${m.reply}`); }, 2600); }, onHub: (h) => { if (h.action === "lecture") { confrontRef.current?.(h.lecturer.code); return; } if (h.activity) { setOpen(h); return; } const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true); } });
+        scene = await createInteriorScene(box.current, c, { look, gender, selfName: selfRef.current, club: isClub(place.id), barSpot: (() => { const b = list.find((h) => h.act === "club_drink"); return b ? { x: b.x, z: b.z } : null; })(), input, view: "follow", lecturers, onFade: setFade, onIncidentEnd: (e) => setAfter(e), onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onChat: (m) => { toast.info(`${m.name}: ${m.line}`); setTimeout(() => { if (!dead) toast.info(`${m.name}: ${m.reply}`); }, 2600); }, onHub: (h) => { if (h.action === "lecture") { confrontRef.current?.(h.lecturer.code); return; } if (h.activity) { setOpen(h); return; } if (place.id === CUSTODY_PLACE) { deskRef.current?.(); return; } const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true); } });
         if (dead) { scene.dispose(); return; } api.current = scene; if (peopleRef.current) scene.setRemotePlayers(peopleRef.current); setStatus("ready"); setSceneReady(true);
       } catch (e) { console.warn("interior unavailable", e); if (!dead) setStatus("fallback"); }
     })();
@@ -98,6 +101,35 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
   useEffect(() => { if (open && !(near && near.activity === open.activity)) setOpen(null); }, [near, open]); // walking away from a ring closes its panel
   useEffect(() => { const k = (e) => { if (e.key !== "Escape") return; if (open) setOpen(null); else if (info) setInfo(false); else onLeave(); }; document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [onLeave, info, open]);
 
+  // ---- the charge desk in Floor O ("Settle your bill") ----
+  // A prisoner is held INSIDE Floor O. Settling the bill is done here, in the custody panel; it never sends them to /home (that is the player's own room).
+  const gs = useGame(), [desk, setDesk] = useState(false), [paying, setPaying] = useState(false), [, setTick] = useState(0), deskRef = useRef(null);
+  deskRef.current = () => { if (place.id === CUSTODY_PLACE && isJailed(game.get()?.character ?? {}, serverTime())) setDesk(true); else toast.info("The charge desk is for people being held here. Nobody is booked in under your name."); };
+  useEffect(() => { if (!desk) return; const t = setInterval(() => setTick((n) => n + 1), 1000); return () => clearInterval(t); }, [desk]);
+  const heldUntil = gs?.floorZero?.releaseAt ?? gs?.character?.jailedUntil ?? null, stillHeld = !!heldUntil && +new Date(heldUntil) > serverTime();
+  useEffect(() => { if (desk && gs && !stillHeld) { setDesk(false); game.refresh(); } }, [desk, gs, stillHeld]); // the sentence ended while the panel was open
+  async function settleBill() {
+    if (paying) return; setPaying(true);
+    const r = await call("/api/floor0/pay", {}); setPaying(false);
+    if (r.failed) return toast.error(r.error || "Could not pay the bail. Try again.");
+    toast.success(r.served ? "Your sentence is over. You are free." : "Bail paid. You are free.", { sound: "coin" });
+    setDesk(false); await game.refresh(); onLeave();
+  }
+  const deskMs = heldUntil ? Math.max(0, +new Date(heldUntil) - serverTime()) : 0, deskBail = heldUntil ? bailFor(heldUntil, serverTime()) : 0n;
+  const deskMmSs = `${Math.floor(deskMs / 3600000)}h ${String(Math.floor(deskMs / 60000) % 60).padStart(2, "0")}m ${String(Math.floor(deskMs / 1000) % 60).padStart(2, "0")}s`;
+  const deskPanel = desk && (
+    <div className="bi" role="dialog" aria-modal="true" aria-label={CUSTODY_NAME} style={{ zIndex: 60 }} onClick={(e) => { if (e.target === e.currentTarget) setDesk(false); }}>
+      <div className="bi-card">
+        <span className="bi-ico"><Icon name="siren" size={30} weight="fill" /></span>
+        <small>Charge desk</small>
+        <h2>{CUSTODY_NAME}</h2>
+        <p>You are being held here and you serve your whole sentence inside. Pay the bill to walk out early, or wait it out. You can still message other players.</p>
+        <p><b>Time left:</b> {deskMmSs}<br /><b>Bill to leave now:</b> {naira(deskBail.toString())}</p>
+        <button type="button" className="go" disabled={paying || !stillHeld} onClick={settleBill}><Icon name="door" size={18} /> {paying ? "Paying…" : `Pay ${naira(deskBail.toString())} and leave`}</button>
+        <button type="button" onClick={() => setDesk(false)}>Back to walking</button>
+      </div>
+    </div>
+  );
   const card = (
     <div className="bi" role="dialog" aria-modal="true" aria-label={`About ${place.name}`} data-over={status === "ready" ? "1" : undefined} onClick={(e) => { if (status === "ready" && e.target === e.currentTarget) setInfo(false); }}>
       <div className="bi-card">
@@ -121,6 +153,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
   if (status === "fallback" || status === "none") return card;
   return (
     <div className="bi3" role="dialog" aria-modal="true" aria-label={`Inside ${place.name}`}>
+      {deskPanel}
       <div className="bi3-view" ref={box} />
       {status === "loading" && <div className="bi3-load" role="status"><Icon name="door" size={30} /><b>Going in…</b></div>}
       {status === "ready" && (

@@ -1,0 +1,189 @@
+diff --git a/components/BuildingInside.js b/components/BuildingInside.js
+index 358a8eb..35b31a7 100644
+--- a/components/BuildingInside.js
++++ b/components/BuildingInside.js
+@@ -10,7 +10,7 @@ import { Icon } from "./Icon";
+ import { Stick, Hold } from "./TripHud";
+ import { call } from "@/lib/client";
+ import { serverTime } from "@/lib/serverClock";
+-import { game } from "@/lib/gameStore";
++import { game, useGame } from "@/lib/gameStore";
+ import { confirmAction } from "@/lib/confirm";
+ import { toast } from "@/lib/toast";
+ import LectureFight, { ResultCard } from "./LectureFight";
+@@ -18,6 +18,9 @@ import ActivityLayer from "./ActivityLayer";
+ import ClubLayer from "./ClubLayer";
+ import { isClub, clubStatus, HOURS_LABEL } from "@/lib/clubs.js";
+ import { ICON_OF } from "@/lib3d/landmarks.js";
++import { CUSTODY_PLACE, CUSTODY_NAME, isJailed } from "@/lib/discipline";
++import { bailFor } from "@/lib/engine";
++import { naira } from "@/lib/client";
+ import "./travel.css";
+ 
+ export default function BuildingInside({ place, look = null, gender = "M", focus = null, selfName = "", onLeave, onCustody = null }) {
+@@ -54,7 +57,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
+         const lecturers = (lec.current.courses ?? []).map((x) => ({ code: x.code, name: x.lecturer.name, difficulty: x.lecturer.difficulty, npcIndex: x.venue.npcIndex }));
+         // the activity rings: placed by the same code the server uses to check where you stand (lib3d/interiors/activityHubs.js), drawn teal
+         const list = activityHubs(c, classify(place.id, place.kind).spec).hubs.map((h) => ({ ...h, activity: h.id, tint: "#5fe3c0" })); c.hubs = [...c.hubs, ...list]; setRings(list); if (dead || !box.current) return;
+-        scene = await createInteriorScene(box.current, c, { look, gender, selfName: selfRef.current, club: isClub(place.id), barSpot: (() => { const b = list.find((h) => h.act === "club_drink"); return b ? { x: b.x, z: b.z } : null; })(), input, view: "follow", lecturers, onFade: setFade, onIncidentEnd: (e) => setAfter(e), onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onChat: (m) => { toast.info(`${m.name}: ${m.line}`); setTimeout(() => { if (!dead) toast.info(`${m.name}: ${m.reply}`); }, 2600); }, onHub: (h) => { if (h.action === "lecture") { confrontRef.current?.(h.lecturer.code); return; } if (h.activity) { setOpen(h); return; } const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true); } });
++        scene = await createInteriorScene(box.current, c, { look, gender, selfName: selfRef.current, club: isClub(place.id), barSpot: (() => { const b = list.find((h) => h.act === "club_drink"); return b ? { x: b.x, z: b.z } : null; })(), input, view: "follow", lecturers, onFade: setFade, onIncidentEnd: (e) => setAfter(e), onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onChat: (m) => { toast.info(`${m.name}: ${m.line}`); setTimeout(() => { if (!dead) toast.info(`${m.name}: ${m.reply}`); }, 2600); }, onHub: (h) => { if (h.action === "lecture") { confrontRef.current?.(h.lecturer.code); return; } if (h.activity) { setOpen(h); return; } if (place.id === CUSTODY_PLACE) { deskRef.current?.(); return; } const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true); } });
+         if (dead) { scene.dispose(); return; } api.current = scene; if (peopleRef.current) scene.setRemotePlayers(peopleRef.current); setStatus("ready"); setSceneReady(true);
+       } catch (e) { console.warn("interior unavailable", e); if (!dead) setStatus("fallback"); }
+     })();
+@@ -98,6 +101,35 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
+   useEffect(() => { if (open && !(near && near.activity === open.activity)) setOpen(null); }, [near, open]); // walking away from a ring closes its panel
+   useEffect(() => { const k = (e) => { if (e.key !== "Escape") return; if (open) setOpen(null); else if (info) setInfo(false); else onLeave(); }; document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [onLeave, info, open]);
+ 
++  // ---- the charge desk in Floor O ("Settle your bill") ----
++  // A prisoner is held INSIDE Floor O. Settling the bill is done here, in the custody panel; it never sends them to /home (that is the player's own room).
++  const gs = useGame(), [desk, setDesk] = useState(false), [paying, setPaying] = useState(false), [, setTick] = useState(0), deskRef = useRef(null);
++  deskRef.current = () => { if (place.id === CUSTODY_PLACE && isJailed(game.get()?.character ?? {}, serverTime())) setDesk(true); else toast.info("The charge desk is for people being held here. Nobody is booked in under your name."); };
++  useEffect(() => { if (!desk) return; const t = setInterval(() => setTick((n) => n + 1), 1000); return () => clearInterval(t); }, [desk]);
++  const heldUntil = gs?.floorZero?.releaseAt ?? gs?.character?.jailedUntil ?? null, stillHeld = !!heldUntil && +new Date(heldUntil) > serverTime();
++  useEffect(() => { if (desk && gs && !stillHeld) { setDesk(false); game.refresh(); } }, [desk, gs, stillHeld]); // the sentence ended while the panel was open
++  async function settleBill() {
++    if (paying) return; setPaying(true);
++    const r = await call("/api/floor0/pay", {}); setPaying(false);
++    if (r.failed) return toast.error(r.error || "Could not pay the bail. Try again.");
++    toast.success(r.served ? "Your sentence is over. You are free." : "Bail paid. You are free.", { sound: "coin" });
++    setDesk(false); await game.refresh(); onLeave();
++  }
++  const deskMs = heldUntil ? Math.max(0, +new Date(heldUntil) - serverTime()) : 0, deskBail = heldUntil ? bailFor(heldUntil, serverTime()) : 0n;
++  const deskMmSs = `${Math.floor(deskMs / 3600000)}h ${String(Math.floor(deskMs / 60000) % 60).padStart(2, "0")}m ${String(Math.floor(deskMs / 1000) % 60).padStart(2, "0")}s`;
++  const deskPanel = desk && (
++    <div className="bi" role="dialog" aria-modal="true" aria-label={CUSTODY_NAME} style={{ zIndex: 60 }} onClick={(e) => { if (e.target === e.currentTarget) setDesk(false); }}>
++      <div className="bi-card">
++        <span className="bi-ico"><Icon name="siren" size={30} weight="fill" /></span>
++        <small>Charge desk</small>
++        <h2>{CUSTODY_NAME}</h2>
++        <p>You are being held here and you serve your whole sentence inside. Pay the bill to walk out early, or wait it out. You can still message other players.</p>
++        <p><b>Time left:</b> {deskMmSs}<br /><b>Bill to leave now:</b> {naira(deskBail.toString())}</p>
++        <button type="button" className="go" disabled={paying || !stillHeld} onClick={settleBill}><Icon name="door" size={18} /> {paying ? "Paying…" : `Pay ${naira(deskBail.toString())} and leave`}</button>
++        <button type="button" onClick={() => setDesk(false)}>Back to walking</button>
++      </div>
++    </div>
++  );
+   const card = (
+     <div className="bi" role="dialog" aria-modal="true" aria-label={`About ${place.name}`} data-over={status === "ready" ? "1" : undefined} onClick={(e) => { if (status === "ready" && e.target === e.currentTarget) setInfo(false); }}>
+       <div className="bi-card">
+@@ -121,6 +153,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
+   if (status === "fallback" || status === "none") return card;
+   return (
+     <div className="bi3" role="dialog" aria-modal="true" aria-label={`Inside ${place.name}`}>
++      {deskPanel}
+       <div className="bi3-view" ref={box} />
+       {status === "loading" && <div className="bi3-load" role="status"><Icon name="door" size={30} /><b>Going in…</b></div>}
+       {status === "ready" && (
+diff --git a/lib/gameService.js b/lib/gameService.js
+index bc1c346..732c88b 100644
+--- a/lib/gameService.js
++++ b/lib/gameService.js
+@@ -81,7 +81,10 @@ export async function getState(db, userId) {
+     nextExamWeek: week + ((6 - (cw % 6)) % 6), satThisWeek: rs.some((r) => r.gameWeek === week), recent: rs.slice(0, 6) };
+   // serverNow lets every screen show countdowns against the SERVER's clock, so two devices with different clocks still agree
+   return { serverNow: now, week, notifications, hostels: ch.hostel ? null : allowedHostels(ch.class, ch.gender, ch.level), academics,
+-    floorZero: fz && { startedAt: fz.startedAt, releaseAt: fz.releaseAt, location: fz.location ?? CUSTODY_PLACE, billKobo: bailFor(fz.releaseAt, now).toString() },
++    // A player whose jailedUntil is still in the future is ALWAYS shown the custody screen, even if their FloorZero row is missing (old data, a half-finished arrest):
++    // without this fallback the home screen found no `floorZero` and drew the room instead of Floor O.
++    floorZero: fz ? { startedAt: fz.startedAt, releaseAt: fz.releaseAt, location: fz.location ?? CUSTODY_PLACE, billKobo: bailFor(fz.releaseAt, now).toString() }
++      : isJailed(ch, now) ? { startedAt: null, releaseAt: ch.jailedUntil, location: CUSTODY_PLACE, billKobo: bailFor(ch.jailedUntil, now).toString() } : null,
+     hustle, lectureIncident, character: { ...rest, faculty: faculty.name }, balanceKobo: account.balance.toString(), calledThisWeek: ch.lastParentCallWeek >= week };
+ }
+ 
+@@ -211,20 +214,22 @@ export async function payBail(db, userId) {
+     return await db.$transaction(async (tx) => {
+       const c = await loadLocked(tx, userId, { allowJailed: true, allowSuspended: true }); // a suspended player can still pay to leave Floor O; also frees a player whose time is already up
+       const fz = await tx.floorZero.findFirst({ where: { characterId: c.id, status: "JAILED" }, orderBy: { id: "desc" } });
+-      if (!fz || !c.jailedUntil) {
+-        if (!fz && !c.jailedUntil && await tx.floorZero.findFirst({ where: { characterId: c.id, status: "SERVED", releaseAt: { gte: new Date(Date.now() - 60_000) } } })) return { ok: true, paidKobo: "0", served: true }; // the time ran out as they tapped: free, nothing to pay
++      if (!c.jailedUntil) {
++        if (!fz && await tx.floorZero.findFirst({ where: { characterId: c.id, status: "SERVED", releaseAt: { gte: new Date(Date.now() - 60_000) } } })) return { ok: true, paidKobo: "0", served: true }; // the time ran out as they tapped: free, nothing to pay
+         throw new GameError(`You are not in ${CUSTODY_NAME}.`, 409);
+       }
+-      const due = bailFor(fz.releaseAt, Date.now());
++      // No FloorZero row but jailedUntil is set (old data): the sentence on the character row is still enforced everywhere, so it can still be paid off.
++      const releaseAt = fz?.releaseAt ?? c.jailedUntil;
++      const due = bailFor(releaseAt, Date.now());
+       if (due <= 0n) { // the last minute ran out while this request was being handled: they are free, and owe nothing
+         await tx.floorZero.updateMany({ where: { characterId: c.id, status: "JAILED" }, data: { status: "SERVED" } });
+         await tx.character.update({ where: { id: c.id }, data: { jailedUntil: null } });
+         return { ok: true, paidKobo: "0", served: true };
+       }
+       const dsa = await tx.account.findUnique({ where: { systemName: "DSA" } });
+-      await transferInTx(tx, { fromId: c.account.id, toId: dsa.id, amount: due, memo: "Floor O bill", key: `bail:${fz.id}`, week });
++      await transferInTx(tx, { fromId: c.account.id, toId: dsa.id, amount: due, memo: "Floor O bill", key: fz ? `bail:${fz.id}` : `bail:c${c.id}:${+c.jailedUntil}`, week });
+       await tx.floorZero.updateMany({ where: { characterId: c.id, status: "JAILED" }, data: { status: "PAID" } });
+-      await tx.floorZero.update({ where: { id: fz.id }, data: { bill: due } }); // keep what was actually paid
++      if (fz) await tx.floorZero.update({ where: { id: fz.id }, data: { bill: due } }); // keep what was actually paid
+       await tx.character.update({ where: { id: c.id }, data: { jailedUntil: null } });
+       return { ok: true, paidKobo: due.toString() };
+     });
+diff --git a/src/app/home/page.js b/src/app/home/page.js
+index 28b8888..490b2cf 100644
+--- a/src/app/home/page.js
++++ b/src/app/home/page.js
+@@ -268,7 +268,8 @@ export default function Play() {
+   };
+ 
+   const bail = () => {
+-    if (!canAfford(bailFor(st.floorZero.releaseAt, serverTime())))
++    const until = st.floorZero?.releaseAt ?? st.character.jailedUntil;
++    if (!canAfford(bailFor(until, serverTime())))
+       return toast.error("You cannot afford the bail. Wait out your sentence.");
+     return go({
+       key: "bail",
+@@ -280,9 +281,9 @@ export default function Play() {
+       request: () => call("/api/floor0/pay", {}),
+       // the money leaves the wallet at once (taken back if refused), but the custody screen only lifts when the server confirms
+       effects: [
+-        { store: game, patch: (s) => (s.floorZero ? cash(-bailFor(s.floorZero.releaseAt, serverTime()))(s) : s) },
++        { store: game, patch: (s) => { const u = s.floorZero?.releaseAt ?? s.character?.jailedUntil; return u ? cash(-bailFor(u, serverTime()))(s) : s; } },
+       ],
+-      after: () => [{ store: game, patch: (s) => ({ ...s, floorZero: null }) }],
++      after: () => [{ store: game, patch: (s) => ({ ...s, floorZero: null, character: { ...s.character, jailedUntil: null } }) }],
+     });
+   };
+ 
+@@ -341,7 +342,7 @@ export default function Play() {
+   if (!st) return <Loader fullscreen label="Loading your life" />;
+   const c = st.character,
+     a = st.academics,
+-    left = st.floorZero ? Math.max(0, new Date(st.floorZero.releaseAt) - now) : 0;
++    left = st.floorZero ? Math.max(0, new Date(st.floorZero.releaseAt) - now) : isJailed(c, now) ? Math.max(0, new Date(c.jailedUntil) - now) : 0;
+   if (c.graduated)
+     return (
+       <View key={view}>
+@@ -365,10 +366,11 @@ export default function Play() {
+       </View>
+     );
+   // A player in custody is held INSIDE Floor O: they do not get the home room. (Expelled players in custody are told about both.)
+-  if (isJailed(c, now) && st.floorZero)
++  // The deadline on the character decides this, not whether a FloorZero record came back with the state (the server also fills it in, this is the second guard).
++  if (isJailed(c, now))
+     return (
+       <View key={view}>
+-        <Custody st={st} now={now} busy={busy} bail={bail} />
++        <Custody st={st.floorZero ? st : { ...st, floorZero: { startedAt: null, releaseAt: c.jailedUntil, location: "floor0", billKobo: "0" } }} now={now} busy={busy} bail={bail} />
+       </View>
+     );
+   if (isExpelled(c, now))
+diff --git a/tests/hustle.test.mjs b/tests/hustle.test.mjs
+index cf28225..c67bb49 100644
+--- a/tests/hustle.test.mjs
++++ b/tests/hustle.test.mjs
+@@ -137,6 +137,15 @@ try {
+   // a suspended player can still pay to leave Floor O
+   const rel3 = new Date(clock + 30 * MIN); T.character[0].jailedUntil = rel3; T.character[0].suspendedUntilWeek = 999; T.floorZero.push({ id: 3n, characterId: "c1", reason: "Risky hustle", startedAt: new Date(clock), releaseAt: rel3, bill: N(105_000), status: "JAILED" });
+   T.account.find((a) => a.id === "acc1").balance = N(1_000_000); assert.equal((await G.payBail(db, "u1")).paidKobo, N(105_000).toString()); T.character[0].suspendedUntilWeek = 0;
++  // regression: jailedUntil is set but the FloorZero row is missing (old data, half-finished arrest). The state must still say "in Floor O" (so the home
++  // screen shows custody, not the room), and the bail must still be payable, charged once.
++  { const rel4 = new Date(clock + 40 * MIN); T.character[0].jailedUntil = rel4; T.floorZero.length = 0;
++    T.account.find((a) => a.id === "acc1").balance = N(1_000_000);
++    const st4 = await G.getState(db, "u1"); assert.ok(st4.floorZero, "custody is reported even without a FloorZero row"); assert.equal(st4.floorZero.billKobo, N(40 * 3_500).toString());
++    const bal4 = T.account.find((a) => a.id === "acc1").balance;
++    const p4 = await G.payBail(db, "u1"); assert.equal(p4.paidKobo, N(40 * 3_500).toString(), "bail is charged from the character's deadline");
++    assert.equal(T.account.find((a) => a.id === "acc1").balance, bal4 - N(40 * 3_500)); assert.equal(T.character[0].jailedUntil, null, "released");
++    e = await err(G.payBail(db, "u1")); assert.ok(e && e.status === 409, "cannot pay the same sentence twice"); }
+   // the sentence runs out as they tap: free, nothing charged
+   const rel4 = new Date(clock + 5 * MIN); T.character[0].jailedUntil = rel4; T.floorZero.push({ id: 4n, characterId: "c1", reason: "Risky hustle", startedAt: new Date(clock), releaseAt: rel4, bill: N(17_500), status: "JAILED" });
+   clock += 5 * MIN + 1; const bal4 = T.account.find((a) => a.id === "acc1").balance; const free = await G.payBail(db, "u1"); assert.equal(free.paidKobo, "0"); assert.equal(T.account.find((a) => a.id === "acc1").balance, bal4);

@@ -137,6 +137,15 @@ try {
   // a suspended player can still pay to leave Floor O
   const rel3 = new Date(clock + 30 * MIN); T.character[0].jailedUntil = rel3; T.character[0].suspendedUntilWeek = 999; T.floorZero.push({ id: 3n, characterId: "c1", reason: "Risky hustle", startedAt: new Date(clock), releaseAt: rel3, bill: N(105_000), status: "JAILED" });
   T.account.find((a) => a.id === "acc1").balance = N(1_000_000); assert.equal((await G.payBail(db, "u1")).paidKobo, N(105_000).toString()); T.character[0].suspendedUntilWeek = 0;
+  // regression: jailedUntil is set but the FloorZero row is missing (old data, half-finished arrest). The state must still say "in Floor O" (so the home
+  // screen shows custody, not the room), and the bail must still be payable, charged once.
+  { const rel4 = new Date(clock + 40 * MIN); T.character[0].jailedUntil = rel4; T.floorZero.length = 0;
+    T.account.find((a) => a.id === "acc1").balance = N(1_000_000);
+    const st4 = await G.getState(db, "u1"); assert.ok(st4.floorZero, "custody is reported even without a FloorZero row"); assert.equal(st4.floorZero.billKobo, N(40 * 3_500).toString());
+    const bal4 = T.account.find((a) => a.id === "acc1").balance;
+    const p4 = await G.payBail(db, "u1"); assert.equal(p4.paidKobo, N(40 * 3_500).toString(), "bail is charged from the character's deadline");
+    assert.equal(T.account.find((a) => a.id === "acc1").balance, bal4 - N(40 * 3_500)); assert.equal(T.character[0].jailedUntil, null, "released");
+    e = await err(G.payBail(db, "u1")); assert.ok(e && e.status === 409, "cannot pay the same sentence twice"); }
   // the sentence runs out as they tap: free, nothing charged
   const rel4 = new Date(clock + 5 * MIN); T.character[0].jailedUntil = rel4; T.floorZero.push({ id: 4n, characterId: "c1", reason: "Risky hustle", startedAt: new Date(clock), releaseAt: rel4, bill: N(17_500), status: "JAILED" });
   clock += 5 * MIN + 1; const bal4 = T.account.find((a) => a.id === "acc1").balance; const free = await G.payBail(db, "u1"); assert.equal(free.paidKobo, "0"); assert.equal(T.account.find((a) => a.id === "acc1").balance, bal4);
