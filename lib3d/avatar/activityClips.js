@@ -15,6 +15,7 @@
 import * as THREE from "three";
 import { boneKey } from "./manifest.js";
 import { bake, legs, arms, spine, NEED, TAU } from "./npcClips.js";
+import { POLICE_CLIPS, POLICE_SEATED } from "./policeClips.js";
 
 const wave = (ps, k = 1) => Math.sin(ps * k);
 
@@ -162,7 +163,8 @@ const clips = {
     spine(S, -0.01 + 0.012 * br, 0.04, 0);
   }),
 };
-const SEATED = new Set(["listen", "write", "type", "read", "eatSit"]);
+Object.assign(clips, POLICE_CLIPS); // officer and custody clips (policeClips.js) are baked and shared the same way
+const SEATED = new Set(["listen", "write", "type", "read", "eatSit", ...POLICE_SEATED]);
 
 const cache = new Map();
 /** The activity clips for this body (built once per gender and shared). Names the model already has are skipped. Returns [] if the skeleton is incomplete. */

@@ -157,7 +157,7 @@ export default function Shell({ children }) {
     onPlay = path === "/home" && !!st,
     buying = onPlay && mode === "buy",
     mood = st ? moodOf(st.character.happiness) : null,
-    held = !!st?.floorZero && +new Date(st.floorZero.releaseAt) > serverTime(); // serving a sentence in Floor O (N-QRS Custody): no shop, and the phone is for messages only
+    held = !!st?.floorZero && +new Date(st.floorZero.releaseAt) > serverTime(); // serving a sentence in Floor O (N-QRS Custody): no shop; the phone still works (the apps follow their own rules)
   const goHome = () => {
     setPlayMode("home");
     if (path !== "/home") router.push("/home");

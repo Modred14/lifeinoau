@@ -25,6 +25,7 @@ import RideApp from "./apps/RideApp";
 import GuideApp from "./apps/GuideApp";
 import SugApp from "./apps/SugApp";
 import BetApp from "./bet/BetApp";
+import GamesApp, { useGamesBadge } from "./apps/GamesApp";
 import "./phone.css";
 
 /** Every app opens inside the handset. `own` apps draw their own header (Messages has a chat bar). */
@@ -42,14 +43,16 @@ const APPS = {
   hire: { name: "Hire", icon: "driver", tone: "indigo", C: HireApp },
   ride: { name: "Ride", icon: "ride", tone: "orange", C: RideApp },
   bet: { name: "Bet", icon: "ticket", tone: "bet", own: true, C: BetApp }, // draws its own header and tab bar, like Messages
+  games: { name: "Games", icon: "game", tone: "games", own: true, C: GamesApp }, // draws its own header, like Bet and Messages
   sug: { name: "SUG", icon: "hall", tone: "navy", C: SugApp }, // the Students' Union Government: elections, government, Assembly
   settings: { name: "Settings", icon: "gear", tone: "graphite", C: SettingsApp },
   guide: { name: "OAU Guide", icon: "study", tone: "lime", C: GuideApp }, // generated from lib/features.js
 };
 export const PHONE_APPS = Object.keys(APPS);
-const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "spending", "forbes", "awards", "housing", "ride", "hire", "bet", "sug", "guide", "settings"];
-/** In Floor O (N-QRS Custody) the phone only does messages (and settings). The server refuses everything else too; this just stops offering it. */
-const CUSTODY_GRID = ["messages", "settings"];
+const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "spending", "forbes", "awards", "housing", "ride", "hire", "bet", "games", "sug", "guide", "settings"];
+/** In Floor O (N-QRS Custody) the PHONE keeps working: custody stops you leaving, not using your phone. Only the apps that are about getting somewhere (rides, drivers, moving house) are
+ *  tucked away. Every app that stays follows its own rules: the server still refuses anything custody forbids (working a shift, going out...) with a clear message. */
+const CUSTODY_HIDDEN = ["ride", "hire", "housing"];
 
 /** "Friday 16 October · Ile-Ife" */
 const dateLine = (d) => {
@@ -80,6 +83,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
   const [now, setNow] = useState(() => serverDate());
   const [app, setApp] = useState(null);
   const unread = useChat((s) => s.unread); // pushed by the chat connection: nothing is polled for it any more
+  const gamesBadge = useGamesBadge(open); // challenges waiting for you, or a match where it is your move
   const wasOpen = useRef(false);
 
   useEffect(() => {
@@ -89,7 +93,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
   }, [open]);
   useEffect(() => {
     if (!open) return;
-    setApp(APPS[initialApp] && (!held || CUSTODY_GRID.includes(initialApp)) ? initialApp : null);
+    setApp(APPS[initialApp] && (!held || !CUSTODY_HIDDEN.includes(initialApp)) ? initialApp : null);
     setNow(serverDate());
     const t = setInterval(() => setNow(serverDate()), 15000);
     return () => clearInterval(t);
@@ -144,8 +148,8 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
                 </div>
               )}
               <div className="ph-grid">
-                {(held ? CUSTODY_GRID : GRID).map((id, k) => (
-                  <Tile key={id} {...APPS[id]} badge={id === "messages" ? unread : 0} first={k === 0 ? firstApp : undefined} onClick={() => setApp(id)} />
+                {(held ? GRID.filter((id) => !CUSTODY_HIDDEN.includes(id)) : GRID).map((id, k) => (
+                  <Tile key={id} {...APPS[id]} badge={id === "messages" ? unread : id === "games" ? gamesBadge : 0} first={k === 0 ? firstApp : undefined} onClick={() => setApp(id)} />
                 ))}
                 {!held && <Tile name="Shop" icon="bag" tone="mint" sound="none" onClick={onShop} />}
                 <Tile name={loggingOut ? "Leaving…" : "Log out"} icon="logout" tone="slate" onClick={onLogout} />

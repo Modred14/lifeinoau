@@ -3,6 +3,7 @@
 // This file adds only what a crowd needs on top: a reproducible, varied look for each person, the lighter model copies, and a per-frame level-of-detail budget.
 import { SKIN_TONES, COLORS, HAIR, OUTFITS } from "../../lib/look.js";
 import { createAvatar } from "./loadAvatar.js";
+import { dressPolice } from "./policeGear.js";
 
 /** Small seeded random generator (mulberry32), so the same seed always gives the same person. */
 export const rng = (seed) => { let a = hashSeed(seed); return () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
@@ -19,7 +20,7 @@ const ROLES = {
   student: { outfit: [["campus", 40], ["casual", 50], ["office", 4], ["owambe", 6]], age: 0 },
   staff: { outfit: [["office", 100]], age: 1 }, // lecturers, administrators
   celebrant: { outfit: [["owambe", 100]], age: 0 },
-  officer: { outfit: [["sitework", 100]], age: 1 }, // QRS and site workers: navy uniform and a hi-vis vest
+  officer: { outfit: [["sitework", 100]], age: 1 }, // N-QRS officers: navy uniform and vest, cap and duty belt (policeGear.js)
 };
 
 /**
@@ -32,12 +33,12 @@ export function npcSpec(seed, { gender, role = "student", force = {} } = {}) {
   const skin = pickW(r, [["amber", 13], ["caramel", 24], ["chestnut", 26], ["mahogany", 19], ["espresso", 12], ["ebony", 6]]);
   const outfit = pickW(r, R.outfit), smart = outfit === "office" || outfit === "owambe";
   // hair: women have the full set; men use their four. Staff keep it neat.
-  const hairPool = g === "F" ? (role === "officer" ? ["lowcut", "classic", "braids", "bun"] : R.age ? ["classic", "lowcut", "bun", "gele", "braids"] : HAIR.F) : (R.age ? ["lowcut", "classic"] : HAIR.M);
+  const hairPool = g === "F" ? (role === "officer" ? ["lowcut", "classic", "braids"] : R.age ? ["classic", "lowcut", "bun", "gele", "braids"] : HAIR.F) : (R.age ? ["lowcut", "classic"] : HAIR.M);
   const hair = pickW(r, hairPool.map((h) => [h, g === "M" && h === "lowcut" ? 3 : g === "F" && (h === "braids" || h === "ponytail" || h === "afro") ? 2 : 1]));
   const height = pickW(r, [["short", 25], ["average", 50], ["tall", 25]]), build = pickW(r, [["slim", 40], ["average", 40], ["athletic", 20]]);
   const top = pick(r, smart ? SMART_TOPS : TOPS), bottom = pick(r, smart ? SMART_BOTTOMS : BOTTOMS);
   let colors = null;
-  if (role === "officer") colors = { top: "#c8e61a", bottom: "#1b2a49", topDark: "#1b2a49" }; // hi-vis vest over a navy uniform
+  if (role === "officer") colors = { top: "#26385c", bottom: "#151c2e", topDark: "#1d2b47" }; // N-QRS patrol uniform: navy shirt, a slightly lighter tactical vest, dark trousers (policeGear.js adds the cap, belt and badge)
   const width = (build === "slim" ? 0.95 : build === "athletic" ? 1.06 : 1) * (0.96 + r() * 0.08) * (g === "F" ? 0.96 : 1) * (R.age ? 1.03 : 1);
   const spec = {
     gender: g, role, look: { skin, hair, outfit, top, bottom, build, height, acc: [] }, colors,
@@ -56,6 +57,7 @@ export async function createNpc(specOrSeed, opts = {}) {
   const spec = typeof specOrSeed === "object" ? specOrSeed : npcSpec(specOrSeed, opts);
   const av = await createAvatar(spec.look, spec.gender, { lod: opts.lod !== false, npc: true, bodyWidth: spec.bodyWidth, colors: spec.colors, skinHex: spec.skinHex });
   av.spec = spec;
+  if (spec.role === "officer") dressPolice(av); // cap, badge, epaulettes, radio and duty belt
   if (av.kind === "glb") {
     const head = av.bone("Head"); if (head) head.scale.set(...spec.headScale); // a slightly different head shape for each person
     av.root.scale.multiplyScalar(spec.heightJitter ?? 1); av.height *= spec.heightJitter ?? 1;

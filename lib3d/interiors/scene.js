@@ -14,6 +14,7 @@ import { ITEMS, dimsOf } from "./items.js";
 import { movePlayer, rayClip, EXIT_DEPTH, DOOR_H } from "./compile.js";
 import { createPlayerTags } from "../playerTags.js";
 import { createRemotePlayers } from "./remotePlayers.js";
+import { cellAt, clampToCell, CELL_MARGIN } from "../../lib/custodyCells.js";
 import { createClubFx } from "./clubFx.js";
 
 // ------------------------------------------------------------------------------------------------ textures
@@ -181,7 +182,10 @@ export async function createInteriorScene(container, c, opts = {}) {
     const sp = new THREE.Sprite(own(new THREE.SpriteMaterial({ map: textTexture(h.label, { bg: "rgba(13,19,33,0.82)", fg: h.tint ? "#b9ffe9" : "#ffe9a6" }, 4.2), transparent: true, toneMapped: false, depthWrite: false }))); sp.scale.set(2.1, 0.5, 1); sp.position.set(h.x, fl(h.floor ?? 0) + 2.15, h.z); scene.add(sp); return { h, ring, sp, f: h.floor ?? 0 }; });
 
   // ---- the player ----
-  const input = opts.input ?? { jx: 0, jy: 0, run: false }, keys = new Set(), P = { x: c.spawn.x, z: c.spawn.z, y: 0, fl: 0, yaw: c.spawn.yaw ?? 0, moving: 0, run: false };
+  // Custody. A prisoner (opts.cell = their cell) starts inside it, facing the bars, and can never leave it: every frame they are pulled back inside (the server refuses any other position too).
+  // Everyone else (opts.lockedCells = every cell, when this is the custody building) is refused the cells: a step that would end inside one is undone.
+  const cell = opts.cell ?? null, lockedCells = !cell && Array.isArray(opts.lockedCells) && opts.lockedCells.length ? opts.lockedCells : null;
+  const input = opts.input ?? { jx: 0, jy: 0, run: false }, keys = new Set(), P = cell ? { x: cell.cx, z: cell.cz, y: 0, fl: cell.floor ?? 0, yaw: 0, moving: 0, run: false } : { x: c.spawn.x, z: c.spawn.z, y: 0, fl: 0, yaw: c.spawn.yaw ?? 0, moving: 0, run: false };
   let locked = false, shownFloor = 0, camYaw = P.yaw, camPitch = 0.4, camDist = 3.4, near = null, lastRoom = null, exited = false, cur = null, vp = null;
   const player = new THREE.Group(); scene.add(player);
   let avatar = null; createAvatar(opts.look ?? null, opts.gender ?? "M").then((av) => { if (!alive) { av.dispose(); return; } avatar = av; player.add(av.root); }).catch(() => {
@@ -271,10 +275,11 @@ export async function createInteriorScene(container, c, opts = {}) {
 
   // ---- other real players: avatars at the spots they reported, each with a name tag that opens the player menu. Never NPCs, never yourself. ----
   const tags = createPlayerTags({ container, camera, selfName: opts.selfName ?? "", selfId: opts.selfId ?? "", onPick: opts.onPickPlayer, visible: (tg, cp, hp) => rayClip(c.wallsByFloor[P.fl] ?? [], cp.x, cp.z, hp.x, hp.z, 0) >= 0.97 }); // nobody is named through a wall
-  const remote = createRemotePlayers({ scene, makeAvatar: createAvatar, tags, floorY: fl, self: { id: opts.selfId ?? "", name: opts.selfName ?? "" } });
+  const remote = createRemotePlayers({ scene, makeAvatar: createAvatar, tags, floorY: fl, self: { id: opts.selfId ?? "", name: opts.selfName ?? "" }, cells: opts.lockedCells ?? (cell ? [cell] : []) });
 
   // ---- nightclub shows (lib3d/interiors/clubFx.js): only built inside a club. The screen hands it what the server confirmed; it draws. ----
-  const fx = opts.club ? createClubFx({ scene, floorY: fl, bounds: c.bounds, lights: { hemi, ambient }, barSpot: opts.barSpot ?? (c.spawn ? { x: c.spawn.x, z: c.spawn.z } : null), reduced: typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches,
+  // (named clubFx: the camera code below has its own `fx` for the view direction, which used to hide this one and made every interior throw each frame)
+  const clubFx = opts.club ? createClubFx({ scene, floorY: fl, bounds: c.bounds, lights: { hemi, ambient }, barSpot: opts.barSpot ?? (c.spawn ? { x: c.spawn.x, z: c.spawn.z } : null), reduced: typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches,
     walkable: (x, z, f) => { const nv = c.navPlayer?.[f]; if (!nv) return true; const [i, j] = nv.cell(x, z); return !!nv.at(i, j); }, pathFn: (x0, z0, x1, z1, f) => c.navPlayer?.[f]?.path(x0, z0, x1, z1) ?? null,
     posOf: (name) => (opts.selfName && String(name).trim().toLowerCase() === opts.selfName.trim().toLowerCase() ? { x: P.x, z: P.z, floor: P.fl } : remote.positionOf(name)),
     makeWaiter: () => createNpc(npcSpec("club:waiter", { gender: "M", role: "staff" })) }) : null;
@@ -284,9 +289,9 @@ export async function createInteriorScene(container, c, opts = {}) {
 
   // ---- the N-QRS response ----
   // The picture of an incident comes from lectureEncounter.js (a pure function of server time since the fight was settled); this only draws it.
-  let inc = null, incSeq = 0;
+  let inc = null, incSeq = 0, cuffedNow = false;
   const OFFICER_LOD = { shadowAt: 0, halfAt: 8, hideAt: 40 }, nearestPath = (a, b) => { const pth = c.nav?.[0]?.path?.(a[0], a[1], b[0], b[1]); return pth && pth.length > 1 ? pth : [a, b]; };
-  const stopIncident = () => { if (!inc) return; const k = inc; inc = null; for (const cop of k.cops) if (cop.av) { scene.remove(cop.av.root); cop.av.dispose?.(); } const lp = people.find((q) => q.i === k.npcIndex); if (lp) { lp.av.root.rotation.order = "XYZ"; lp.av.root.rotation.set(0, lp.yaw, 0); place(lp); } if (k.outcome !== "ARRESTED") locked = false; opts.onFade?.(0); };
+  const stopIncident = () => { if (!inc) return; const k = inc; inc = null; cuffedNow = false; for (const cop of k.cops) if (cop.av) { scene.remove(cop.av.root); cop.av.dispose?.(); } const lp = people.find((q) => q.i === k.npcIndex); if (lp) { lp.av.root.rotation.order = "XYZ"; lp.av.root.rotation.set(0, lp.yaw, 0); place(lp); } if (k.outcome !== "ARRESTED") locked = false; opts.onFade?.(0); };
   /** Plays the response for a settled fight: { id, outcome, settledAt (server ms), clock: () => server ms now, npcIndex }. Safe to call again for the same id (a reconnect). */
   function playIncident(o) {
     if (inc?.id === o.id) return true; stopIncident(); if (o.outcome === "LOST" || !spec[o.npcIndex]) return false;
@@ -302,8 +307,9 @@ export async function createInteriorScene(container, c, opts = {}) {
   const stepIncident = (t, dt) => {
     if (!inc) return; const k = inc, f = incidentFrame({ outcome: k.outcome, elapsedMs: k.clock() - k.settledAt, inbound: k.inbound, doorAt: k.doorAt, outbound: k.outbound, lecturerAt: k.lecturerAt, playerAt: k.playerAt });
     f.officers.forEach((o, i) => { const cop = k.cops[i]; if (!cop?.av) return; const r = cop.av.root; r.visible = o.visible; if (!o.visible) return; r.position.set(o.x, fl(0) + 0.02, o.z); r.rotation.y = o.yaw;
-      const want = o.walking ? "walk" : "idle"; if (cop.clip !== want && setClip(cop.av, want, { fade: 0.2 })) cop.clip = want; cop.av.tick(t, dt, Math.hypot(o.x - camera.position.x, o.z - camera.position.z), OFFICER_LOD); });
+      const want = o.walking ? (f.player?.cuffed ? "escortWalk" : "patrolWalk") : f.player?.cuffed ? "guard" : "radio"; if (cop.clip !== want && setClip(cop.av, want, { fade: 0.2 })) cop.clip = want; cop.av.tick(t, dt, Math.hypot(o.x - camera.position.x, o.z - camera.position.z), OFFICER_LOD); });
     const lp = people.find((q) => q.i === k.npcIndex); if (lp) { const r = lp.av.root; if (f.lecturer === "down") { r.rotation.order = "YXZ"; r.rotation.set(-Math.PI / 2, lp.yaw, 0); r.position.set(lp.x, fl(lp.f) + 0.16, lp.z); } else if (r.rotation.x !== 0) { r.rotation.order = "XYZ"; r.rotation.set(0, lp.yaw, 0); place(lp); } }
+    cuffedNow = !!f.player?.cuffed;
     if (f.player) { P.x = f.player.x; P.z = f.player.z; P.yaw = f.player.yaw; P.moving = f.player.walking ? 0.5 : 0; P.run = false; }
     if (Math.abs(f.fade - k.fade) > 0.04 || (f.fade === 0 && k.fade !== 0)) { k.fade = f.fade; opts.onFade?.(f.fade); }
     if (f.done && !k.ended) { k.ended = true; opts.onIncidentEnd?.({ id: k.id, outcome: k.outcome }); if (k.outcome !== "ARRESTED") stopIncident(); }
@@ -317,6 +323,7 @@ export async function createInteriorScene(container, c, opts = {}) {
     let mx = (input.jx ?? 0), mz = (input.jy ?? 0); if (keys.has("a") || keys.has("arrowleft")) mx -= 1; if (keys.has("d") || keys.has("arrowright")) mx += 1; if (keys.has("w") || keys.has("arrowup")) mz += 1; if (keys.has("s") || keys.has("arrowdown")) mz -= 1;
     if (keys.has("q")) camYaw += dt * 1.8; if (keys.has("e")) camYaw -= dt * 1.8;
     const mag = Math.min(1, Math.hypot(mx, mz)); P.run = !!input.run || keys.has("shift");
+    const px0 = P.x, pz0 = P.z;
     if (mag > 0.05 && !exited && !locked) {
       if (route) { route.done(false); route = null; } // taking the controls ends an automatic walk
       const fx = Math.sin(camYaw), fz = Math.cos(camYaw), rx = -fz, rz = fx, dx = (fx * mz + rx * mx) / Math.hypot(mx, mz), dz = (fz * mz + rz * mx) / Math.hypot(mx, mz), sp = (P.run ? 3.7 : 1.9) * mag, total = sp * dt, steps = Math.max(1, Math.ceil(total / 0.08));
@@ -328,12 +335,14 @@ export async function createInteriorScene(container, c, opts = {}) {
       else { const k = Math.min(step, d) / d, n = Math.max(1, Math.ceil(Math.min(step, d) / 0.08)); for (let q = 0; q < n; q++) movePlayer(c, P, (dx * k) / n, (dz * k) / n);
         let dh = Math.atan2(dx, dz) - P.yaw; dh = ((dh + Math.PI * 3) % (Math.PI * 2)) - Math.PI; P.yaw += dh * Math.min(1, dt * 12); P.moving = 0.5; P.run = false; }
     } else P.moving = 0;
+    if (cell) { const q = clampToCell(cell, P.x, P.z, CELL_MARGIN); P.x = q.x; P.z = q.z; P.fl = cell.floor ?? 0; }
+    else if (lockedCells && cellAt(lockedCells, P.x, P.z, 0)) { P.x = px0; P.z = pz0; } // the cells are locked: that step is undone
     stepIncident(t, dt);
     if (P.fl !== shownFloor) { shownFloor = P.fl; setVis(); }
     player.position.set(P.x, P.y + 0.02, P.z); player.rotation.y = P.yaw;
     const acting = stepAct(dt); drawAct();
     if (chatSelf) { const q = people.find((o) => o.i === chatSelf.i); chatSelf.t += dt; if (P.moving > 0.05 || !q || chatSelf.t > 4.5) chatSelf = null; else P.yaw = turnTo(P.yaw, Math.atan2(q.x - P.x, q.z - P.z), dt * 6); }
-    if (avatar) { const want = P.moving > 0.05 ? (P.run ? "run" : "walk") : chatSelf ? (chatSelf.t < 1.8 ? "greet" : "talk") : act && !act.off ? clipAt(act.plan, act.t, (n) => avatar.has?.(n)) : pose && !acting ? (pose.find((n) => avatar.has?.(n)) ?? "idle") : "idle"; if (want !== cur && avatar.has?.(want) && avatar.play(want, { fade: act ? 0.4 : 0.25 })) cur = want; if (pose && P.moving <= 0.05) avatar.setSpeed?.(1); else if (want !== "idle") avatar.setSpeed?.(Math.max(0.6, Math.min(1.6, P.moving * (P.run ? 1 : 1.05)))); avatar.update(t, dt); }
+    if (avatar) { const want = cuffedNow ? (P.moving > 0.05 ? "cuffedWalk" : "cuffedStand") : cell && P.moving > 0.05 ? "detainedPace" : cell && !act && !pose && !chatSelf ? (cell.z1 - P.z < 1.1 ? "detainedHold" : "lookAround") : P.moving > 0.05 ? (P.run ? "run" : "walk") : chatSelf ? (chatSelf.t < 1.8 ? "greet" : "talk") : act && !act.off ? clipAt(act.plan, act.t, (n) => avatar.has?.(n)) : pose && !acting ? (pose.find((n) => avatar.has?.(n)) ?? "idle") : "idle"; if (want !== cur && avatar.has?.(want) && avatar.play(want, { fade: act ? 0.4 : 0.25 })) cur = want; if (pose && P.moving <= 0.05) avatar.setSpeed?.(1); else if (want !== "idle") avatar.setSpeed?.(Math.max(0.6, Math.min(1.6, P.moving * (P.run ? 1 : 1.05)))); avatar.update(t, dt); }
     // room name, hubs, exit
     const room = c.roomAt(P.x, P.z, P.fl); if ((room?.name ?? null) !== lastRoom) { lastRoom = room?.name ?? null; opts.onRoom?.(lastRoom); }
     let best = null, bd = 1.7; for (const h of hubObjs) { if (h.f !== P.fl) continue; const d = Math.hypot(h.h.x - P.x, h.h.z - P.z); if (d < bd) { bd = d; best = h; } }
@@ -341,7 +350,7 @@ export async function createInteriorScene(container, c, opts = {}) {
       if (sp) { sp.hubObj ??= { h: { action: "chat", npcIndex: sp.i, label: `Greet ${sp.n.studentName ?? "student"}`, x: 0, z: 0 }, f: sp.f, ring: { visible: false, material: { opacity: 1 }, scale: { setScalar() {} } }, sp: { visible: false } }; sp.hubObj.h.x = sp.x; sp.hubObj.h.z = sp.z; best = sp.hubObj; } }
     if (best !== near) { near = best; opts.onNear?.(near ? near.h : null); }
     for (const h of hubObjs) { const on = h.f <= P.fl && Math.hypot(h.h.x - P.x, h.h.z - P.z) < 9 && h.f === P.fl; h.ring.visible = on; h.sp.visible = on; h.ring.material.opacity = h === near ? 1 : 0.55 + Math.sin(t * 3) * 0.2; h.ring.scale.setScalar(h === near ? 1.12 : 1); }
-    if (!exited && P.fl === 0 && c.porch && c.outsideDepth(P.x, P.z) > EXIT_DEPTH) { exited = true; opts.onExit?.(); }
+    if (!cell && !exited && P.fl === 0 && c.porch && c.outsideDepth(P.x, P.z) > EXIT_DEPTH) { exited = true; opts.onExit?.(); }
     // people
     // each person moves; only the closest eight on this floor are drawn (a skinned person is tens of thousands of triangles)
     camera.getWorldPosition(v3); const draw = [];
@@ -359,25 +368,25 @@ export async function createInteriorScene(container, c, opts = {}) {
       const room2 = room ?? null, ceil = room2 ? fl(P.fl) + room2.h - 0.2 : fl(P.fl) + 3.2;
       camPos.set(P.x - fx * h * k, Math.min(ty + v * Math.max(k, 0.35), ceil), P.z - fz * h * k); look.set(P.x + fx * 0.5, ty - 0.1 - (1 - k) * 0.2, P.z + fz * 0.5); player.visible = camDist * k > 0.85; }
     if (!camInit) { camera.position.copy(camPos); camInit = true; } else camera.position.lerp(camPos, Math.min(1, dt * 14)); camera.lookAt(look); camera.fov = view === "overhead" ? 45 : 62; camera.updateProjectionMatrix(); void vp;
-    remote.update(t, dt, P); fx?.update(t, dt); tags.update(); // after the camera has moved, so each name sits on its owner's head
+    remote.update(t, dt, P); clubFx?.update(t, dt); tags.update(); // after the camera has moved, so each name sits on its owner's head
   });
   setVis();
   const api = {
     stage, setYaw(y) { camYaw = y; }, teleport(x, z, floor = 0) { P.x = x; P.z = z; P.fl = floor; P.y = c.floorY[floor] ?? 0; }, get view() { return view; }, get state() { return { x: P.x, z: P.z, y: P.y, floor: P.fl, yaw: P.yaw, people: people.length, exited }; }, setView(v) { view = v; setVis(); }, toggleView() { view = view === "follow" ? "overhead" : "follow"; setVis(); return view; }, use: activate, playIncident, stopIncident, get incident() { return inc ? { id: inc.id, outcome: inc.outcome } : null }, setPose(list, id) { pose = list?.length ? list : null; endAct(); if (pose && id) { act = null; beginAct(id); } },
     /** A club show the server confirmed: draws it, and makes whoever it is about (you, or another player in the room) play a gesture. */
     playClubShow(show) {
-      if (!fx || !show) return; fx.play(show); const parts = show.data?.parts ?? [], me = String(opts.selfName ?? "").trim().toLowerCase(), isMe = (n) => String(n ?? "").trim().toLowerCase() === me;
+      if (!clubFx || !show) return; clubFx.play(show); const parts = show.data?.parts ?? [], me = String(opts.selfName ?? "").trim().toLowerCase(), isMe = (n) => String(n ?? "").trim().toLowerCase() === me;
       const gesture = parts.includes("spray") ? ["cheer", "idleEmote"] : parts.includes("bottle") || show.data?.exp ? ["cheer", "idleEmote"] : null, ms = parts.includes("spray") ? (show.data?.sec ?? 4) * 1000 : 3500;
       if (gesture) { if (isMe(show.actor)) cueSelf(gesture, ms); else remote.cue(show.actor, gesture, ms); }
       if (show.to) { const t = setTimeout(() => { clubTimers.delete(t); if (isMe(show.to)) cueSelf(["drink", "cheer", "idleEmote"], 3500); else remote.cue(show.to, ["drink", "cheer", "idleEmote"], 3500); }, 4500); clubTimers.add(t); } // the bottle has arrived: the friend raises a glass
     },
     /** The reserved tables and the lights as the server says they are now. Safe to call on every poll. */
-    setClubTables(list) { fx?.setTables(list); }, setClubMood(m) { fx?.setMood(m); }, get clubStats() { return fx?.stats() ?? null; },
+    setClubTables(list) { clubFx?.setTables(list); }, setClubMood(m) { clubFx?.setMood(m); }, get clubStats() { return clubFx?.stats() ?? null; },
     /** The real players in this building (from /api/travel?at=): each { id, name, gender, look, level, faculty, x, z, floor, anim? }. Anyone not in the list is removed. */
     setRemotePlayers(list) { remote.sync(list, { x: P.x, z: P.z }); }, get remoteIds() { return remote.ids(); },
     /** Walk to a point on the current floor by the shortest clear path. Resolves true on arrival, false if it could not or you took the controls. */
     walkTo(x, z) { return new Promise((resolve) => { if (route) route.done(false); const nv = c.navPlayer[P.fl], path = nv.path(P.x, P.z, x, z); if (!path || path.length < 1) { resolve(false); return; } route = { pts: [...path.slice(1), [x, z]], i: 0, done: resolve }; }); },
-    dispose() { alive = false; for (const t of clubTimers) clearTimeout(t); clubTimers.clear(); fx?.dispose(); remote.dispose(); tags.dispose(); stopIncident(); if (route) { route.done(false); route = null; } window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); el.removeEventListener("pointerdown", pd); el.removeEventListener("pointermove", pm); el.removeEventListener("pointerup", pu); el.removeEventListener("pointercancel", pu); el.removeEventListener("wheel", wh);
+    dispose() { alive = false; for (const t of clubTimers) clearTimeout(t); clubTimers.clear(); clubFx?.dispose(); remote.dispose(); tags.dispose(); stopIncident(); if (route) { route.done(false); route = null; } window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); el.removeEventListener("pointerdown", pd); el.removeEventListener("pointermove", pm); el.removeEventListener("pointerup", pu); el.removeEventListener("pointercancel", pu); el.removeEventListener("wheel", wh);
       for (const p of people) { scene.remove(p.av.root); p.av.dispose?.(); } people.length = 0; if (avatar) { player.remove(avatar.root); avatar.dispose?.(); avatar = null; }
       for (const o of toDispose) o.dispose?.(); toDispose.length = 0; for (const s of spots) s.L?.dispose?.(); scene.clear(); stage.dispose(); },
   };

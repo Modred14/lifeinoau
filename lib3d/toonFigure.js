@@ -28,7 +28,7 @@ function textTexture(text, { w = 256, h = 128, bg = "#c8e61a", fg = "#1b2a49", f
  * hair: "short" | "afro" | "long" | "bun" | "none".  Returns { root, hips, apply(target, k), expr(name), height, dispose() }.
  */
 export function makeFigure(o = {}) {
-  const { skin = "#7f5236", top = "#1f2f55", bottom = "#a8946a", shoe = "#1d1f23", hair = "short", hairColor = "#16110e", long = false, width = 1, belly = 0, tie = null, glasses = false, vest = false, cap = null, scale = 0.96 } = o;
+  const { skin = "#7f5236", top = "#1f2f55", bottom = "#a8946a", shoe = "#1d1f23", hair = "short", hairColor = "#16110e", long = false, width = 1, belly = 0, tie = null, glasses = false, vest = false, police = false, cap = null, scale = 0.96 } = o;
   const geos = [], root = new THREE.Group(), hips = new THREE.Group(); hips.position.y = 0.97; root.add(hips);
   const add = (parent, geo, material, x = 0, y = 0, z = 0) => { geos.push(geo); const m = new THREE.Mesh(geo, material); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
   const skinM = mat(skin), topM = mat(top), botM = mat(bottom);
@@ -46,6 +46,21 @@ export function makeFigure(o = {}) {
     back.position.set(-0.126, 0.3, 0); back.rotation.y = -Math.PI / 2; torso.add(back);
   }
 
+  if (police) { // N-QRS patrol uniform: a crisp navy shirt with epaulettes and a chest badge, a duty belt (radio, baton, cuffs, holster) and a black tie. Nothing medical: no hi-vis, no white.
+    const navy = mat("#1d2b47"), blk = mat("#0e121c", { roughness: 0.5 }), gold = mat("#e8b83a", { metalness: 0.6, roughness: 0.35 }), steel = mat("#aab2bd", { metalness: 0.7, roughness: 0.3 });
+    add(torso, new THREE.BoxGeometry(0.235, 0.34, 0.4 * width), navy, 0, 0.3, 0); // the shirt, a touch fuller than the body
+    add(torso, new THREE.BoxGeometry(0.02, 0.28, 0.05), blk, 0.118 + belly * 0.04, 0.3, 0); // tie
+    for (const s of [1, -1]) { add(torso, new THREE.BoxGeometry(0.07, 0.016, 0.1), blk, 0, 0.5, 0.2 * s * width); add(torso, new THREE.BoxGeometry(0.05, 0.004, 0.02), gold, 0, 0.51, 0.2 * s * width); } // epaulettes
+    const badge = add(torso, new THREE.CylinderGeometry(0.035, 0.035, 0.008, 6), gold, 0.122 + belly * 0.04, 0.38, 0.1 * width); badge.rotation.z = Math.PI / 2; // badge on the left chest
+    const patch = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.1), new THREE.MeshBasicMaterial({ map: textTexture("N-QRS", { w: 256, h: 128, bg: "#1d2b47", fg: "#e8b83a", font: "800 70px system-ui, sans-serif" }) })); geos.push(patch.geometry);
+    patch.position.set(-0.121, 0.34, 0); patch.rotation.y = -Math.PI / 2; torso.add(patch); // N-QRS across the back
+    add(hips, new THREE.BoxGeometry(0.26, 0.05, 0.36 * width), blk, 0, 0.06, 0); // duty belt
+    add(hips, new THREE.BoxGeometry(0.06, 0.05, 0.03), gold, 0.13, 0.06, 0); // buckle
+    add(hips, new THREE.BoxGeometry(0.05, 0.12, 0.06), blk, 0.02, -0.02, 0.19 * width); // holster, right hip
+    add(hips, new THREE.BoxGeometry(0.04, 0.1, 0.05), blk, 0.0, -0.01, -0.19 * width); // cuff pouch, left hip
+    const bat = add(hips, new THREE.CylinderGeometry(0.014, 0.012, 0.3, 8), blk, -0.06, -0.12, -0.19 * width); bat.rotation.x = 0.12; // baton
+    add(torso, new THREE.BoxGeometry(0.04, 0.09, 0.05), blk, 0.04, 0.5, -0.12 * width); add(torso, new THREE.BoxGeometry(0.01, 0.07, 0.01), steel, 0.04, 0.58, -0.13 * width); // shoulder radio and its antenna
+  }
   const neckAt = 0.5; add(torso, new THREE.CylinderGeometry(0.04, 0.045, 0.08, 8), skinM, 0, neckAt + 0.02, 0);
   const head = new THREE.Group(); head.position.y = neckAt + 0.07; torso.add(head);
   const skull = add(head, new THREE.SphereGeometry(0.115, 18, 14), skinM, 0, 0.115, 0); skull.scale.set(0.95, 1.08, 0.9);
@@ -66,6 +81,7 @@ export function makeFigure(o = {}) {
   }
   if (cap) {
     const cm = mat(cap); add(head, new THREE.CylinderGeometry(0.13, 0.135, 0.06, 16), cm, 0, 0.215, 0); add(head, new THREE.BoxGeometry(0.1, 0.012, 0.18), cm, 0.13, 0.205, 0);
+    if (police) { add(head, new THREE.CylinderGeometry(0.142, 0.142, 0.03, 16), cm, 0, 0.25, 0); add(head, new THREE.BoxGeometry(0.1, 0.012, 0.19), mat("#0b0e16", { roughness: 0.3 }), 0.14, 0.2, 0); add(head, new THREE.BoxGeometry(0.01, 0.012, 0.2), mat("#e8b83a"), 0.0, 0.232, 0); } // peaked patrol cap with a gold band
     add(head, new THREE.BoxGeometry(0.02, 0.025, 0.04), mat("#e8b83a", { metalness: 0.5 }), 0.133, 0.225, 0);
   }
 

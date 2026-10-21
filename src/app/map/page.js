@@ -12,6 +12,7 @@ import TripHud from "@/components/TripHud";
 import PlaceActivities from "@/components/PlaceActivities";
 import { featuresAt } from "@/lib/features.js";
 import BuildingInside from "@/components/BuildingInside";
+import CustodyCell from "@/components/CustodyCell";
 import { hasInterior } from "@/lib3d/interiors/registry.js";
 import { isOpenSpace } from "@/lib3d/interiors/openSpaces.js";
 import { call, naira } from "@/lib/client";
@@ -157,7 +158,7 @@ export default function MapPage() {
       </div>
       {trip && <TripHud trip={trip} placeName={trip.name} st={tripSt} input={input} miniRef={miniRef} previewRef={previewRef} onCancel={() => setTrip(null)} />}
       <div className="trip-fade" data-on={fade ? "1" : undefined} aria-hidden="true" />
-      {insidePlace && <BuildingInside place={insidePlace} look={ch?.look ?? null} gender={ch?.gender ?? "M"} focus={focus} selfName={ch?.name ?? ""} onLeave={() => { setInside(null); setFocus(null); }} />}
+      {insidePlace && held && insidePlace.id === "floor0" ? <CustodyCell st={g ?? {}} look={ch?.look ?? null} gender={ch?.gender ?? "M"} selfName={ch?.name ?? ""} onFree={() => { setInside(null); setFocus(null); }} /> : insidePlace && <BuildingInside place={insidePlace} look={ch?.look ?? null} gender={ch?.gender ?? "M"} focus={focus} selfName={ch?.name ?? ""} onLeave={() => { setInside(null); setFocus(null); }} />}
       {(sheet || direct) && L && <TravelSheet place={L} here={youPlace?.name} hasCar={ownsCar(ch)} driver={driverActive(ch, g?.week) ? { name: ch.driverName } : null} people={counts[L.id] ?? 0} distanceM={youPlace && L.located && youPlace.located ? Math.round(Math.hypot(L.x - youPlace.x, L.z - youPlace.z)) : null} character={ch} balanceKobo={g?.balanceKobo ?? null} jailed={held} highlight={want} eta={eta} onGo={begin} onClose={() => { closeSheet(); setWant(null); }} />}
       {youPlace && !trip && <div className="map-here" role="status"><Icon name="pin" size={14} weight="fill" /> {held ? <>You are held in <b>{CUSTODY_NAME}</b> until your sentence ends</> : <>You are at <b>{youPlace.name}</b></>}</div>}
       <div

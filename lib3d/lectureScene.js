@@ -1,7 +1,7 @@
 // lib3d/lectureScene.js
 // The lecture-theatre brawl and what follows, in one 3D scene. Browser only.
 //   fight    a real-time brawl run by lib/fightSim.js (the scene only draws it). Auto-plays the player's side; press / hold to take over.
-//   dsa      the QRS van screeches in, officers jump out, run you down, CARRY you to the van, put you inside and drive off
+//   dsa      the QRS van screeches in, officers jump out, run you down, catch you, cuff you and WALK you upright to the van (an officer at each arm), put you inside and drive off
 //   floor0   the van rolls through the gate of Floor O and you are walked in
 //   escape   you won and ran before the van arrived
 //   lost     you lost the fight
@@ -60,7 +60,7 @@ function lecturerLook(name, difficulty) {
   const h = hash(name), big = difficulty > 1.3, skins = Object.values(SKIN_TONES);
   return { skin: skins[h % skins.length], top: big ? "#7a1f33" : SHIRTS[h % SHIRTS.length], bottom: "#23262d", tie: big ? "#14161a" : TIES[(h >> 3) % TIES.length], hair: "short", hairColor: "#a5a5a5", long: true, glasses: true, belly: big ? 0.9 : 0.5, width: big ? 1.15 : 1.02, scale: big ? 1.0 : 0.97 };
 }
-const OFFICER = { top: "#1b2a49", bottom: "#1b2a49", vest: true, cap: "#1b2a49", long: true };
+const OFFICER = { top: "#1d2b47", bottom: "#151c2e", police: true, cap: "#151c2e", long: true }; // N-QRS patrol uniform: navy shirt, dark trousers, duty belt, peaked cap (see toonFigure `police`)
 const CROWD_SKINS = ["#b98560", "#9c6a45", "#7f5236", "#63402b", "#4a2e20"], CROWD_TOPS = ["#c0312f", "#2f62c4", "#e3b83a", "#2f7a45", "#e58aa8", "#6b3fa0", "#dd6b27"];
 
 // ---------- effects ----------
@@ -259,63 +259,54 @@ export async function createLectureScene(container, opts = {}) {
     const exitA = seg(t, 3.7, 4.2), exitB = seg(t, 3.85, 4.35), runA = seg(t, 4.2, 5.9), runB = seg(t, 4.35, 6.4);
     // --- the player: celebrates, sees the van, flees to the right ---
     const flee = seg(t, 3.5, 5.9), fx = mix(PX, CATCH.x, flee), fz = mix(0, CATCH.z, flee) + 0.7 * Math.sin(Math.PI * flee);
-    const frameU = { carry: seg(t, 7.5, 9.6), turn: seg(t, 9.6, 10.2), load: E.io(seg(t, 10.2, 11.4)), lift: E.io(seg(t, 6.8, 7.5)) };
-    // the carrying frame: a point P with a heading; the player lies along it, head first, A at the head end and B at the feet
-    let Px = CATCH.x, Pz = CATCH.z, phi = Math.PI / 2;
-    if (t >= 7.5) { Pz = mix(CATCH.z, VZ, E.sm(frameU.carry)); }
-    if (t >= 9.6) { Px = mix(CATCH.x, 2.35, E.io(frameU.turn)); phi = mix(Math.PI / 2, Math.PI, E.io(frameU.turn)); }
-    if (t >= 10.2) Px = mix(2.35, -0.6, frameU.load);
-    const dX = { x: Math.cos(phi), z: -Math.sin(phi) }, carried = t >= 6.8;
-    if (t < 6.8) {
+    // The arrest is upright and by the book: the officers catch the runner, one cuffs from behind, then both walk the cuffed player (hands behind the back, one
+    // officer at each arm) round to the rear of the van, one officer steps up and in beside them and the other closes the doors. Nobody is carried or laid down.
+    const ESC = [[CATCH.x, CATCH.z], [CATCH.x, VZ], [1.5, VZ], [0.7, VZ], [-0.7, VZ]], escU = E.io(seg(t, 6.9, 11.2)) * 0.15 + seg(t, 6.9, 11.2) * 0.85;
+    const esc = polyPos(ESC, escU), escYaw = yawTo(esc.dx, esc.dz), hx = esc.dx / Math.hypot(esc.dx, esc.dz || 1e-9 || 1), hz = esc.dz / (Math.hypot(esc.dx, esc.dz) || 1);
+    const sideOf = (k) => ({ x: -hz * k, z: hx * k }); // k metres to the walker's left (the walker faces along the path)
+    const stepUp = E.sm(clamp01((1.0 - esc.x) / 0.7)), inside = escU >= 0.999;
+    const HANDS_UP = pose({ aRs: 2.6, aLs: 2.6, aRe: 0.5, aLe: 0.5, headX: 0.1, lean: -0.05 }), CUFFED = P(HELD, { headX: 0.35 });
+    if (t < 6.9) {
       if (t < 3.5) { place(player, PX, 0, 0); victor(t); }
       else {
         const dist = flee * Math.hypot(CATCH.x - PX, CATCH.z) * 1.05;
         if (flee < 1) { place(player, fx, fz, yawTo(CATCH.x - PX, CATCH.z + 0.3 * Math.cos(Math.PI * flee) * Math.PI), 0); setPose(player, gait(dist, true, { headY: 0.0 })); player.expr("shock"); }
-        else { // caught: thrashing
-          const w = Math.sin(t * 22);
+        else if (t < 6.3) { // caught: a short struggle
+          const w = Math.sin(t * 22) * (1 - seg(t, 5.9, 6.3) * 0.7);
           place(player, CATCH.x, CATCH.z, yawTo(1, 0.0) + w * 0.12, 0); setPose(player, pose({ lean: -0.15 + w * 0.05, aRs: 1.6 + w * 0.6, aLs: 1.6 - w * 0.6, aRe: 0.5, aLe: 0.5, lRh: w * 0.4, lLh: -w * 0.4, lRk: 0.3, lLk: 0.3, headY: w * 0.4 })); player.expr("shock");
+        } else { // gives up: hands up, then the arms are brought behind the back and cuffed
+          place(player, CATCH.x, CATCH.z, yawTo(1, 0.0), 0); setPose(player, mixPose(HANDS_UP, CUFFED, E.sm(seg(t, 6.5, 6.9)))); player.expr("shock");
         }
       }
     } else {
-      const lieYaw = phi + Math.PI, standYaw = yawTo(1, 0), u = frameU.lift;
-      const yawEnd = lieYaw - 2 * Math.PI * Math.round((lieYaw - standYaw) / (2 * Math.PI));
-      const lyX = Px - 0.9 * dX.x, lyZ = Pz - 0.9 * dX.z, onVan = t >= 10.2 ? seg(t, 10.8, 11.4) : 0;
-      const lyY = mix(1.05, VAN_FLOOR + 0.12, onVan);
-      place(player, mix(CATCH.x, lyX, u), mix(CATCH.z, lyZ, u), mix(standYaw, yawEnd, u), mix(0, lyY, u), (Math.PI / 2) * u);
-      setPose(player, pose({ aRs: 0.15 + Math.sin(t * 14) * 0.35 * (1 - onVan), aLs: 0.15 - Math.sin(t * 14) * 0.35 * (1 - onVan), aRe: 0.3, aLe: 0.3, lRh: Math.sin(t * 12) * 0.25 * (1 - onVan), lLh: -Math.sin(t * 12) * 0.25 * (1 - onVan), headX: 0.2, headY: Math.sin(t * 9) * 0.3 })); player.expr("shock");
+      const y = mix(0, VAN_FLOOR, stepUp);
+      place(player, esc.x, esc.z, escYaw, y);
+      setPose(player, inside ? P(SEATED, { aRs: -0.35, aLs: -0.35, headX: 0.45 }) : { ...gait(esc.dist, false), ...pick(CUFFED, ["aRs", "aLs", "aRe", "aLe", "headX"]), lean: 0.06 }); player.expr("shock");
     }
-    // officer A: sprints, grabs, lifts, walks backwards with the head end, climbs into the van with the player
+    const GRIP = { aRs: 0.95, aLs: 0.95, aRe: 0.4, aLe: 0.4, headX: 0.05 }; // one hand on the prisoner's arm, the other on the belt
+    // officer A (left of the player): sprints, grabs from behind, cuffs, walks the prisoner to the van and climbs in beside them
     {
       const startA = [VX - 0.1, VZ + 0.55];
       if (t < 3.7) inVan(offA, -0.1, 0.55);
       else if (t < 4.2) { const k = exitA, z = mix(startA[1], -2.95, k); place(offA, VX - 0.1, z, 0, 0.63 * (1 - E.sm(seg(k, 0.4, 1)))); setPose(offA, gait(k * 0.5, true)); }
       else if (t < 5.9) { const p = polyPos([[VX - 0.1, -2.95], [CATCH.x, CATCH.z - 1.25]], runA); place(offA, p.x, p.z, yawTo(p.dx, p.dz), 0); setPose(offA, gait(p.dist, true)); }
-      else {
-        const ax = Px + 1.25 * dX.x, az = Pz + 1.25 * dX.z;
-        const aStep = t >= 10.2 ? E.sm(seg(ax, 0.9, 0.3)) : 0;
-        place(offA, ax, az, phi + Math.PI, 0.63 * (t >= 10.2 ? aStep : 0));
-        const walking = (t >= 7.5 && t < 10.2) || (t >= 10.2 && t < 11.4);
-        const dist = (t >= 7.5 ? (Math.hypot(Px - CATCH.x, Pz - CATCH.z) + (t >= 10.2 ? 3 - Px : 0)) : 0) * 1.0;
-        const hold = pose({ aRs: 0.95, aLs: 0.95, aRe: 0.35, aLe: 0.35, lean: 0.05, hipsY: t >= 10.2 ? -0.2 : -0.02, headX: 0.1 });
-        setPose(offA, walking ? { ...gait(dist, false), aRs: hold.aRs, aLs: hold.aLs, aRe: hold.aRe, aLe: hold.aLe, lean: 0.05, hipsY: hold.hipsY } : hold);
-        if (t >= 11.4) { place(offA, ax, az, phi + Math.PI, 0.63); setPose(offA, pose({ hipsY: -0.25, lRh: 0.5, lRk: 0.9, lLh: 0.5, lLk: 0.9, aRs: 0.3, aLs: 0.3 })); }
+      else if (t < 6.9) { // steps in behind the runner and cuffs them
+        const k = E.sm(seg(t, 5.9, 6.5)); place(offA, mix(CATCH.x, CATCH.x - 0.55, k), mix(CATCH.z - 1.25, CATCH.z - 0.1, k), 0, 0);
+        setPose(offA, pose({ lean: 0.18, headX: 0.15, aRs: 1.05 + 0.1 * Math.sin(t * 14), aLs: 0.95, aRe: 0.35, aLe: 0.45, lRh: 0.1, lRk: 0.12, lLh: -0.08, lLk: 0.08 })); offA.expr("angry");
+      } else {
+        const o = sideOf(0.62), yA = mix(0, VAN_FLOOR, stepUp), side = inside ? 0.45 : mix(0.62, 0.62, 1), oo = sideOf(side);
+        place(offA, esc.x + oo.x, esc.z + oo.z, escYaw, yA); void o;
+        setPose(offA, inside ? P(SEATED, { aRs: 0.3, aLs: 0.3 }) : { ...gait(esc.dist, false), ...GRIP, lean: 0.04 }); offA.expr("normal");
       }
     }
-    // officer B: runs round the player, takes the feet, pushes him in, shuts the doors and goes back to the side door
+    // officer B (right of the player): runs round the player, guards the other arm, peels off at the van, lowers a hand over the head, shuts the doors and goes back
     {
       if (t < 3.85) inVan(offB, 0.45, 0.55);
       else if (t < 4.35) { const k = exitB, z = mix(VZ + 0.55, -2.95, k); place(offB, VX + 0.45, z, 0, 0.63 * (1 - E.sm(seg(k, 0.4, 1)))); setPose(offB, gait(k * 0.5, true)); }
       else if (t < 6.4) { const p = polyPos([[VX + 0.45, -2.95], [-0.2, 2.2], [CATCH.x, CATCH.z + 1.25]], runB); place(offB, p.x, p.z, yawTo(p.dx, p.dz), 0); setPose(offB, gait(p.dist, true)); }
-      else if (t < 6.8) { place(offB, CATCH.x, CATCH.z + 1.25, Math.PI / 2, 0); setPose(offB, pose({ hipsY: -0.3, lean: 0.5, aRs: 1.3, aLs: 1.3, aRe: 0.2, aLe: 0.2, lRh: 0.9, lRk: 1, lLh: -0.1, lLk: 0.9 })); }
-      else if (t < 11.8) {
-        const bx = Math.max(Px - 1.25 * dX.x, 1.5), bz = Pz - 1.25 * dX.z, bxF = t >= 10.2 ? Math.max(Px + 1.25, 1.5) : bx;
-        const px = t >= 10.2 ? bxF : bx, pz = t >= 10.2 ? VZ : bz;
-        place(offB, px, pz, t >= 10.2 ? Math.PI : phi, 0);
-        const dist = Math.hypot(Px - CATCH.x, Pz - CATCH.z) * 1.0 + (t >= 10.2 ? 3 - Px : 0);
-        const walking = (t >= 7.5 && t < 11.0);
-        const hold = pose({ aRs: 0.9, aLs: 0.9, aRe: 0.4, aLe: 0.4, lean: 0.12, hipsY: -0.06, headX: 0.1 });
-        setPose(offB, t < 7.5 ? pose({ hipsY: -0.3 + 0.3 * E.sm(seg(t, 6.8, 7.5)), lean: 0.4 * (1 - seg(t, 6.8, 7.5)), aRs: 1.3, aLs: 1.3, aRe: 0.2, aLe: 0.2, lRh: 0.9 * (1 - seg(t, 6.8, 7.5)), lRk: 1 * (1 - seg(t, 6.8, 7.5)), lLh: 0, lLk: 0.9 * (1 - seg(t, 6.8, 7.5)) }) : walking ? { ...gait(dist, false), aRs: 0.9, aLs: 0.9, aRe: 0.4, aLe: 0.4, hipsY: -0.06, lean: 0.12 } : hold);
-      }
+      else if (t < 6.9) { const k = E.sm(seg(t, 6.4, 6.9)); place(offB, CATCH.x, mix(CATCH.z + 1.25, CATCH.z + 0.75, k), yawTo(0, -1) , 0); setPose(offB, pose({ lean: 0.12, aRs: 1.1, aLs: 0.8, aRe: 0.3, aLe: 0.5, headX: 0.1 })); offB.expr("normal"); }
+      else if (escU < 0.76) { const oo = sideOf(-0.62); place(offB, esc.x + oo.x, esc.z + oo.z, escYaw, 0); setPose(offB, { ...gait(esc.dist, false), ...GRIP, lean: 0.04 }); offB.expr("normal"); }
+      else if (t < 11.8) { place(offB, 1.7, VZ + 0.85, yawTo(-1, -0.6), 0); setPose(offB, pose({ lean: 0.06, aRs: 0.5, aLs: 0.4, aRe: 0.5, aLe: 1.2, headX: 0.1 })); } // stands at the doorway, hand ready to guide the head
       else if (t < 12.2) { place(offB, 2.0, VZ, Math.PI, 0); setPose(offB, pose({ aRs: 1.3, aLs: 1.3, aRe: 0.2, aLe: 0.2, lean: 0.2 })); }
       else if (t < 14.0) { const p = polyPos(DSA_PATH_B.map((q) => [q[0], q[1]]), E.sm(seg(t, 12.2, 14.0))); place(offB, p.x, p.z, yawTo(p.dx, p.dz), 0); setPose(offB, gait(p.dist, true)); }
       else if (t < 14.4) { const k = seg(t, 14.0, 14.4); place(offB, VX + 0.45, mix(-2.95, VZ + 0.55, k), yawTo(0, -1), 0.63 * E.sm(k)); setPose(offB, gait(k * 0.5, false)); }

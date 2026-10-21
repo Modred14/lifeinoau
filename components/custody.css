@@ -1,0 +1,13 @@
+/* components/custody.css */
+.cc-load { position: fixed; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px; background: #0d1321; color: #e8edf5; z-index: 5; }
+.cc-bar { position: absolute; left: 12px; right: 12px; top: 64px; z-index: 4; display: flex; align-items: center; gap: 10px; max-width: 520px; padding: 8px 10px; border-radius: 14px; background: rgba(13, 19, 33, 0.82); color: #f1f4f9; border: 1px solid rgba(255, 255, 255, 0.14); backdrop-filter: blur(6px); pointer-events: auto; }
+.cc-ico { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: #b8322f; color: #fff; flex: none; }
+.cc-txt { display: grid; gap: 1px; min-width: 0; flex: 1; font-size: 12px; line-height: 1.25; }
+.cc-txt b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-txt span { color: #c3ccda; }
+.cc-txt em { font-style: normal; color: #fff; font-weight: 700; }
+.cc-btn { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.08); color: #fff; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.cc-btn.go { background: #d9a441; border-color: #d9a441; color: #1b1405; }
+.cc-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.bi3-lock { pointer-events: none; opacity: 0.9; }
+@media (max-width: 420px) { .cc-bar { top: 58px; flex-wrap: wrap; } .cc-txt { flex-basis: 100%; } .cc-btn { flex: 1; justify-content: center; } }

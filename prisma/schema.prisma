@@ -1127,3 +1127,58 @@ model SugLegVote {
 
   @@unique([itemId, voterId])
 }
+
+// ---- Games app (lib/games/*, lib/games/matchService.js) ----
+// One row per two-player match. `state` is the AUTHORITATIVE game state held only on the server (the board, the dice, the ball positions...); players send
+// moves, never results. Money is kobo and moves only through lib/ledger.js: each stake goes to the GAMES system account when the match starts and
+// leaves it exactly once, when the match is settled (the winner takes the whole pool, or both stakes come back).
+//   status   INVITED (a friend challenge waiting) | ACTIVE | FINISHED | CANCELLED (never started: declined, withdrawn, lapsed) | VOID (started, then cancelled with refunds)
+//   result   WIN | DRAW | FORFEIT | TIMEOUT | VOID (set when settled)
+model GameMatch {
+  id           BigInt    @id @default(autoincrement())
+  game         String // LUDO | CHESS | POOL | HOOPS | CHECKERS | CONNECT4 | TICTACTOE
+  mode         String // FRIEND | RANDOM | REMATCH
+  status       String // see above
+  hostId       String // seat 0
+  guestId      String // seat 1
+  stakeKobo    BigInt    @default(0) // each player's wager; the pool is twice this
+  state        Json // lib/games/<game>.js state
+  version      Int       @default(0) // +1 on every accepted move: a screen asks only for what is newer
+  turn         Int       @default(0) // the seat to move (0 or 1)
+  turnDeadline DateTime? // the player to move loses on time after this (never merely for being offline for a moment)
+  winnerSeat   Int?
+  result       String?
+  reason       String?
+  payoutKobo   BigInt    @default(0) // what the winner was credited (the whole pool); 0 for a draw or a void
+  drawOffer    Int? // the seat that has offered to draw / cancel and is waiting for an answer
+  rematch      Json? // { by: seat, stakeNaira, at: ms, declined?: seat, nextId?: id } for the rematch after this match
+  rematchOfId  BigInt?
+  rids         Json      @default("[]") // the last request ids applied ("seat:id"): a move sent twice is applied once
+  createdAt    DateTime  @default(now())
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  updatedAt    DateTime  @default(now())
+
+  @@index([hostId, status])
+  @@index([guestId, status])
+  @@index([status, turnDeadline])
+}
+
+// A player waiting for a random opponent. One row per player (the primary key), so nobody can queue twice or be matched with themselves.
+model GameQueue {
+  characterId String   @id
+  game        String
+  stakeKobo   BigInt
+  joinedAt    DateTime @default(now())
+
+  @@index([game, stakeKobo, joinedAt])
+}
+
+// "This player is in this running match". One row per player (the primary key) for as long as a match is ACTIVE: the database itself refuses a second match.
+model GameSeat {
+  characterId String @id
+  matchId     BigInt
+  seat        Int
+
+  @@index([matchId])
+}

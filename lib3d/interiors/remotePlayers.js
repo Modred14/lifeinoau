@@ -4,6 +4,7 @@
 // server listed them as a player, and a player who is no longer listed (left, disconnected, went quiet) is removed on the very next update.
 import * as THREE from "three";
 import { isTaggable } from "../playerTags.js";
+import { cellAt } from "../../lib/custodyCells.js";
 
 export const REMOTE_MAX = 12;   // avatars are heavy, so only the nearest few are built
 export const REMOTE_RANGE = 22; // metres: farther away they are hidden (and so is their tag)
@@ -13,7 +14,7 @@ const RUN_AT = 2.6, SPEED_CAP = 4.4, SNAP = 14;
  * scene: where avatars go. makeAvatar(look, gender) -> Promise<avatar> (createAvatar). tags: a playerTags layer. floorY(f): height of floor f.
  * self: { id, name } (never drawn). Returns { sync(list, from), update(t, dt, P), dispose(), count(), ids() }.
  */
-export function createRemotePlayers({ scene, makeAvatar, tags, floorY = () => 0, self = {} }) {
+export function createRemotePlayers({ scene, makeAvatar, tags, floorY = () => 0, self = {}, cells = [] }) {
   const entries = new Map(); let dead = false;
 
   function drop(id) {
@@ -49,7 +50,7 @@ export function createRemotePlayers({ scene, makeAvatar, tags, floorY = () => 0,
     for (const id of [...entries.keys()]) if (!keep.has(id)) drop(id); // left, went quiet or disconnected: gone now
     for (const [id, p] of keep) {
       const e = entries.get(id) ?? add(p);
-      e.tx = p.x; e.tz = p.z; e.floor = p.floor ?? 0; e.anim = p.anim ?? null; e.name = p.name; e.meta = { level: p.level, faculty: p.faculty };
+      e.tx = p.x; e.tz = p.z; e.floor = p.floor ?? 0; e.anim = p.anim ?? null; e.detained = p.detained === true; e.name = p.name; e.meta = { level: p.level, faculty: p.faculty };
       if (e.av || e.fallback) tags.set(id, { name: p.name, anchor: e.anchor, meta: e.meta });
     }
   }
@@ -65,7 +66,10 @@ export function createRemotePlayers({ scene, makeAvatar, tags, floorY = () => 0,
       e.holder.position.set(e.x, floorY(e.floor) + 0.02, e.z); e.holder.rotation.y = e.yaw;
       const show = e.floor === P.fl && Math.hypot(e.x - P.x, e.z - P.z) < REMOTE_RANGE && !!(e.av || e.fallback);
       e.holder.visible = show; if (!show || !e.av) continue;
-      const av = e.av, moving = e.v > 0.35, clips = e.cue && performance.now() < e.cue.until ? e.cue.clips : e.anim, pose = !moving && clips ? clips.find((n) => av.has?.(n)) : null, want = moving ? (e.v > RUN_AT ? "run" : "walk") : pose ?? "idle";
+      const av = e.av, moving = e.v > 0.35, clips = e.cue && performance.now() < e.cue.until ? e.cue.clips : e.anim, pose = !moving && clips ? clips.find((n) => av.has?.(n)) : null;
+      // A prisoner (only ever flagged by the server) moves and rests like one: pacing, hands on the bars when beside them, a slow look round otherwise.
+      let want = moving ? (e.v > RUN_AT ? "run" : "walk") : pose ?? "idle";
+      if (e.detained && !pose) { const cell = cellAt(cells, e.x, e.z, -0.4); want = moving ? "detainedPace" : cell && cell.z1 - e.z < 1.1 ? "detainedHold" : "lookAround"; if (!av.has?.(want)) want = moving ? "walk" : "idle"; }
       if (want !== e.cur && av.has?.(want) && av.play(want, { fade: 0.25 })) e.cur = want;
       if (moving) av.setSpeed?.(Math.max(0.6, Math.min(1.6, e.v / 2.2))); else av.setSpeed?.(1);
       // the name stays just above the head, lower when they sit and lower still when they lie down

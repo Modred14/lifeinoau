@@ -12,6 +12,7 @@ import { ACTIVITY_SECONDS, ACTIVITY_MS } from "../lib/activityTime.js";
 import { makeDb } from "./fakedb.mjs";
 import * as G from "../lib/gameService.js";
 import * as S from "../lib/activityService.js";
+import { cellsOf, cellFor, inCell } from "../lib/custodyCells.js";
 
 let bad = 0; const chk = (l, c, more) => { if (!c) bad++; console.log((c ? "OK  " : "FAIL") + " " + l + (!c && more ? "\n     " + more : "")); };
 
@@ -242,10 +243,18 @@ try {
     const wk = (await S.status(w.db, "u1")).now ? 1 : 1; w.T.partyTicket.push({ id: 1n, characterId: "c1", venue: "Quantum", gameWeek: Math.floor((clock - START) / (7 * DAY)) + 1, pricePaid: N(20_000) });
     const s = await err(S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) })); assert.ok(s === null || !/ticket/.test(s.message), "with this week's ticket the ring works: " + s?.message); clock = day; }
 
-  // ---- the cells are for people in custody
-  { const w = world({ placeId: "floor0", energy: 40 }); const h = ringOf("floor0", "cell_bunk"); await go(w, "floor0", h); const e = await err(S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) })); assert.ok(e && /sentence/.test(e.message), "a free visitor cannot use the cells");
-    w.c.jailedUntil = new Date(clock + 40 * MIN); const s = await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); assert.ok(s.started, "a prisoner can rest in the cell"); }
-  { const w = world({ placeId: "oduduwa", jailedUntil: new Date(clock + 40 * MIN) }); const h = ringOf("oduduwa", "event_gig"); await go(w, "oduduwa", h); const e = await err(S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) })); assert.ok(e, "no activities while in custody (except the cells)"); }
+  // ---- the cells are for people in custody, and only their own cell
+  { const cells = cellsOf(built.get("floor0").comp), mine = cellFor(cells, "c1"), inMine = (h) => inCell(mine, h.x, h.z);
+    const rings = built.get("floor0").hubs.filter((h) => h.act === "cell_bunk"), h = rings.find(inMine); assert.ok(h, "every cell has a bunk ring, including this prisoner's");
+    // a free visitor cannot stand in a cell at all, so cannot reach a cell ring
+    { const w = world({ placeId: "floor0", energy: 40 }); cur = w; await enter(w, "floor0"); clock += 40_000; const e = await err(S.report(w.db, "u1", at(h))); assert.ok(e && /locked/.test(e.message), "a free visitor is refused a cell: " + e?.message); }
+    // a prisoner stands only in their own cell: their first report is in it (not at the door), and the bunk ring works
+    { const w = world({ placeId: "floor0", energy: 40, jailedUntil: new Date(clock + 40 * MIN) }); cur = w;
+      let e = await err(S.report(w.db, "u1", { x: built.get("floor0").comp.spawn.x, z: built.get("floor0").comp.spawn.z, floor: 0 })); assert.ok(e && /cell/.test(e.message), "a prisoner cannot be reported at the door: " + e?.message);
+      const other = rings.find((r) => !inMine(r)); clock += 40_000; e = await err(S.report(w.db, "u1", at(other))); assert.ok(e && /cell/.test(e.message), "nor in another cell");
+      clock += 40_000; await S.report(w.db, "u1", at(h)); const s = await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); assert.ok(s.started, "a prisoner can rest in their own cell");
+      clock += 5_000; e = await err(S.report(w.db, "u1", { x: mine.cx, z: mine.z1 + 1.0, floor: 0 })); assert.ok(e && /cell/.test(e.message), "stepping through the bars into the corridor is refused"); } }
+  { const w = world({ placeId: "oduduwa", jailedUntil: new Date(clock + 40 * MIN) }); cur = w; const e = await err(enter(w, "oduduwa")); assert.ok(e, "a prisoner has no position anywhere but their cell"); }
 
   // ---- bad input
   { const w = world(); const h = ringOf("oduduwa", "event_gig"); await go(w, "oduduwa", h);

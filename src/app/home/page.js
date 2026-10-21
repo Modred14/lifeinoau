@@ -21,7 +21,8 @@ import { resolveAction, hustleBlock, safeHustleAt, bailFor, waitText, HUSTLE } f
 import { confirmAction } from "@/lib/confirm";
 import { serverTime } from "@/lib/serverClock";
 import { isJailed, isSuspended, isExpelled } from "@/lib/discipline";
-import { Custody, Suspension, Expulsion } from "@/components/DisciplineScreens";
+import { Suspension, Expulsion } from "@/components/DisciplineScreens";
+import CustodyCell from "@/components/CustodyCell";
 import { fmtN } from "@/lib/classes";
 import { wakeResult } from "@/lib/sleep";
 import "./play.css";
@@ -370,7 +371,7 @@ export default function Play() {
   if (isJailed(c, now))
     return (
       <View key={view}>
-        <Custody st={st.floorZero ? st : { ...st, floorZero: { startedAt: null, releaseAt: c.jailedUntil, location: "floor0", billKobo: "0" } }} now={now} busy={busy} bail={bail} />
+        <CustodyCell st={st.floorZero ? st : { ...st, floorZero: { startedAt: null, releaseAt: c.jailedUntil, location: "floor0", billKobo: "0" } }} now={now} busy={busy} bail={bail} look={c.look ?? null} gender={c.gender ?? "M"} selfName={c.name ?? ""} />
       </View>
     );
   if (isExpelled(c, now))
