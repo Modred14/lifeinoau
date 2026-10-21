@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import { createTrafficSim } from "./trafficsim.js";
 import { createNpc, npcSpec } from "./avatar/npc.js";
+import { createAvatar } from "./avatar/loadAvatar.js";
 import { carBodyGeometry, CAR_WHEELS, CAR_WHEEL_R, CAR_COLORS, makeKeke, makeBus, makeCar, rollWheels } from "./vehicles.js";
 
 export const DENSITY = { cars: 6, kekes: 2, buses: 1, peds: 10 }; // within about 250 m of the camera
@@ -61,7 +62,10 @@ export function createTraffic({ parent, svc, focus, density = DENSITY, seed = 7,
       if (!e) { const model = t.mode === "keke" ? makeKeke() : t.mode === "bus" ? makeBus() : t.mode === "car" ? makeCar() : null, walker = model ? null : makeWalker("#8d5a3b", "#2f62c4", "#1f2f55"), root = model ? model.root : new THREE.Group(), tag = new THREE.Object3D();
         if (walker) { // on foot: the player's own look, drawn like everyone else, replaces the stand-in as soon as it has loaded
           e = { root, model, walker, tag, x: t.x, z: t.z, h: t.h, tx: t.x, tz: t.z, th: t.h, phase: 0, at: now };
-          createNpc(npcSpec(t.id, { gender: t.gender === "F" ? "F" : "M", force: { look: t.look ?? undefined } }), { lod: false }).then((av) => { if (!live.has(t.id) || live.get(t.id) !== e || gone) { av.dispose(); return; } if (av.kind !== "glb") { av.dispose(); root.add(walker.root); return; } e.av = av; e.cur = null; root.add(av.root); }).catch(() => root.add(walker.root));
+          // A real player is built by createAvatar from exactly their saved look: the same body, skin tone, hair, clothes and size they have in their room and in every building.
+          // (Never through npcSpec: that adds random NPC variation, and gives a random person to a player whose look is not set.) If the model cannot load, the built-in
+          // character in the same look is used, so the stand-in box figure is only for a character that could not be built at all.
+          createAvatar(t.look, t.gender === "F" ? "F" : "M", { lod: false }).then((av) => { if (!live.has(t.id) || live.get(t.id) !== e || gone) { av.dispose(); return; } av.root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.userData.npcMesh = true; } }); /* the avatar owns its meshes: dispose() below must not free the shared model geometry */ e.av = av; e.cur = null; root.add(av.root); }).catch(() => root.add(walker.root));
         }
         tag.position.set(0, model ? model.height + 0.9 : 2.2, 0); root.add(tag); group.add(root); tags?.set(t.id, { name: t.name, anchor: tag }); root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
         e = e ?? { root, model, walker, tag, x: t.x, z: t.z, h: t.h, tx: t.x, tz: t.z, th: t.h, phase: 0, at: now }; live.set(t.id, e); }

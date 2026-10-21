@@ -12,6 +12,9 @@ const pickW = (r, table) => { let x = r() * table.reduce((a, [, w]) => a + w, 0)
 const pick = (r, list) => list[Math.floor(r() * list.length)];
 const jitter = (hex, r, amt) => { const c = hex.replace("#", ""), n = [0, 2, 4].map((i) => parseInt(c.slice(i, i + 2), 16)), k = 1 + (r() - 0.5) * 2 * amt, w = (r() - 0.5) * 8; return "#" + n.map((v, i) => Math.max(0, Math.min(255, Math.round(v * k + (i === 0 ? w : i === 2 ? -w : 0)))).toString(16).padStart(2, "0")).join(""); };
 
+// The styles the crowd has always used. The player-only additions to lib/look.js (long hair for women, braids for men) are left out so the same seed keeps giving the same person.
+const CROWD_HAIR = { F: HAIR.F.filter((h) => h !== "long"), M: HAIR.M.filter((h) => h !== "braids") };
+
 // What people at OAU wear. Tops are any colour; bottoms are the usual jeans, chinos and trousers.
 const TOPS = ["white", "cream", "black", "charcoal", "grey", "navy", "blue", "sky", "teal", "green", "olive", "khaki", "yellow", "orange", "red", "maroon", "pink", "purple", "brown"];
 const BOTTOMS = ["navy", "blue", "blue", "khaki", "black", "charcoal", "olive", "brown", "cream", "maroon", "grey"];
@@ -33,7 +36,7 @@ export function npcSpec(seed, { gender, role = "student", force = {} } = {}) {
   const skin = pickW(r, [["amber", 13], ["caramel", 24], ["chestnut", 26], ["mahogany", 19], ["espresso", 12], ["ebony", 6]]);
   const outfit = pickW(r, R.outfit), smart = outfit === "office" || outfit === "owambe";
   // hair: women have the full set; men use their four. Staff keep it neat.
-  const hairPool = g === "F" ? (role === "officer" ? ["lowcut", "classic", "braids"] : R.age ? ["classic", "lowcut", "bun", "gele", "braids"] : HAIR.F) : (R.age ? ["lowcut", "classic"] : HAIR.M);
+  const hairPool = g === "F" ? (role === "officer" ? ["lowcut", "classic", "braids"] : R.age ? ["classic", "lowcut", "bun", "gele", "braids"] : CROWD_HAIR.F) : (R.age ? ["lowcut", "classic"] : CROWD_HAIR.M);
   const hair = pickW(r, hairPool.map((h) => [h, g === "M" && h === "lowcut" ? 3 : g === "F" && (h === "braids" || h === "ponytail" || h === "afro") ? 2 : 1]));
   const height = pickW(r, [["short", 25], ["average", 50], ["tall", 25]]), build = pickW(r, [["slim", 40], ["average", 40], ["athletic", 20]]);
   const top = pick(r, smart ? SMART_TOPS : TOPS), bottom = pick(r, smart ? SMART_BOTTOMS : BOTTOMS);

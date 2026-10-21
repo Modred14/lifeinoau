@@ -27,22 +27,51 @@ const loader = new GLTFLoader(),
   exists = new Map();
 const HEIGHT = { short: 0.95, average: 1, tall: 1.06 };
 
-/** True if the URL answers 200. Remembered, so a missing model is only asked for once per session. */
-async function available(url) {
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Asks the server whether an asset exists. true / false only when the server gave a definite answer (200, or 404 / 410 / an HTML page standing in for a missing file);
+ *  null when it could not be asked at all (offline, interrupted, a 5xx). A host that does not answer HEAD is asked for one byte instead. */
+async function probe(url) {
+  for (let i = 0; i < 2; i++) {
+    try {
+      let r = await fetch(url, { method: "HEAD" });
+      if (r.status === 405 || r.status === 501) r = await fetch(url, { headers: { Range: "bytes=0-0" } });
+      if (r.ok || r.status === 206) return !/text\/html/.test(r.headers.get("content-type") ?? "");
+      if (r.status === 404 || r.status === 410) return false;
+    } catch {
+      /* offline or interrupted: ask once more */
+    }
+    if (i === 0) await wait(300);
+  }
+  return null;
+}
+
+/** The remembered answer of probe(). Only definite answers are remembered: a dropped connection must never make an installed model look "missing" for the rest of the session
+ *  (that is what used to leave a player on a different-looking built-in body until they reloaded). */
+function status(url) {
   if (!exists.has(url))
     exists.set(
       url,
-      fetch(url, { method: "HEAD" })
-        .then(
-          (r) =>
-            r.ok && !/text\/html/.test(r.headers.get("content-type") ?? ""),
-        )
-        .catch(() => false),
+      probe(url).then((s) => {
+        if (s === null) exists.delete(url);
+        return s;
+      }),
     );
   return exists.get(url);
 }
+/** True only when the asset is known to be installed. */
+const available = async (url) => (await status(url)) === true;
+
+/** Loads a model once and shares it. A failed load is forgotten, so asking again really tries again. */
 const loadGltf = (url) => {
-  if (!gltfCache.has(url)) gltfCache.set(url, loader.loadAsync(url));
+  if (!gltfCache.has(url))
+    gltfCache.set(
+      url,
+      loader.loadAsync(url).catch((e) => {
+        gltfCache.delete(url);
+        throw e;
+      }),
+    );
   return gltfCache.get(url);
 };
 
@@ -179,11 +208,39 @@ async function resolveUrl(url, lod) {
   return url;
 }
 
+/**
+ * Builds the rigged character for a look. Resolves with null only when the authored model is DEFINITELY not usable (a required file is not installed, or the
+ * skeleton is wrong): the caller then shows the built-in character in the same look. A file that could not be fetched (offline, interrupted) is not "missing":
+ * the load throws, and createAvatar tries again instead of quietly swapping the player's body.
+ */
 async function loadModel(look, gender, opt = {}) {
-  const url = await resolveUrl(BASES[gender], opt.lod);
-  if (!(await available(url))) return null;
-  const gltf = await loadGltf(url),
-    root = SkeletonUtils.clone(gltf.scene),
+  // Everything the look needs is asked for at once (a phone on a slow connection used to wait for each file in turn).
+  const slots = [
+    ["hair", look.hair],
+    ["outfit", look.outfit],
+    ...(look.acc ?? []).map((a) => [a, a]),
+  ];
+  const [baseUrl, ...found] = await Promise.all([
+    resolveUrl(BASES[gender], opt.lod),
+    ...slots.map(([slot, id]) => resolveUrl(partUrl(slot, id, gender), opt.lod)),
+  ]);
+  const states = await Promise.all([baseUrl, ...found].map(status));
+  if (states[0] === false) return null; // no body installed
+  const wanted = []; // the parts to fit, in the order of the look
+  for (let i = 0; i < slots.length; i++) {
+    const slot = slots[i][0], st = states[i + 1];
+    if (REQUIRED_SLOTS.includes(slot)) {
+      if (st === false) return null; // a look without its hair or outfit part uses the built-in character
+      wanted.push([slot, found[i]]); // known to exist, or unknown (then the load below decides)
+    } else if (st === true) wanted.push([slot, found[i]]); // accessories are optional
+  }
+  const libraryUrl = (await available(ANIM_LIBRARY)) ? ANIM_LIBRARY : null;
+  const [gltf, library, ...loadedParts] = await Promise.all([
+    loadGltf(baseUrl),
+    libraryUrl ? loadGltf(libraryUrl).catch((e) => { console.warn("shared animation library unavailable:", e); return null; }) : null,
+    ...wanted.map(([, u]) => loadGltf(u)),
+  ]);
+  const root = SkeletonUtils.clone(gltf.scene),
     problems = missingBones(root);
   if (problems.length) {
     console.warn("avatar base is missing bones:", problems.join(", "));
@@ -191,8 +248,7 @@ async function loadModel(look, gender, opt = {}) {
   }
   tintSkin(root, opt.skinHex ?? SKIN_TONES[look.skin]);
   const clips = [...gltf.animations];
-  if (await available(ANIM_LIBRARY))
-    clips.push(...(await loadGltf(ANIM_LIBRARY)).animations);
+  if (library) clips.push(...library.animations);
   // body and height: blend shapes when the model has them, otherwise a plain scale
   root.traverse((o) => {
     if (!o.isMesh || !o.morphTargetDictionary) return;
@@ -214,24 +270,18 @@ async function loadModel(look, gender, opt = {}) {
   if (opt.bodyWidth && opt.bodyWidth !== 1) { root.scale.x *= opt.bodyWidth; root.scale.z *= 1 + (opt.bodyWidth - 1) * 0.8; }
   const target = raw * k;
   root.updateMatrixWorld(true);
-  // modular parts: each is optional, a missing file is skipped
-  const parts = [
-      ["hair", look.hair],
-      ["outfit", look.outfit],
-      ...(look.acc ?? []).map((a) => [a, a]),
-    ],
-    extra = [];
-  for (const [slot, id] of parts) {
-    const u = await resolveUrl(partUrl(slot, id, gender), opt.lod);
-    if (!(await available(u))) {
-      if (REQUIRED_SLOTS.includes(slot)) return null;
-      continue;
-    } // a look without its hair or outfit part uses the built-in character
-    const part = SkeletonUtils.clone((await loadGltf(u)).scene),
+  // modular parts (already loaded above): skinned ones join the skeleton, plain accessories are parented to a bone
+  const extra = [];
+  for (let i = 0; i < wanted.length; i++) {
+    const slot = wanted[i][0],
+      part = SkeletonUtils.clone(loadedParts[i].scene),
       meshes = attachSkinnedPart(root, part);
     if (!meshes.length && ATTACH_BONES[slot]) {
       attachToBone(root, part, ATTACH_BONES[slot]);
       extra.push(part);
+    } else if (!meshes.length && REQUIRED_SLOTS.includes(slot)) {
+      console.warn(`avatar ${slot} "${look[slot]}" does not fit the skeleton`);
+      return null; // never show a bald or bare authored body: the built-in character in the same look is used instead
     } else extra.push(...meshes);
   }
   softenHair(extra);
@@ -261,58 +311,39 @@ async function loadModel(look, gender, opt = {}) {
 }
 
 /**
- * Creates a character. Always resolves: if no model is installed (or it is broken) it returns the built-in character.
- * The result: { root, kind: "glb"|"procedural", height, update(t, dt), play(name), has(name), animations(), setExpression(name), dispose() }.
+ * Creates a character. Always resolves: if no model is installed (or it is broken) it returns the built-in character in the SAME look.
+ * A model that merely failed to download (offline, interrupted) is retried once before that happens, so a flaky connection does not change how a player looks.
+ * The result: { root, kind: "glb"|"procedural", look, gender, height, update(t, dt), play(name), has(name), animations(), setExpression(name), dispose() }.
+ * `look` is the cleaned look that was actually built, so every screen that shows a player can be checked against the saved one.
  */
 export async function createAvatar(
   lookIn,
   gender = "F",
   { preferModel = true, lod = false, npc = false, actor = true, bodyWidth = 1, colors = null, skinHex = null } = {},
 ) {
-  const look = cleanLook(lookIn, gender);
+  const g = gender === "F" ? "F" : "M",
+    look = cleanLook(lookIn, g);
   if (preferModel) {
-    try {
-      const m = await loadModel(look, gender, { lod, npc, actor, bodyWidth, colors, skinHex });
-      if (m)
-        return {
-          kind: "glb",
-          root: m.root,
-          height: m.height,
-          update: (t, dt) => {
-            m.animator.update(dt);
-            m.face.update(t, dt);
-          },
-          play: (n, o) => m.animator.play(n, o),
-          /** Plays the idle emote once and blends back to idle. onDone(finishedByItself). Returns false if this model cannot. */
-          emote: (o) => m.animator.playOnce("idleEmote", o),
-          stopEmote: () => m.animator.stopOnce("idle"),
-          has: (n) => m.animator.has(n),
-          setSpeed: (k) => m.animator.setSpeed(k),
-          duration: (n) => m.animator.durationOf(n),
-          /** A bone of this character's skeleton by name without the rig prefix ("Head", "LeftHand"...), or null. */
-          bone: (n) => { let b = null; m.root.traverse((o) => { if (o.isBone && boneKey(o.name) === n) b = o; }); return b; },
-          animations: () => m.animator.available(),
-          setExpression: (n) => m.face.setExpression(n),
-          dispose() {
-            m.animator.dispose();
-            m.root.traverse((o) => {
-              // an NPC only frees what is its own: the geometry and textures are shared with every other copy of the same model
-              if (npc) (Array.isArray(o.material) ? o.material : [o.material]).forEach((x) => x?.userData?.owned && x.dispose());
-              else o.geometry?.dispose?.();
-            });
-          },
-        };
-    } catch (e) {
-      console.warn(
-        "avatar model unavailable, using the built-in character:",
-        e,
-      );
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const m = await loadModel(look, g, { lod, npc, actor, bodyWidth, colors, skinHex });
+        if (m) return wrapModel(m, look, g);
+        break; // the authored model is definitely not usable for this look: asking again cannot change that
+      } catch (e) {
+        if (attempt === 0) {
+          await wait(500);
+          continue;
+        }
+        console.warn("avatar model unavailable, using the built-in character:", e);
+      }
     }
   }
-  const c = buildCharacter(look, gender);
+  const c = buildCharacter(look, g);
   return {
     kind: "procedural",
     root: c.root,
+    look,
+    gender: g,
     height: c.height,
     update: (t) => c.update(t),
     play: () => false,
@@ -322,5 +353,42 @@ export async function createAvatar(
     animations: () => [],
     setExpression: () => {},
     dispose: c.dispose,
+  };
+}
+
+/** The common interface of a rigged character (see createAvatar). */
+function wrapModel(m, look, gender) {
+  return {
+    kind: "glb",
+    root: m.root,
+    look,
+    gender,
+    height: m.height,
+    update: (t, dt) => {
+      m.animator.update(dt);
+      m.face.update(t, dt);
+    },
+    play: (n, o) => m.animator.play(n, o),
+    /** Plays the idle emote once and blends back to idle. onDone(finishedByItself). Returns false if this model cannot. */
+    emote: (o) => m.animator.playOnce("idleEmote", o),
+    stopEmote: () => m.animator.stopOnce("idle"),
+    has: (n) => m.animator.has(n),
+    setSpeed: (k) => m.animator.setSpeed(k),
+    duration: (n) => m.animator.durationOf(n),
+    /** A bone of this character's skeleton by name without the rig prefix ("Head", "LeftHand"...), or null. */
+    bone: (n) => {
+      let b = null;
+      m.root.traverse((o) => {
+        if (o.isBone && boneKey(o.name) === n) b = o;
+      });
+      return b;
+    },
+    animations: () => m.animator.available(),
+    setExpression: (n) => m.face.setExpression(n),
+    dispose() {
+      m.animator.dispose();
+      // The geometry and textures are shared with every other copy of the same cached model, so they stay. Only what was made for this one character is freed.
+      m.root.traverse((o) => (Array.isArray(o.material) ? o.material : [o.material]).forEach((x) => x?.userData?.owned && x.dispose()));
+    },
   };
 }
