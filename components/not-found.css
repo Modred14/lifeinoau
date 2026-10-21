@@ -1,0 +1,37 @@
+/* components/not-found.css: the 404 page. Flat dark surface, the site's green and gold. Everything is prefixed `nf-`. */
+body[data-bare] .hud { display: none !important; }
+body[data-bare] { --hud-h: 0px; }
+
+.nf { position: fixed; inset: 0; z-index: 80; display: grid; justify-items: center; overflow-y: auto; text-align: center;
+  padding: max(24px, var(--safe-t, 0px)) clamp(16px, 4vw, 48px) max(24px, var(--safe-b, 0px));
+  background: var(--bg, #0d1321); color: var(--text, #eaf0f8); }
+.nf-card { width: min(100%, 520px); margin: auto; display: flex; flex-direction: column; align-items: center; padding: 8px 0 40px; animation: nf-in 500ms var(--ease, ease) both; }
+
+.nf-num { display: flex; align-items: center; justify-content: center; gap: 0.04em; margin-bottom: 28px; font: 600 clamp(6.5rem, 26vw, 11rem)/1 var(--font-head, system-ui, sans-serif); letter-spacing: -0.04em; color: var(--text, #eaf0f8); user-select: none; }
+.nf-zero { width: 0.78em; height: 0.78em; overflow: visible; }
+.nf-ring { fill: none; stroke: #f2f6ff; stroke-width: 13; stroke-linecap: butt; stroke-dasharray: 100; transform: rotate(-90deg); transform-origin: 50% 50%; animation: nf-draw 900ms var(--ease, ease) 150ms both; }
+.nf-sun { fill: #fbad01; animation: nf-rise 700ms var(--ease, ease) 700ms both; }
+
+.nf-chip { margin: 0 0 14px; padding: 6px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold-text, #f2b84b); background: rgba(242, 184, 75, 0.09); border: 1px solid rgba(242, 184, 75, 0.22); }
+.nf h1 { margin: 0 0 12px; font: 600 clamp(1.6rem, 5.2vw, 2.2rem)/1.15 var(--font-head, system-ui, sans-serif); letter-spacing: -0.015em; text-wrap: balance; }
+.nf-copy { margin: 0 auto 28px; max-width: 40ch; color: var(--muted, #9aa8bc); font-size: 1.02rem; line-height: 1.55; }
+
+.nf-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; width: 100%; }
+.nf-actions .btn { min-width: 176px; min-height: 54px; padding: 12px 22px; border-radius: 14px; font-size: 1.02rem; text-decoration: none; }
+.nf-actions .nf-main { font: 700 1.05rem var(--font-head, system-ui, sans-serif); letter-spacing: 0.01em; }
+.nf-actions .nf-alt { background: transparent; color: var(--text, #eaf0f8); border: 1px solid var(--line, rgba(255, 255, 255, 0.09)); }
+.nf-actions .nf-alt:hover { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.28); }
+.nf-actions .btn:focus-visible { outline: 3px solid var(--ring, #3fd08a); outline-offset: 3px; }
+
+.nf-path { margin: 28px 0 0; max-width: 100%; font-size: 0.8rem; color: var(--muted, #9aa8bc); }
+.nf-path code { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; padding: 3px 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.06); }
+.nf-brand { position: absolute; bottom: max(18px, var(--safe-b, 0px)); left: 0; right: 0; margin: 0 auto; font: 700 1rem var(--font-head, system-ui, sans-serif); letter-spacing: -0.015em; color: var(--muted, #9aa8bc); opacity: 0.7; }
+.nf-brand i { color: var(--green-text, #3fd08a); font-style: normal; }
+
+@keyframes nf-in { from { opacity: 0; transform: translateY(12px); } }
+@keyframes nf-draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+@keyframes nf-rise { from { opacity: 0; transform: translateY(12px); } }
+
+@media (max-width: 480px) { .nf-actions { flex-direction: column; } .nf-actions .btn { width: 100%; } }
+@media (max-height: 640px) { .nf-brand { display: none; } }
+@media (prefers-reduced-motion: reduce) { .nf-card, .nf-ring, .nf-sun { animation: none; } }
