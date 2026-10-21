@@ -106,6 +106,7 @@ model Character {
   sessionStartWeek   Int            @default(1) // game week the current level began; sessions are 12 weeks
   failedSessions     Int            @default(0) // consecutive failed sessions (2 = academic withdrawal)
   graduated          Boolean        @default(false)
+  hideFromForbes     Boolean        @default(false) // left off the FORBES OAU board (set from the database by the owner; there is no screen for it)
   graduatedWeek      Int?
   finalCgpaX100      Int?
   classification     String?
