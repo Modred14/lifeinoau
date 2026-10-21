@@ -1,4 +1,4 @@
-// tests/activities.test.mjs
+// tests/tests__activities.test.mjs
 // tests/activities.test.mjs: building activities. Part 1: the building-to-activity map against every real interior (pure, no database).
 // Part 2: the rules (costs, budgets, cooldowns, position). Part 3: the server service against the in-memory fake database, with the clock controlled.
 import assert from "node:assert/strict";
@@ -109,7 +109,7 @@ chk("the pure rules hold", true);
 const H = 3_600_000, MIN = 60_000, DAY = 24 * H, N = (n) => BigInt(n) * 100n;
 const START = Date.UTC(2026, 9, 1, 15, 30);
 const realNow = Date.now; let clock = START + 5 * DAY + H; Date.now = () => clock;
-const models = ["character", "account", "actionLog", "ledgerEntry", "floorZero", "gameClock", "notification", "achievement", "examResult", "achievementAward", "business", "holding", "partyTicket", "bond", "activityRun", "courseProgress"];
+const models = ["character", "account", "actionLog", "ledgerEntry", "floorZero", "gameClock", "notification", "achievement", "examResult", "achievementAward", "business", "holding", "partyTicket", "bond", "activityRun", "courseProgress", "clubVip", "clubBuyout", "clubEvent", "clubTransaction", "block"];
 const FACULTY = { name: "Science", difficulty: 1.1 };
 function world(over = {}) {
   const db = makeDb(models, { unique: { actionLog: ["characterId", "requestId"], ledgerEntry: ["idempotencyKey"], activityRun: ["characterId", "requestId"], examResult: ["characterId", "gameWeek"] }, join: { character: (r, T) => r && ({ ...r, account: T.account.find((a) => a.characterId === r.id), faculty: FACULTY }) } });
@@ -236,10 +236,11 @@ try {
     clock += ACTIVITIES.sit_exam.cd * 1000 + 100 + DAY; const e = await err(S.startActivity(w.db, "u1", { hubId: he.id, requestId: req(), ...at(he) })); assert.ok(e && /already sat|no exam/.test(e.message), "one exam a week: " + e?.message); }
 
   // ---- nightlife needs the week's ticket for that club
-  { const w = world({ placeId: "club_quantum", energy: 100 }); const h = ringOf("club_quantum", "dance"); await go(w, "club_quantum", h);
-    let e = await err(S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) })); assert.ok(e && /ticket/.test(e.message), "no ticket, no dancing");
+  { const day = clock; clock = Date.UTC(2026, 9, 6, 21, 30); // the clubs only open from 8 PM to 5 AM (game time, UTC+1): 22:30 on the same game day
+    const w = world({ placeId: "club_quantum", energy: 100 }); const h = ringOf("club_quantum", "dance"); await go(w, "club_quantum", h);
+    let e = await err(S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) })); assert.ok(e && /ticket/.test(e.message), "no ticket, no dancing: " + e?.message);
     const wk = (await S.status(w.db, "u1")).now ? 1 : 1; w.T.partyTicket.push({ id: 1n, characterId: "c1", venue: "Quantum", gameWeek: Math.floor((clock - START) / (7 * DAY)) + 1, pricePaid: N(20_000) });
-    const s = await err(S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) })); assert.ok(s === null || !/ticket/.test(s.message), "with this week's ticket the ring works: " + s?.message); }
+    const s = await err(S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) })); assert.ok(s === null || !/ticket/.test(s.message), "with this week's ticket the ring works: " + s?.message); clock = day; }
 
   // ---- the cells are for people in custody
   { const w = world({ placeId: "floor0", energy: 40 }); const h = ringOf("floor0", "cell_bunk"); await go(w, "floor0", h); const e = await err(S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) })); assert.ok(e && /sentence/.test(e.message), "a free visitor cannot use the cells");

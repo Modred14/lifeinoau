@@ -15,6 +15,8 @@ import { confirmAction } from "@/lib/confirm";
 import { toast } from "@/lib/toast";
 import LectureFight, { ResultCard } from "./LectureFight";
 import ActivityLayer from "./ActivityLayer";
+import ClubLayer from "./ClubLayer";
+import { isClub, clubStatus, HOURS_LABEL } from "@/lib/clubs.js";
 import { ICON_OF } from "@/lib3d/landmarks.js";
 import "./travel.css";
 
@@ -52,7 +54,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
         const lecturers = (lec.current.courses ?? []).map((x) => ({ code: x.code, name: x.lecturer.name, difficulty: x.lecturer.difficulty, npcIndex: x.venue.npcIndex }));
         // the activity rings: placed by the same code the server uses to check where you stand (lib3d/interiors/activityHubs.js), drawn teal
         const list = activityHubs(c, classify(place.id, place.kind).spec).hubs.map((h) => ({ ...h, activity: h.id, tint: "#5fe3c0" })); c.hubs = [...c.hubs, ...list]; setRings(list); if (dead || !box.current) return;
-        scene = await createInteriorScene(box.current, c, { look, gender, selfName: selfRef.current, input, view: "follow", lecturers, onFade: setFade, onIncidentEnd: (e) => setAfter(e), onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onChat: (m) => { toast.info(`${m.name}: ${m.line}`); setTimeout(() => { if (!dead) toast.info(`${m.name}: ${m.reply}`); }, 2600); }, onHub: (h) => { if (h.action === "lecture") { confrontRef.current?.(h.lecturer.code); return; } if (h.activity) { setOpen(h); return; } const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true); } });
+        scene = await createInteriorScene(box.current, c, { look, gender, selfName: selfRef.current, club: isClub(place.id), barSpot: (() => { const b = list.find((h) => h.act === "club_drink"); return b ? { x: b.x, z: b.z } : null; })(), input, view: "follow", lecturers, onFade: setFade, onIncidentEnd: (e) => setAfter(e), onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onChat: (m) => { toast.info(`${m.name}: ${m.line}`); setTimeout(() => { if (!dead) toast.info(`${m.name}: ${m.reply}`); }, 2600); }, onHub: (h) => { if (h.action === "lecture") { confrontRef.current?.(h.lecturer.code); return; } if (h.activity) { setOpen(h); return; } const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true); } });
         if (dead) { scene.dispose(); return; } api.current = scene; if (peopleRef.current) scene.setRemotePlayers(peopleRef.current); setStatus("ready"); setSceneReady(true);
       } catch (e) { console.warn("interior unavailable", e); if (!dead) setStatus("fallback"); }
     })();
@@ -103,6 +105,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
         <small>You are inside</small>
         <h2>{place.name}</h2>
         <p>{place.blurb}</p>
+        {isClub(place.id) && (() => { const cs = clubStatus(serverTime()); return <p className="mut" role="status"><b>{cs.label}</b> · Opening hours {HOURS_LABEL} (game time) · {cs.note}</p>; })()}
         {place.actions?.length > 0 && <div className="bi-actions">{place.actions.map((a) => <Link key={a.href} href={a.href} className="btn go">{a.label}</Link>)}</div>}
         <h3><Icon name="users" size={18} /> Here now{people ? ` · ${people.length}` : ""}</h3>
         {people == null ? <p className="mut">Looking around…</p> : people.length === 0 ? <p className="mut">Nobody else is here right now.</p> : (
@@ -130,6 +133,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
           </div>
           {near && !open && <button type="button" className={`bi3-use${near.activity ? " act" : ""}`} onClick={() => api.current?.use()} data-sound="none"><Icon name={near.activity ? "timer" : "sparkle"} size={18} weight="fill" /> {near.label} <kbd>F</kbd></button>}
           <ActivityLayer api={api} rings={rings} open={open} ready onClose={() => setOpen(null)} onLeave={onLeave} />
+          {isClub(place.id) && <ClubLayer place={place} api={api} ready={sceneReady} selfName={selfName} people={people ?? []} onLeave={onLeave} />}
           <p className="bi3-help">Walk with WASD or the stick · Shift to run · drag to look · V changes view · walk out of the door to leave</p>
           <Stick input={input} />
           <Hold className="th-btn th-run" label="Run" onDown={() => input.hold(true)} onUp={() => input.hold(false)}>RUN</Hold>

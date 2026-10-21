@@ -65,7 +65,7 @@ export function createRemotePlayers({ scene, makeAvatar, tags, floorY = () => 0,
       e.holder.position.set(e.x, floorY(e.floor) + 0.02, e.z); e.holder.rotation.y = e.yaw;
       const show = e.floor === P.fl && Math.hypot(e.x - P.x, e.z - P.z) < REMOTE_RANGE && !!(e.av || e.fallback);
       e.holder.visible = show; if (!show || !e.av) continue;
-      const av = e.av, moving = e.v > 0.35, pose = !moving && e.anim ? e.anim.find((n) => av.has?.(n)) : null, want = moving ? (e.v > RUN_AT ? "run" : "walk") : pose ?? "idle";
+      const av = e.av, moving = e.v > 0.35, clips = e.cue && performance.now() < e.cue.until ? e.cue.clips : e.anim, pose = !moving && clips ? clips.find((n) => av.has?.(n)) : null, want = moving ? (e.v > RUN_AT ? "run" : "walk") : pose ?? "idle";
       if (want !== e.cur && av.has?.(want) && av.play(want, { fade: 0.25 })) e.cur = want;
       if (moving) av.setSpeed?.(Math.max(0.6, Math.min(1.6, e.v / 2.2))); else av.setSpeed?.(1);
       // the name stays just above the head, lower when they sit and lower still when they lie down
@@ -74,6 +74,11 @@ export function createRemotePlayers({ scene, makeAvatar, tags, floorY = () => 0,
     }
   }
 
+  const byName = (name) => { const k = String(name ?? "").trim().toLowerCase(); for (const e of entries.values()) if (e.name?.trim().toLowerCase() === k) return e; return null; };
+  /** Where a player in this room stands: { x, z, floor } or null. (The club effects aim at people with it.) */
+  const positionOf = (name) => { const e = byName(name); return e ? { x: e.x, z: e.z, floor: e.floor } : null; };
+  /** Make a player play a gesture for `ms` (a club show: spraying money, receiving a bottle). Their real activity pose comes back after. */
+  const cue = (name, clips, ms) => { const e = byName(name); if (e) e.cue = { clips, until: performance.now() + ms }; };
   const dispose = () => { dead = true; for (const id of [...entries.keys()]) drop(id); };
-  return { sync, update, dispose, count: () => entries.size, ids: () => [...entries.keys()] };
+  return { sync, update, dispose, positionOf, cue, count: () => entries.size, ids: () => [...entries.keys()] };
 }

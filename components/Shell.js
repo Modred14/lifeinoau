@@ -1,5 +1,6 @@
 // components/Shell.js
 "use client";
+import { GAME_TIME_ZONE } from "@/lib/campus-clock.js"; // the clubs open by game time (West Africa Time), so the clock shows that time too
 import Logo from "./Logo";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -24,7 +25,7 @@ const moodOf = (h) =>
         ? ["Okay", "meh"]
         : ["Low", "sad"];
 const stamp = (d) =>
-  `${d.toLocaleDateString("en-NG", { weekday: "short" })} ${d.getDate()} · ${d.toLocaleTimeString("en-NG", { hour: "numeric", minute: "2-digit", hour12: true }).replace(/\s?(am|pm)/i, (m) => " " + m.trim().toUpperCase())}`;
+  `${d.toLocaleDateString("en-NG", { weekday: "short" })} ${d.getDate()} · ${d.toLocaleTimeString("en-NG", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: GAME_TIME_ZONE }).replace(/\s?(am|pm)/i, (m) => " " + m.trim().toUpperCase())}`;
 
 /** Top bar across the whole window, four-tab bottom bar (Home, Buy, Map, Phone) and the phone. Hidden on the landing page and until you have a character. */
 export default function Shell({ children }) {

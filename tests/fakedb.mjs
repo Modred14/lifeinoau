@@ -34,7 +34,14 @@ export function makeDb(models, { unique = {}, defaults = {}, join = {} } = {}) {
       findUnique: async ({ where }) => put(rows().find((r) => match(r, where)) ?? null) ?? null,
       findFirst: async ({ where, orderBy } = {}) => put(sortBy(rows().filter((r) => match(r, where)), orderBy)[0] ?? null) ?? null,
       findMany: async ({ where, orderBy, take } = {}) => sortBy(rows().filter((r) => match(r, where)), orderBy).slice(0, take ?? 1e9).map(put),
-      groupBy: async ({ by, where }) => { const seen = new Map(); for (const r of rows().filter((x) => match(x, where))) seen.set(by.map((k) => r[k]).join("|"), Object.fromEntries(by.map((k) => [k, r[k]]))); return [...seen.values()]; },
+      groupBy: async ({ by, where, _sum, _count, _max } = {}) => { // distinct `by` keys (the chat code), plus Prisma's _sum / _count / _max per group (the club history)
+        const g = new Map();
+        for (const r of rows().filter((x) => match(x, where))) {
+          const key = by.map((k) => r[k]).join("|"), o = g.get(key) ?? { ...Object.fromEntries(by.map((k) => [k, r[k]])), _sum: {}, _count: { _all: 0 }, _max: {} };
+          o._count._all++; for (const f of Object.keys(_sum ?? {})) o._sum[f] = (o._sum[f] ?? 0n) + BigInt(r[f]); for (const f of Object.keys(_max ?? {})) if (o._max[f] == null || r[f] > o._max[f]) o._max[f] = r[f]; g.set(key, o);
+        }
+        return [...g.values()];
+      },
       count: async ({ where } = {}) => rows().filter((r) => match(r, where)).length,
       create: async ({ data }) => {
         const u = unique[name]; if (u && rows().some((r) => u.every((k) => r[k] === data[k]))) { const e = new Error("Unique constraint"); e.code = "P2002"; throw e; }

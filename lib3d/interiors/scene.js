@@ -14,6 +14,7 @@ import { ITEMS, dimsOf } from "./items.js";
 import { movePlayer, rayClip, EXIT_DEPTH, DOOR_H } from "./compile.js";
 import { createPlayerTags } from "../playerTags.js";
 import { createRemotePlayers } from "./remotePlayers.js";
+import { createClubFx } from "./clubFx.js";
 
 // ------------------------------------------------------------------------------------------------ textures
 
@@ -161,7 +162,7 @@ export async function createInteriorScene(container, c, opts = {}) {
   for (const t of texts) groups[t.f].add(t.m);
 
   // ---- lights ----
-  if (dark) scene.add(new THREE.AmbientLight("#8a84c0", 1.1));
+  const ambient = dark ? new THREE.AmbientLight("#8a84c0", 1.1) : null; if (ambient) scene.add(ambient); // kept, so a club mood can tint it and put it back
   const hemi = new THREE.HemisphereLight(dark ? "#a79ee0" : "#ffffff", dark ? "#3a3556" : "#b9ab90", dark ? 2.3 : 1.55); scene.add(hemi);
   if (!dark) { const sun = new THREE.DirectionalLight("#fff3dc", 0.55); sun.position.set(30, 60, 20); scene.add(sun); }
   const flicker = [], spots = [], tiles = [], balls = [];
@@ -272,6 +273,15 @@ export async function createInteriorScene(container, c, opts = {}) {
   const tags = createPlayerTags({ container, camera, selfName: opts.selfName ?? "", selfId: opts.selfId ?? "", onPick: opts.onPickPlayer, visible: (tg, cp, hp) => rayClip(c.wallsByFloor[P.fl] ?? [], cp.x, cp.z, hp.x, hp.z, 0) >= 0.97 }); // nobody is named through a wall
   const remote = createRemotePlayers({ scene, makeAvatar: createAvatar, tags, floorY: fl, self: { id: opts.selfId ?? "", name: opts.selfName ?? "" } });
 
+  // ---- nightclub shows (lib3d/interiors/clubFx.js): only built inside a club. The screen hands it what the server confirmed; it draws. ----
+  const fx = opts.club ? createClubFx({ scene, floorY: fl, bounds: c.bounds, lights: { hemi, ambient }, barSpot: opts.barSpot ?? (c.spawn ? { x: c.spawn.x, z: c.spawn.z } : null), reduced: typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches,
+    walkable: (x, z, f) => { const nv = c.navPlayer?.[f]; if (!nv) return true; const [i, j] = nv.cell(x, z); return !!nv.at(i, j); }, pathFn: (x0, z0, x1, z1, f) => c.navPlayer?.[f]?.path(x0, z0, x1, z1) ?? null,
+    posOf: (name) => (opts.selfName && String(name).trim().toLowerCase() === opts.selfName.trim().toLowerCase() ? { x: P.x, z: P.z, floor: P.fl } : remote.positionOf(name)),
+    makeWaiter: () => createNpc(npcSpec("club:waiter", { gender: "M", role: "staff" })) }) : null;
+  const clubTimers = new Set();
+  /** Make your own avatar play a gesture for ms, then go back to what it was doing. */
+  const cueSelf = (clips, ms) => { const prev = pose, mine = clips; pose = mine; const t = setTimeout(() => { clubTimers.delete(t); if (pose === mine) pose = prev; }, ms); clubTimers.add(t); };
+
   // ---- the N-QRS response ----
   // The picture of an incident comes from lectureEncounter.js (a pure function of server time since the fight was settled); this only draws it.
   let inc = null, incSeq = 0;
@@ -349,16 +359,25 @@ export async function createInteriorScene(container, c, opts = {}) {
       const room2 = room ?? null, ceil = room2 ? fl(P.fl) + room2.h - 0.2 : fl(P.fl) + 3.2;
       camPos.set(P.x - fx * h * k, Math.min(ty + v * Math.max(k, 0.35), ceil), P.z - fz * h * k); look.set(P.x + fx * 0.5, ty - 0.1 - (1 - k) * 0.2, P.z + fz * 0.5); player.visible = camDist * k > 0.85; }
     if (!camInit) { camera.position.copy(camPos); camInit = true; } else camera.position.lerp(camPos, Math.min(1, dt * 14)); camera.lookAt(look); camera.fov = view === "overhead" ? 45 : 62; camera.updateProjectionMatrix(); void vp;
-    remote.update(t, dt, P); tags.update(); // after the camera has moved, so each name sits on its owner's head
+    remote.update(t, dt, P); fx?.update(t, dt); tags.update(); // after the camera has moved, so each name sits on its owner's head
   });
   setVis();
   const api = {
     stage, setYaw(y) { camYaw = y; }, teleport(x, z, floor = 0) { P.x = x; P.z = z; P.fl = floor; P.y = c.floorY[floor] ?? 0; }, get view() { return view; }, get state() { return { x: P.x, z: P.z, y: P.y, floor: P.fl, yaw: P.yaw, people: people.length, exited }; }, setView(v) { view = v; setVis(); }, toggleView() { view = view === "follow" ? "overhead" : "follow"; setVis(); return view; }, use: activate, playIncident, stopIncident, get incident() { return inc ? { id: inc.id, outcome: inc.outcome } : null }, setPose(list, id) { pose = list?.length ? list : null; endAct(); if (pose && id) { act = null; beginAct(id); } },
+    /** A club show the server confirmed: draws it, and makes whoever it is about (you, or another player in the room) play a gesture. */
+    playClubShow(show) {
+      if (!fx || !show) return; fx.play(show); const parts = show.data?.parts ?? [], me = String(opts.selfName ?? "").trim().toLowerCase(), isMe = (n) => String(n ?? "").trim().toLowerCase() === me;
+      const gesture = parts.includes("spray") ? ["cheer", "idleEmote"] : parts.includes("bottle") || show.data?.exp ? ["cheer", "idleEmote"] : null, ms = parts.includes("spray") ? (show.data?.sec ?? 4) * 1000 : 3500;
+      if (gesture) { if (isMe(show.actor)) cueSelf(gesture, ms); else remote.cue(show.actor, gesture, ms); }
+      if (show.to) { const t = setTimeout(() => { clubTimers.delete(t); if (isMe(show.to)) cueSelf(["drink", "cheer", "idleEmote"], 3500); else remote.cue(show.to, ["drink", "cheer", "idleEmote"], 3500); }, 4500); clubTimers.add(t); } // the bottle has arrived: the friend raises a glass
+    },
+    /** The reserved tables and the lights as the server says they are now. Safe to call on every poll. */
+    setClubTables(list) { fx?.setTables(list); }, setClubMood(m) { fx?.setMood(m); }, get clubStats() { return fx?.stats() ?? null; },
     /** The real players in this building (from /api/travel?at=): each { id, name, gender, look, level, faculty, x, z, floor, anim? }. Anyone not in the list is removed. */
     setRemotePlayers(list) { remote.sync(list, { x: P.x, z: P.z }); }, get remoteIds() { return remote.ids(); },
     /** Walk to a point on the current floor by the shortest clear path. Resolves true on arrival, false if it could not or you took the controls. */
     walkTo(x, z) { return new Promise((resolve) => { if (route) route.done(false); const nv = c.navPlayer[P.fl], path = nv.path(P.x, P.z, x, z); if (!path || path.length < 1) { resolve(false); return; } route = { pts: [...path.slice(1), [x, z]], i: 0, done: resolve }; }); },
-    dispose() { alive = false; remote.dispose(); tags.dispose(); stopIncident(); if (route) { route.done(false); route = null; } window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); el.removeEventListener("pointerdown", pd); el.removeEventListener("pointermove", pm); el.removeEventListener("pointerup", pu); el.removeEventListener("pointercancel", pu); el.removeEventListener("wheel", wh);
+    dispose() { alive = false; for (const t of clubTimers) clearTimeout(t); clubTimers.clear(); fx?.dispose(); remote.dispose(); tags.dispose(); stopIncident(); if (route) { route.done(false); route = null; } window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); el.removeEventListener("pointerdown", pd); el.removeEventListener("pointermove", pm); el.removeEventListener("pointerup", pu); el.removeEventListener("pointercancel", pu); el.removeEventListener("wheel", wh);
       for (const p of people) { scene.remove(p.av.root); p.av.dispose?.(); } people.length = 0; if (avatar) { player.remove(avatar.root); avatar.dispose?.(); avatar = null; }
       for (const o of toDispose) o.dispose?.(); toDispose.length = 0; for (const s of spots) s.L?.dispose?.(); scene.clear(); stage.dispose(); },
   };

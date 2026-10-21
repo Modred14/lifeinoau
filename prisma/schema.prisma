@@ -723,3 +723,78 @@ model OwnedCar {
   @@unique([characterId, modelId])
   @@index([characterId])
 }
+
+
+// ---- Nightclub spending (lib/clubs.js has the price list, lib/clubService.js the rules). Money still moves ONLY through the ledger: every
+// completed ClubTransaction has a matching LedgerEntry (idempotencyKey club:<characterId>:<requestId>); this table is what the Spending History reads.
+model ClubTransaction {
+  id            BigInt   @id @default(autoincrement())
+  characterId   String // the purchaser: the only person who can ever read this row
+  clubId        String // club_0203 | club_divas | club_quantum
+  kind          String // SPRAY | DRINK | GIFT_DRINK | PACKAGE | BUYOUT | EXPERIENCE
+  itemId        String // the drink, package, buyout tier or experience id ("spray" for money spraying)
+  itemName      String
+  amount        BigInt // kobo; CHECK between N10,000 and N10,000,000 (migration)
+  status        String   @default("COMPLETED") // only COMPLETED rows are written, in the same database transaction as the ledger entry; failures write nothing
+  recipientId   String? // GIFT_DRINK: who the drink was for (never charged)
+  recipientName String?
+  requestId     String
+  gameWeek      Int
+  delta         Json? // the mood/popularity actually applied (what the daily and weekly caps are counted from)
+  createdAt     DateTime @default(now())
+
+  @@unique([characterId, requestId]) // a repeated request can never be charged twice
+  @@index([characterId, createdAt])
+  @@index([characterId, clubId])
+  @@index([characterId, kind])
+}
+
+// What happens on the floor, so the other players in the club see it (they ask every few seconds). SHOW rows are one-off effects that live a few
+// seconds; TABLE and MOOD rows last as long as the table or the lights, so someone who walks in or reconnects sees the club as it is NOW.
+model ClubEvent {
+  id         BigInt   @id @default(autoincrement())
+  clubId     String
+  kind       String // SHOW | TABLE | MOOD
+  fx         String // spray | bottle | confetti | spotlight | banner | table | mood
+  level      Int // 1..5, how big the show is
+  actorId    String
+  actorName  String
+  targetName String? // a drink bought for someone
+  title      String // the announcement text
+  data       Json? // amount, drink id, table kind, mood, and so on
+  x          Float? // where it happened (the purchaser's spot)
+  z          Float?
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([clubId, id])
+  @@index([clubId, expiresAt])
+}
+
+// A club buyout. Only one can be running per club: the service takes a per-club lock and checks endsAt before it charges.
+model ClubBuyout {
+  id          BigInt   @id @default(autoincrement())
+  clubId      String
+  characterId String
+  hostName    String
+  tierId      String
+  amount      BigInt
+  startsAt    DateTime
+  endsAt      DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([clubId, endsAt])
+}
+
+// VIP privileges at one club until `until` (a package, the lounge, a table, a buyout). Buying again extends it.
+model ClubVip {
+  id          BigInt   @id @default(autoincrement())
+  characterId String
+  clubId      String
+  source      String
+  until       DateTime
+  createdAt   DateTime @default(now())
+
+  @@unique([characterId, clubId])
+  @@index([clubId, until])
+}

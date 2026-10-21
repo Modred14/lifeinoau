@@ -1,5 +1,6 @@
 // components/Phone.js
 "use client";
+import { GAME_TIME_ZONE } from "@/lib/campus-clock.js"; // the clubs open by game time (West Africa Time), so the clock shows that time too
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import { naira, call } from "@/lib/client";
@@ -14,6 +15,7 @@ import CoursesApp from "./apps/CoursesApp";
 import InvestApp from "./apps/InvestApp";
 import RelationshipApp from "./apps/RelationshipApp";
 import PartiesApp from "./apps/PartiesApp";
+import SpendingApp from "./apps/SpendingApp";
 import LeaderboardsApp from "./apps/LeaderboardsApp";
 import AchievementsApp from "./apps/AchievementsApp";
 import SettingsApp from "./apps/SettingsApp";
@@ -32,6 +34,7 @@ const APPS = {
   invest: { name: "Invest", icon: "invest", tone: "gold", C: InvestApp },
   love: { name: "Love", icon: "love", tone: "rose", C: RelationshipApp },
   parties: { name: "Parties", icon: "party", tone: "violet", C: PartiesApp },
+  spending: { name: "Spending", icon: "receipt", tone: "rose", C: SpendingApp }, // club spending history (0203, Royal Divas, Quantum)
   forbes: { name: "Forbes", icon: "forbes", tone: "amber", C: LeaderboardsApp },
   awards: { name: "Awards", icon: "medal", tone: "orange", C: AchievementsApp },
   housing: { name: "Housing", icon: "home", tone: "sky", C: HousingApp },
@@ -42,7 +45,7 @@ const APPS = {
   guide: { name: "OAU Guide", icon: "study", tone: "lime", C: GuideApp }, // generated from lib/features.js
 };
 export const PHONE_APPS = Object.keys(APPS);
-const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "forbes", "awards", "housing", "ride", "hire", "bet", "guide", "settings"];
+const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "spending", "forbes", "awards", "housing", "ride", "hire", "bet", "guide", "settings"];
 /** In Floor O (N-QRS Custody) the phone only does messages (and settings). The server refuses everything else too; this just stops offering it. */
 const CUSTODY_GRID = ["messages", "settings"];
 
@@ -53,7 +56,7 @@ const dateLine = (d) => {
 };
 /** "10:10" for the big clock, "10:10PM" (ampm = true) for the status bar. */
 const clock = (d, ampm = false) => {
-  const t = d.toLocaleTimeString("en-NG", { hour: "numeric", minute: "2-digit", hour12: true }).replace(/\s?(am|pm)/i, (m) => m.trim().toUpperCase());
+  const t = d.toLocaleTimeString("en-NG", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: GAME_TIME_ZONE }).replace(/\s?(am|pm)/i, (m) => m.trim().toUpperCase());
   return ampm ? t : t.replace(/(AM|PM)$/, "");
 };
 const isNight = (d) => d.getHours() >= 19 || d.getHours() < 6;

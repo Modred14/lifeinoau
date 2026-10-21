@@ -20,6 +20,7 @@ import { game, useGame, run, cash } from "@/lib/gameStore";
 import { fareKobo, placeOf, ownsCar, driverActive, MODE_INFO } from "@/lib/travel.js";
 import { playSound } from "@/lib/sound";
 import { serverTime } from "@/lib/serverClock";
+import { isClub, clubOf, clubStatus, closedMessage, HOURS_LABEL } from "@/lib/clubs.js";
 import { CUSTODY_NAME } from "@/lib/discipline";
 
 const CampusMap = dynamic(() => import("@/components/CampusMap"), {
@@ -117,6 +118,7 @@ export default function MapPage() {
   function begin(mode, withDriver, act = null) {
     const dest = L; if (!dest) return; setSheet(false);
     if (held) return toast.error(`You are held in ${CUSTODY_NAME}. You cannot travel until your sentence ends.`);
+    if (isClub(dest.id) && !clubStatus(serverTime()).open) return toast.error(closedMessage(clubOf(dest.id)), { duration: 7000 }); // the server refuses too: the clubs open 8 PM to 5 AM
     const fetchPeople = () => call("/api/travel?at=" + encodeURIComponent(dest.id)).then((r) => (r.failed ? [] : r.people ?? []));
     const people = fetchPeople();
     setTripSt(null); input.jx = input.jy = input.steer = input.gas = input.brake = 0; input.run = false;
@@ -206,11 +208,12 @@ export default function MapPage() {
               />
             )}
             {counts[L.id] > 0 && <p className="mut"><Icon name="users" size={15} /> {counts[L.id]} player{counts[L.id] === 1 ? "" : "s"} here now</p>}
+            {isClub(L.id) && (() => { const cs = clubStatus(serverTime()); return <p className="mut" role="status"><Icon name={cs.open ? "moon" : "clock"} size={15} /> <b style={{ color: cs.open ? "var(--green-text)" : "var(--danger-text)" }}>{cs.label}</b> · Opening hours {HOURS_LABEL} · {cs.note}</p>; })()}
             <div className="row">
-              {L.id === here ? (hasInterior(L.id, L.kind) || isOpenSpace(L.id) ? <button type="button" className="go go-there" onClick={() => setInside(L.id)}><Icon name={isOpenSpace(L.id) ? "users" : "door"} size={18} /> {isOpenSpace(L.id) ? "Hang out here" : "Go inside"}</button> : <p className="mut"><Icon name="pin" size={15} /> You are here. This is an open-air place, so there are no rooms to enter.</p>)
-                : <button type="button" className="go go-there" disabled={!L.located || !ch || held} onClick={() => setSheet(true)}><Icon name="nav" size={18} weight="fill" /> {held ? "Held in Floor O" : L.located ? "Go there" : "Not on the map yet"}</button>}
+              {L.id === here ? (hasInterior(L.id, L.kind) || isOpenSpace(L.id) ? <button type="button" className="go go-there" onClick={() => (isClub(L.id) && !clubStatus(serverTime()).open ? toast.error(closedMessage(clubOf(L.id)), { duration: 7000 }) : setInside(L.id))}><Icon name={isOpenSpace(L.id) ? "users" : "door"} size={18} /> {isOpenSpace(L.id) ? "Hang out here" : "Go inside"}</button> : <p className="mut"><Icon name="pin" size={15} /> You are here. This is an open-air place, so there are no rooms to enter.</p>)
+                : <button type="button" className="go go-there" disabled={!L.located || !ch || held} onClick={() => (isClub(L.id) && !clubStatus(serverTime()).open ? toast.error(closedMessage(clubOf(L.id)), { duration: 7000 }) : setSheet(true))}><Icon name="nav" size={18} weight="fill" /> {held ? "Held in Floor O" : L.located ? "Go there" : "Not on the map yet"}</button>}
             </div>
-            {L.kind !== "billboard" && (() => { const fa = featuresAt(L.id, L.kind); return L.id === here ? <PlaceActivities activities={fa.activities} extra={fa.extra} links={[]} character={ch} balanceKobo={g?.balanceKobo ?? null} jailed={held} here highlight={want} actionLabel="Go inside and start" onDo={(a) => { setFocus(a.act); setInside(L.id); }} /> : null; })()}
+            {L.kind !== "billboard" && (() => { const fa = featuresAt(L.id, L.kind); return L.id === here ? <PlaceActivities activities={fa.activities} extra={fa.extra} links={[]} character={ch} balanceKobo={g?.balanceKobo ?? null} jailed={held} here highlight={want} actionLabel="Go inside and start" onDo={(a) => { if (isClub(L.id) && !clubStatus(serverTime()).open) return toast.error(closedMessage(clubOf(L.id)), { duration: 7000 }); setFocus(a.act); setInside(L.id); }} /> : null; })()}
             {L.actions?.length > 0 && (
               <div className="row">
                 {L.actions.map((a) => (
