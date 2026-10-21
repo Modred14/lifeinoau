@@ -798,3 +798,332 @@ model ClubVip {
   @@unique([characterId, clubId])
   @@index([clubId, until])
 }
+
+// =====================================================================================================================================
+// SUG elections and student government (lib/sugRules.js has the rules, lib/sugService.js, lib/governmentService.js and
+// lib/assemblyService.js the behaviour). Character ids are plain strings here (like Chat and Achievement): eligibility is always
+// decided on the server. Times are real timestamps; the stage of a cycle is derived from them (see stageOf in lib/sugRules.js).
+// Integrity that must hold even if application code is wrong lives in the migration: partial unique indexes, CHECKs, and triggers that make
+// ballots, results and legislative votes append-only and refuse ballots / nominations outside their windows.
+// =====================================================================================================================================
+
+// One election cycle: the whole timetable, set when the cycle is created. A new cycle is created by the system (or an admin) when the last
+// one is over, so future elections need no manual database work. Only one cycle may be live at a time (partial unique index in the migration).
+model SugCycle {
+  id                  Int         @id @default(autoincrement())
+  number              Int         @unique // 1, 2, 3 ...: "SUG Election 3"
+  title               String
+  status              String      @default("LIVE") // LIVE (the election is running) | DECIDED (results final) | CANCELLED. The term that follows is tracked by SugTerm
+  stage               String      @default("ANNOUNCED") // ANNOUNCED | REGISTRATION | CAMPAIGN | VOTING | RUNOFF | RESULTS | FORMATION | ACTIVE | COMPLETED | CANCELLED (kept in step lazily)
+  announcedAt         DateTime
+  registrationOpensAt DateTime
+  campaignStartsAt    DateTime // registration closes here
+  votingStartsAt      DateTime // campaign closes here
+  votingEndsAt        DateTime
+  runoffStartsAt      DateTime? // set only if a tie needs a runoff
+  runoffEndsAt        DateTime?
+  termStartsAt        DateTime
+  termEndsAt          DateTime
+  nominationFeeKobo   BigInt
+  spendCapExecKobo    BigInt // most one executive candidate may spend on the campaign
+  spendCapAssemblyKobo BigInt // the same for assembly candidates
+  resultsAt           DateTime? // set ONCE when the results are final: after that the results are locked (trigger)
+  createdBy           String // admin user id or 'SYSTEM'
+  createdAt           DateTime    @default(now())
+  races               SugRace[]
+  term                SugTerm?
+
+  @@index([status, stage])
+}
+
+// One race per position per cycle (12 of them: nine executive posts, Speaker, Deputy Speaker and the 30-seat Honourable Member race).
+model SugRace {
+  id          Int            @id @default(autoincrement())
+  cycleId     Int
+  position    String
+  seats       Int // 1, or 30 for HONOURABLE_MEMBER (CHECK in the migration)
+  status      String         @default("OPEN") // OPEN | RUNOFF | CLOSED
+  validVotes  Int            @default(0) // round one ballots for candidates still standing, set when the race is tallied
+  seatsFilled Int            @default(0)
+  tieNote     String? // how a tie was settled: RUNOFF, RUNOFF_THEN_REGISTRATION_ORDER
+  cycle       SugCycle       @relation(fields: [cycleId], references: [id])
+  candidates  SugCandidate[]
+  ballots     SugBallot[]
+  results     SugResult[]
+
+  @@unique([cycleId, position])
+}
+
+// A player's candidacy. ONE position per player per cycle (unique key): the same rule for registering, campaigning, voting and results.
+model SugCandidate {
+  id           Int             @id @default(autoincrement())
+  cycleId      Int
+  raceId       Int
+  characterId  String
+  position     String
+  slogan       String
+  intro        String
+  manifesto    String
+  promises     Json // up to five short promises
+  status       String          @default("ACTIVE") // ACTIVE | WITHDRAWN | DISQUALIFIED | WON | LOST
+  statusNote   String?
+  feeKobo      BigInt
+  registeredAt DateTime        @default(now())
+  race         SugRace         @relation(fields: [raceId], references: [id])
+  ballots      SugBallot[]
+  results      SugResult[]
+  events       SugCampaignEvent[]
+  expenses     SugExpense[]
+  supporters   SugSupport[]
+
+  @@unique([cycleId, characterId])
+  @@index([raceId, status])
+}
+
+// A ballot. Append-only (trigger): it can never be changed or removed. One per voter per race per round (unique key).
+// Nothing in the API ever returns who a voter chose.
+model SugBallot {
+  id          BigInt       @id @default(autoincrement())
+  cycleId     Int
+  raceId      Int
+  round       Int          @default(1) // 1 = the election, 2 = the runoff for a tie
+  voterId     String
+  candidateId Int
+  castAt      DateTime     @default(now())
+  race        SugRace      @relation(fields: [raceId], references: [id])
+  candidate   SugCandidate @relation(fields: [candidateId], references: [id])
+
+  @@unique([raceId, round, voterId])
+  @@index([raceId, round, candidateId])
+}
+
+// The final result of one candidate in one race. Written once, when the race is settled (append-only, and refused after the cycle's results are locked).
+model SugResult {
+  id          BigInt       @id @default(autoincrement())
+  cycleId     Int
+  raceId      Int
+  candidateId Int
+  votes       Int // round one votes
+  runoffVotes Int? // round two votes, for the candidates who were tied
+  percentBp   Int // share of valid round-one votes, in basis points (2550 = 25.50%)
+  rank        Int
+  outcome     String // WON | LOST
+  seat        Int? // the seat number won (1 for single-seat posts)
+  tieBreak    String? // RUNOFF | REGISTRATION_ORDER when a tie decided this candidate's place
+  race        SugRace      @relation(fields: [raceId], references: [id])
+  candidate   SugCandidate @relation(fields: [candidateId], references: [id])
+
+  @@unique([raceId, candidateId])
+  @@index([cycleId])
+}
+
+// Something a candidate did to win support: a speech, a rally, meeting students, a message, posters, publicity, a debate.
+model SugCampaignEvent {
+  id          BigInt       @id @default(autoincrement())
+  cycleId     Int
+  candidateId Int
+  kind        String // SPEECH | RALLY | MEET | MESSAGE | POSTER | PUBLICITY | DEBATE
+  venue       String? // map place id, for the ones held somewhere
+  title       String
+  body        String       @default("")
+  costKobo    BigInt       @default(0)
+  opponentId  Int? // a debate: the other candidate (same race)
+  startsAt    DateTime
+  endsAt      DateTime
+  status      String       @default("LIVE") // LIVE | SUCCESS | FAILED
+  settledAt   DateTime?
+  attendees   Int          @default(0) // real players (other than the host) who came
+  freshAudience Int        @default(0) // of those, players this candidate had not reached before (only these earn audience points)
+  momentum    Int          @default(0) // what it earned, set when settled
+  note        String? // why it worked or did not
+  requestId   String
+  createdAt   DateTime     @default(now())
+  candidate   SugCandidate @relation(fields: [candidateId], references: [id])
+  attendance  SugEventAttendance[]
+
+  @@unique([candidateId, requestId])
+  @@index([cycleId, status, endsAt])
+  @@index([candidateId, createdAt])
+}
+
+model SugEventAttendance {
+  id          BigInt           @id @default(autoincrement())
+  eventId     BigInt
+  characterId String
+  pledged     Boolean          @default(false) // the visitor said they back the candidate
+  createdAt   DateTime         @default(now())
+  event       SugCampaignEvent @relation(fields: [eventId], references: [id])
+
+  @@unique([eventId, characterId])
+  @@index([characterId])
+}
+
+// A distinct player who has been reached by a candidate (came to an event or pledged). Counted once per candidate, so repeating events cannot farm it.
+model SugSupport {
+  candidateId Int
+  supporterId String
+  pledged     Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  candidate   SugCandidate @relation(fields: [candidateId], references: [id])
+
+  @@id([candidateId, supporterId])
+}
+
+// Money a candidate spent on the campaign. The money itself moves through the ledger (ledgerKey is that entry's idempotency key).
+model SugExpense {
+  id          BigInt       @id @default(autoincrement())
+  cycleId     Int
+  candidateId Int
+  eventId     BigInt?
+  kind        String
+  amountKobo  BigInt
+  ledgerKey   String       @unique
+  requestId   String
+  createdAt   DateTime     @default(now())
+  candidate   SugCandidate @relation(fields: [candidateId], references: [id])
+
+  @@unique([candidateId, requestId])
+  @@index([cycleId, candidateId])
+}
+
+// The government a cycle elects. Its privileges exist only between startsAt and endsAt (checked against the clock on every request).
+model SugTerm {
+  id           Int                @id @default(autoincrement())
+  cycleId      Int                @unique
+  startsAt     DateTime
+  endsAt       DateTime
+  status       String             @default("SCHEDULED") // SCHEDULED | ACTIVE | ENDED (kept in step lazily)
+  createdAt    DateTime           @default(now())
+  cycle        SugCycle           @relation(fields: [cycleId], references: [id])
+  appointments SugAppointment[]
+  announcements SugAnnouncement[]
+  sessions     SugSession[]
+  items        SugItem[]
+}
+
+// Who holds which office this term: elected winners and the appointed Clerk. A political role only: it is never an account permission.
+// Partial unique indexes in the migration: one ACTIVE holder per (term, position, seat), one office per person per term, and seat numbers
+// 1..30 for Honourable Members and exactly 1 for every other post, so the 30-seat limit and one winner per single-seat post hold in the database.
+model SugAppointment {
+  id          Int      @id @default(autoincrement())
+  termId      Int
+  characterId String
+  position    String
+  seat        Int      @default(1)
+  kind        String // ELECTED | APPOINTED
+  status      String   @default("ACTIVE") // ACTIVE | REVOKED
+  appointedBy String? // the Speaker's character id for a Clerk
+  startedAt   DateTime @default(now())
+  endedAt     DateTime?
+  term        SugTerm  @relation(fields: [termId], references: [id])
+
+  @@index([termId, status])
+  @@index([characterId, status])
+}
+
+model SugAnnouncement {
+  id          BigInt   @id @default(autoincrement())
+  termId      Int
+  authorId    String
+  position    String
+  kind        String // EVENT | PARTY | SPORTS | WELFARE | STATEMENT | MEETING | FINANCE | ASSEMBLY
+  title       String
+  body        String
+  createdAt   DateTime @default(now())
+  term        SugTerm  @relation(fields: [termId], references: [id])
+
+  @@index([createdAt])
+  @@index([termId, createdAt])
+}
+
+// A sitting of the Student Representative Assembly. The chair is the Speaker, or the Deputy Speaker when the Speaker hands over or is absent.
+model SugSession {
+  id          Int             @id @default(autoincrement())
+  termId      Int
+  title       String
+  agenda      String          @default("")
+  scheduledAt DateTime
+  status      String          @default("SCHEDULED") // SCHEDULED | OPEN | CLOSED | CANCELLED
+  chairId     String? // who is presiding (set when it opens)
+  createdBy   String // the Clerk
+  openedAt    DateTime?
+  closedAt    DateTime?
+  floorItemId BigInt? // the bill or motion being dealt with
+  floorSpeakerId String? // the member the chair has recognised to speak
+  minutes     String?
+  minutesBy   String?
+  minutesAt   DateTime?
+  createdAt   DateTime        @default(now())
+  term        SugTerm         @relation(fields: [termId], references: [id])
+  attendance  SugAttendance[]
+  items       SugItem[]
+
+  @@index([termId, scheduledAt])
+}
+
+model SugAttendance {
+  id          BigInt     @id @default(autoincrement())
+  sessionId   Int
+  characterId String
+  status      String // PRESENT | ABSENT | EXCUSED
+  source      String // SELF | CLERK
+  markedAt    DateTime   @default(now())
+  session     SugSession @relation(fields: [sessionId], references: [id])
+
+  @@unique([sessionId, characterId])
+}
+
+// A bill or a motion. The Clerk registers it (gives it a number), the chair puts it on a sitting's order paper, members debate it and vote.
+// The outcome is computed by the server from the recorded votes; the Clerk has no way to change it.
+model SugItem {
+  id           BigInt      @id @default(autoincrement())
+  termId       Int
+  sessionId    Int?
+  kind         String // BILL | MOTION
+  serial       String? // BILL-0001 / MOTION-0001, given when the Clerk registers it
+  title        String
+  body         String
+  authorId     String
+  status       String      @default("SUBMITTED") // SUBMITTED | REGISTERED | LISTED | DEBATING | VOTING | PASSED | FAILED | WITHDRAWN
+  registeredBy String?
+  registeredAt DateTime?
+  yes          Int         @default(0)
+  no           Int         @default(0)
+  abstain      Int         @default(0)
+  present      Int?        // members present when the vote closed
+  quorum       Int?
+  outcomeNote  String?
+  votingOpenedAt DateTime?
+  closedAt     DateTime?
+  createdAt    DateTime    @default(now())
+  term         SugTerm     @relation(fields: [termId], references: [id])
+  session      SugSession? @relation(fields: [sessionId], references: [id])
+  debate       SugDebate[]
+  votes        SugLegVote[]
+
+  @@index([termId, status])
+  @@index([sessionId])
+}
+
+model SugDebate {
+  id        BigInt   @id @default(autoincrement())
+  itemId    BigInt
+  speakerId String
+  body      String
+  createdAt DateTime @default(now())
+  item      SugItem  @relation(fields: [itemId], references: [id])
+
+  @@index([itemId, id])
+}
+
+// A member's vote on a bill or motion. Append-only (trigger): one per member per item, never changed.
+model SugLegVote {
+  id      BigInt   @id @default(autoincrement())
+  itemId  BigInt
+  voterId String
+  choice  String // YES | NO | ABSTAIN
+  castAt  DateTime @default(now())
+  item    SugItem  @relation(fields: [itemId], references: [id])
+
+  @@unique([itemId, voterId])
+}

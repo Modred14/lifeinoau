@@ -988,6 +988,7 @@ function Profile({ prof, blocked, onPay, onReport, onBlock, onUnblock }) {
         <p className="mut">
           {prof.faculty}, {prof.level}L, {prof.class}
         </p>
+        {prof.office && <p className="ms-tags"><span>{prof.office}</span></p>}
         {prof.personalities?.length > 0 && (
           <p className="ms-tags">
             {prof.personalities.map((p) => (

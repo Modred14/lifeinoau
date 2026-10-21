@@ -23,6 +23,7 @@ import HousingApp from "./apps/HousingApp";
 import HireApp from "./apps/HireApp";
 import RideApp from "./apps/RideApp";
 import GuideApp from "./apps/GuideApp";
+import SugApp from "./apps/SugApp";
 import BetApp from "./bet/BetApp";
 import "./phone.css";
 
@@ -41,11 +42,12 @@ const APPS = {
   hire: { name: "Hire", icon: "driver", tone: "indigo", C: HireApp },
   ride: { name: "Ride", icon: "ride", tone: "orange", C: RideApp },
   bet: { name: "Bet", icon: "ticket", tone: "bet", own: true, C: BetApp }, // draws its own header and tab bar, like Messages
+  sug: { name: "SUG", icon: "hall", tone: "navy", C: SugApp }, // the Students' Union Government: elections, government, Assembly
   settings: { name: "Settings", icon: "gear", tone: "graphite", C: SettingsApp },
   guide: { name: "OAU Guide", icon: "study", tone: "lime", C: GuideApp }, // generated from lib/features.js
 };
 export const PHONE_APPS = Object.keys(APPS);
-const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "spending", "forbes", "awards", "housing", "ride", "hire", "bet", "guide", "settings"];
+const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "spending", "forbes", "awards", "housing", "ride", "hire", "bet", "sug", "guide", "settings"];
 /** In Floor O (N-QRS Custody) the phone only does messages (and settings). The server refuses everything else too; this just stops offering it. */
 const CUSTODY_GRID = ["messages", "settings"];
 

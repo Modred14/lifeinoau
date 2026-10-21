@@ -18,6 +18,7 @@ for (const name of [
   "CLINICS",
   "BUSINESS",
   "MARKET",
+  "SUG", // nomination fees and campaign spending (lib/sugService.js)
 ])
   await db.account.upsert({
     where: { systemName: name },
