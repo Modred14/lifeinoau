@@ -14,9 +14,10 @@ import HoopsBoard from "./HoopsBoard";
 import CheckersBoard from "./CheckersBoard";
 import Connect4Board from "./Connect4Board";
 import TicTacToeBoard from "./TicTacToeBoard";
+import WhotBoard from "./WhotBoard";
 
-const BOARDS = { LUDO: LudoBoard, CHESS: ChessBoard, POOL: PoolTable, HOOPS: HoopsBoard, CHECKERS: CheckersBoard, CONNECT4: Connect4Board, TICTACTOE: TicTacToeBoard };
-const RESULT_DELAY = { POOL: 2600, HOOPS: 2400, LUDO: 900, CHESS: 700, CHECKERS: 700, CONNECT4: 900, TICTACTOE: 700 };
+const BOARDS = { LUDO: LudoBoard, CHESS: ChessBoard, POOL: PoolTable, HOOPS: HoopsBoard, CHECKERS: CheckersBoard, CONNECT4: Connect4Board, TICTACTOE: TicTacToeBoard, WHOT: WhotBoard };
+const RESULT_DELAY = { POOL: 2600, HOOPS: 2400, LUDO: 900, CHESS: 700, CHECKERS: 700, CONNECT4: 900, TICTACTOE: 700, WHOT: 1200 };
 
 export default function MatchScreen({ id, onExit, onOpen, balanceKobo }) {
   const [m, setM] = useState(null), [busy, setBusy] = useState(false), [gone, setGone] = useState(null), [tick, setTick] = useState(0), [confirm, setConfirm] = useState(false), [showResult, setShowResult] = useState(false);

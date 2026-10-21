@@ -9,9 +9,10 @@ import { toast } from "@/lib/toast";
 import { gamesGet, gamesPost, koboNaira, nairaOf } from "@/lib/games/gamesClient";
 import StakePicker from "../games/StakePicker";
 import MatchScreen from "../games/MatchScreen";
+import WhotPractice from "../games/WhotPractice";
 import "../games/games.css";
 
-const TONE = { LUDO: "#d64545", CHESS: "#7d8aa5", POOL: "#1f8a4c", HOOPS: "#e8742d", CHECKERS: "#a15c2e", CONNECT4: "#3f7fd6", TICTACTOE: "#8a5cd6" };
+const TONE = { LUDO: "#d64545", CHESS: "#7d8aa5", POOL: "#1f8a4c", HOOPS: "#e8742d", CHECKERS: "#a15c2e", CONNECT4: "#3f7fd6", TICTACTOE: "#8a5cd6", WHOT: "#9c1c2b" };
 
 /** A tiny picture for each game's tile (drawn here, no image files). */
 function GameGlyph({ id }) {
@@ -26,6 +27,7 @@ function GameGlyph({ id }) {
       {id === "CHECKERS" && <g><circle cx="17" cy="18" r="7" fill="#fff" /><circle cx="31" cy="30" r="7" fill="#15171c" /><circle cx="17" cy="18" r="3.4" fill="none" stroke={c} strokeWidth="1.6" /></g>}
       {id === "CONNECT4" && <g><circle cx="15" cy="15" r="4.6" fill="#fff" /><circle cx="24" cy="15" r="4.6" fill="#ffd24d" /><circle cx="33" cy="15" r="4.6" fill="#fff" /><circle cx="15" cy="26" r="4.6" fill="#ffd24d" /><circle cx="24" cy="26" r="4.6" fill="#fff" /><circle cx="33" cy="26" r="4.6" fill="#ffd24d" /><circle cx="24" cy="37" r="4.6" fill="#fff" /></g>}
       {id === "TICTACTOE" && <g stroke="#fff" strokeWidth="3" strokeLinecap="round" fill="none"><path d="M18 10v28M30 10v28M10 18h28M10 30h28" opacity=".55" /><path d="M12 12l5 5M17 12l-5 5" /><circle cx="24" cy="24" r="3.4" /></g>}
+      {id === "WHOT" && <g><rect x="13" y="8" width="22" height="32" rx="4" fill="#fffaf0" transform="rotate(-10 24 24)" /><rect x="13" y="8" width="22" height="32" rx="4" fill="#fffaf0" transform="rotate(10 24 24)" /><polygon points="24,14 27,21 34,22 29,27 30.5,34 24,30.5 17.5,34 19,27 14,22 21,21" fill={c} /></g>}
     </svg>
   );
 }
@@ -47,7 +49,7 @@ export function useGamesBadge(open) {
 }
 
 export default function GamesApp({ onHome }) {
-  const [lobby, setLobby] = useState(null), [tab, setTab] = useState("play"), [setup, setSetup] = useState(null), [matchId, setMatchId] = useState(null), [err, setErr] = useState(null), [busy, setBusy] = useState(false);
+  const [lobby, setLobby] = useState(null), [tab, setTab] = useState("play"), [setup, setSetup] = useState(null), [matchId, setMatchId] = useState(null), [err, setErr] = useState(null), [busy, setBusy] = useState(false), [practice, setPractice] = useState(false);
   const alive = useRef(true), timer = useRef(0), searching = useRef(false);
 
   const load = useCallback(async () => {
@@ -73,6 +75,7 @@ export default function GamesApp({ onHome }) {
   const openMatch = useCallback((id) => { setSetup(null); setMatchId(String(id)); load(); }, [load]);
   const leave = useCallback(() => { setMatchId(null); load(); }, [load]);
 
+  if (practice) return <div className="gm"><WhotPractice onExit={() => setPractice(false)} /></div>;
   if (matchId) return <div className="gm"><MatchScreen id={matchId} onExit={leave} onOpen={openMatch} balanceKobo={lobby?.balanceKobo} /></div>;
 
   return (
@@ -84,7 +87,7 @@ export default function GamesApp({ onHome }) {
       </header>
       {err && !lobby && <div className="gm-pad"><p className="gm-note">{err}</p><button type="button" className="gm-btn" onClick={load}>Try again</button></div>}
       {!lobby && !err && <div className="gm-pad gm-center"><i className="gm-spin" aria-hidden="true" /></div>}
-      {lobby && setup && <Setup key={setup.id} game={setup} lobby={lobby} busy={busy} run={run} openMatch={openMatch} />}
+      {lobby && setup && <Setup key={setup.id} game={setup} lobby={lobby} busy={busy} run={run} openMatch={openMatch} onPractice={() => setPractice(true)} />}
       {lobby && !setup && (
         <>
           <nav className="gm-tabs" aria-label="Games sections">
@@ -128,7 +131,7 @@ export default function GamesApp({ onHome }) {
   );
 }
 
-function Setup({ game, lobby, busy, run, openMatch }) {
+function Setup({ game, lobby, busy, run, openMatch, onPractice }) {
   const [mode, setMode] = useState("friend"), [name, setName] = useState(""), [stake, setStake] = useState(0), [sugg, setSugg] = useState([]), [chosen, setChosen] = useState(false);
   const recent = [...new Set(lobby.history.map((h) => h.opponent))].slice(0, 5);
   useEffect(() => {
@@ -144,6 +147,7 @@ function Setup({ game, lobby, busy, run, openMatch }) {
   return (
     <div className="gm-scroll gm-setup">
       <div className="gm-setup-hero"><GameGlyph id={game.id} /><p>{game.blurb}</p></div>
+      {game.id === "WHOT" && <button type="button" className="gm-btn gm-btn-wide" onClick={onPractice}>Practice against the computer<small>For fun: nothing at stake and nothing saved</small></button>}
       <div className="gm-seg" role="tablist" aria-label="Who to play">
         <button type="button" role="tab" aria-selected={mode === "friend"} data-on={mode === "friend" ? "1" : undefined} onClick={() => setMode("friend")}>Challenge a friend</button>
         <button type="button" role="tab" aria-selected={mode === "random"} data-on={mode === "random" ? "1" : undefined} onClick={() => setMode("random")}>Random opponent</button>
