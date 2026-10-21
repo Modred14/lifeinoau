@@ -20,7 +20,7 @@ const needsCourse = (k) => k === "course_attend" || k === "course_study" || k ==
 
 /** `api` is a ref to the 3D scene, `rings` the activity rings drawn in it, `open` the ring whose panel is showing, `onClose` closes it, `onLeave` leaves the building. */
 export default function ActivityLayer({ api, rings, open, onClose, onLeave, ready }) {
-  const [st, setSt] = useState(null), [run, setRun] = useState(null), [busy, setBusy] = useState(false), [course, setCourse] = useState(""), [tick, setTick] = useState(() => serverTime()), [done, setDone] = useState(null), [fold, setFold] = useState(true); // the panel opens folded; the person unfolds it
+  const [st, setSt] = useState(null), [run, setRun] = useState(null), [busy, setBusy] = useState(false), [course, setCourse] = useState(""), [tick, setTick] = useState(() => serverTime()), [done, setDone] = useState(null), [fold, setFold] = useState(false); // the panel opens expanded; the person can fold it with the arrow. (was: opens folded; the person unfolds it
   const runRef = useRef(null), finishing = useRef(false), e0 = useRef(0); // e0: energy when the run began (for the rising bar while sleeping)
   const pos = () => { const s = api.current?.state; return s ? { x: s.x, z: s.z, floor: s.floor } : null; };
   const ring = (id) => rings.find((r) => r.activity === id);
@@ -70,7 +70,7 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
 
   useEffect(() => () => { if (runRef.current) fetch("/api/activity", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "cancel" }) }).catch(() => {}); }, []); // leaving the building ends a running activity
 
-  useEffect(() => { setFold(true); }, [open?.activity]); // each ring's panel starts folded
+  useEffect(() => { setFold(false); }, [open?.activity]); // each ring's panel starts expanded
   const info = open ? st?.hubs?.find((h) => h.id === open.activity) : null;
   const begin = async (param) => {
     if (!info || busy || run) return; const p = pos(); if (!p) return;
