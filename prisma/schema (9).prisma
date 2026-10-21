@@ -1,0 +1,1130 @@
+// prisma/schema.prisma
+// OAU Life - Phase 1 schema. All money is BigInt KOBO (1 naira = 100 kobo).
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Gender {
+  M
+  F
+}
+
+enum Class {
+  NEPO
+  MAPO
+  LAPO
+}
+
+enum AccountKind {
+  PLAYER
+  SYSTEM
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  isAdult      Boolean // 18+ checkbox, stored at signup
+  adultAckAt   DateTime   @default(now())
+  role         String     @default("PLAYER") // PLAYER | ADMIN
+  createdAt    DateTime   @default(now())
+  character    Character?
+}
+
+model Faculty {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  difficulty  Decimal      @default(1.00) @db.Decimal(3, 2)
+  verified    Boolean      @default(false) // flip to true once checked against oauife.edu.ng
+  departments Department[]
+  characters  Character[]
+}
+
+model Department {
+  id        Int     @id @default(autoincrement())
+  facultyId Int
+  name      String
+  faculty   Faculty @relation(fields: [facultyId], references: [id])
+
+  @@unique([facultyId, name])
+}
+
+model Character {
+  id                 String         @id @default(cuid())
+  userId             String         @unique
+  name               String         @unique
+  gender             Gender
+  class              Class // assigned server-side with crypto RNG, never from the client
+  personalities      String[]
+  facultyId          Int
+  level              Int            @default(100)
+  hostel             String         @default("") // empty until chosen after the class reveal; changed later from the Housing app on the phone
+  rentPaidUntilWeek  Int            @default(0) // last game week whose rent was paid up front when moving home (0 = none); tick.js skips rent up to it
+  transport          String         @default("Trek")
+  placeId            String         @default("") // where the player is on the map ("" = at home, see lib/travel.js); other players see them there while placeAt is recent
+  placeAt            DateTime? // last time they were seen at placeId (the map pings it every minute)
+  driverName         String         @default("") // the driver hired from the Hire app on the phone
+  driverUntilWeek    Int            @default(0) // last game week the driver is paid for (0 = none)
+  activeCar          String         @default("") // the YK Autos car the player drives on the map (a lib/cars.js id); "" = none chosen (a Nepo's family car, or no car)
+  activeCarColor     String         @default("") // its paint
+  ownedCars          OwnedCar[]
+  tripX              Float? // while on a trip: where the player is on the road (map metres), so other players can see them pass
+  tripZ              Float?
+  tripH              Float? // heading, radians
+  tripMode           String         @default("")
+  tripAt             DateTime? // last position ping; the player counts as on the road for a few seconds after
+  // 0-100 stats, clamped in the engine
+  health             Int            @default(80)
+  energy             Int            @default(90)
+  happiness          Int            @default(60)
+  academics          Int            @default(40)
+  popularity         Int            @default(10)
+  suspicion          Int            @default(0)
+  luck               Int
+  riskTolerance      Int
+  lastTickWeek       Int            @default(0) // last game week fully simulated for this player
+  missedCallStreak   Int            @default(0)
+  lastParentCallWeek Int            @default(0)
+  jailedUntil        DateTime? // end of the Floor O (N-QRS Custody) sentence; while it is in the future the player is held at placeId "floor0"
+  joinedWeek         Int            @default(1)
+  strikes            Int            @default(0)
+  suspendedUntilWeek Int            @default(0) // LEGACY (week based). No longer read: suspensions are the timestamps below
+  // Academic discipline. Real-time deadlines, enforced on the server: suspension is at most 2 hours, expulsion at most 5 hours.
+  suspendedAt        DateTime?
+  suspendedUntil     DateTime?
+  expelled           Boolean        @default(false)
+  expelledAt         DateTime?
+  expelledUntil      DateTime? // when it ends the player starts again at 100L (lib/discipline.js)
+  restartWeek        Int            @default(0) // game week of the last restart after an expulsion; exam results before it no longer count towards CGPA
+  energyRefilledAt   DateTime? // energy is refilled once per in-game day; this is when it last was
+  sessionStartWeek   Int            @default(1) // game week the current level began; sessions are 12 weeks
+  failedSessions     Int            @default(0) // consecutive failed sessions (2 = academic withdrawal)
+  graduated          Boolean        @default(false)
+  hideFromForbes     Boolean        @default(false) // left off the FORBES OAU board (set from the database by the owner; there is no screen for it)
+  graduatedWeek      Int?
+  finalCgpaX100      Int?
+  classification     String?
+  dependents         Int            @default(0) // kept pregnancies: childcare is charged weekly
+  campusLook         String?
+  look               Json? // appearance choices, validated by lib/look.js
+  jobKey             String?
+  jobXp              Int            @default(0)
+  sleepingSince      DateTime? // set while the player is asleep in their bed; wake-up energy is computed from this on the server
+  arrivedAt          DateTime? // when the player last arrived at placeId (travel sets it): the earliest they can arrive anywhere else follows from the distance
+  sleepingBed        String? // the RoomItem id of the bed the player is lying in (set with sleepingSince)
+  jobShifts          JobShift[]
+  hustleRuns         HustleRun[]
+  classTests         ClassTest[]
+  businesses         Business[]
+  // Where the player last said they stand INSIDE a building (see lib/activityService.js). Position is checked on the server: the place must be
+  // the one they travelled to, each step must be walkable in the time that passed, and an activity needs them beside its ring.
+  inPlace            String         @default("")
+  inX                Float?
+  inZ                Float?
+  inFloor            Int            @default(0)
+  inAt               DateTime?
+  createdAt          DateTime       @default(now())
+  user               User           @relation(fields: [userId], references: [id])
+  faculty            Faculty        @relation(fields: [facultyId], references: [id])
+  account            Account?
+  notifications      Notification[]
+
+  @@index([facultyId])
+  @@index([placeId, placeAt])
+  @@index([tripAt])
+}
+
+// Cached balance for fast reads. The ledger is the source of truth.
+model Account {
+  id          String        @id @default(cuid())
+  kind        AccountKind
+  systemName  String?       @unique // 'WORLD', 'PARENTS', 'LANDLORDS', 'DSA' ...
+  characterId String?       @unique
+  balance     BigInt        @default(0)
+  character   Character?    @relation(fields: [characterId], references: [id])
+  debits      LedgerEntry[] @relation("debit")
+  credits     LedgerEntry[] @relation("credit")
+  // SYSTEM balances are not cached (derive them from the ledger). Enforced in the first migration (raw SQL):
+  //   CHECK (kind = 'SYSTEM' OR balance >= 0)
+}
+
+model LedgerEntry {
+  id              BigInt   @id @default(autoincrement())
+  idempotencyKey  String   @unique // replaying a request can never double-pay
+  debitAccountId  String // money leaves this account
+  creditAccountId String // money arrives here
+  amount          BigInt // > 0, enforced by CHECK (amount > 0)
+  memo            String
+  gameWeek        Int
+  createdAt       DateTime @default(now())
+  debit           Account  @relation("debit", fields: [debitAccountId], references: [id])
+  credit          Account  @relation("credit", fields: [creditAccountId], references: [id])
+
+  @@index([debitAccountId, createdAt])
+  @@index([creditAccountId, createdAt])
+  @@index([memo, creditAccountId]) // leaderboard: income by memo type
+}
+
+model GameClock {
+  id        Int      @id @default(1)
+  campusEpoch DateTime?
+  campusStartWeek Int?
+  startedAt DateTime // used only when campusEpoch is empty
+  // The clock is strictly 1:1 with real time: the week is campusStartWeek + floor((now - campusEpoch) / 7 days), the day is 24 hours from campusEpoch.
+}
+
+model Notification {
+  id          BigInt    @id @default(autoincrement())
+  characterId String
+  kind        String
+  body        String
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+  character   Character @relation(fields: [characterId], references: [id])
+
+  @@index([characterId, createdAt])
+}
+
+model AuditLog {
+  id        BigInt   @id @default(autoincrement())
+  actorId   String // admin or 'SYSTEM'
+  action    String
+  target    String?
+  detail    Json?
+  createdAt DateTime @default(now())
+}
+
+// One row per processed action request. The unique key makes replays (double-taps, retries) harmless.
+model ActionLog {
+  id          BigInt   @id @default(autoincrement())
+  characterId String
+  requestId   String
+  action      String
+  gameWeek    Int
+  createdAt   DateTime @default(now())
+
+  @@unique([characterId, requestId])
+  @@index([characterId, action, createdAt])
+}
+
+// One use of a building activity (lib/activities.js). It is created when the player starts (the fee is paid then) and finished once its
+// duration has passed with the player still beside the ring. Cooldowns, daily and weekly limits and stat budgets are all counted from these rows.
+model ActivityRun {
+  id          BigInt    @id @default(autoincrement())
+  characterId String
+  requestId   String
+  activityId  String
+  hubId       String
+  placeId     String
+  status      String // RUNNING | DONE | CANCELLED
+  startedAt   DateTime
+  endsAt      DateTime
+  finishedAt  DateTime?
+  gameWeek    Int
+  param       String? // the course code for a class, a study session or a test
+  delta       Json? // the stat changes that were really applied (what the budgets are counted from)
+
+  @@unique([characterId, requestId])
+  @@index([characterId, activityId, startedAt])
+  @@index([characterId, status])
+}
+
+enum JailStatus {
+  JAILED
+  PAID
+  SERVED
+}
+
+model FloorZero {
+  id          BigInt     @id @default(autoincrement())
+  characterId String
+  reason      String
+  startedAt   DateTime   @default(now())
+  releaseAt   DateTime
+  bill        BigInt // kobo, fixed at arrest time so it cannot be gamed by moving money
+  status      JailStatus @default(JAILED)
+  location    String     @default("floor0") // where the sentence is served: the map place id of Floor O (N-QRS Custody)
+
+  @@index([characterId, status])
+}
+
+// A player confronting the lecturer of one of their courses, in that lecturer's lecture room (lib/lectureService.js, lib/lectureResponse.js).
+// OPEN from the moment the player approaches the lecturer until the fight is recorded, then SETTLED with an outcome. When the lecturer was knocked out
+// the row also holds the N-QRS response: when it reached the door and when it is over (server timestamps; every screen derives the sequence from them).
+model LectureEncounter {
+  id             BigInt    @id @default(autoincrement())
+  characterId    String
+  requestId      String // the approach request: repeating it returns the same encounter
+  courseCode     String
+  lecturerKey    String
+  lecturerName   String
+  venueId        String // map place id of the building the lecture room is in
+  roomId         String // the room inside that building
+  npcIndex       Int       @default(0) // which person in the interior plan is the lecturer
+  status         String    @default("OPEN") // OPEN | SETTLED | EXPIRED
+  outcome        String? // LOST | ESCAPED | ARRESTED, once settled
+  startedAt      DateTime  @default(now())
+  expiresAt      DateTime // an encounter not fought by now lapses
+  settledAt      DateTime?
+  qrsArriveAt    DateTime? // N-QRS reaches the door (ESCAPED and ARRESTED only)
+  responseEndsAt DateTime? // the response is over: the lecturer is secured and, when ARRESTED, the player has been taken to Floor O
+  responseState  String? // ACTIVE while the response runs: at most one per lecture room (see the migration), then DONE
+  floorZeroId    BigInt? // the custody record, when ARRESTED
+  result         Json? // what the player is shown afterwards: cash seized, bail, sentence end, strikes
+
+  @@unique([characterId, requestId])
+  @@index([characterId, status])
+  @@index([venueId, roomId, responseState])
+}
+
+model ExamResult {
+  id          BigInt  @id @default(autoincrement())
+  characterId String
+  gameWeek    Int
+  level       Int
+  score       Int
+  gradePoint  Int
+  cheated     Boolean @default(false)
+  caught      Boolean @default(false)
+  missed      Boolean @default(false)
+  detail      Json? // per-course scores for that exam
+
+  @@unique([characterId, gameWeek]) // one result per exam week: no re-sitting
+}
+
+// ---- Messaging. Built to stay small: one Chat row per pair of players, and thin Message rows. ----
+// Chat holds everything that used to be written onto every message: who read what (watermarks, not a flag per message),
+// unread counters and the preview line. "Read" is a single number per side, so reading 50 messages is ONE tiny update
+// instead of 50 row rewrites (Postgres rewrites a whole row on every update, which is what bloats a table).
+// aId is the smaller of the two character ids (compared as plain text), bId the larger.
+model Chat {
+  id        Int      @id @default(autoincrement())
+  aId       String
+  bId       String
+  lastId    BigInt   @default(0) // newest message id (0 = none yet)
+  lastAt    DateTime @default(now())
+  lastBody  String   @default("") // preview line for the inbox, at most 60 characters, so old messages can be pruned freely
+  lastKind  Int      @default(0) @db.SmallInt // 0 text, 1 money
+  lastFromA Boolean  @default(true)
+  aRead     BigInt   @default(0) // newest message id that A has read
+  bRead     BigInt   @default(0)
+  aDel      BigInt   @default(0) // newest message id that reached A's device
+  bDel      BigInt   @default(0)
+  aUnread   Int      @default(0)
+  bUnread   Int      @default(0)
+
+  @@unique([aId, bId])
+  @@index([bId])
+}
+
+// Only the newest messages of each chat are kept (CHAT_KEEP_PER_CHAT, default 150, and CHAT_KEEP_DAYS, default 30), so the table
+// stops growing. kind 1 is a money note: body is "<naira>\n<note>". The primary key doubles as the chat+time index.
+model Message {
+  id        BigInt   @default(autoincrement())
+  chatId    Int
+  fromA     Boolean
+  kind      Int      @default(0) @db.SmallInt
+  body      String
+  createdAt DateTime @default(now())
+
+  @@id([chatId, id])
+}
+
+// When a player last had the game open. Written once when they go offline, never on a timer. "Online" itself lives in the
+// realtime server's memory and costs no storage at all.
+model Presence {
+  characterId String   @id
+  lastSeen    DateTime
+}
+
+model Block {
+  id        BigInt @id @default(autoincrement())
+  blockerId String
+  blockedId String
+
+  @@unique([blockerId, blockedId])
+}
+
+model Report {
+  id         BigInt   @id @default(autoincrement())
+  reporterId String
+  targetId   String
+  reason     String
+  status     String   @default("OPEN") // reviewed in the admin panel
+  evidence   Json? // the last 20 messages between the two players, copied when the report is made so pruning can never erase them
+  createdAt  DateTime @default(now())
+
+  @@index([status, createdAt])
+}
+
+// Fixed-window counters for rate limiting. One row per (key, window); old rows are pruned opportunistically.
+model RateLimit {
+  key         String
+  windowStart DateTime
+  count       Int      @default(0)
+
+  @@id([key, windowStart])
+}
+
+// Attendance counter per venue per game week. Capacity is enforced by one atomic upsert, so the last ticket cannot be sold twice.
+model PartyNight {
+  venue     String
+  gameWeek  Int
+  attendees Int    @default(0)
+
+  @@id([venue, gameWeek])
+}
+
+model PartyTicket {
+  id          BigInt   @id @default(autoincrement())
+  characterId String
+  venue       String
+  gameWeek    Int
+  pricePaid   BigInt
+  createdAt   DateTime @default(now())
+
+  @@unique([characterId, gameWeek]) // one night out per game week
+  @@index([characterId])
+}
+
+enum RelStatus {
+  ACTIVE
+  ENDED
+}
+
+model Relationship {
+  id           BigInt    @id @default(autoincrement())
+  characterId  String
+  npcName      String
+  npcTrait     String
+  stage        String    @default("STRANGER") // STRANGER | FRIEND | TALKING | SNEAKY | DATING
+  affection    Int       @default(0)
+  lastWeek     Int // last game week of contact (affection fades 3/week without contact)
+  lastGiftWeek Int?
+  lastDateWeek Int?
+  startedWeek  Int
+  endedWeek    Int?
+  status       RelStatus @default(ACTIVE)
+  // constraints.sql adds: UNIQUE (characterId) WHERE status = 'ACTIVE'  -> one active relationship per player
+
+  @@index([characterId, status])
+}
+
+// ---- The Love app: real players, not made-up ones. One row per pair of players (lowId < highId), kept after a breakup as kind EX. ----
+model Bond {
+  id          BigInt   @id @default(autoincrement())
+  lowId       String // the two players' ids, the smaller one first, so a pair can only exist once
+  highId      String
+  kind        String   @default("TALKING") // TALKING | BESTIE | SNEAKY | BABE | ENGAGED | EX
+  prevKind    String? // what it was before a breakup (a reconciliation goes back to it)
+  affection   Int      @default(0) // 0-100; fades 3 a week without contact (1 a week when living together)
+  startedWeek Int
+  kindWeek    Int // game week the current kind began ("one week of dating" is counted from here)
+  lastWeek    Int // last game week they did something together
+  dates       Int      @default(0) // dates they have been on together
+  meals       Int      @default(0) // times one bought the other food
+  visits      Int      @default(0) // times one had the other over
+  done        Json     @default("{}") // this week's limits: { date: week, visit: week, "<playerId>:food": week, ... }
+  everBabe    Boolean  @default(false) // reached the dating stage at least once (for the achievement)
+  everEngaged Boolean  @default(false)
+  together    Boolean  @default(false) // living in the same home (valid only while both still live in homeHostel)
+  homeHostel  String?
+  cheatedBy   String? // the player who was caught with a sneaky link and has not been forgiven yet
+  cheatedWeek Int?
+  lastCheater String? // the player who was last caught (kept after forgiving, for the achievement)
+  strikes     Int      @default(0) // times they were caught
+  endedWeek   Int?
+  endedBy     String?
+  createdAt   DateTime @default(now())
+
+  @@unique([lowId, highId])
+  @@index([highId])
+}
+
+// Something one player asks of the other: a date, a visit, a night in, to be babe / sneaky link, a proposal, to move in, to get back together.
+model LoveRequest {
+  id        BigInt    @id @default(autoincrement())
+  bondId    BigInt
+  fromId    String
+  toId      String
+  kind      String // DATE | VISIT | HANG | NIGHT | BABE | SNEAKY | PROPOSE | MOVEIN | RECONCILE
+  variant   String? // night: safe | risky; ring: simple | classic | royal; move in: cover | own
+  gameWeek  Int // the week it was sent; a request not answered within 3 game weeks lapses
+  status    String    @default("PENDING") // PENDING | ACCEPTED | DECLINED | CANCELLED | EXPIRED
+  createdAt DateTime  @default(now())
+  answeredAt DateTime?
+
+  @@index([toId, status])
+  @@index([fromId, status])
+  @@index([bondId])
+}
+
+// What the two of them have done together, newest first (shown as "Memories").
+model BondEvent {
+  id       BigInt   @id @default(autoincrement())
+  bondId   BigInt
+  gameWeek Int
+  body     String
+  createdAt DateTime @default(now())
+
+  @@index([bondId, id])
+}
+
+enum PregStatus {
+  PENDING
+  KEPT
+  ENDED
+  UNRESOLVED
+}
+
+model Pregnancy {
+  id             BigInt     @id @default(autoincrement())
+  characterId    String
+  relationshipId BigInt
+  startedWeek    Int
+  decideBy       Int // game week after which an undecided case settles on its own
+  status         PregStatus @default(PENDING)
+
+  @@index([characterId, status])
+}
+
+model Achievement {
+  characterId String
+  key         String
+  earnedWeek  Int
+
+  @@id([characterId, key]) // earned once, never twice
+}
+
+// Business capital is real money held in the BUSINESS system account, so the ledger always shows what is locked inside businesses.
+model Business {
+  id          BigInt    @id @default(autoincrement())
+  characterId String
+  type        String // key of TYPES in lib/business.js
+  name        String
+  level       Int       @default(1)
+  employees   Int       @default(0)
+  reputation  Int       @default(50)
+  capital     BigInt // kobo; CHECK (capital >= 0) in constraints.sql
+  status      String    @default("ACTIVE") // ACTIVE | CLOSED | BANKRUPT
+  startedWeek Int
+  lastWeek    Int // last game week that was traded: each week is settled exactly once
+  character   Character @relation(fields: [characterId], references: [id])
+
+  @@index([characterId, status])
+  @@index([status, capital])
+}
+
+// One row per (player, product). Units are integer micro-units; valueKobo is a mark-to-market snapshot refreshed each time the player is caught up.
+model Holding {
+  id          BigInt @id @default(autoincrement())
+  characterId String
+  product     String
+  unitsMicro  BigInt
+  costKobo    BigInt // what you paid for the units you still hold
+  valueKobo   BigInt @default(0)
+  lastBuyWeek Int
+
+  @@unique([characterId, product])
+  @@index([characterId])
+}
+
+// Effort in one course during one session: lectures attended and preparation done. A new session starts fresh.
+model CourseProgress {
+  id               BigInt @id @default(autoincrement())
+  characterId      String
+  sessionStartWeek Int
+  code             String
+  attended         Int    @default(0)
+  prep             Int    @default(0)
+  lastAttendWeek   Int?
+  lastStudyWeek    Int?
+
+  @@unique([characterId, sessionStartWeek, code])
+  @@index([characterId, sessionStartWeek])
+}
+
+// One row per piece of furniture a player owns. placed = standing in the room at (x, z) turned rot quarter-turns; otherwise it is in storage.
+// paid is what it cost in kobo (0 for the free starter set, which cannot be sold). Selling returns 60% of paid.
+model RoomItem {
+  id          BigInt   @id @default(autoincrement())
+  characterId String
+  key         String // key of ITEMS in lib/furniture.js
+  placed      Boolean  @default(false)
+  x           Int?
+  z           Int?
+  rot         Int      @default(0)
+  paid        BigInt   @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([characterId])
+}
+
+enum BillboardStatus {
+  PENDING // reserved, waiting for payment; the hold lapses at holdUntil
+  PAID
+}
+
+// One row per poster spot a player has reserved or bought on the map's ten billboards (board 1..10, slot 1..10).
+// REAL money (naira, in kobo), not in-game cash. The payment itself is wired later: until then a reservation is only ever confirmed by
+// confirmBillboardOrder() in lib/billboards.js. Buying a whole board creates ten rows with scope WHOLE; the poster image lives on the rows that have one.
+model BillboardSlot {
+  id         Int             @id @default(autoincrement())
+  board      Int
+  slot       Int
+  ownerId    String
+  orderId    String
+  scope      String          @default("SLOT") // SLOT | WHOLE
+  status     BillboardStatus @default(PENDING)
+  amountKobo BigInt // price of this one spot
+  orderKobo  BigInt // what the whole order costs (the same on every row of the order)
+  caption    String          @default("")
+  image      Bytes?
+  imageMime  String?
+  hidden     Boolean         @default(false) // an admin can switch a poster off without refunding or deleting it
+  holdUntil  DateTime?
+  paidAt     DateTime?
+  payRef     String?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@unique([board, slot])
+  @@index([ownerId])
+  @@index([orderId])
+}
+
+// Bet app, sports: one row per slip. legs is a Json list of { fx, mk, pk, odds (hundredths), home, away, leagueName, ko }. Money is real in-game cash held by the CASINO system account.
+model BetSlip {
+  id          BigInt    @id @default(autoincrement())
+  characterId String
+  stakeKobo   BigInt
+  oddsText    String // total odds, for display ("12.45")
+  potentialKobo BigInt // what a win pays, fixed at placing time
+  legs        Json
+  status      String    @default("OPEN") // OPEN | WON | LOST
+  payoutKobo  BigInt    @default(0)
+  createdAt   DateTime  @default(now())
+  settledAt   DateTime?
+
+  @@index([characterId, status])
+  @@index([characterId, createdAt])
+}
+
+// Bet app, casino: one row per Aviator flight or roulette spin.
+// Aviator: crashCenti is the secret multiplier (hundredths) the plane flies away at; it is never sent to the player until the flight is over.
+model CasinoRound {
+  id          BigInt    @id @default(autoincrement())
+  characterId String
+  game        String // AVIATOR | ROULETTE
+  stakeKobo   BigInt
+  status      String    @default("FLYING") // FLYING | WON | LOST (roulette is settled at once)
+  crashCenti  Int       @default(0)
+  autoCenti   Int? // the player's auto cash-out, settled by the server even if they close the app
+  cashCenti   Int? // multiplier the player got out at
+  payoutKobo  BigInt    @default(0)
+  data        Json? // roulette: { n } the number that came up
+  startedAt   DateTime  @default(now())
+  settledAt   DateTime?
+
+  @@index([characterId, game, startedAt])
+  @@index([characterId, status])
+}
+
+model CampusLink {
+  userId String @id
+  characterId String @unique
+  profileId String @unique @db.Char(64)
+  createdAt DateTime @default(now())
+}
+
+model CampusAssessment {
+  id BigInt @id @default(autoincrement())
+  characterId String
+  key String
+  gameWeek Int
+  score Int
+  createdAt DateTime @default(now())
+  @@unique([characterId, key])
+}
+
+// One row per clocked-in job shift (see lib/jobs.js). Partial unique indexes in the migration keep it to one active shift
+// and one shift per in-game day.
+model JobShift {
+  id          BigInt    @id @default(autoincrement())
+  characterId String
+  jobKey      String
+  shiftKey    String
+  gameDay     Int
+  gameWeek    Int
+  startedAt   DateTime
+  endsAt      DateTime
+  energyCost  Int
+  payKobo     BigInt
+  status      String    @default("ACTIVE")
+  claimedAt   DateTime?
+  requestId   String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, gameDay])
+  @@unique([characterId, requestId])
+  @@index([characterId, gameWeek])
+}
+
+// A timed on-site hustle (lib/hustleSites.js). One active run at a time (partial unique index in the migration).
+model HustleRun {
+  id          BigInt    @id @default(autoincrement())
+  characterId String
+  kind        String
+  placeId     String
+  startedAt   DateTime
+  endsAt      DateTime
+  energyCost  Int
+  caught      Boolean   @default(false)
+  payKobo     BigInt    @default(0)
+  status      String    @default("ACTIVE")
+  finishedAt  DateTime?
+  requestId   String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, requestId])
+}
+
+// A surprise test waiting at the student's faculty. Missing the week marks it MISSED (see lib/tick.js).
+model ClassTest {
+  id               BigInt    @id @default(autoincrement())
+  characterId      String
+  sessionStartWeek Int
+  gameWeek         Int
+  code             String
+  status           String    @default("PENDING")
+  score            Int?
+  takenAt          DateTime?
+  character        Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, gameWeek])
+}
+
+// A car bought at YK Autos on the Ride app (lib/cars.js has the showroom). One row per car model per player: the unique key is also what stops
+// a double purchase, however many requests arrive at once. pricePaid is kobo, as charged.
+model OwnedCar {
+  id          BigInt    @id @default(autoincrement())
+  characterId String
+  modelId     String
+  color       String    @default("")
+  pricePaid   BigInt
+  createdAt   DateTime  @default(now())
+  character   Character @relation(fields: [characterId], references: [id])
+
+  @@unique([characterId, modelId])
+  @@index([characterId])
+}
+
+
+// ---- Nightclub spending (lib/clubs.js has the price list, lib/clubService.js the rules). Money still moves ONLY through the ledger: every
+// completed ClubTransaction has a matching LedgerEntry (idempotencyKey club:<characterId>:<requestId>); this table is what the Spending History reads.
+model ClubTransaction {
+  id            BigInt   @id @default(autoincrement())
+  characterId   String // the purchaser: the only person who can ever read this row
+  clubId        String // club_0203 | club_divas | club_quantum
+  kind          String // SPRAY | DRINK | GIFT_DRINK | PACKAGE | BUYOUT | EXPERIENCE
+  itemId        String // the drink, package, buyout tier or experience id ("spray" for money spraying)
+  itemName      String
+  amount        BigInt // kobo; CHECK between N10,000 and N10,000,000 (migration)
+  status        String   @default("COMPLETED") // only COMPLETED rows are written, in the same database transaction as the ledger entry; failures write nothing
+  recipientId   String? // GIFT_DRINK: who the drink was for (never charged)
+  recipientName String?
+  requestId     String
+  gameWeek      Int
+  delta         Json? // the mood/popularity actually applied (what the daily and weekly caps are counted from)
+  createdAt     DateTime @default(now())
+
+  @@unique([characterId, requestId]) // a repeated request can never be charged twice
+  @@index([characterId, createdAt])
+  @@index([characterId, clubId])
+  @@index([characterId, kind])
+}
+
+// What happens on the floor, so the other players in the club see it (they ask every few seconds). SHOW rows are one-off effects that live a few
+// seconds; TABLE and MOOD rows last as long as the table or the lights, so someone who walks in or reconnects sees the club as it is NOW.
+model ClubEvent {
+  id         BigInt   @id @default(autoincrement())
+  clubId     String
+  kind       String // SHOW | TABLE | MOOD
+  fx         String // spray | bottle | confetti | spotlight | banner | table | mood
+  level      Int // 1..5, how big the show is
+  actorId    String
+  actorName  String
+  targetName String? // a drink bought for someone
+  title      String // the announcement text
+  data       Json? // amount, drink id, table kind, mood, and so on
+  x          Float? // where it happened (the purchaser's spot)
+  z          Float?
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([clubId, id])
+  @@index([clubId, expiresAt])
+}
+
+// A club buyout. Only one can be running per club: the service takes a per-club lock and checks endsAt before it charges.
+model ClubBuyout {
+  id          BigInt   @id @default(autoincrement())
+  clubId      String
+  characterId String
+  hostName    String
+  tierId      String
+  amount      BigInt
+  startsAt    DateTime
+  endsAt      DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([clubId, endsAt])
+}
+
+// VIP privileges at one club until `until` (a package, the lounge, a table, a buyout). Buying again extends it.
+model ClubVip {
+  id          BigInt   @id @default(autoincrement())
+  characterId String
+  clubId      String
+  source      String
+  until       DateTime
+  createdAt   DateTime @default(now())
+
+  @@unique([characterId, clubId])
+  @@index([clubId, until])
+}
+
+// =====================================================================================================================================
+// SUG elections and student government (lib/sugRules.js has the rules, lib/sugService.js, lib/governmentService.js and
+// lib/assemblyService.js the behaviour). Character ids are plain strings here (like Chat and Achievement): eligibility is always
+// decided on the server. Times are real timestamps; the stage of a cycle is derived from them (see stageOf in lib/sugRules.js).
+// Integrity that must hold even if application code is wrong lives in the migration: partial unique indexes, CHECKs, and triggers that make
+// ballots, results and legislative votes append-only and refuse ballots / nominations outside their windows.
+// =====================================================================================================================================
+
+// One election cycle: the whole timetable, set when the cycle is created. A new cycle is created by the system (or an admin) when the last
+// one is over, so future elections need no manual database work. Only one cycle may be live at a time (partial unique index in the migration).
+model SugCycle {
+  id                  Int         @id @default(autoincrement())
+  number              Int         @unique // 1, 2, 3 ...: "SUG Election 3"
+  title               String
+  status              String      @default("LIVE") // LIVE (the election is running) | DECIDED (results final) | CANCELLED. The term that follows is tracked by SugTerm
+  stage               String      @default("ANNOUNCED") // ANNOUNCED | REGISTRATION | CAMPAIGN | VOTING | RUNOFF | RESULTS | FORMATION | ACTIVE | COMPLETED | CANCELLED (kept in step lazily)
+  announcedAt         DateTime
+  registrationOpensAt DateTime
+  campaignStartsAt    DateTime // registration closes here
+  votingStartsAt      DateTime // campaign closes here
+  votingEndsAt        DateTime
+  runoffStartsAt      DateTime? // set only if a tie needs a runoff
+  runoffEndsAt        DateTime?
+  termStartsAt        DateTime
+  termEndsAt          DateTime
+  nominationFeeKobo   BigInt
+  spendCapExecKobo    BigInt // most one executive candidate may spend on the campaign
+  spendCapAssemblyKobo BigInt // the same for assembly candidates
+  resultsAt           DateTime? // set ONCE when the results are final: after that the results are locked (trigger)
+  createdBy           String // admin user id or 'SYSTEM'
+  createdAt           DateTime    @default(now())
+  races               SugRace[]
+  term                SugTerm?
+
+  @@index([status, stage])
+}
+
+// One race per position per cycle (12 of them: nine executive posts, Speaker, Deputy Speaker and the 30-seat Honourable Member race).
+model SugRace {
+  id          Int            @id @default(autoincrement())
+  cycleId     Int
+  position    String
+  seats       Int // 1, or 30 for HONOURABLE_MEMBER (CHECK in the migration)
+  status      String         @default("OPEN") // OPEN | RUNOFF | CLOSED
+  validVotes  Int            @default(0) // round one ballots for candidates still standing, set when the race is tallied
+  seatsFilled Int            @default(0)
+  tieNote     String? // how a tie was settled: RUNOFF, RUNOFF_THEN_REGISTRATION_ORDER
+  cycle       SugCycle       @relation(fields: [cycleId], references: [id])
+  candidates  SugCandidate[]
+  ballots     SugBallot[]
+  results     SugResult[]
+
+  @@unique([cycleId, position])
+}
+
+// A player's candidacy. ONE position per player per cycle (unique key): the same rule for registering, campaigning, voting and results.
+model SugCandidate {
+  id           Int             @id @default(autoincrement())
+  cycleId      Int
+  raceId       Int
+  characterId  String
+  position     String
+  slogan       String
+  intro        String
+  manifesto    String
+  promises     Json // up to five short promises
+  status       String          @default("ACTIVE") // ACTIVE | WITHDRAWN | DISQUALIFIED | WON | LOST
+  statusNote   String?
+  feeKobo      BigInt
+  registeredAt DateTime        @default(now())
+  race         SugRace         @relation(fields: [raceId], references: [id])
+  ballots      SugBallot[]
+  results      SugResult[]
+  events       SugCampaignEvent[]
+  expenses     SugExpense[]
+  supporters   SugSupport[]
+
+  @@unique([cycleId, characterId])
+  @@index([raceId, status])
+}
+
+// A ballot. Append-only (trigger): it can never be changed or removed. One per voter per race per round (unique key).
+// Nothing in the API ever returns who a voter chose.
+model SugBallot {
+  id          BigInt       @id @default(autoincrement())
+  cycleId     Int
+  raceId      Int
+  round       Int          @default(1) // 1 = the election, 2 = the runoff for a tie
+  voterId     String
+  candidateId Int
+  castAt      DateTime     @default(now())
+  race        SugRace      @relation(fields: [raceId], references: [id])
+  candidate   SugCandidate @relation(fields: [candidateId], references: [id])
+
+  @@unique([raceId, round, voterId])
+  @@index([raceId, round, candidateId])
+}
+
+// The final result of one candidate in one race. Written once, when the race is settled (append-only, and refused after the cycle's results are locked).
+model SugResult {
+  id          BigInt       @id @default(autoincrement())
+  cycleId     Int
+  raceId      Int
+  candidateId Int
+  votes       Int // round one votes
+  runoffVotes Int? // round two votes, for the candidates who were tied
+  percentBp   Int // share of valid round-one votes, in basis points (2550 = 25.50%)
+  rank        Int
+  outcome     String // WON | LOST
+  seat        Int? // the seat number won (1 for single-seat posts)
+  tieBreak    String? // RUNOFF | REGISTRATION_ORDER when a tie decided this candidate's place
+  race        SugRace      @relation(fields: [raceId], references: [id])
+  candidate   SugCandidate @relation(fields: [candidateId], references: [id])
+
+  @@unique([raceId, candidateId])
+  @@index([cycleId])
+}
+
+// Something a candidate did to win support: a speech, a rally, meeting students, a message, posters, publicity, a debate.
+model SugCampaignEvent {
+  id          BigInt       @id @default(autoincrement())
+  cycleId     Int
+  candidateId Int
+  kind        String // SPEECH | RALLY | MEET | MESSAGE | POSTER | PUBLICITY | DEBATE
+  venue       String? // map place id, for the ones held somewhere
+  title       String
+  body        String       @default("")
+  costKobo    BigInt       @default(0)
+  opponentId  Int? // a debate: the other candidate (same race)
+  startsAt    DateTime
+  endsAt      DateTime
+  status      String       @default("LIVE") // LIVE | SUCCESS | FAILED
+  settledAt   DateTime?
+  attendees   Int          @default(0) // real players (other than the host) who came
+  freshAudience Int        @default(0) // of those, players this candidate had not reached before (only these earn audience points)
+  momentum    Int          @default(0) // what it earned, set when settled
+  note        String? // why it worked or did not
+  requestId   String
+  createdAt   DateTime     @default(now())
+  candidate   SugCandidate @relation(fields: [candidateId], references: [id])
+  attendance  SugEventAttendance[]
+
+  @@unique([candidateId, requestId])
+  @@index([cycleId, status, endsAt])
+  @@index([candidateId, createdAt])
+}
+
+model SugEventAttendance {
+  id          BigInt           @id @default(autoincrement())
+  eventId     BigInt
+  characterId String
+  pledged     Boolean          @default(false) // the visitor said they back the candidate
+  createdAt   DateTime         @default(now())
+  event       SugCampaignEvent @relation(fields: [eventId], references: [id])
+
+  @@unique([eventId, characterId])
+  @@index([characterId])
+}
+
+// A distinct player who has been reached by a candidate (came to an event or pledged). Counted once per candidate, so repeating events cannot farm it.
+model SugSupport {
+  candidateId Int
+  supporterId String
+  pledged     Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  candidate   SugCandidate @relation(fields: [candidateId], references: [id])
+
+  @@id([candidateId, supporterId])
+}
+
+// Money a candidate spent on the campaign. The money itself moves through the ledger (ledgerKey is that entry's idempotency key).
+model SugExpense {
+  id          BigInt       @id @default(autoincrement())
+  cycleId     Int
+  candidateId Int
+  eventId     BigInt?
+  kind        String
+  amountKobo  BigInt
+  ledgerKey   String       @unique
+  requestId   String
+  createdAt   DateTime     @default(now())
+  candidate   SugCandidate @relation(fields: [candidateId], references: [id])
+
+  @@unique([candidateId, requestId])
+  @@index([cycleId, candidateId])
+}
+
+// The government a cycle elects. Its privileges exist only between startsAt and endsAt (checked against the clock on every request).
+model SugTerm {
+  id           Int                @id @default(autoincrement())
+  cycleId      Int                @unique
+  startsAt     DateTime
+  endsAt       DateTime
+  status       String             @default("SCHEDULED") // SCHEDULED | ACTIVE | ENDED (kept in step lazily)
+  createdAt    DateTime           @default(now())
+  cycle        SugCycle           @relation(fields: [cycleId], references: [id])
+  appointments SugAppointment[]
+  announcements SugAnnouncement[]
+  sessions     SugSession[]
+  items        SugItem[]
+}
+
+// Who holds which office this term: elected winners and the appointed Clerk. A political role only: it is never an account permission.
+// Partial unique indexes in the migration: one ACTIVE holder per (term, position, seat), one office per person per term, and seat numbers
+// 1..30 for Honourable Members and exactly 1 for every other post, so the 30-seat limit and one winner per single-seat post hold in the database.
+model SugAppointment {
+  id          Int      @id @default(autoincrement())
+  termId      Int
+  characterId String
+  position    String
+  seat        Int      @default(1)
+  kind        String // ELECTED | APPOINTED
+  status      String   @default("ACTIVE") // ACTIVE | REVOKED
+  appointedBy String? // the Speaker's character id for a Clerk
+  startedAt   DateTime @default(now())
+  endedAt     DateTime?
+  term        SugTerm  @relation(fields: [termId], references: [id])
+
+  @@index([termId, status])
+  @@index([characterId, status])
+}
+
+model SugAnnouncement {
+  id          BigInt   @id @default(autoincrement())
+  termId      Int
+  authorId    String
+  position    String
+  kind        String // EVENT | PARTY | SPORTS | WELFARE | STATEMENT | MEETING | FINANCE | ASSEMBLY
+  title       String
+  body        String
+  createdAt   DateTime @default(now())
+  term        SugTerm  @relation(fields: [termId], references: [id])
+
+  @@index([createdAt])
+  @@index([termId, createdAt])
+}
+
+// A sitting of the Student Representative Assembly. The chair is the Speaker, or the Deputy Speaker when the Speaker hands over or is absent.
+model SugSession {
+  id          Int             @id @default(autoincrement())
+  termId      Int
+  title       String
+  agenda      String          @default("")
+  scheduledAt DateTime
+  status      String          @default("SCHEDULED") // SCHEDULED | OPEN | CLOSED | CANCELLED
+  chairId     String? // who is presiding (set when it opens)
+  createdBy   String // the Clerk
+  openedAt    DateTime?
+  closedAt    DateTime?
+  floorItemId BigInt? // the bill or motion being dealt with
+  floorSpeakerId String? // the member the chair has recognised to speak
+  minutes     String?
+  minutesBy   String?
+  minutesAt   DateTime?
+  createdAt   DateTime        @default(now())
+  term        SugTerm         @relation(fields: [termId], references: [id])
+  attendance  SugAttendance[]
+  items       SugItem[]
+
+  @@index([termId, scheduledAt])
+}
+
+model SugAttendance {
+  id          BigInt     @id @default(autoincrement())
+  sessionId   Int
+  characterId String
+  status      String // PRESENT | ABSENT | EXCUSED
+  source      String // SELF | CLERK
+  markedAt    DateTime   @default(now())
+  session     SugSession @relation(fields: [sessionId], references: [id])
+
+  @@unique([sessionId, characterId])
+}
+
+// A bill or a motion. The Clerk registers it (gives it a number), the chair puts it on a sitting's order paper, members debate it and vote.
+// The outcome is computed by the server from the recorded votes; the Clerk has no way to change it.
+model SugItem {
+  id           BigInt      @id @default(autoincrement())
+  termId       Int
+  sessionId    Int?
+  kind         String // BILL | MOTION
+  serial       String? // BILL-0001 / MOTION-0001, given when the Clerk registers it
+  title        String
+  body         String
+  authorId     String
+  status       String      @default("SUBMITTED") // SUBMITTED | REGISTERED | LISTED | DEBATING | VOTING | PASSED | FAILED | WITHDRAWN
+  registeredBy String?
+  registeredAt DateTime?
+  yes          Int         @default(0)
+  no           Int         @default(0)
+  abstain      Int         @default(0)
+  present      Int?        // members present when the vote closed
+  quorum       Int?
+  outcomeNote  String?
+  votingOpenedAt DateTime?
+  closedAt     DateTime?
+  createdAt    DateTime    @default(now())
+  term         SugTerm     @relation(fields: [termId], references: [id])
+  session      SugSession? @relation(fields: [sessionId], references: [id])
+  debate       SugDebate[]
+  votes        SugLegVote[]
+
+  @@index([termId, status])
+  @@index([sessionId])
+}
+
+model SugDebate {
+  id        BigInt   @id @default(autoincrement())
+  itemId    BigInt
+  speakerId String
+  body      String
+  createdAt DateTime @default(now())
+  item      SugItem  @relation(fields: [itemId], references: [id])
+
+  @@index([itemId, id])
+}
+
+// A member's vote on a bill or motion. Append-only (trigger): one per member per item, never changed.
+model SugLegVote {
+  id      BigInt   @id @default(autoincrement())
+  itemId  BigInt
+  voterId String
+  choice  String // YES | NO | ABSTAIN
+  castAt  DateTime @default(now())
+  item    SugItem  @relation(fields: [itemId], references: [id])
+
+  @@unique([itemId, voterId])
+}
