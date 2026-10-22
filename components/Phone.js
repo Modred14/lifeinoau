@@ -43,7 +43,7 @@ const APPS = {
   housing: { name: "Housing", icon: "home", tone: "sky", C: HousingApp },
   hire: { name: "Hire", icon: "driver", tone: "indigo", C: HireApp },
   ride: { name: "Ride", icon: "ride", tone: "orange", C: RideApp },
-  offishall: { name: "Offishall", icon: "shirt", tone: "fashion", C: OffishallApp }, // clothes shop + wardrobe
+  offishall: { name: "Clothing", icon: "shirt", tone: "fashion", C: OffishallApp }, // clothes shop + wardrobe
   bet: { name: "Bet", icon: "ticket", tone: "bet", own: true, C: BetApp }, // draws its own header and tab bar, like Messages
   games: { name: "Games", icon: "game", tone: "games", own: true, C: GamesApp }, // draws its own header, like Bet and Messages
   sug: { name: "SUG", icon: "hall", tone: "navy", C: SugApp }, // the Students' Union Government: elections, government, Assembly
