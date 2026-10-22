@@ -1,7 +1,7 @@
 // tests/travel.test.mjs
 // Travel rules (fares, ride times, car ownership, driver plans, place ids) and the road network over the real campus map. Pure Node.
 import fs from "node:fs";
-import { MODES, FARE_NAIRA, fareKobo, rideSeconds, ownsCar, driverPlan, DRIVER_PLANS, driverActive, homePlace, placeOf, isPlaceId } from "../lib/travel.js";
+import { MODES, FARE_NAIRA, fareKobo, rideKind, rideSecondsFor, RIDE_SECONDS, ownsCar, driverPlan, DRIVER_PLANS, driverActive, homePlace, placeOf, isPlaceId } from "../lib/travel.js";
 import { placeExists } from "../lib/travelService.js";
 import { buildRoadNet, findPath, drivePlan, destinationOf, isRoad, nearestWalkable } from "../lib3d/roadnet.js";
 import { withExtras } from "../lib3d/mapExtras.js";
@@ -10,8 +10,8 @@ let bad = 0; const chk = (l, c) => { if (!c) bad++; console.log((c ? "OK  " : "F
 chk("fares: trek free, keke 300, bus 200, car 500", FARE_NAIRA.trek === 0 && FARE_NAIRA.keke === 300 && FARE_NAIRA.bus === 200 && FARE_NAIRA.car === 500);
 chk("fares are charged in kobo", fareKobo("keke") === 30000n && fareKobo("car") === 50000n && fareKobo("trek") === 0n && fareKobo("nope") === 0n);
 chk("four modes", MODES.join() === "trek,keke,bus,car");
-chk("ride seconds: keke 8, bus 10, car with driver 5", rideSeconds("keke", false) === 8 && rideSeconds("bus", false) === 10 && rideSeconds("car", true) === 5);
-chk("you steer trek and your own car (no fixed time)", rideSeconds("trek", false) === null && rideSeconds("car", false) === null);
+chk("a ride's length comes from the road distance, inside each vehicle's window: keke 10-15 s, bus 8-10 s, car with a driver 6-9 s", [["keke", rideKind("keke", false)], ["bus", rideKind("bus", false)], ["driver", rideKind("car", true)]].every(([k, kind]) => kind === k && [0, 150, 900, 2400, 6000].every((m) => { const t = rideSecondsFor(kind, m); return t >= RIDE_SECONDS[kind][0] && t <= RIDE_SECONDS[kind][1]; }) && rideSecondsFor(kind, 6000) > rideSecondsFor(kind, 100)));
+chk("you steer trek and your own car (no vehicle ride)", rideKind("trek", false) === null && rideKind("car", false) === null);
 chk("only Nepos own a car", ownsCar({ transport: "Daddy Benz" }) && !ownsCar({ transport: "Keke" }) && !ownsCar(null));
 chk("driver plans", driverPlan(1)?.naira === 10000 && driverPlan(3) === null && DRIVER_PLANS.length === 3);
 chk("driver is active only until the paid week", driverActive({ driverName: "Musa", driverUntilWeek: 5 }, 5) && !driverActive({ driverName: "Musa", driverUntilWeek: 4 }, 5) && !driverActive({ driverUntilWeek: 9 }, 5));

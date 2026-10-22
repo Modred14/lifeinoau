@@ -12,16 +12,24 @@ const TEXT = {
   intro: "Getting ready…", approach: "Walking to your ride", board: "Getting in…", ride: "On the way", paying: "Paying the fare…", alight: "Getting out…", walk: "Walking to the door", door: "Going in…", enter: "Going in…", inside: "Going in…",
 };
 
-/** A thumb stick: drag inside the circle. Writes -1..1 into input.jx / input.jy. */
+/** Stops the browser scrolling, zooming, selecting or opening a menu under a finger that is steering. */
+const NO_GESTURE = { touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none", WebkitTapHighlightColor: "transparent" };
+
+/** A thumb stick: drag inside the circle. Writes -1..1 into input.jx / input.jy. It follows ONE finger (the one that touched it first); other fingers, on it or elsewhere, are ignored. */
 export function Stick({ input }) {
-  const ref = useRef(null), [dot, setDot] = useState([0, 0]);
+  const ref = useRef(null), id = useRef(null), [dot, setDot] = useState([0, 0]);
   const move = (e) => { const r = ref.current.getBoundingClientRect(), R = r.width / 2, dx = e.clientX - (r.left + R), dy = e.clientY - (r.top + R), d = Math.min(R * 0.8, Math.hypot(dx, dy)), a = Math.atan2(dy, dx), x = Math.cos(a) * d, y = Math.sin(a) * d; setDot([x, y]); input.jx = x / (R * 0.8); input.jy = -y / (R * 0.8); };
-  const end = () => { setDot([0, 0]); input.jx = 0; input.jy = 0; };
-  return <div ref={ref} className="th-stick" role="application" aria-label="Walk: drag to move" onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); move(e); }} onPointerMove={(e) => e.buttons && move(e)} onPointerUp={end} onPointerCancel={end}><i style={{ transform: `translate(${dot[0]}px, ${dot[1]}px)` }} /></div>;
+  const end = (e) => { if (e && e.pointerId !== id.current) return; id.current = null; setDot([0, 0]); input.jx = 0; input.jy = 0; };
+  useEffect(() => () => { input.jx = 0; input.jy = 0; }, [input]); // leaving the screen never leaves the stick pushed
+  return <div ref={ref} className="th-stick" style={NO_GESTURE} role="application" aria-label="Walk: drag to move" onContextMenu={(e) => e.preventDefault()}
+    onPointerDown={(e) => { if (id.current != null) return; id.current = e.pointerId; e.currentTarget.setPointerCapture(e.pointerId); move(e); e.preventDefault(); }}
+    onPointerMove={(e) => { if (e.pointerId === id.current) move(e); }} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}><i style={{ transform: `translate(${dot[0]}px, ${dot[1]}px)` }} /></div>;
 }
-/** A button that is "down" while held. */
+/** A button that is "down" while held, by the one finger that pressed it: a second finger on it does not press it again, and lifting that one does not release the first. */
 export function Hold({ className, label, onDown, onUp, children }) {
-  return <button type="button" className={className} aria-label={label} data-sound="none" onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); onDown(); }} onPointerUp={onUp} onPointerCancel={onUp} onLostPointerCapture={onUp} onContextMenu={(e) => e.preventDefault()}>{children}</button>;
+  const id = useRef(null), up = (e) => { if (e.pointerId !== id.current) return; id.current = null; onUp(); };
+  useEffect(() => () => { if (id.current != null) onUp(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return <button type="button" className={className} style={NO_GESTURE} aria-label={label} data-sound="none" onPointerDown={(e) => { if (id.current != null) return; id.current = e.pointerId; e.currentTarget.setPointerCapture(e.pointerId); onDown(); e.preventDefault(); }} onPointerUp={up} onPointerCancel={up} onLostPointerCapture={up} onContextMenu={(e) => e.preventDefault()}>{children}</button>;
 }
 
 export default function TripHud({ trip, placeName, st, input, miniRef, previewRef, onCancel }) {
@@ -29,11 +37,11 @@ export default function TripHud({ trip, placeName, st, input, miniRef, previewRe
   useEffect(() => { if (!preview) return; const k = (e) => e.key === "Escape" && setPreview(false); document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [preview]);
   const m = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + " km" : n + " m");
   const vname = trip.mode === "bus" ? "bus" : trip.mode === "keke" ? "keke" : "car";
-  const line = steering ? `Drive to ${placeName}` : phase === "trek" ? `Walk to ${placeName}` : phase === "approach" ? `${st?.autoWalk ? "Walking" : "Walk"} to the ${vname}` : phase === "ride" ? `${vname[0].toUpperCase() + vname.slice(1)} to ${placeName}` : TEXT[phase] ?? "";
+  const line = st?.settling ? "Confirming your fare…" : steering ? `Drive to ${placeName}` : phase === "trek" ? `Walk to ${placeName}` : phase === "approach" ? `${st?.autoWalk ? "Walking" : "Walk"} to the ${vname}` : phase === "ride" ? `${vname[0].toUpperCase() + vname.slice(1)} to ${placeName}` : TEXT[phase] ?? "";
   // how long is left: the same arithmetic as the estimate on the travel sheet, from where everything is right now
   const eta = st?.eta != null && phase !== "inside" ? fmtDuration(st.eta) : "";
   return (
-    <div className="th" data-phase={phase}>
+    <div className="th" data-phase={phase} style={{ WebkitTouchCallout: "none", userSelect: "none", WebkitUserSelect: "none" }}>
       <button type="button" className="th-cancel ghost" onClick={onCancel} data-sound="none"><Icon name="close" size={16} /> Cancel</button>
       <button type="button" className="th-mini" aria-label="Open the map to see your route" onClick={() => { setPreview(true); playSound("tap"); }}>
         <canvas ref={miniRef} width="320" height="320" />
@@ -63,8 +71,8 @@ export default function TripHud({ trip, placeName, st, input, miniRef, previewRe
             <header><b>{placeName}</b><button type="button" className="ghost" aria-label="Close map" onClick={() => setPreview(false)}><Icon name="close" /></button></header>
             <canvas ref={previewRef} width="900" height="640" />
             <footer>
-              <span className={"th-key " + (trip.mode === "trek" ? "dots" : "solid")} aria-hidden="true" />
-              {trip.mode === "trek" ? "Walking route" : "Driving route"}{st ? ` · ${m(st.remain)} to go` : ""}
+              <span className={"th-key " + ((st?.routeKind ?? (trip.mode === "trek" ? "walk" : "drive")) === "walk" ? "dots" : "solid")} aria-hidden="true" />
+              {(st?.routeKind ?? (trip.mode === "trek" ? "walk" : "drive")) === "walk" ? "Walking route" : "Driving route"}{st ? ` · ${m(st.remain)} to go` : ""}
             </footer>
           </div>
         </div>

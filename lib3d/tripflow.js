@@ -26,7 +26,7 @@ export function createTripFlow(env, o) {
   const { svc, sim } = env, { world, nav, graph } = svc, plan = o.plan, mode = plan.mode, B = plan.B, dims = o.dims ?? null;   // dims: { len, wid } of the model, when it is not the standard size (a purchased car)
   const driven = !!plan.driven, ownCar = mode === "car" && !plan.driven, vehicleTrip = mode !== "trek", kind = plan.kind;
   const walker = new Walker(world, nav, { x: plan.start.x, z: plan.start.z, hx: 0, hz: 1 });
-  const S = { phase: "intro", t: 0, time: 0, eta: plan.secs, notice: null, ended: false, entered: false, doorK: 0, boardK: 0, alightK: 0, speed: 0 };
+  const S = { phase: "intro", t: 0, time: 0, eta: plan.secs, notice: null, ended: false, entered: false, pay: "none", doorK: 0, boardK: 0, alightK: 0, speed: 0 };
   let hero = null, own = null, inProf = null, heroT = 0, spawnAt = 0, spawnTries = 0, waitedForVehicle = 0, boardFrom = null, alightTo = null, lastEta = -1, retargeted = false, approachDoor = null, departed = false, enterFrom = null, alightFrom = null;
   const person = { visible: true, seated: false, seat: null, x: plan.start.x, z: plan.start.z, hx: 0, hz: 1 };
 
@@ -102,9 +102,15 @@ export function createTripFlow(env, o) {
     if (ownCar) { makeOwn(); go("drive"); return; }
     sim.setRoute(hero, plan.route, {}); hero.hold = false; hero.stopAt = null; hero.kinematic = true; heroT = 0; go("ride");   // played over exactly the ride time the plan promised (plan.rideProf)
   }
+  // Arriving: the fare is settled with the server IN THE BACKGROUND. The traveller does not stand still waiting for the answer: they step out and walk to the door at once
+  // (movement is local). The server stays the authority: if it refuses (or the request finally fails) the trip ends as "failed" and the page rolls the player back to where
+  // the server says they are; and the one thing that does wait for the answer is going INTO the building, because what a place lets you do depends on the server's record.
   function arrive() {
-    go("paying"); const after = (ok) => { if (S.ended) return; if (ok === false) end("failed"); else startAlight(); };
-    try { const r = o.onArrive?.() ?? true; if (r && typeof r.then === "function") r.then(after, () => end("failed")); else after(r); } catch { end("failed"); }
+    S.pay = "pending"; go("paying");
+    const settle = (ok) => { if (S.ended) return; if (ok === false) { S.pay = "failed"; end("failed"); } else S.pay = "paid"; };
+    let r; try { r = o.onArrive?.() ?? true; } catch { r = false; }
+    if (r && typeof r.then === "function") { r.then(settle, () => settle(false)); startAlight(); }
+    else { settle(r); if (!S.ended) startAlight(); }
   }
   function startAlight() {
     if (mode === "trek") { startWalk(); return; }
@@ -155,8 +161,8 @@ export function createTripFlow(env, o) {
         if (S.t >= ALIGHT_SECONDS) { person.seated = false; walker.place(alightTo.x, alightTo.z); startWalk(); } break; }
       case "walk": walker.step(dt, walkIn); if (!walker.following && Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z) < 1.2) { walker.vx = walker.vz = 0; go("door"); }
         else if (!walker.following && walker.failed) { notice("The way to the door is blocked."); end("unreachable"); } break;
-      case "door": { const hx = -B.door.nx, hz = -B.door.nz; walker.step(dt, null); walker.hx = hx; walker.hz = hz; S.doorK = Math.min(1, S.t / DOOR_OPEN); if (!B.building) { if (S.t > 0.6) finishEnter(); } else if (S.t > DOOR_OPEN) go("enter"); break; }
-      case "enter": { const k = Math.min(1, S.t / ENTER_SECONDS), d = -B.door.nx, e = -B.door.nz; enterFrom ??= { x: walker.x, z: walker.z }; const ix = B.front.x + d * 3.2, iz = B.front.z + e * 3.2; walker.x = enterFrom.x + (ix - enterFrom.x) * k; walker.z = enterFrom.z + (iz - enterFrom.z) * k; walker.hx = d; walker.hz = e; walker.speed = 2.4; person.visible = k < 0.55; if (k >= 1) finishEnter(); break; }
+      case "door": { const hx = -B.door.nx, hz = -B.door.nz; walker.step(dt, null); walker.hx = hx; walker.hz = hz; S.doorK = Math.min(1, S.t / DOOR_OPEN); if (!B.building) { if (S.t > 0.6 && S.pay !== "pending") finishEnter(); } else if (S.t > DOOR_OPEN && S.pay !== "pending") go("enter"); break; }
+      case "enter": { const k = Math.min(1, S.t / ENTER_SECONDS), d = -B.door.nx, e = -B.door.nz; enterFrom ??= { x: walker.x, z: walker.z }; const ix = B.front.x + d * 3.2, iz = B.front.z + e * 3.2; walker.x = enterFrom.x + (ix - enterFrom.x) * k; walker.z = enterFrom.z + (iz - enterFrom.z) * k; walker.hx = d; walker.hz = e; walker.speed = 2.4; person.visible = k < 0.55; if (k >= 1 && S.pay !== "pending") finishEnter(); break; }
       default: break;
     }
     // the person
@@ -190,5 +196,5 @@ export function createTripFlow(env, o) {
     S.ended = true; sim.removeExternal("player"); sim.removeExternal("own"); world.removeBody("own");
     if (hero) { if (departed) hero.role = "npc"; else sim.remove(hero); }
   }
-  return { update, dispose, state: S, walker, person, plan, kind, get hero() { return hero; }, get own() { return own; }, get vehicle() { return own ?? hero; }, eta: () => S.eta, remainMetres, cancel: () => end("cancelled"), get driving() { return S.phase === "drive"; } };
+  return { update, dispose, state: S, walker, person, plan, kind, get hero() { return hero; }, get approachDoor() { return approachDoor ?? plan.doorIn; }, get own() { return own; }, get vehicle() { return own ?? hero; }, eta: () => S.eta, remainMetres, cancel: () => end("cancelled"), get driving() { return S.phase === "drive"; } };
 }

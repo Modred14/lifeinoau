@@ -7,6 +7,7 @@ import { loadCampusData, placeMeta } from "../lib3d/campusData.js";
 import { Icon } from "./Icon";
 import { playSound } from "@/lib/sound";
 import { call } from "@/lib/client";
+import { createTripSync } from "@/lib/tripSync";
 import { useGame } from "@/lib/gameStore";
 import { lookKey } from "@/lib/look.js";
 
@@ -49,7 +50,7 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
           const down = (e) => { d0 = [e.clientX, e.clientY, performance.now()]; };
           const up = (e) => { if (box.current?.dataset.trip) return; if (!d0 || Math.hypot(e.clientX - d0[0], e.clientY - d0[1]) > 5 || performance.now() - d0[2] > 500) return; const r = el.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, stage.camera); const id = campus.pick(ray); if (id) { hold(); playSound("tap"); cb.current?.(id); } };
           const plane = new stage.THREE.Plane(new stage.THREE.Vector3(0, 1, 0), 0), at = new stage.THREE.Vector3();
-          const zoomIn = (e) => { const r = el.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, stage.camera); if (!ray.ray.intersectPlane(plane, at)) return; const d = stage.camera.position.distanceTo(stage.controls.target); stage.flyTo(at.x, 0, at.z, Math.max(stage.controls.minDistance + 10, d * 0.45), null); }; // double-click or double-tap: glide in on that spot
+          const zoomIn = (e) => { if (box.current?.dataset.trip) return; /* on a trip the trip camera is in charge: a double tap must not send the map camera flying */ const r = el.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, stage.camera); if (!ray.ray.intersectPlane(plane, at)) return; const d = stage.camera.position.distanceTo(stage.controls.target); stage.flyTo(at.x, 0, at.z, Math.max(stage.controls.minDistance + 10, d * 0.45), null); }; // double-click or double-tap: glide in on that spot
           el.addEventListener("pointerdown", down); el.addEventListener("pointerup", up); el.addEventListener("dblclick", zoomIn); off.push(() => { el.removeEventListener("pointerdown", down); el.removeEventListener("pointerup", up); el.removeEventListener("dblclick", zoomIn); }); }
         // labels: HTML buttons that follow each building's roof
         if (pins) {
@@ -82,7 +83,7 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
 
   // ---- a trip: the travel engine takes over the camera until it ends ----
   useEffect(() => {
-    const a = api.current; if (!trip || !a) return; let dead = false, handle = null, timers = [];
+    const a = api.current; if (!trip || !a) return; let dead = false, handle = null, sync = null, unhook = null;
     const end = (why) => { if (dead) return; tripCb.current.onTripEnd?.(why); };
     (async () => {
       try {
@@ -92,13 +93,23 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
           onState: (st) => tripCb.current.onTripState?.(st), onNotice: (m) => tripCb.current.onTripNotice?.(m), onArrive: () => tripCb.current.onTripArrive?.() ?? true, onEnter: () => tripCb.current.onTripEnter?.(), onEnd: end });
         if (dead) { handle?.dispose(); return; } tripRef.current = handle;
         if (!handle) return end("error");
-        // real players on the road: tell the server where we are every two seconds, and ask who else is out there
-        const ping = () => { const p = handle.pos(); call("/api/travel", { action: "trip", x: p.x, z: p.z, h: p.h, mode: trip.mode }); };
-        const road = async () => { const r = await call("/api/travel?road=1"); if (!r.failed && !dead) handle.setTravellers(r.travellers ?? []); };
-        ping(); road(); timers.push(setInterval(ping, 2000), setInterval(road, 2500));
+        // real players on the road, in the BACKGROUND: where we are goes to the server and who else is out there comes back without ever touching how the player moves (that is local and
+        // immediate). lib/tripSync.js sends the latest pose only, never two requests at once, backs off when the connection is slow or down, and sends at once when it comes back.
+        const quick = { timeout: 6000, retries: 0 };
+        sync = createTripSync({
+          getPose: () => { const p = handle.pos(); return { x: p.x, z: p.z, h: p.h, mode: trip.mode }; },
+          send: (p, { signal }) => call("/api/travel", { action: "trip", x: p.x, z: p.z, h: p.h, mode: p.mode }, { ...quick, signal }),
+          fetchRoad: ({ signal }) => call("/api/travel?road=1", undefined, { ...quick, signal }),
+          onTravellers: (list) => { if (!dead) handle?.setTravellers(list); },
+          isOnline: () => typeof navigator === "undefined" || navigator.onLine !== false, isHidden: () => typeof document !== "undefined" && document.hidden,
+        });
+        const wake = () => sync?.nudge(), leave = () => { try { fetch("/api/travel", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "trip" }) }); } catch { /* the server drops a silent traveller after a few seconds anyway */ } };
+        addEventListener("online", wake); document.addEventListener("visibilitychange", wake); addEventListener("pagehide", leave);
+        unhook = () => { removeEventListener("online", wake); document.removeEventListener("visibilitychange", wake); removeEventListener("pagehide", leave); };
+        sync.start();
       } catch (e) { if (e?.reason && e.reason !== "error") { tripCb.current.onTripNotice?.(e.text ?? e.message); end(e.reason); } else { console.error("trip failed", e); end("error"); } }
     })();
-    return () => { dead = true; timers.forEach(clearInterval); handle?.dispose(); tripRef.current = null; if (box.current) delete box.current.dataset.trip; call("/api/travel", { action: "trip" }); const b = api.current; if (b) { const L = b.campus.resolve(trip.to); if (L) b.stage.flyTo(L.x, 0, L.z, 70, 1.0); } };
+    return () => { dead = true; sync?.stop(); unhook?.(); handle?.dispose(); tripRef.current = null; if (box.current) delete box.current.dataset.trip; call("/api/travel", { action: "trip" }); const b = api.current; if (b) { const L = b.campus.resolve(trip.to); if (L) b.stage.flyTo(L.x, 0, L.z, 70, 1.0); } };
   }, [trip?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { const a = api.current; if (a && billboards) a.campus.setBillboards(billboards); }, [billboards, mounts]);

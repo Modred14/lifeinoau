@@ -11,7 +11,7 @@ export function createStage(container, opts = {}) {
   const el = renderer.domElement; el.style.cssText = "display:block;width:100%;height:100%;touch-action:none;outline:none"; container.appendChild(el);
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(opts.fov ?? 40, 1, 0.1, opts.far ?? 600);
   const controls = new OrbitControls(camera, el); controls.enableDamping = true; controls.dampingFactor = 0.08; Object.assign(controls, opts.controls ?? {});
-  const cbs = [], after = []; let fly = null, manual = false; let last = performance.now(), elapsed = 0, raf = 0, visible = true, alive = true; /* own timer: THREE.Clock is deprecated in newer three.js */
+  const cbs = [], after = []; let fly = null, manual = false, ctlWas = true; let last = performance.now(), elapsed = 0, raf = 0, visible = true, alive = true; /* own timer: THREE.Clock is deprecated in newer three.js */
   const resize = () => { const w = container.clientWidth || 1, h = container.clientHeight || 1; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
   const io = new IntersectionObserver(([e]) => { visible = e.isIntersecting; }); io.observe(container);
@@ -30,6 +30,7 @@ export function createStage(container, opts = {}) {
     if (controls.target.distanceTo(fly.to) < 0.15 && Math.abs(sp.radius - fly.dist) < 0.5) fly = null; }
   el.addEventListener("pointerdown", () => { fly = null; }); el.addEventListener("wheel", () => { fly = null; }, { passive: true });
   tick();
-  return { THREE, renderer, scene, camera, controls, onFrame: (f) => { cbs.push(f); return () => { const i = cbs.indexOf(f); if (i >= 0) cbs.splice(i, 1); }; }, setManual: (v) => { manual = !!v; fly = null; if (!v) controls.update(); }, onAfterRender: (f) => after.push(f), nudge, flyTo, resize,
+  return { THREE, renderer, scene, camera, controls, onFrame: (f) => { cbs.push(f); return () => { const i = cbs.indexOf(f); if (i >= 0) cbs.splice(i, 1); }; }, setManual: (v) => { v = !!v; // while a caller drives the camera itself (a trip, a building interior), the orbit controls must not also react to touches and the wheel: they call update() from their own pointer handlers and would fight it
+      if (v && !manual) ctlWas = controls.enabled; if (v) controls.enabled = false; else if (manual) controls.enabled = ctlWas; manual = v; fly = null; if (!v) controls.update(); }, onAfterRender: (f) => after.push(f), nudge, flyTo, resize,
     dispose() { alive = false; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); controls.dispose(); scene.traverse((o) => { o.geometry?.dispose?.(); }); renderer.dispose(); el.remove(); } };
 }

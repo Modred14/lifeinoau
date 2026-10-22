@@ -5,7 +5,8 @@
 //   trek / your own car:               you steer (stick, keys or buttons); a mini map shows the way; your car stays on the road; when you reach the building you go in.
 // What happens is decided by lib3d/tripflow.js (the state machine) on top of lib3d/tripplan.js (the plan and the estimate), lib3d/walker.js (people), lib3d/trafficsim.js
 // (vehicles) and lib3d/collide.js (what is solid). This file draws it: the camera, the avatar, the vehicle models, the guide ribbon, the door, the mini map.
-// The fare is paid the moment the ride stops (o.onArrive), before you get out. Metres everywhere inside; the world group scales them to scene units.
+// The fare is settled with the server in the background the moment the ride stops (o.onArrive); you do not wait for it to step out and walk. Everything you do is local and immediate;
+// what is sent to the server (lib/tripSync.js) never moves you. Metres everywhere inside; the world group scales them to scene units.
 import * as THREE from "three";
 import { S } from "./campusReal.js";
 import { buildRoadNet, isRoad, walkable, Path } from "./roadnet.js";
@@ -19,6 +20,9 @@ import { createPlayerTags, isTaggable } from "./playerTags.js";
 import { createAvatar } from "./avatar/loadAvatar.js";
 import { lookKey } from "../lib/look.js";
 import { paintBase, drawMini, drawPreview } from "./minimap.js";
+import { createGuide } from "./tripguide.js";
+import { CAM, PITCH, clamp, ease, frame, clearBack, followBack, zoomByPinch, zoomByWheel } from "./tripcam.js";
+import { attachTripPointer } from "./tripinput.js";
 
 let netCache = null;
 /** The road net for this campus data, built once (about a tenth of a second). */
@@ -32,16 +36,23 @@ export function resolvePlace(data, id) {
 const angDiff = (a, b) => ((b - a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
 const yawOf = (hx, hz) => Math.atan2(hx, hz);
 
-/** A ribbon of chevrons lying on the road along `path` (width in metres). Returns { mesh, tex, dispose }. */
-function ribbon(path, width, color) {
-  const n = Math.max(2, Math.floor(path.len / 2)), pos = [], uv = [], idx = [], c = document.createElement("canvas"); c.width = 64; c.height = 128; const g = c.getContext("2d");
+/**
+ * A ribbon of chevrons lying on the ground along a route. Made once; `set(pts, s0, width, color)` rebuilds only its shape (from the live route, which starts under the traveller), so a
+ * new route never leaves an old one on screen. `s0` is how far along the whole route the first point is, so the chevrons keep their place as the start moves. Returns { mesh, tex, set, dispose }.
+ */
+function makeRibbon() {
+  const c = document.createElement("canvas"); c.width = 64; c.height = 128; const g = c.getContext("2d");
   g.fillStyle = "rgba(255,255,255,0.28)"; g.fillRect(8, 0, 48, 128); g.fillStyle = "#fff"; g.beginPath(); g.moveTo(10, 100); g.lineTo(32, 56); g.lineTo(54, 100); g.lineTo(54, 118); g.lineTo(32, 76); g.lineTo(10, 118); g.closePath(); g.fill();
-  const tex = new THREE.CanvasTexture(c); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.colorSpace = THREE.SRGBColorSpace; const p = {};
-  for (let i = 0; i <= n; i++) { const s = (path.len * i) / n; path.at(s, p); const rx = -p.hz * width / 2, rz = p.hx * width / 2; pos.push(p.x - rx, 0, p.z - rz, p.x + rx, 0, p.z + rz); uv.push(0, s / (width * 1.6), 1, s / (width * 1.6)); if (i) { const k = (i - 1) * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); } }
-  const g2 = new THREE.BufferGeometry(); g2.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g2.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g2.setIndex(idx);
-  const mesh = new THREE.Mesh(g2, new THREE.MeshBasicMaterial({ map: tex, color, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8 }));
-  mesh.position.y = 0.22; mesh.renderOrder = 5; mesh.frustumCulled = false;
-  return { mesh, tex, dispose() { g2.dispose(); mesh.material.dispose(); tex.dispose(); } };
+  const tex = new THREE.CanvasTexture(c); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.colorSpace = THREE.SRGBColorSpace;
+  const mesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ map: tex, color: "#4aa8ff", transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8 }));
+  mesh.position.y = 0.22; mesh.renderOrder = 5; mesh.frustumCulled = false; mesh.visible = false;
+  const p = {};
+  function set(pts, s0, width, color) {
+    const path = new Path(pts.length > 1 ? pts : [pts[0], [pts[0][0] + 0.1, pts[0][1]]]), n = Math.max(2, Math.floor(path.len / 2)), pos = [], uv = [], idx = [];
+    for (let i = 0; i <= n; i++) { const d = (path.len * i) / n; path.at(d, p); const rx = -p.hz * width / 2, rz = p.hx * width / 2, v = (s0 + d) / (width * 1.6); pos.push(p.x - rx, 0, p.z - rz, p.x + rx, 0, p.z + rz); uv.push(0, v, 1, v); if (i) { const k = (i - 1) * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); } }
+    const old = mesh.geometry, g2 = new THREE.BufferGeometry(); g2.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g2.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g2.setIndex(idx); mesh.geometry = g2; old.dispose(); mesh.material.color.set(color);
+  }
+  return { mesh, tex, set, dispose() { mesh.geometry.dispose(); mesh.material.dispose(); tex.dispose(); } };
 }
 
 /** The door of a building: a frame, a panel that swings open, and a dark doorway behind it. Returns { group, open(k), dispose }. */
@@ -82,11 +93,10 @@ export async function startTrip(env, o) {
   const disposers = []; let alive = true;
 
   // ---- the guide: a ribbon of chevrons on the way to go, and the beam over the destination ----
-  const walkPath = (r) => new Path(r.pts.length > 1 ? r.pts : [r.pts[0], [r.pts[0][0] + 0.1, r.pts[0][1]]]);
-  const guides = { walkIn: plan.walkIn ? walkPath(plan.walkIn) : null, ride: plan.route?.path ?? null, walkOut: plan.walkOut ? walkPath(plan.walkOut) : null, trek: plan.walk ? walkPath(plan.walk) : null };
-  let route = guides.trek ?? guides.walkIn ?? guides.ride, guideKey = null, rb = null;
-  const setGuide = (key) => { if (key === guideKey || !guides[key]) return; guideKey = key; route = guides[key]; if (rb) { world.remove(rb.mesh); rb.dispose(); } const walkingGuide = key !== "ride"; rb = ribbon(route, walkingGuide ? 1.3 : 2.4, walkingGuide ? "#4aa8ff" : "#2fe38a"); world.add(rb.mesh); };
-  setGuide(mode === "trek" ? "trek" : "walkIn"); disposers.push(() => rb?.dispose());
+  // The route is NEVER the one planned when the trip began: lib3d/tripguide.js works it out from where the traveller is now to where they are going, again whenever the leg changes
+  // (on foot -> in the vehicle -> on foot) or they leave the route, and shows only the part still ahead. This block only draws it.
+  const guide = createGuide({ nav: svc.nav, graph: svc.graph, plan }), rb = makeRibbon(); world.add(rb.mesh); disposers.push(() => rb.dispose());
+  let gd = guide.update(0, { phase: "intro", x: plan.start.x, z: plan.start.z }), rbRev = -1, rbAt = -9;
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 70, 16, 1, true), new THREE.MeshBasicMaterial({ color: "#3fd08a", transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); beam.position.set(B.front.x, 35, B.front.z); world.add(beam);
   const ring = new THREE.Mesh(new THREE.RingGeometry(2.2, 2.8, 40), new THREE.MeshBasicMaterial({ color: "#3fd08a", transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.set(B.front.x, 0.25, B.front.z); world.add(ring);
   disposers.push(() => { beam.geometry.dispose(); beam.material.dispose(); ring.geometry.dispose(); ring.material.dispose(); });
@@ -126,15 +136,24 @@ export async function startTrip(env, o) {
   const flow = createTripFlow({ svc, sim: traffic.sim }, { plan, dims: vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width } : null, rnd: Math.random, onArrive: () => o.onArrive?.() ?? true, onEnter: () => o.onEnter?.(), onEnd: (why) => { if (alive) o.onEnd?.(why); }, onNotice: (m) => o.onNotice?.(m) });
   disposers.push(() => flow.dispose());
   const P = flow.person, F = flow.state, WK = flow.walker;
-  let camYaw = Math.atan2(-(plan.start.x - (plan.doorIn?.x ?? plan.goal.x)), -(plan.start.z - (plan.doorIn?.z ?? plan.goal.z))), userYaw = 0, userPitch = 0, userAt = -9, drag = null, time = 0, hornT = 0, lastState = 0, camBack = 3.6;
+  let camYaw = Math.atan2(-(plan.start.x - (plan.doorIn?.x ?? plan.goal.x)), -(plan.start.z - (plan.doorIn?.z ?? plan.goal.z))), userYaw = 0, userPitch = 0, userAt = -9, time = 0, hornT = 0, lastState = 0, camBack = CAM.walk.back, zoomW = 1, zoomV = 1, leadX = 0, leadZ = 0, swipe = 0;
   camPt.x = P.x; camPt.z = P.z; WK.hx = Math.sin(camYaw + Math.PI); WK.hz = Math.cos(camYaw + Math.PI);
 
   // ---- controls: keys (cleared when the window loses focus, so a key never sticks), and dragging the picture to look around ----
   const keys = new Set(), kd = (e) => { if (e.target?.closest?.("input,textarea")) return; keys.add(e.key.toLowerCase()); if (e.key === " " || e.key.startsWith("Arrow")) e.preventDefault(); }, ku = (e) => keys.delete(e.key.toLowerCase()), blur = () => keys.clear();
   window.addEventListener("keydown", kd); window.addEventListener("keyup", ku); window.addEventListener("blur", blur); disposers.push(() => { window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); window.removeEventListener("blur", blur); });
-  const el = stage.renderer.domElement, pd = (e) => { drag = [e.clientX, e.clientY, userYaw, userPitch]; }, pm = (e) => { if (!drag) return; userYaw = drag[2] - (e.clientX - drag[0]) * 0.006; userPitch = Math.max(-0.4, Math.min(0.7, drag[3] + (e.clientY - drag[1]) * 0.004)); userAt = time; }, pu = () => { drag = null; };
-  el.addEventListener("pointerdown", pd); window.addEventListener("pointermove", pm); window.addEventListener("pointerup", pu); window.addEventListener("pointercancel", pu); disposers.push(() => { el.removeEventListener("pointerdown", pd); window.removeEventListener("pointermove", pm); window.removeEventListener("pointerup", pu); window.removeEventListener("pointercancel", pu); });
-  const K = (a, b) => (keys.has(a) || keys.has(b) ? 1 : 0), read = () => ({ fwd: Math.max(K("w", "arrowup"), input.jy > 0 ? input.jy : 0), back: Math.max(K("s", "arrowdown"), input.jy < 0 ? -input.jy : 0), right: Math.max(K("d", "arrowright"), input.jx > 0 ? input.jx : 0) - Math.max(K("a", "arrowleft"), input.jx < 0 ? -input.jx : 0), run: keys.has("shift") || !!input.run, gas: Math.max(K("w", "arrowup"), input.gas ?? 0), brake: Math.max(K("s", "arrowdown") || K(" ", " "), input.brake ?? 0), steer: Math.max(-1, Math.min(1, K("d", "arrowright") - K("a", "arrowleft") + (input.steer ?? 0))) });
+  // Looking round, zooming and (on a touch screen, while driving) swiping to steer all come through lib3d/tripinput.js: every finger is tracked by its own id on the canvas only, so a finger on
+  // the on-screen stick or a button is never also read as a camera drag, a second finger pinches instead of rotating, and the orbit controls are switched off for the whole trip (stage.setManual).
+  const inVehNow = () => !!vehicle && ["ride", "drive", "paying"].includes(F.phase);
+  const el = stage.renderer.domElement, pointer = attachTripPointer(el, {
+    mode: () => (!alive || F.phase === "inside" ? "none" : F.phase === "drive" ? "steer" : "look"),
+    look: (dYaw, dPitch) => { if (inVehNow()) userYaw = clamp(userYaw - dYaw, -1.7, 1.7); else camYaw -= dYaw; userPitch = clamp(userPitch + dPitch, PITCH.min, PITCH.max); userAt = time; },
+    zoom: (scale) => { if (inVehNow()) zoomV = zoomByPinch(zoomV, scale, "veh"); else zoomW = zoomByPinch(zoomW, scale, "walk"); },
+    wheel: (dy) => { if (inVehNow()) zoomV = zoomByWheel(zoomV, dy, "veh"); else zoomW = zoomByWheel(zoomW, dy, "walk"); },
+    steer: (v) => { swipe = v; },
+  });
+  disposers.push(() => pointer.detach());
+  const K = (a, b) => (keys.has(a) || keys.has(b) ? 1 : 0), read = () => ({ fwd: Math.max(K("w", "arrowup"), input.jy > 0 ? input.jy : 0), back: Math.max(K("s", "arrowdown"), input.jy < 0 ? -input.jy : 0), right: Math.max(K("d", "arrowright"), input.jx > 0 ? input.jx : 0) - Math.max(K("a", "arrowleft"), input.jx < 0 ? -input.jx : 0), run: keys.has("shift") || !!input.run, gas: Math.max(K("w", "arrowup"), input.gas ?? 0), brake: Math.max(K("s", "arrowdown") || K(" ", " "), input.brake ?? 0), steer: Math.max(-1, Math.min(1, K("d", "arrowright") - K("a", "arrowleft") + (input.steer ?? 0) + swipe)) });
 
   // ---- drawing what the journey says ----
   let gait = "", lastPhase = "";
@@ -168,41 +187,47 @@ export async function startTrip(env, o) {
 
   // ---- camera: follows the person, or the vehicle while you ride in it; never ends up inside a wall; every smoothing step depends on elapsed time, not on frames ----
   function follow(dt) {
-    const inVeh = !!vehicle && ["ride", "drive", "paying"].includes(F.phase), v = flow.vehicle, t = inVeh && v ? v : P, sp = Math.abs(F.speed ?? 0);
+    const inVeh = inVehNow(), v = flow.vehicle, t = inVeh && v ? v : P, sp = Math.abs(F.speed ?? 0);
     const headYaw = inVeh && v ? yawOf2(v.hx, v.hz) + Math.PI : camYaw; // camera yaw: the direction from the target back to the camera
     if (inVeh) { const d = angDiff(camYaw, headYaw); camYaw += d * (1 - Math.exp(-dt * (F.phase === "ride" ? 5 : 3))); }
-    else if (["alight", "door", "enter", "intro", "board", "approach"].includes(F.phase) && WK.mode !== "manual") { const want = yawOf2(P.hx, P.hz) + Math.PI, d = angDiff(camYaw, want); camYaw += d * (1 - Math.exp(-dt * 1.6)); }
-    if (time - userAt > 2.5) { userYaw *= Math.exp(-dt * 1.6); userPitch *= Math.exp(-dt * 0.9); }
-    const back0 = inVeh ? 8 + Math.min(34, sp * 0.16) : 3.6, height = (inVeh ? 3.8 + Math.min(18, sp * 0.09) : 1.9) + userPitch * back0 * 1.2, yaw = camYaw + userYaw;
+    else if (["alight", "door", "enter", "intro", "board", "approach"].includes(F.phase) && WK.mode !== "manual" && !pointer.active) { const want = yawOf2(P.hx, P.hz) + Math.PI, d = angDiff(camYaw, want); camYaw += d * (1 - Math.exp(-dt * 1.6)); }
+    // in a vehicle, looking round springs back to the road ahead; on foot the view stays exactly where the player put it (it never swings by itself while they steer)
+    if (inVeh && !pointer.active && time - userAt > 1.2) { userYaw *= Math.exp(-dt * 2.2); userPitch *= Math.exp(-dt * 1.4); }
+    if (!inVeh) userYaw = 0;
+    const fr = frame({ inVeh, speed: sp, zoom: inVeh ? zoomV : zoomW, pitch: userPitch }), yaw = camYaw + userYaw, bx = Math.sin(yaw), bz = Math.cos(yaw);
     camPt.x = t.x; camPt.z = t.z;
-    // a wall between the person and the camera pulls the camera in, instantly; it eases back out when the wall is gone
-    let want = back0; const hit = svc.world.raycast(t.x, t.z, t.x + Math.sin(yaw) * back0, t.z + Math.cos(yaw) * back0); if (hit != null) want = Math.max(1.1, hit * back0 - 0.45);
-    camBack = want < camBack ? want : camBack + (want - camBack) * (1 - Math.exp(-dt * 3));
-    const cx = t.x + Math.sin(yaw) * camBack, cz = t.z + Math.cos(yaw) * camBack, k = 1 - Math.exp(-dt * (time < 1.4 ? 3.2 : 12));
-    cam.position.x += (cx * S - cam.position.x) * k; cam.position.z += (cz * S - cam.position.z) * k; cam.position.y += (height * S - cam.position.y) * k;
-    const look = inVeh ? 1.2 : 1.3, ahead = inVeh ? Math.min(10, sp * 0.1) : 0; ctl.target.set((t.x - Math.sin(yaw) * ahead) * S, look * S, (t.z - Math.cos(yaw) * ahead) * S); cam.lookAt(ctl.target);
-    const fov = 42 + Math.min(18, sp * 0.12); if (Math.abs(cam.fov - fov) > 0.2) { cam.fov += (fov - cam.fov) * (1 - Math.exp(-dt * 4)); cam.updateProjectionMatrix(); }
+    // a wall between the person and the camera (centre and either side, so corners too) pulls the camera in at once; it eases back out when the wall is gone
+    camBack = followBack(camBack, clearBack(svc.world, t.x, t.z, bx, bz, fr.back), dt);
+    const hgt = fr.height * (0.7 + 0.3 * Math.min(1, camBack / fr.back)), cx = t.x + bx * camBack, cz = t.z + bz * camBack, k = 1 - Math.exp(-dt * (time < 1.4 ? 3.2 : 12));
+    cam.position.x += (cx * S - cam.position.x) * k; cam.position.z += (cz * S - cam.position.z) * k; cam.position.y += (hgt * S - cam.position.y) * k;
+    // look a little ahead of a walking person, so where they are going stays in view; smoothed so a change of direction never snaps the view
+    const leadWant = !inVeh && WK.speed > 0.3 ? Math.min(CAM.walk.lead, WK.speed * 0.8) : 0; leadX = ease(leadX, P.hx * leadWant, 2.5, dt); leadZ = ease(leadZ, P.hz * leadWant, 2.5, dt);
+    const ahead = inVeh ? Math.min(10, sp * 0.1) : 0; ctl.target.set((t.x + leadX - bx * ahead) * S, fr.aim * S, (t.z + leadZ - bz * ahead) * S); cam.lookAt(ctl.target);
+    if (Math.abs(cam.fov - fr.fov) > 0.2) { cam.fov += (fr.fov - cam.fov) * (1 - Math.exp(-dt * 4)); cam.updateProjectionMatrix(); }
   }
 
   const off = stage.onFrame((tm, dt0) => {
     if (!alive) return; const dt = Math.min(dt0, 0.1); time += dt;
     // what the person is asking for: a direction in the world from the stick / keys and where the camera looks (the same for walking and for steering the car)
-    const inp = read(), f = { x: Math.sin(camYaw + Math.PI), z: Math.cos(camYaw + Math.PI) }, r = { x: -f.z, z: f.x }, ax = (inp.fwd - inp.back) * f.x + inp.right * r.x, az = (inp.fwd - inp.back) * f.z + inp.right * r.z, m = Math.min(1, Math.hypot(ax, az));
+    const inp = read(), viewYaw = camYaw + (inVehNow() ? userYaw : 0), f = { x: Math.sin(viewYaw + Math.PI), z: Math.cos(viewYaw + Math.PI) }, // the stick is relative to the view the player SEES
+       r = { x: -f.z, z: f.x }, ax = (inp.fwd - inp.back) * f.x + inp.right * r.x, az = (inp.fwd - inp.back) * f.z + inp.right * r.z, m = Math.min(1, Math.hypot(ax, az));
     traffic.update(dt);
     flow.update(dt, { dx: ax, dz: az, mag: m, run: inp.run, gas: inp.gas, brake: inp.brake, steer: inp.steer });
-    if (F.phase !== lastPhase) { lastPhase = F.phase; setGuide(["approach", "board"].includes(F.phase) ? "walkIn" : ["ride", "drive"].includes(F.phase) ? "ride" : ["alight", "paying", "walk", "door", "enter"].includes(F.phase) && mode !== "trek" ? "walkOut" : mode === "trek" ? "trek" : "walkIn"); if (F.phase === "walk" && mode === "trek") setGuide("trek"); }
-    if (WK.mode === "manual" && F.phase !== "drive" && m > 0.05 && inp.fwd > 0.3 && time - userAt > 1.5) { const wantY = yawOf2(P.hx, P.hz) + Math.PI; if (Math.abs(angDiff(camYaw, wantY)) < 2.2) camYaw += angDiff(camYaw, wantY) * (1 - Math.exp(-dt * 1.1)); }
+    lastPhase = F.phase;
     drawPerson(dt); drawVehicle(dt); if (door) door.open(F.doorK);
-    rb.tex.offset.y -= dt * 1.6; beam.material.opacity = 0.2 + Math.sin(time * 3) * 0.08; ring.scale.setScalar(1 + Math.sin(time * 3) * 0.08); hornT = Math.max(0, hornT - dt);
+    beam.material.opacity = 0.2 + Math.sin(time * 3) * 0.08; ring.scale.setScalar(1 + Math.sin(time * 3) * 0.08); hornT = Math.max(0, hornT - dt);
     avatar.update?.(time, dt); follow(dt); tags.update();
-    const pos = flow.vehicle && ["ride", "drive", "paying"].includes(F.phase) ? flow.vehicle : P;
-    const live = { x: pos.x, z: pos.z, hx: pos.hx, hz: pos.hz, route, mode: mode === "trek" ? "trek" : "drive", dest: { x: B.front.x, z: B.front.z }, from: { x: A.front.x, z: A.front.z } }, mini = o.miniCanvas?.(), prev = o.previewCanvas?.();
+    // the route, from where the traveller is NOW (the vehicle while riding in it, the person otherwise) to where they are going
+    const pos = inVehNow() && flow.vehicle ? flow.vehicle : P, hero = flow.hero;
+    gd = guide.update(dt, { phase: F.phase, x: pos.x, z: pos.z, goal: flow.approachDoor, ride: hero && ["board", "ride"].includes(F.phase) ? { s: hero.s, path: hero.route?.path } : null });
+    if (gd.show) { rb.mesh.visible = true; if (gd.rev !== rbRev || time - rbAt > (gd.kind === "drive" ? 0.12 : 0.2)) { rbRev = gd.rev; rbAt = time; rb.set(gd.pts, gd.s, gd.kind === "walk" ? 1.3 : 2.4, gd.kind === "walk" ? "#4aa8ff" : "#2fe38a"); } rb.tex.offset.y -= dt * 1.6; } else rb.mesh.visible = false;
+    const live = { x: pos.x, z: pos.z, hx: pos.hx, hz: pos.hz, route: { pts: gd.pts, len: gd.len }, mode: gd.kind === "walk" ? "trek" : "drive", dest: { x: B.front.x, z: B.front.z } }, mini = o.miniCanvas?.(), prev = o.previewCanvas?.();
     if (mini) drawMini(mini, base, live); if (prev) drawPreview(prev, base, live);
-    if (time - lastState > 0.1) { lastState = time; o.onState?.({ phase: F.phase, mode, auto, eta: F.eta, left: F.eta, remain: Math.round(flow.remainMetres()), speed: Math.round(Math.abs(F.speed ?? 0) * 3.6), canHorn: mode === "car" && F.phase === "drive", estimate: plan.secs, notice: F.notice, walking: F.phase === "approach" && WK.mode, autoWalk: WK.mode === "auto", parts: plan.parts }); }
+    if (time - lastState > 0.1) { lastState = time; o.onState?.({ phase: F.phase, mode, auto, eta: F.eta, left: F.eta, remain: Math.round(flow.remainMetres()), speed: Math.round(Math.abs(F.speed ?? 0) * 3.6), canHorn: mode === "car" && F.phase === "drive", estimate: plan.secs, notice: F.notice, routeKind: gd.kind, routeLen: Math.round(gd.len), settling: F.pay === "pending" && ["door", "enter"].includes(F.phase), walking: F.phase === "approach" && WK.mode, autoWalk: WK.mode === "auto", parts: plan.parts }); }
   });
 
   const api = {
-    traffic, plan, setLook, setTravellers: (l) => traffic.setTravellers(l), pos: () => { const p = flow.vehicle && ["ride", "drive", "paying"].includes(F.phase) ? flow.vehicle : P; return { x: p.x, z: p.z, h: Math.atan2(p.hx, p.hz) }; }, route: () => route, cancel: () => flow.cancel(),
+    traffic, plan, setLook, setTravellers: (l) => traffic.setTravellers(l), pos: () => { const p = flow.vehicle && ["ride", "drive", "paying"].includes(F.phase) ? flow.vehicle : P; return { x: p.x, z: p.z, h: Math.atan2(p.hx, p.hz) }; }, route: () => gd, cancel: () => flow.cancel(),
     horn() { if (hornT > 0) return; hornT = 0.4; o.onHorn?.(); },
     dispose() { if (!alive) return; alive = false; off?.(); for (const d of disposers.reverse()) { try { d(); } catch { /* clean up as much as possible */ } } stage.scene.remove(world); stage.setManual(false); campus.setTripMode(false);
       cam.near = saved.near; cam.fov = saved.fov; cam.updateProjectionMatrix(); Object.assign(light.sun.shadow.camera, { left: saved.shadow.l, right: saved.shadow.r, top: saved.shadow.t, bottom: saved.shadow.b }); light.sun.shadow.camera.updateProjectionMatrix(); },
