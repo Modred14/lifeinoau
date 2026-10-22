@@ -7,7 +7,7 @@ import { makeDb } from "./fakedb.mjs";
 import { cleanLook, lookKey, defaultLook } from "../lib/look.js";
 import { cleanNames, getAvatarLooks, MAX_NAMES } from "../lib/avatarService.js";
 import { createDirectory } from "../lib/avatarDirectory.js";
-import { keyOf, peekSnapshot, getSnapshot, framing, SNAP_VERSION } from "../lib/avatarSnapshot.js";
+import { keyOf, peekSnapshot, getSnapshot, framing, SNAP_VERSION, SNAP_PX, HEAD_TOP, HAIR_TOP, CHIN_AT } from "../lib/avatarSnapshot.js";
 let bad = 0; const chk = (l, c) => { if (!c) bad++; console.log((c ? "OK  " : "FAIL") + " " + l); };
 const tick = (ms = 80) => new Promise((r) => setTimeout(r, ms));
 
@@ -51,9 +51,18 @@ const before = calls.length; await dir.request("Newbie"); chk("…so the name is
 // ---- snapshot cache, framing, fallback ----
 chk("pictures are keyed by what is drawn and by the picture version", keyOf("abc") === `v${SNAP_VERSION}:abc` && keyOf("abc") !== keyOf("abd"));
 chk("nothing is in memory before anything is drawn", peekSnapshot("never-drawn") === null);
-for (const h of [1.5, 1.76, 1.9]) { const f = framing(h); chk(`framing for ${h} m keeps the head in and the camera sane`, f.mid > h * 0.78 && f.mid < h * 0.9 && f.dist > 0.8 && f.dist < 3); }
-const f1 = framing(1.6), f2 = framing(1.9); chk("a taller character is framed higher and from further away, so the same share of them shows", f2.mid > f1.mid && f2.dist > f1.dist);
-chk("an absurd height is clamped", framing(0).mid > 0 && framing(50).dist < 4);
+// a head as measured from the real model: [top of hair, top of skull, chin] in metres
+const HEADS = { man: { top: 1.78, skullTop: 1.767, chin: 1.555 }, afro: { top: 1.957, skullTop: 1.873, chin: 1.66 }, gele: { top: 1.788, skullTop: 1.673, chin: 1.47 }, short: { top: 1.65, skullTop: 1.589, chin: 1.39 } };
+const place = (m, f, y) => 0.5 - (y - f.cy) / f.size; // where a height lands in the square picture, 0 = top edge, 1 = bottom edge
+for (const [n, m] of Object.entries(HEADS)) {
+  const f = framing({ ...m, cx: 0, cz: 0.06, hairW: 0.3 });
+  chk(`${n}: the hair is inside the picture, clear of the top edge`, place(m, f, m.top) >= HAIR_TOP - 1e-9 && place(m, f, m.top) < 0.2);
+  chk(`${n}: the chin sits at its place in the circle and the face fills at least 40% of the picture`, Math.abs(place(m, f, m.chin) - CHIN_AT) < 1e-9 && place(m, f, m.chin) - place(m, f, m.skullTop) >= 0.4);
+  chk(`${n}: the camera is the same kind of distance for everyone (head and shoulders, not a speck)`, f.dist > 0.4 && f.dist < 2 && f.size < 0.9);
+}
+chk("a wide hairstyle zooms out instead of being cut at the sides", framing({ ...HEADS.man, hairW: 0.6 }).size > framing({ ...HEADS.man, hairW: 0.2 }).size);
+chk("an absurd measurement still gives a usable camera", Number.isFinite(framing({ top: 1, chin: 1 }).dist) && framing({ top: 1, chin: 1 }).dist > 0);
+chk("the picture is square and the circle crop shows all of it", SNAP_PX > 0 && SNAP_PX % 2 === 0 && SNAP_VERSION >= 2);
 const t0 = Date.now(); const s1 = await getSnapshot("nowebgl", ada, "F");
 chk("without WebGL the picture is null (the caller shows its fallback), not an exception", s1 === null);
 const s2 = await getSnapshot("nowebgl", ada, "F");

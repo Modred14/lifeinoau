@@ -3,8 +3,8 @@
 .pav-disc { position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; border-radius: 50%; color: #fff; font-weight: 700; letter-spacing: 0.02em; line-height: 1;
   background: radial-gradient(circle at 50% 30%, #4a6a9c 0%, #27385a 70%); }
 .pav[data-state="loading"] .pav-disc { background-size: 200% 100%; background-image: linear-gradient(100deg, #27385a 30%, #3a5280 50%, #27385a 70%); animation: pav-shimmer 1.4s linear infinite; }
-.pav[data-state="ready"] .pav-disc { background: radial-gradient(circle at 50% 35%, #5c7db0 0%, #2d4168 75%); }
-.pav-disc img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; display: block; user-select: none; -webkit-user-drag: none; pointer-events: none; }
+.pav[data-state="ready"] .pav-disc { background: #eef0f5; } /* the same plain studio backdrop the picture is drawn on (lib/avatarSnapshot.js SNAP_BG) */
+.pav-disc img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 50%; aspect-ratio: 1 / 1; display: block; user-select: none; -webkit-user-drag: none; pointer-events: none; }
 @keyframes pav-shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .pav[data-state="loading"] .pav-disc { animation: none; } }
 /* places that give the picture its own size through their stylesheet (the home face button fills it) */
