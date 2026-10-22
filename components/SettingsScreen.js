@@ -19,7 +19,7 @@ import { game } from "@/lib/gameStore";
 import { applyPrefs } from "@/lib/prefs";
 import { MUSIC } from "@/lib/sound";
 import { SETTING_DEFAULTS, cleanSettings, sameSettings } from "@/lib/settings";
-import { SKIN_TONES, HAIR, OUTFITS, COLORS, HEIGHTS, adaptLook, cleanLook, lookKey, label } from "@/lib/look";
+import { SKIN_TONES, HAIR, HEIGHTS, adaptLook, cleanLook, lookKey, label } from "@/lib/look";
 import { NAME_RE, NAME_RULE, cleanName, hostelForGender } from "@/lib/profileRules";
 import "./settings-screen.css";
 
@@ -347,7 +347,7 @@ export default function SettingsScreen({ onClose, onLogout, loggingOut }) {
       <div className="sx-char">
         <div className="sx-charview">
           <div className="sx-viewbox" aria-label="Character preview"><CharacterViewer look={lk} gender={g} /></div>
-          <div className="sx-caption"><b>{p.name}</b><span className="mut">{g === "F" ? "Woman" : "Man"}, {label(lk.hair).toLowerCase()} hair, {label(lk.outfit).toLowerCase()} outfit</span>
+          <div className="sx-caption"><b>{p.name}</b><span className="mut">{g === "F" ? "Woman" : "Man"}, {label(lk.hair).toLowerCase()} hair, {lk.wear ? "Offishall" : label(lk.outfit).toLowerCase()} outfit</span>
             {lookDirty && <em>Preview. Not saved yet.</em>}</div>
         </div>
         <div className="sx-charpanel">
@@ -367,9 +367,7 @@ export default function SettingsScreen({ onClose, onLogout, loggingOut }) {
             <Field title="Height" value={HEIGHT_LABEL[lk.height]}><Chips items={HEIGHTS} value={lk.height} onPick={setLookKey("height")} name="Height" text={(k) => HEIGHT_LABEL[k]} /></Field>
           </Card>
           <Card title="Clothes" icon="bag">
-            <Field title="Outfit" value={label(lk.outfit)}><Chips items={OUTFITS} value={lk.outfit} onPick={setLookKey("outfit")} name="Outfit" /></Field>
-            <Field title={g === "F" ? "Top colour" : "Shirt colour"} value={label(lk.top)}><Swatches map={COLORS} value={lk.top} onPick={setLookKey("top")} name="Top colour" /></Field>
-            <Field title={g === "F" ? "Skirt or trouser colour" : "Trouser colour"} value={label(lk.bottom)}><Swatches map={COLORS} value={lk.bottom} onPick={setLookKey("bottom")} name="Bottom colour" /></Field>
+            <p className="sx-note" role="note"><Icon name="shirt" size={14} weight="fill" /> Clothes now come from the Offishall Store on your phone. Everything you buy is kept in your wardrobe, and you can change outfits there whenever you like.</p>
           </Card>
         </div>
         <div className="sx-bar-fixed" data-show={lookDirty || lookSave ? "1" : undefined}>

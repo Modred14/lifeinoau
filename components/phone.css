@@ -54,6 +54,7 @@
 .ph-ico[data-tone="graphite"] { background: linear-gradient(165deg, #8d95a6, #3c4453); }
 .ph-ico[data-tone="navy"] { background: linear-gradient(165deg, #4a6fd0, #1f3a85); }
 .ph-ico[data-tone="indigo"] { background: linear-gradient(165deg, #7f8cff, #4350d8); }
+.ph-ico[data-tone="fashion"] { background: linear-gradient(165deg, #2b2233, #0f0b14); color: #e7b84a; } /* Offishall: black and gold */
 .ph-ico[data-tone="games"] { background: linear-gradient(165deg, #8f7bff, #4a38d8); }
 .ph-ico[data-tone="bet"] { background: #10151c; color: #2fd27a; } /* flat, no gradient: the Bet app is dark inside */
 /* the Ile-Ife skyline at the bottom of the wallpaper */

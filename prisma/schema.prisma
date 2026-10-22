@@ -74,6 +74,7 @@ model Character {
   activeCar          String         @default("") // the YK Autos car the player drives on the map (a lib/cars.js id); "" = none chosen (a Nepo's family car, or no car)
   activeCarColor     String         @default("") // its paint
   ownedCars          OwnedCar[]
+  wardrobe           WardrobeItem[] // clothes bought in the Offishall Store (lib/wardrobe.js); what is worn is Character.look.wear
   tripX              Float? // while on a trip: where the player is on the road (map metres), so other players can see them pass
   tripZ              Float?
   tripH              Float? // heading, radians
@@ -713,6 +714,20 @@ model ClassTest {
 
 // A car bought at YK Autos on the Ride app (lib/cars.js has the showroom). One row per car model per player: the unique key is also what stops
 // a double purchase, however many requests arrive at once. pricePaid is kobo, as charged.
+// ---- Offishall Store: every clothing item a player has bought, kept for good (one row per item, never deleted or replaced by a later purchase).
+// The price paid went through the ledger (idempotencyKey wardrobe:<characterId>:<itemId>), so a row exists exactly when the money moved.
+model WardrobeItem {
+  id          BigInt    @id @default(autoincrement())
+  characterId String
+  itemId      String // an id from lib/wardrobe.js
+  pricePaid   BigInt
+  createdAt   DateTime  @default(now())
+  character   Character @relation(fields: [characterId], references: [id])
+
+  @@unique([characterId, itemId])
+  @@index([characterId])
+}
+
 model OwnedCar {
   id          BigInt    @id @default(autoincrement())
   characterId String

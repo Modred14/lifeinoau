@@ -6,7 +6,7 @@ import { allowed, tooMany } from "@/lib/ratelimit";
 import { currentWeek } from "@/lib/clock";
 import { drawClass, lifestyle } from "@/lib/rng";
 import { PERSONALITIES, allowedHostels, startingTransport } from "@/lib/rules";
-import { cleanLook } from "@/lib/look";
+import { cleanLook, withoutWear } from "@/lib/look";
 export const dynamic = "force-dynamic"; // never cache API responses
 const db = (globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } }));
 const bad = (m, s = 400) => Response.json({ error: m }, { status: s });
@@ -48,7 +48,7 @@ export async function POST(req) {
           facultyId: faculty.id,
           hostel: "",
           transport: startingTransport(cls),
-          look: cleanLook(b.look, b.gender),
+          look: withoutWear(cleanLook(b.look, b.gender)), // the starter outfit is free; store clothes only come from the Offishall Store
           lastTickWeek: week - 1,
           lastParentCallWeek: week,
           joinedWeek: week,

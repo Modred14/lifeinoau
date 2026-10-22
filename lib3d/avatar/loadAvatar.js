@@ -5,6 +5,8 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { SKIN_TONES, COLORS, cleanLook } from "../../lib/look.js";
+import { checkWear, legacyFields, FINISHES } from "../../lib/wardrobe.js";
+import { keepMask, applyFinish } from "./garments.js";
 import { buildCharacter } from "../character.js";
 import {
   BASES,
@@ -133,7 +135,7 @@ function tintSkin(root, hex) {
 /** Clothes are recoloured by material name, whatever outfit is worn: "Top_*" takes the shirt colour, "Bottom_*" the trouser/skirt colour, and "TopDark_*" / "BottomDark_*"
  *  a slightly darker shade of the same (cuffs, a shirt under a vest). Trim, shoes, stripes, ties and hair keep their own colour. Materials are cloned because the loaded model is cached. */
 const SHADE = { "": 1, dark: 0.72, light: 1.18 };
-function tintOutfit(meshes, topHex, bottomHex, darkTopHex = null) {
+function tintOutfit(meshes, topHex, bottomHex, darkTopHex = null, finish = null) {
   for (const o of meshes) {
     const list = Array.isArray(o.material) ? o.material : [o.material];
     const out = list.map((m) => {
@@ -144,6 +146,7 @@ function tintOutfit(meshes, topHex, bottomHex, darkTopHex = null) {
       c.color.set(k[1].toLowerCase() === "top" ? topHex : bottomHex);
       if (darkTopHex && k[1].toLowerCase() === "top" && /^dark$/i.test(k[2] ?? "")) c.color.set(darkTopHex); // NPC uniforms: a shirt of its own colour under the vest
       else c.color.multiplyScalar(SHADE[(k[2] ?? "").toLowerCase()] ?? 1);
+      if (finish) applyFinish(c, finish[k[1].toLowerCase()], FINISHES); // store clothes: wool, denim, satin, silk or leather
       return c;
     });
     o.material = Array.isArray(o.material) ? out : out[0];
@@ -188,6 +191,16 @@ export function attachSkinnedPart(base, partScene) {
   return added.map(([m]) => m);
 }
 
+/** Keeps only the garments of an outfit model that a look wants ({ top, bottom }: shoes follow the bottom). Dropped meshes are taken off the character again.
+ *  The model itself is shared and cached, so nothing is disposed. Returns the meshes that stay. With no `want` every mesh stays (the whole starter outfit). */
+export function keepGarments(meshes, want) {
+  if (!want || !meshes.length) return meshes;
+  const cy = (m) => { m.geometry.computeBoundingBox?.(); const b = m.geometry.boundingBox; return b ? (b.min.y + b.max.y) / 2 : 0; };
+  const mat = (m) => (Array.isArray(m.material) ? m.material[0] : m.material)?.name;
+  const mask = keepMask(meshes.map((m) => ({ material: mat(m), cy: cy(m) })), want);
+  return meshes.filter((m, i) => { if (!mask[i]) m.removeFromParent(); return mask[i]; });
+}
+
 /** Parents a plain (non-skinned) accessory to a bone, e.g. a watch to the left hand. */
 export function attachToBone(base, object, boneName) {
   let bone = null;
@@ -215,9 +228,14 @@ async function resolveUrl(url, lod) {
  */
 async function loadModel(look, gender, opt = {}) {
   // Everything the look needs is asked for at once (a phone on a slow connection used to wait for each file in turn).
+  // Store clothes (look.wear): the top and bottom come from the garment meshes of the models they were authored in. No wear = the whole starter outfit model.
+  const fit = checkWear(look.wear, gender), fitted = fit.ok ? fit.parts : null;
+  const outfitSlots = !fitted ? [["outfit", look.outfit, null]]
+    : fitted.top.src === fitted.bottom.src ? [["outfit", fitted.top.src, { top: true, bottom: true }]]
+    : [["outfit", fitted.top.src, { top: true, bottom: false }], ["outfit", fitted.bottom.src, { top: false, bottom: true }]];
   const slots = [
     ["hair", look.hair],
-    ["outfit", look.outfit],
+    ...outfitSlots,
     ...(look.acc ?? []).map((a) => [a, a]),
   ];
   const [baseUrl, ...found] = await Promise.all([
@@ -231,8 +249,8 @@ async function loadModel(look, gender, opt = {}) {
     const slot = slots[i][0], st = states[i + 1];
     if (REQUIRED_SLOTS.includes(slot)) {
       if (st === false) return null; // a look without its hair or outfit part uses the built-in character
-      wanted.push([slot, found[i]]); // known to exist, or unknown (then the load below decides)
-    } else if (st === true) wanted.push([slot, found[i]]); // accessories are optional
+      wanted.push([slot, found[i], slots[i][2] ?? null]); // known to exist, or unknown (then the load below decides)
+    } else if (st === true) wanted.push([slot, found[i], null]); // accessories are optional
   }
   const libraryUrl = (await available(ANIM_LIBRARY)) ? ANIM_LIBRARY : null;
   const [gltf, library, ...loadedParts] = await Promise.all([
@@ -275,7 +293,7 @@ async function loadModel(look, gender, opt = {}) {
   for (let i = 0; i < wanted.length; i++) {
     const slot = wanted[i][0],
       part = SkeletonUtils.clone(loadedParts[i].scene),
-      meshes = attachSkinnedPart(root, part);
+      meshes = keepGarments(attachSkinnedPart(root, part), wanted[i][2]);
     if (!meshes.length && ATTACH_BONES[slot]) {
       attachToBone(root, part, ATTACH_BONES[slot]);
       extra.push(part);
@@ -287,9 +305,10 @@ async function loadModel(look, gender, opt = {}) {
   softenHair(extra);
   tintOutfit(
     extra,
-    opt.colors?.top ?? COLORS[look.top] ?? COLORS.navy,
-    opt.colors?.bottom ?? COLORS[look.bottom] ?? COLORS.khaki,
+    opt.colors?.top ?? COLORS[fitted ? fitted.top.color : look.top] ?? COLORS.navy,
+    opt.colors?.bottom ?? COLORS[fitted ? fitted.bottom.color : look.bottom] ?? COLORS.khaki,
     opt.colors?.topDark ?? null,
+    fitted ? { top: fitted.top.finish, bottom: fitted.bottom.finish } : null,
   );
   if (opt.npc || opt.actor) clips.push(...npcClips(root, gender, clips)); // crowd and player: sit, phone, talk, run ...
   clips.push(...activityClips(root, gender, clips)); // listen, write, type, read, eat, drink, greet, shop, work ... (one per kind of activity)
@@ -338,7 +357,7 @@ export async function createAvatar(
       }
     }
   }
-  const c = buildCharacter(look, g);
+  const c = buildCharacter({ ...look, ...(legacyFields(look.wear, g) ?? {}) }, g); // same outfit and colours as the model would have had
   return {
     kind: "procedural",
     root: c.root,

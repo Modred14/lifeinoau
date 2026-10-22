@@ -36,7 +36,7 @@ chk("no character, no rename", await refused(svc.saveName(db, "nobody", "Zed"), 
 const before = snapshot("c1");
 const a1 = await svc.saveAppearance(db, "u1", { look: { hair: "afro", outfit: "owambe", skin: "amber", top: "navy", bottom: "khaki", height: "short" } });
 const c1 = T.character.find((c) => c.id === "c1");
-chk("hair and clothes change on their own", c1.look.hair === "afro" && c1.look.outfit === "owambe" && c1.look.skin === "amber" && c1.gender === "M" && c1.hostel === "Awo");
+chk("hair and skin change on their own, but Settings can no longer change clothes (only the Offishall wardrobe does)", c1.look.hair === "afro" && c1.look.outfit === "casual" && c1.look.top === "white" && c1.look.bottom === "black" && !c1.look.wear && c1.look.skin === "amber" && c1.gender === "M" && c1.hostel === "Awo");
 chk("nothing else about the player is touched (level, money, stats, settings, name)", snapshot("c1") === before && c1.money === 123n && c1.level === 300);
 chk("the answer carries the same look that was stored", JSON.stringify(a1.look) === JSON.stringify(c1.look) && a1.gender === "M" && !a1.hostelMoved);
 chk("an invalid option is replaced by a safe one, never stored", (await svc.saveAppearance(db, "u1", { look: { hair: "mohawk-9000", outfit: "<x>", skin: "lava" } })) && HAIR.M.includes(T.character.find((c) => c.id === "c1").look.hair));
@@ -51,7 +51,7 @@ T.character.push({ id: "c9", userId: "u9", name: "Eve", gender: "F", hostel: "Mo
 const g1 = await svc.saveAppearance(db, "u1", { gender: "F", look: T.character.find((c) => c.id === "c1").look });
 const f = T.character.find((c) => c.id === "c1");
 chk("gender changes together with a look that fits it", f.gender === "F" && HAIR.F.includes(f.look.hair) && JSON.stringify(cleanLook(f.look, "F")) === JSON.stringify(f.look));
-chk("choices that exist for both are kept (skin, outfit, colours, height)", f.look.skin === "amber" && f.look.outfit === "owambe" && f.look.top === "navy" && f.look.height === "short");
+chk("choices that exist for both are kept (skin, height) and the clothes are untouched", f.look.skin === "amber" && f.look.outfit === "casual" && f.look.top === "white" && f.look.height === "short");
 chk("the school hall moves to its pair, and the answer says so", f.hostel === "Moremi" && g1.hostelMoved && g1.previousHostel === "Awo");
 chk("level, money and the rest are untouched by a gender change", f.money === 123n && f.level === 300 && f.name === "ADAEZE");
 chk("a friendship follows the new genders: besties with a man become talking, talking with a woman become besties", T.bond[0].kind === "TALKING" && T.bond[1].kind === "BESTIE");

@@ -18,6 +18,7 @@ for (const name of [
   "CLINICS",
   "BUSINESS",
   "MARKET",
+  "RETAIL", // Offishall Store clothing (lib/wardrobeService.js)
   "SUG", // nomination fees and campaign spending (lib/sugService.js)
 ])
   await db.account.upsert({

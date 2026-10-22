@@ -1,6 +1,6 @@
 // components/Icon.js
 "use client";
-import { House, MapTrifold, DeviceMobile, Briefcase, ChatCircleText, TrendUp, Heart, GraduationCap, Trophy, Medal, Confetti, Wallet, Bell, ArrowClockwise, ArrowCounterClockwise,
+import { TShirt, House, MapTrifold, DeviceMobile, Briefcase, ChatCircleText, TrendUp, Heart, GraduationCap, Trophy, Medal, Confetti, Wallet, Bell, ArrowClockwise, ArrowCounterClockwise,
   Plus, Minus, X, CaretLeft, Buildings, Books, FirstAidKit, Plant, Bed, UsersThree, Star, Door, MusicNotes, Storefront, Eye, EyeSlash, ListBullets, ArrowRight, Check, Crosshair,
   Lightning, Smiley, BookOpen, HeartStraight, Coins, Gift, Car, PersonSimpleWalk, Warning, DiceFive, FastForward, Moon, Sun, ChatsCircle, UserFocus, CaretRight, Lock, Phone, HandCoins, Siren, Timer,
   ShoppingBag, CookingPot, Couch, GameController, Package, Tag, ArrowsClockwise, Gear, SignOut, CellSignalFull, WifiHigh, BatteryFull, SmileyMeh, SmileySad, SmileyWink, CaretDown, CaretUp, Cube, Backpack, Bank, Handshake, Newspaper, Sparkle, ArrowsOutCardinal, Fan, Wrench, Presentation, Image, UploadSimple, SpeakerHigh, SpeakerSlash, Bus, Taxi, SteeringWheel, MapPin, NavigationArrow, IdentificationBadge, DoorOpen, Megaphone, Users, ArrowLeft, SoccerBall, AirplaneTilt, Ticket, Receipt, ArrowUUpLeft, Trash, Clock, LockSimple, CheckCircle, XCircle, ShieldCheck, Repeat, DotsThreeVertical, MagnifyingGlass, PaperPlaneRight, Prohibit, Flag, UserCircle, ArrowDown, WarningCircle } from "@phosphor-icons/react";
@@ -19,7 +19,7 @@ const ICONS = { home: House, map: MapTrifold, phone: DeviceMobile, jobs: Briefca
   eye: Eye, eyeOff: EyeSlash, list: ListBullets, next: ArrowRight, check: Check, reset: Crosshair,
   energy: Lightning, happy: Smiley, study: BookOpen, health: HeartStraight, coins: Coins, gift: Gift, ride: Car, trek: PersonSimpleWalk, warn: Warning, dice: DiceFive, skip: FastForward,
   moon: Moon, sun: Sun, talk: ChatsCircle, focus: UserFocus, caret: CaretRight, lock: Lock, call: Phone, hustle: HandCoins, siren: Siren, timer: Timer,
-  bag: ShoppingBag, kitchen: CookingPot, sofa: Couch, game: GameController, box: Package, sell: Tag, spin: ArrowsClockwise, gear: Gear, logout: SignOut, signal: CellSignalFull, wifi: WifiHigh, battery: BatteryFull,
+  shirt: TShirt, bag: ShoppingBag, kitchen: CookingPot, sofa: Couch, game: GameController, box: Package, sell: Tag, spin: ArrowsClockwise, gear: Gear, logout: SignOut, signal: CellSignalFull, wifi: WifiHigh, battery: BatteryFull,
   meh: SmileyMeh, sad: SmileySad, wink: SmileyWink, down: CaretDown, up: CaretUp, cube: Cube, backpack: Backpack, bank: Bank, deal: Handshake, news: Newspaper, sparkle: Sparkle, move: ArrowsOutCardinal, fan: Fan, wrench: Wrench, billboard: Presentation, image: Image, upload: UploadSimple, music: MusicNotes, sound: SpeakerHigh, mute: SpeakerSlash,
   bus: Bus, keke: Taxi, wheel: SteeringWheel, pin: MapPin, nav: NavigationArrow, driver: IdentificationBadge, door: DoorOpen, horn: Megaphone, users: Users, left: ArrowLeft, right: ArrowRight,
   ball: SoccerBall, plane: AirplaneTilt, ticket: Ticket, receipt: Receipt, undo: ArrowUUpLeft, trash: Trash, clock: Clock, lockS: LockSimple, win: CheckCircle, lose: XCircle, shield: ShieldCheck, repeat: Repeat, roulette: Roulette,
