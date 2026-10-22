@@ -15,6 +15,11 @@ import SoundToggle from "./SoundToggle";
 import { toast } from "@/lib/toast";
 import { game, useGame } from "@/lib/gameStore";
 import { serverDate, serverTime } from "@/lib/serverClock";
+import { initPrefs, syncPrefsFrom } from "@/lib/prefs";
+import dynamic from "next/dynamic";
+import "./prefs.css";
+
+const SettingsScreen = dynamic(() => import("./SettingsScreen"), { ssr: false }); // loaded only when someone opens Settings
 
 const moodOf = (h) =>
   h >= 80
@@ -38,6 +43,7 @@ export default function Shell({ children }) {
     st = g?.character?.hostel ? g : null,
     unreadChats = useChat((x) => x.unread),
     [phone, setPhone] = useState(false),
+    [settingsOpen, setSettingsOpen] = useState(false),
     [phoneApp, setPhoneApp] = useState(null),
     [phoneWith, setPhoneWith] = useState(null), // a player to open a chat with (set when you tap "Message" on a name tag)
     [clock, setClock] = useState(null),
@@ -79,6 +85,14 @@ export default function Shell({ children }) {
       document.removeEventListener("visibilitychange", v);
     };
   }, [bare, path, load]);
+  // Preferences: show the last saved ones at once, then follow the server's copy (it comes with the game state), so a change made on another device arrives here too.
+  useEffect(() => { initPrefs(); }, []);
+  useEffect(() => { syncPrefsFrom(g?.character); }, [g?.character?.settings]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const open = () => { setPhone(false); setSettingsOpen(true); }; // the phone's Settings app (and anything else) asks for the Settings screen with this event
+    window.addEventListener("oau:settings", open);
+    return () => window.removeEventListener("oau:settings", open);
+  }, []);
   useEffect(() => {
     setClock(serverDate());
     const t = setInterval(() => setClock(serverDate()), 20000);
@@ -293,6 +307,7 @@ export default function Shell({ children }) {
           goBuy();
         }}
       />
+      {settingsOpen && g?.character && <SettingsScreen onClose={() => setSettingsOpen(false)} onLogout={logout} loggingOut={loggingOut} />}
       {st && <PlayerMenu />}
     </>
   );

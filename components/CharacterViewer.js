@@ -3,12 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import { lookKey } from "@/lib/look.js";
+import { usePrefs } from "@/lib/prefs";
 
 // Where the camera sits relative to what it looks at (a metre-scale offset, scaled to the distance), and how much of the figure must stay in view.
 const TARGET_Y = 0.8, VIEW = [Math.sin(0.35), 0.25 / 4.25, Math.cos(0.35)], BASE_DIST = 4.25, HALF_BODY = 0.62;
 
 /** A 3D character you can spin: drag, use the buttons, or the arrow keys. `look` and `gender` update live; the character is rebuilt only when the look really changes. */
-export default function CharacterViewer({ look, gender = "F", className = "", style, hint = true, autoSpin = true, label }) {
+export default function CharacterViewer({ look, gender = "F", className = "", style, hint = true, autoSpin: spinWanted = true, label }) {
+  const prefs = usePrefs().accessibility, autoSpin = spinWanted && prefs.autoSpin && !prefs.reduceMotion; // Settings > Accessibility can switch the turning off
   const box = useRef(null), api = useRef(null), latest = useRef({ look, gender });
   const [failed, setFailed] = useState(false);
   latest.current = { look, gender };
@@ -20,7 +22,7 @@ export default function CharacterViewer({ look, gender = "F", className = "", st
       try {
         const [{ createStage }, { addCharacterLights }, { createAvatar }, THREE] = await Promise.all([import("../lib3d/stage.js"), import("../lib3d/character.js"), import("../lib3d/avatar/loadAvatar.js"), import("three")]);
         if (!alive) return;
-        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches || prefs.reduceMotion;
         stage = createStage(box.current.querySelector("[data-canvas]"), { alpha: true, fov: 30, controls: { enablePan: false, minDistance: 2.2, maxDistance: 6, minPolarAngle: 1.05, maxPolarAngle: 1.7, autoRotate: autoSpin && !reduce, autoRotateSpeed: 1.1 } });
         const el = stage.renderer.domElement;
         el.style.touchAction = "pan-y"; // a finger that starts on the preview can still scroll the page up and down; sideways drags spin the character
@@ -56,7 +58,7 @@ export default function CharacterViewer({ look, gender = "F", className = "", st
       } catch (e) { console.error("3D preview unavailable", e); if (alive) setFailed(true); }
     })();
     return () => { alive = false; ro?.disconnect(); cur?.dispose(); stage?.dispose(); api.current = null; };
-  }, [autoSpin]);
+  }, [autoSpin, prefs.reduceMotion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { api.current?.set(latest.current.look, latest.current.gender); }, [key]);
 

@@ -7,6 +7,8 @@ import { loadCampusData, placeMeta } from "../lib3d/campusData.js";
 import { Icon } from "./Icon";
 import { playSound } from "@/lib/sound";
 import { call } from "@/lib/client";
+import { useGame } from "@/lib/gameStore";
+import { lookKey } from "@/lib/look.js";
 
 const HOME_VIEW = { x: 0, z: 8, dist: 210, az: 0.7, pol: 0.95 };
 const labelWidth = (name, tier) => Math.min(190, name.length * (tier === 1 ? 7.4 : 6.4) + 26);
@@ -74,6 +76,9 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
   useEffect(() => { const a = api.current; if (!a) return; a.campus.setSelected(selectedId); if (selectedId && !noFly.current) { const p = a.campus.resolve(selectedId)?.pos; if (p) a.stage.flyTo(p.x, 0, p.z, 60, 1.0); } noFly.current = false; }, [selectedId, mounts]);
 
   useEffect(() => { const a = api.current; if (a) a.campus.setYou(youId); }, [youId, mounts]);
+  // the player changed their look in Settings while on a trip: the character on the road changes with it
+  const me = useGame()?.character, meKey = me ? lookKey(me.look, me.gender) : "";
+  useEffect(() => { if (me) tripRef.current?.setLook?.(me.look, me.gender); }, [meKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- a trip: the travel engine takes over the camera until it ends ----
   useEffect(() => {

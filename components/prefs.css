@@ -1,0 +1,6 @@
+/* components/prefs.css: what the accessibility and gameplay preferences do to the whole page. The switches are attributes on <html> (see lib/prefs.js). */
+html[data-reduce-motion] *, html[data-reduce-motion] *::before, html[data-reduce-motion] *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
+html[data-large-text] { font-size: 118.75%; } /* every rem grows by 19%: 16px becomes 19px */
+html[data-high-contrast] { --text: #ffffff; --muted: #d4dbe6; --line: rgba(255, 255, 255, 0.32); --surface: #0a0f1c; --raised: #131c30; --bg: #05080f; --field: #b7c3d8; --green-text: #66f0aa; --gold-text: #ffd27a; --danger-text: #ff9c9c; }
+html[data-high-contrast] button:focus-visible, html[data-high-contrast] a:focus-visible, html[data-high-contrast] input:focus-visible, html[data-high-contrast] [tabindex]:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+html[data-hide-name-tags] .pt-tag { display: none !important; }

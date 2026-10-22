@@ -25,6 +25,7 @@ import { Suspension, Expulsion } from "@/components/DisciplineScreens";
 import CustodyCell from "@/components/CustodyCell";
 import { fmtN } from "@/lib/classes";
 import { wakeResult } from "@/lib/sleep";
+import { getPrefs } from "@/lib/prefs";
 import "./play.css";
 
 function View({ children }) {
@@ -62,7 +63,12 @@ export default function Play() {
 
   // Game notifications become persistent info toasts. Once the last one is closed they are marked read.
   const showNotes = useCallback((list) => {
-    const fresh = (list ?? []).filter((n) => !shown.current.has(n.id) && !noteSeen(n.id)); // a result already announced elsewhere (a bet that just settled) is not announced again
+    const all = (list ?? []).filter((n) => !shown.current.has(n.id) && !noteSeen(n.id)); // a result already announced elsewhere (a bet that just settled) is not announced again
+    // Settings > Notifications: award pop-ups can be switched off. They are still counted as seen, so they do not come back.
+    const mute = getPrefs().notifications.achievements ? [] : all.filter((n) => n.kind === "ACHIEVEMENT");
+    mute.forEach((n) => shown.current.add(n.id));
+    const fresh = all.filter((n) => !mute.includes(n));
+    if (mute.length && !fresh.length && pending.current === 0) call("/api/notifications", {});
     if (!fresh.length) return;
     fresh.forEach((n) => shown.current.add(n.id));
     const groups =
@@ -82,7 +88,7 @@ export default function Play() {
     groups.forEach((n) =>
       (n.kind === "bet:won" ? toast.success : toast.info)(n.body, { // a won bet is good news, not information
         id: "note-" + n.id,
-        sound: n.kind === "bet:won" ? "coin" : "notify",
+        sound: n.kind === "bet:won" ? "coin" : getPrefs().notifications.alertSound ? "notify" : false,
         persistent: true,
         onDismiss: closed,
       }),

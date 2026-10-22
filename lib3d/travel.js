@@ -17,6 +17,7 @@ import { createTripFlow } from "./tripflow.js";
 import { createTraffic, makeWalker } from "./traffic.js";
 import { createPlayerTags, isTaggable } from "./playerTags.js";
 import { createAvatar } from "./avatar/loadAvatar.js";
+import { lookKey } from "../lib/look.js";
 import { paintBase, drawMini, drawPreview } from "./minimap.js";
 
 let netCache = null;
@@ -102,7 +103,7 @@ export async function startTrip(env, o) {
   disposers.push(() => tags.dispose());
 
   // real players waiting around the destination: kept in step with the server's list, so one who leaves loses their avatar and name at once
-  const there = new Map(); // public id -> { av, anchor } (null while the avatar is still loading)
+  const there = new Map(); // public id -> { av, anchor, key } (null while the avatar is still loading)
   const dropThere = (id) => { const t = there.get(id); there.delete(id); tags.remove(id); if (t) { world.remove(t.av.root); t.av.dispose(); } };
   const spotFor = (id) => { let h = 7; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; const a0 = (h % 628) / 100, r = 2.5 + ((h >>> 10) % 60) / 10;
     for (let k = 0; k < 14; k++) { const a = a0 + k * 0.9, x = B.front.x + Math.cos(a) * r, z = B.front.z + Math.sin(a) * r; if ((walkable(net, x, z) && !isRoad(net, x, z) && !svc.world.blockedAt(x, z, 0.6)) || k === 13) return { x, z, yaw: (h % 360) * Math.PI / 180 }; } };
@@ -111,9 +112,9 @@ export async function startTrip(env, o) {
     there.set(p.id, null);
     try { const av = await createAvatar(p.look, p.gender); if (!alive || !there.has(p.id)) { av.dispose(); return; }
       const sp = spotFor(p.id), anchor = new THREE.Object3D(); anchor.position.set(0, 2.2, 0); av.root.add(anchor); av.root.position.set(sp.x, 0.1, sp.z); av.root.rotation.y = sp.yaw; av.play("idle"); world.add(av.root);
-      there.set(p.id, { av, anchor }); tags.set(p.id, { name: p.name, anchor, meta: { level: p.level, faculty: p.faculty } });
+      there.set(p.id, { av, anchor, key: lookKey(p.look, p.gender) }); tags.set(p.id, { name: p.name, anchor, meta: { level: p.level, faculty: p.faculty } });
     } catch { there.delete(p.id); /* a player whose model fails to load is simply not drawn */ } };
-  const syncThere = (list) => { const ids = new Set((list ?? []).map((p) => p?.id)); for (const id of [...there.keys()]) if (!ids.has(id)) dropThere(id); for (const p of (list ?? []).slice(0, 8)) addThere(p); };
+  const syncThere = (list) => { const ids = new Set((list ?? []).map((p) => p?.id)); for (const id of [...there.keys()]) if (!ids.has(id)) dropThere(id); for (const p of (list ?? []).slice(0, 8)) { const t = there.get(p?.id); if (t && t.key !== lookKey(p.look, p.gender)) dropThere(p.id); /* changed their look: rebuilt below */ addThere(p); } };
   (async () => { syncThere(await (o.people ?? [])); /* an array, or a promise of one: the trip never waits for it */ })();
   const pollThere = o.pollPeople ? setInterval(async () => { try { const l = await o.pollPeople(); if (alive) syncThere(l); } catch { /* try again next time */ } }, 5000) : null;
   disposers.push(() => { clearInterval(pollThere); for (const id of [...there.keys()]) dropThere(id); });
@@ -137,6 +138,12 @@ export async function startTrip(env, o) {
 
   // ---- drawing what the journey says ----
   let gait = "", lastPhase = "";
+  // Your saved look changed while you are travelling (Settings): swap the body, keep everything else. Only the newest request counts.
+  let selfTicket = 0, selfKey = lookKey(o.look, o.gender);
+  const setLook = async (look, gender) => {
+    const k = lookKey(look, gender); if (k === selfKey) return; selfKey = k; const mine = ++selfTicket;
+    try { const av = await createAvatar(look, gender); if (!alive || mine !== selfTicket) { av.dispose(); return; } world.remove(avatar.root); avatar.dispose(); avatar = av; world.add(av.root); gait = ""; } catch { /* the old body stays */ }
+  };
   const yawOf2 = (hx, hz) => Math.atan2(hx, hz);
   function drawPerson(dt) {
     const veh = flow.vehicle, seated = P.seated && veh, sp = WK.speed;
@@ -195,7 +202,7 @@ export async function startTrip(env, o) {
   });
 
   const api = {
-    traffic, plan, setTravellers: (l) => traffic.setTravellers(l), pos: () => { const p = flow.vehicle && ["ride", "drive", "paying"].includes(F.phase) ? flow.vehicle : P; return { x: p.x, z: p.z, h: Math.atan2(p.hx, p.hz) }; }, route: () => route, cancel: () => flow.cancel(),
+    traffic, plan, setLook, setTravellers: (l) => traffic.setTravellers(l), pos: () => { const p = flow.vehicle && ["ride", "drive", "paying"].includes(F.phase) ? flow.vehicle : P; return { x: p.x, z: p.z, h: Math.atan2(p.hx, p.hz) }; }, route: () => route, cancel: () => flow.cancel(),
     horn() { if (hornT > 0) return; hornT = 0.4; o.onHorn?.(); },
     dispose() { if (!alive) return; alive = false; off?.(); for (const d of disposers.reverse()) { try { d(); } catch { /* clean up as much as possible */ } } stage.scene.remove(world); stage.setManual(false); campus.setTripMode(false);
       cam.near = saved.near; cam.fov = saved.fov; cam.updateProjectionMatrix(); Object.assign(light.sun.shadow.camera, { left: saved.shadow.l, right: saved.shadow.r, top: saved.shadow.t, bottom: saved.shadow.b }); light.sun.shadow.camera.updateProjectionMatrix(); },

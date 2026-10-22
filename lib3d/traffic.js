@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { createTrafficSim } from "./trafficsim.js";
 import { createNpc, npcSpec } from "./avatar/npc.js";
 import { createAvatar } from "./avatar/loadAvatar.js";
+import { lookKey } from "../lib/look.js";
 import { carBodyGeometry, CAR_WHEELS, CAR_WHEEL_R, CAR_COLORS, makeKeke, makeBus, makeCar, rollWheels } from "./vehicles.js";
 
 export const DENSITY = { cars: 6, kekes: 2, buses: 1, peds: 10 }; // within about 250 m of the camera
@@ -59,9 +60,11 @@ export function createTraffic({ parent, svc, focus, density = DENSITY, seed = 7,
     const now = performance.now(), seen = new Set();
     for (const t of list) {
       seen.add(t.id); let e = live.get(t.id);
+      const key = lookKey(t.look, t.gender);
+      if (e && e.walker && e.key !== key) { group.remove(e.root); tags?.remove(t.id); if (e.av) e.av.dispose(); live.delete(t.id); e = undefined; } // they changed their look: draw the new one, not the old
       if (!e) { const model = t.mode === "keke" ? makeKeke() : t.mode === "bus" ? makeBus() : t.mode === "car" ? makeCar() : null, walker = model ? null : makeWalker("#8d5a3b", "#2f62c4", "#1f2f55"), root = model ? model.root : new THREE.Group(), tag = new THREE.Object3D();
         if (walker) { // on foot: the player's own look, drawn like everyone else, replaces the stand-in as soon as it has loaded
-          e = { root, model, walker, tag, x: t.x, z: t.z, h: t.h, tx: t.x, tz: t.z, th: t.h, phase: 0, at: now };
+          e = { root, model, walker, tag, key, x: t.x, z: t.z, h: t.h, tx: t.x, tz: t.z, th: t.h, phase: 0, at: now };
           // A real player is built by createAvatar from exactly their saved look: the same body, skin tone, hair, clothes and size they have in their room and in every building.
           // (Never through npcSpec: that adds random NPC variation, and gives a random person to a player whose look is not set.) If the model cannot load, the built-in
           // character in the same look is used, so the stand-in box figure is only for a character that could not be built at all.

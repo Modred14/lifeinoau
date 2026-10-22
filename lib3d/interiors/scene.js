@@ -6,6 +6,7 @@
 import * as THREE from "three";
 import { createStage } from "../stage.js";
 import { createAvatar } from "../avatar/loadAvatar.js";
+import { lookKey } from "../../lib/look.js";
 import { createNpc, npcSpec, hashSeed, lecturerSpec } from "../avatar/npc.js";
 import { planFor, clipAt } from "../avatar/activityPlans.js";
 import { studentName, greetLine, chatLine } from "../../lib/socialTalk.js";
@@ -188,8 +189,19 @@ export async function createInteriorScene(container, c, opts = {}) {
   const input = opts.input ?? { jx: 0, jy: 0, run: false }, keys = new Set(), P = cell ? { x: cell.cx, z: cell.cz, y: 0, fl: cell.floor ?? 0, yaw: 0, moving: 0, run: false } : { x: c.spawn.x, z: c.spawn.z, y: 0, fl: 0, yaw: c.spawn.yaw ?? 0, moving: 0, run: false };
   let locked = false, shownFloor = 0, camYaw = P.yaw, camPitch = 0.4, camDist = 3.4, near = null, lastRoom = null, exited = false, cur = null, vp = null;
   const player = new THREE.Group(); scene.add(player);
-  let avatar = null; createAvatar(opts.look ?? null, opts.gender ?? "M").then((av) => { if (!alive) { av.dispose(); return; } avatar = av; player.add(av.root); }).catch(() => {
-    if (!alive) return; const m = new THREE.Mesh(own(new THREE.CapsuleGeometry(0.25, 1.1, 4, 8).translate(0, 0.8, 0)), own(new THREE.MeshStandardMaterial({ color: "#2f62c4" }))); player.add(m); });
+  // Your own character. Built from the saved look; if the look is saved again while you are inside (Settings), setSelfLook swaps in the new one (only the newest request counts).
+  let avatar = null, selfTicket = 0, selfKey = lookKey(opts.look ?? null, opts.gender ?? "M"), stand = null;
+  const loadSelf = (look, gender) => {
+    const mine = ++selfTicket;
+    createAvatar(look ?? null, gender ?? "M").then((av) => {
+      if (!alive || mine !== selfTicket) { av.dispose(); return; }
+      if (avatar) { player.remove(avatar.root); avatar.dispose?.(); }
+      if (stand) { player.remove(stand); stand = null; }
+      avatar = av; cur = null; player.add(av.root); // cur = null: the new body starts its animation again
+    }).catch(() => {
+      if (!alive || avatar || stand) return; stand = new THREE.Mesh(own(new THREE.CapsuleGeometry(0.25, 1.1, 4, 8).translate(0, 0.8, 0)), own(new THREE.MeshStandardMaterial({ color: "#2f62c4" }))); player.add(stand); });
+  };
+  loadSelf(opts.look ?? null, opts.gender ?? "M");
   // ---- acting an activity out: the right clip, a turn towards what you are working at, and a seat or a bed under you ----
   // Only the picture moves: P (the position the server checks against the ring) never changes; the body glides back onto a chair, or onto a bed, and glides out again.
   let act = null; const SEAT_BACK = 0.26, props = {};
@@ -382,6 +394,8 @@ export async function createInteriorScene(container, c, opts = {}) {
     },
     /** The reserved tables and the lights as the server says they are now. Safe to call on every poll. */
     setClubTables(list) { clubFx?.setTables(list); }, setClubMood(m) { clubFx?.setMood(m); }, get clubStats() { return clubFx?.stats() ?? null; },
+    /** Your own saved look changed (Settings): the character you walk around as is rebuilt from it. Does nothing if it is the same look. */
+    setSelfLook(look, gender) { const k = lookKey(look, gender ?? "M"); if (k === selfKey) return; selfKey = k; loadSelf(look ?? null, gender ?? "M"); },
     /** The real players in this building (from /api/travel?at=): each { id, name, gender, look, level, faculty, x, z, floor, anim? }. Anyone not in the list is removed. */
     setRemotePlayers(list) { remote.sync(list, { x: P.x, z: P.z }); }, get remoteIds() { return remote.ids(); },
     /** Walk to a point on the current floor by the shortest clear path. Resolves true on arrival, false if it could not or you took the controls. */

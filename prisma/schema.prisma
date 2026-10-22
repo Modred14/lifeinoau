@@ -113,6 +113,7 @@ model Character {
   dependents         Int            @default(0) // kept pregnancies: childcare is charged weekly
   campusLook         String?
   look               Json? // appearance choices, validated by lib/look.js
+  settings           Json? // the player's saved preferences (audio, gameplay, notifications, privacy, accessibility), validated by lib/settings.js; null = all defaults
   jobKey             String?
   jobXp              Int            @default(0)
   sleepingSince      DateTime? // set while the player is asleep in their bed; wake-up energy is computed from this on the server

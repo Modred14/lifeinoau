@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import { isTaggable } from "../playerTags.js";
 import { cellAt } from "../../lib/custodyCells.js";
+import { lookKey } from "../../lib/look.js";
 
 export const REMOTE_MAX = 12;   // avatars are heavy, so only the nearest few are built
 export const REMOTE_RANGE = 22; // metres: farther away they are hidden (and so is their tag)
@@ -26,7 +27,7 @@ export function createRemotePlayers({ scene, makeAvatar, tags, floorY = () => 0,
 
   function add(p) {
     const holder = new THREE.Group(), anchor = new THREE.Object3D(); anchor.position.y = 2.05; holder.add(anchor); holder.visible = false; scene.add(holder);
-    const e = { id: p.id, name: p.name, holder, anchor, av: null, fallback: null, x: p.x, z: p.z, tx: p.x, tz: p.z, floor: p.floor ?? 0, yaw: 0, cur: null, anim: null, meta: {}, dead: false, height: 1.75, v: 0 };
+    const e = { id: p.id, name: p.name, key: lookKey(p.look, p.gender), holder, anchor, av: null, fallback: null, x: p.x, z: p.z, tx: p.x, tz: p.z, floor: p.floor ?? 0, yaw: 0, cur: null, anim: null, meta: {}, dead: false, height: 1.75, v: 0 };
     entries.set(p.id, e);
     const ready = (h) => { if (e.dead || dead) return false; e.height = h; anchor.position.y = h + 0.3; tags.set(e.id, { name: e.name, anchor, meta: e.meta }); return true; };
     makeAvatar(p.look ?? null, p.gender === "F" ? "F" : "M").then((av) => { if (!ready(av.height ?? 1.75)) { av.dispose?.(); return; } e.av = av; holder.add(av.root); })
@@ -49,6 +50,7 @@ export function createRemotePlayers({ scene, makeAvatar, tags, floorY = () => 0,
     const keep = new Map(want.slice(0, REMOTE_MAX).map((p) => [p.id, p]));
     for (const id of [...entries.keys()]) if (!keep.has(id)) drop(id); // left, went quiet or disconnected: gone now
     for (const [id, p] of keep) {
+      if (entries.get(id) && entries.get(id).key !== lookKey(p.look, p.gender)) drop(id); // they changed their look (or gender): build the new character instead of keeping the old one
       const e = entries.get(id) ?? add(p);
       e.tx = p.x; e.tz = p.z; e.floor = p.floor ?? 0; e.anim = p.anim ?? null; e.detained = p.detained === true; e.name = p.name; e.meta = { level: p.level, faculty: p.faculty };
       if (e.av || e.fallback) tags.set(id, { name: p.name, anchor: e.anchor, meta: e.meta });

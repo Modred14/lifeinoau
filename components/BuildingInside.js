@@ -22,13 +22,15 @@ import { cellsOf } from "@/lib/custodyCells.js";
 import { CUSTODY_PLACE, CUSTODY_NAME, isJailed } from "@/lib/discipline";
 import { bailFor } from "@/lib/engine";
 import { naira } from "@/lib/client";
+import { getPrefs } from "@/lib/prefs";
+import { lookKey } from "@/lib/look.js";
 import "./travel.css";
 
 // In the custody building every cell is locked to anyone who is not a prisoner (the server refuses those positions too, lib/custodyCells.js).
 const lockedOf = (c, place) => (place.id === "floor0" ? cellsOf(c) : null);
 
 export default function BuildingInside({ place, look = null, gender = "M", focus = null, selfName = "", onLeave, onCustody = null, cell = null, banner = null }) {
-  const [people, setPeople] = useState(null), [status, setStatus] = useState("loading"), [info, setInfo] = useState(false), [room, setRoom] = useState(""), [near, setNear] = useState(null), [view, setView] = useState(cell ? "overhead" : "follow"), [note, setNote] = useState(""), [rings, setRings] = useState([]), [open, setOpen] = useState(null);
+  const [people, setPeople] = useState(null), [status, setStatus] = useState("loading"), [info, setInfo] = useState(false), [room, setRoom] = useState(""), [near, setNear] = useState(null), [view, setView] = useState(cell ? "overhead" : getPrefs().gameplay.interiorView), [note, setNote] = useState(""), [rings, setRings] = useState([]), [open, setOpen] = useState(null);
   // the lecturers who teach in this building, the confrontation in progress, and the N-QRS response being acted out (all decided by the server: /api/lecture)
   const [fight, setFight] = useState(null), [incident, setIncident] = useState(null), [after, setAfter] = useState(null), [fade, setFade] = useState(0), lec = useRef({ courses: [] }), played = useRef(null);
   const [sceneReady, setSceneReady] = useState(false), confrontRef = useRef(null);
@@ -61,12 +63,15 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
         const lecturers = (lec.current.courses ?? []).map((x) => ({ code: x.code, name: x.lecturer.name, difficulty: x.lecturer.difficulty, npcIndex: x.venue.npcIndex }));
         // the activity rings: placed by the same code the server uses to check where you stand (lib3d/interiors/activityHubs.js), drawn teal
         const list = activityHubs(c, classify(place.id, place.kind).spec).hubs.map((h) => ({ ...h, activity: h.id, tint: "#5fe3c0" })); c.hubs = [...c.hubs, ...list]; setRings(list); if (dead || !box.current) return;
-        scene = await createInteriorScene(box.current, c, { look, gender, selfName: selfRef.current, club: isClub(place.id), barSpot: (() => { const b = list.find((h) => h.act === "club_drink"); return b ? { x: b.x, z: b.z } : null; })(), input, view: cell ? "overhead" : "follow", lecturers, cell, lockedCells: lockedOf(c, place), onFade: setFade, onIncidentEnd: (e) => setAfter(e), onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onChat: (m) => { toast.info(`${m.name}: ${m.line}`); setTimeout(() => { if (!dead) toast.info(`${m.name}: ${m.reply}`); }, 2600); }, onHub: (h) => { if (h.action === "lecture") { confrontRef.current?.(h.lecturer.code); return; } if (h.activity) { setOpen(h); return; } if (place.id === CUSTODY_PLACE) { deskRef.current?.(); return; } const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true); } });
+        scene = await createInteriorScene(box.current, c, { look, gender, selfName: selfRef.current, club: isClub(place.id), barSpot: (() => { const b = list.find((h) => h.act === "club_drink"); return b ? { x: b.x, z: b.z } : null; })(), input, view: cell ? "overhead" : getPrefs().gameplay.interiorView, lecturers, cell, lockedCells: lockedOf(c, place), onFade: setFade, onIncidentEnd: (e) => setAfter(e), onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onChat: (m) => { toast.info(`${m.name}: ${m.line}`); setTimeout(() => { if (!dead) toast.info(`${m.name}: ${m.reply}`); }, 2600); }, onHub: (h) => { if (h.action === "lecture") { confrontRef.current?.(h.lecturer.code); return; } if (h.activity) { setOpen(h); return; } if (place.id === CUSTODY_PLACE) { deskRef.current?.(); return; } const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true); } });
         if (dead) { scene.dispose(); return; } api.current = scene; if (peopleRef.current) scene.setRemotePlayers(peopleRef.current); setStatus("ready"); setSceneReady(true);
       } catch (e) { console.warn("interior unavailable", e); if (!dead) setStatus("fallback"); }
     })();
     return () => { dead = true; api.current = null; setSceneReady(false); scene?.dispose(); };
   }, [place.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // your saved look changed while you are inside (Settings): the character you walk around as is rebuilt from it
+  const myLookKey = lookKey(look, gender);
+  useEffect(() => { if (sceneReady) api.current?.setSelfLook(look, gender); }, [myLookKey, sceneReady]); // eslint-disable-line react-hooks/exhaustive-deps
   // ---- confronting a lecturer ----
   async function confront(code) {
     if (fight || incident) return;
