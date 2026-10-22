@@ -51,7 +51,7 @@ export default function OffishallApp() {
     return list;
   }, [gender, cat, sort]);
 
-  if (!d) return loadFailed ? <LoadError onRetry={load} /> : <Loader label="Opening Clothing" />;
+  if (!d) return loadFailed ? <LoadError onRetry={load} /> : <Loader label="Opening Offishall Stores" />;
   const balance = gs?.balanceKobo ?? d.balanceKobo ?? "0";
   const item = sel ? itemById(sel) : null;
 
