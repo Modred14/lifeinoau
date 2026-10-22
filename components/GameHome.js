@@ -18,6 +18,7 @@ import { SLEEP, wakeResult, msToFull, toMs } from "@/lib/sleep.js";
 import { serverTime } from "@/lib/serverClock";
 import { Icon } from "./Icon";
 import BuySheet from "./BuySheet";
+import PlayerAvatar from "./PlayerAvatar";
 import "./game-home.css";
 
 const RoomStage = dynamic(() => import("./RoomStage"), {
@@ -544,7 +545,7 @@ export default function GameHome({
               aria-expanded={needsOpen}
               aria-label={needsOpen ? "Hide details" : "Show details"}
             >
-              <span>{c.name.slice(0, 1).toUpperCase()}</span>
+              <PlayerAvatar name={c.name} size="100%" className="pav-fill" />
             </button>
             <div className="gx-needs">
               {NEEDS.map(([n, k, ic]) => {

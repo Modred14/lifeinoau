@@ -16,12 +16,10 @@ import { game, run, cash, bump, chain, canAfford, roomStore, useResource } from 
 import { ACTIVITY, GIFTS, RINGS, COST, NOTES, COUPLE, MAX_SNEAKY, REQUEST_WEEKS, PROPOSE_AFTER_WEEKS } from "@/lib/relationships";
 import * as P from "@/lib/lovePatches";
 import { Spinner } from "../Loader";
+import PlayerAvatar from "../PlayerAvatar";
 import LoadError from "@/components/LoadError";
 import "./relationship-app.css";
 
-const HUES = ["#3b6fd4", "#1f8f6a", "#b5651d", "#8a4fb3", "#c2456a", "#2e8a9c", "#a0802a"];
-const hue = (n = "") => HUES[[...n].reduce((s, ch) => s + ch.charCodeAt(0), 0) % HUES.length];
-const initials = (n = "") => n.replace(/[^a-z0-9]/gi, "").slice(0, 2).toUpperCase() || "?";
 const first = (n = "") => n.split(/\s+/)[0];
 const money = (n) => "₦" + Number(n).toLocaleString("en-NG");
 const brief = (why) => String(why ?? "").split(". ")[0].replace(/\.$/, "");
@@ -38,10 +36,9 @@ const KIND_ICON = { BABE: Heart, ENGAGED: Diamond, SNEAKY: Eye, BESTIE: Handshak
 function Avatar({ name, size = 48, kind, ring }) {
   const K = kind && KIND_ICON[kind];
   return (
-    <span className="lv-av" style={{ width: size, height: size, background: hue(name), fontSize: size * 0.34 }} data-ring={ring ? "1" : undefined} aria-hidden="true">
-      {initials(name)}
+    <PlayerAvatar name={name} size={size} className="lv-av" data-ring={ring ? "1" : undefined}>
       {K && kind !== "TALKING" && kind !== "EX" && <i data-k={kind}><K size={size * 0.22} weight="fill" /></i>}
-    </span>
+    </PlayerAvatar>
   );
 }
 

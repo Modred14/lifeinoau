@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "./Icon";
+import PlayerAvatar from "./PlayerAvatar";
 import { Stick, Hold } from "./TripHud";
 import { call } from "@/lib/client";
 import { serverTime } from "@/lib/serverClock";
@@ -150,7 +151,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
         {place.actions?.length > 0 && <div className="bi-actions">{place.actions.map((a) => <Link key={a.href} href={a.href} className="btn go">{a.label}</Link>)}</div>}
         <h3><Icon name="users" size={18} /> Here now{people ? ` · ${people.length}` : ""}</h3>
         {people == null ? <p className="mut">Looking around…</p> : people.length === 0 ? <p className="mut">Nobody else is here right now.</p> : (
-          <ul className="bi-people">{people.map((p) => <li key={p.name}><span className="bi-av" aria-hidden="true">{p.name[0]}</span><b>{p.name}</b><small>{p.faculty} · {p.level}L</small></li>)}</ul>
+          <ul className="bi-people">{people.map((p) => <li key={p.name}><PlayerAvatar name={p.name} size={36} className="bi-av" /><b>{p.name}</b><small>{p.faculty} · {p.level}L</small></li>)}</ul>
         )}
         {status === "ready" && note && <p className="mut bi-soon">{note}</p>}
         {status === "fallback" && <p className="mut bi-soon">The 3D rooms could not start on this device, so you are seeing the lobby card instead.</p>}

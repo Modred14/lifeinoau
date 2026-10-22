@@ -5,6 +5,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
+import PlayerAvatar from "./PlayerAvatar";
 import "./player-tags.css";
 
 export default function PlayerMenu() {
@@ -29,7 +30,7 @@ export default function PlayerMenu() {
   const sub = [pick.faculty, pick.level ? `${pick.level}L` : ""].filter(Boolean).join(" · ");
   return (
     <div className="pm" ref={box} style={style} role="dialog" aria-label={`${pick.name}, player options`} data-below={below ? "1" : undefined}>
-      <div className="pm-h"><span className="pm-av" aria-hidden="true">{pick.name[0]}</span><span className="pm-t"><b>{pick.name}</b>{sub && <small>{sub}</small>}</span>
+      <div className="pm-h"><PlayerAvatar name={pick.name} size={34} className="pm-av" /><span className="pm-t"><b>{pick.name}</b>{sub && <small>{sub}</small>}</span>
         <button type="button" className="pm-x" aria-label="Close" onClick={() => setPick(null)} data-sound="none"><Icon name="close" size={18} /></button></div>
       <button type="button" className="pm-go" autoFocus onClick={() => { const name = pick.name; setPick(null); window.dispatchEvent(new CustomEvent("oau:message", { detail: { name } })); }}><Icon name="chat" size={18} weight="fill" /> Message</button>
     </div>

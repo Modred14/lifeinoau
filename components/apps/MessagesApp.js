@@ -28,25 +28,10 @@ import { chat, useChat } from "@/lib/chat";
 import { KIND, parseMoney, naira as fmt } from "@/lib/chatShared";
 import { Icon } from "../Icon";
 import { Spinner } from "../Loader";
+import PlayerAvatar from "../PlayerAvatar";
 import "./messages-app.css";
 
 const lc = (n = "") => String(n).toLowerCase();
-const initials = (n = "") =>
-  n
-    .replace(/[^a-z0-9]/gi, "")
-    .slice(0, 2)
-    .toUpperCase() || "?";
-const HUES = [
-  "#3b6fd4",
-  "#1f8f6a",
-  "#b5651d",
-  "#8a4fb3",
-  "#c2456a",
-  "#2e8a9c",
-  "#a0802a",
-];
-const hue = (n = "") =>
-  HUES[[...n].reduce((s, ch) => s + ch.charCodeAt(0), 0) % HUES.length];
 const hm = (d) =>
   new Date(d)
     .toLocaleTimeString("en-NG", {
@@ -101,18 +86,7 @@ function Avatar({ name, size = 44, online }) {
   const dot = Math.max(10, Math.round(size * 0.27));
   return (
     <span className="ms-avwrap" style={{ width: size, height: size }}>
-      <span
-        className="ms-av"
-        style={{
-          width: size,
-          height: size,
-          background: hue(name),
-          fontSize: size * 0.36,
-        }}
-        aria-hidden="true"
-      >
-        {initials(name)}
-      </span>
+      <PlayerAvatar name={name} size={size} className="ms-av" />
       {online && (
         <i
           className="ms-online"

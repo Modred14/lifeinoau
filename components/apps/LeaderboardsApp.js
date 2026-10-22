@@ -5,6 +5,7 @@ import { naira } from "@/lib/client";
 import { useResource } from "@/lib/gameStore";
 import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
+import PlayerAvatar from "@/components/PlayerAvatar";
 
 const TABS = [
   ["forbes", "FORBES"],
@@ -61,7 +62,9 @@ export default function Boards() {
           {b.rows.length ? (
             b.rows.map((r) => (
               <div className="led" key={r.rank + r.name}>
-                <span>
+                <span className="led-who">
+                  <PlayerAvatar name={r.name} size={36} className="led-av" />
+                  <span className="led-txt">
                   <i className="rk" style={MEDAL[r.rank] ? { background: MEDAL[r.rank], color: "#10151f" } : undefined}>{r.rank}</i> <b>{r.name}</b>
                   {r.graduated && <span className="mut"> · graduated</span>}
                   <br />
@@ -78,6 +81,7 @@ export default function Boards() {
                       </span>
                     </>
                   )}
+                  </span>
                 </span>
                 <b className={key === "forbes" ? "cash" : ""}>
                   {r.money ? naira(r.value) : r.value}

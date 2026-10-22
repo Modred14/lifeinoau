@@ -150,3 +150,5 @@
   .sx-bar-fixed .sx-btns button { flex: 1; }
   .sx-who { display: none; }
 }
+.sx-idrow { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.sx-pic { box-shadow: 0 0 0 2px var(--green-text, #3fd08a); }

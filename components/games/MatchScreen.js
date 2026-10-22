@@ -3,6 +3,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "../Icon";
+import PlayerAvatar from "../PlayerAvatar";
 import { notifyError } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { gamesGet, gamesPost, clockText, koboNaira, nairaOf, outcomeText } from "@/lib/games/gamesClient";
@@ -99,7 +100,7 @@ function PlayerBar({ m, who }) {
   const you = who === "you", name = you ? m.you.name : m.opponent.name, seat = you ? m.seat : 1 - m.seat, turn = m.status === "ACTIVE" && m.turn === seat;
   return (
     <div className="gm-pbar" data-turn={turn ? "1" : undefined} data-you={you ? "1" : undefined}>
-      <span className="gm-av" data-s={seat} aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>
+      <PlayerAvatar name={name} size={28} className="gm-av" data-s={seat} />
       <b>{name}{you ? " (you)" : ""}</b>
       {m.status === "ACTIVE" && <small>{turn ? (you ? "Your turn" : "Thinking…") : ""}</small>}
       {m.stakeNaira > 0 && <em className="num">{nairaOf(m.stakeNaira)}</em>}

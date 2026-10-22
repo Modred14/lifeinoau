@@ -10,6 +10,7 @@ import { toast } from "@/lib/toast";
 import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
 import { Icon } from "../Icon";
+import PlayerAvatar from "../PlayerAvatar";
 import { useLive, useDo, Countdown, when, nairaN, Note, Empty, Section } from "./sugKit";
 import SugGovernment from "./SugGovernment";
 import SugAssembly from "./SugAssembly";
@@ -163,7 +164,7 @@ function Candidate({ c, ctx, doIt, load }) {
   return (
     <article className="sg-cand" data-me={c.isMe ? "1" : undefined}>
       <header>
-        <span className="sg-ava" aria-hidden="true">{c.who.name.slice(0, 1)}</span>
+        <PlayerAvatar name={c.who.name} size={40} className="sg-ava" />
         <div><b>{c.who.name}{c.isMe ? " (you)" : ""}</b><small>{[c.who.faculty, c.who.level ? `${c.who.level}L` : null].filter(Boolean).join(" · ")}</small></div>
         {c.status === "WON" ? <span className="sg-pill" data-s="WON">Elected</span> : null}
       </header>

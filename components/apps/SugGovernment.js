@@ -6,6 +6,7 @@ import { useState } from "react";
 import { confirmAction } from "@/lib/confirm";
 import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
+import PlayerAvatar from "../PlayerAvatar";
 import { useLive, useDo, Countdown, when, Note, Empty, Section } from "./sugKit";
 
 const POSTS = [["PRESIDENT", "SUG President"], ["VICE_PRESIDENT", "SUG Vice President"], ["SECRETARY_GENERAL", "Secretary General"], ["ASSISTANT_SECRETARY_GENERAL", "Assistant Secretary General"],
@@ -15,7 +16,7 @@ const POSTS = [["PRESIDENT", "SUG President"], ["VICE_PRESIDENT", "SUG Vice Pres
 function Holder({ title, h }) {
   return (
     <li className="sg-holder" data-vacant={h ? undefined : "1"}>
-      <span className="sg-ava" aria-hidden="true">{h ? h.who.name.slice(0, 1) : "–"}</span>
+      {h ? <PlayerAvatar name={h.who.name} size={40} className="sg-ava" /> : <span className="sg-ava" aria-hidden="true">–</span>}
       <span><b>{h ? h.who.name : "Vacant"}{h?.isMe ? " (you)" : ""}</b><small>{title}{h?.who.faculty ? ` · ${h.who.faculty}` : ""}</small></span>
     </li>
   );

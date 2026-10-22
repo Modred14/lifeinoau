@@ -10,6 +10,8 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { Icon } from "./Icon";
 import Loader from "./Loader";
+import PlayerAvatar from "./PlayerAvatar";
+import { avatarDirectory } from "@/lib/avatarClient";
 import { call, naira, loggedOut } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { confirmAction } from "@/lib/confirm";
@@ -205,6 +207,7 @@ export default function SettingsScreen({ onClose, onLogout, loggingOut }) {
     setLook({ gender: r.gender, look: r.look });
     // every screen reads the character from the game state: put the saved look there at once, then ask the server again
     patchGame((c) => ({ ...c, gender: r.gender, look: r.look, hostel: r.hostel }));
+    avatarDirectory.seed(data.profile.name, r.gender, r.look, r.lookKey); // every profile picture of this player (messages, leaderboards, home...) is redrawn from the new look
     setLookSave({ kind: "ok", text: r.hostelMoved ? `Saved. Your room moved from ${r.previousHostel} to ${r.hostel}.` : "Saved. Your character looks like this everywhere in the game." });
     toast.success("Character updated.");
   }
@@ -220,6 +223,7 @@ export default function SettingsScreen({ onClose, onLogout, loggingOut }) {
     if (r.failed) return setNameSave({ kind: "error", text: r.error || "Could not change your name." });
     setData((d) => ({ ...d, profile: { ...d.profile, name: r.name }, editable: { ...d.editable, nameChangeAvailableAt: r.changed ? new Date(Date.now() + 7 * 864e5).toISOString() : d.editable.nameChangeAvailableAt } }));
     patchGame((c) => ({ ...c, name: r.name }));
+    if (r.changed) { avatarDirectory.forget(data.profile.name); avatarDirectory.seed(r.name, data.profile.gender, data.profile.look, data.profile.lookKey); } // the old name no longer exists; the new one keeps the same look
     setEdit(null); setNameSave(null);
     if (r.changed) toast.success("Your name was changed.");
   }
@@ -257,6 +261,7 @@ export default function SettingsScreen({ onClose, onLogout, loggingOut }) {
   }
 
   const p = data?.profile;
+  const savedPic = useMemo(() => (p ? { name: p.name, gender: p.gender, look: p.look, key: p.lookKey } : null), [p?.name, p?.gender, p?.lookKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const tabInfo = TABS.find((t) => t[0] === tab);
   const badge = useMemo(() => ({ character: lookDirty, profile: nameDirty, audio: prefsDirty && tab === "audio" }), [lookDirty, nameDirty, prefsDirty, tab]);
 
@@ -270,7 +275,10 @@ export default function SettingsScreen({ onClose, onLogout, loggingOut }) {
             <CharacterViewer look={p.look} gender={p.gender} />
           </div>
           <div className="sx-herotxt">
-            <p className="sx-eyebrow">Player #{p.id}</p>
+            <div className="sx-idrow">
+              <PlayerAvatar name={p.name} size={56} look={savedPic} className="sx-pic" />
+              <p className="sx-eyebrow">Player #{p.id}</p>
+            </div>
             <h2>{p.name}</h2>
             <p className="mut">{p.gender === "F" ? "Woman" : "Man"} · {p.faculty.replace(/^Faculty of /, "")} · {p.level}L</p>
             <div className="sx-tags">
