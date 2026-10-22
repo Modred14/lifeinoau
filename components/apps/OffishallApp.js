@@ -130,7 +130,7 @@ export default function OffishallApp() {
 
   return (
     <div className="of">
-      <div className="of-hero"><span className="of-logo" aria-hidden="true">O</span><div><b>Offishall Store</b><span>Fashion for campus, the street and the red carpet</span></div><div className="of-bal"><small>Balance</small><b>{naira(balance)}</b></div></div>
+      <div className="of-hero"><span className="of-logo" aria-hidden="true">O</span><div><b>Offishall Stores</b><span>Fashion for campus, the street and the red carpet</span></div><div className="of-bal"><small>Balance</small><b>{naira(balance)}</b></div></div>
       <div className="of-tabs" role="tablist" aria-label="Offishall sections">
         <button type="button" role="tab" aria-selected={tab === "store"} onClick={() => setTab("store")}>Store</button>
         <button type="button" role="tab" aria-selected={tab === "wardrobe"} onClick={() => setTab("wardrobe")}>Wardrobe{ownedIds.length ? ` (${ownedIds.length})` : ""}</button>
@@ -154,7 +154,7 @@ export default function OffishallApp() {
       </>)}
 
       {tab === "wardrobe" && (ownedIds.length === 0 ? (
-        <div className="of-empty"><Icon name="shirt" size={40} weight="duotone" /><h3>Your wardrobe is empty</h3><p>Clothes you buy at Offishall Store are kept here for good. {worn ? "" : "Until then you are wearing your starter outfit."}</p><button type="button" className="go" onClick={() => setTab("store")}>Visit Offishall Store</button></div>
+        <div className="of-empty"><Icon name="shirt" size={40} weight="duotone" /><h3>Your wardrobe is empty</h3><p>Clothes you buy at Offishall Stores are kept here for good. {worn ? "" : "Until then you are wearing your starter outfit."}</p><button type="button" className="go" onClick={() => setTab("store")}>Visit Offishall Stores</button></div>
       ) : (<>
         <div className="of-stage"><CharacterViewer look={{ ...d.look, wear: shownWear }} gender={gender} label="Your character" /></div>
         <p className="of-note">{shownWear ? <>Showing: {names(shownWear)}</> : "Showing: your starter outfit"}{worn ? <> · Wearing: {names(worn)}</> : " · Wearing: your starter outfit"}</p>

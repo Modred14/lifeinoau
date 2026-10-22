@@ -367,7 +367,7 @@ export default function SettingsScreen({ onClose, onLogout, loggingOut }) {
             <Field title="Height" value={HEIGHT_LABEL[lk.height]}><Chips items={HEIGHTS} value={lk.height} onPick={setLookKey("height")} name="Height" text={(k) => HEIGHT_LABEL[k]} /></Field>
           </Card>
           <Card title="Clothes" icon="bag">
-            <p className="sx-note" role="note"><Icon name="shirt" size={14} weight="fill" /> Clothes now come from the Offishall Store on your phone. Everything you buy is kept in your wardrobe, and you can change outfits there whenever you like.</p>
+            <p className="sx-note" role="note"><Icon name="shirt" size={14} weight="fill" /> Clothes now come from the Offishall Stores, in the Clothing app on your phone. Everything you buy is kept in your wardrobe, and you can change outfits there whenever you like.</p>
           </Card>
         </div>
         <div className="sx-bar-fixed" data-show={lookDirty || lookSave ? "1" : undefined}>
