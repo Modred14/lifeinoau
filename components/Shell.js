@@ -10,6 +10,7 @@ import { setPlayMode, usePlayMode, useBare, resetBoot } from "@/lib/ui";
 import { Icon } from "./Icon";
 import Phone from "./Phone";
 import PlayerMenu from "./PlayerMenu";
+import BottomNav from "./BottomNav";
 import { useChat } from "@/lib/chat";
 import SoundToggle from "./SoundToggle";
 import { toast } from "@/lib/toast";
@@ -172,13 +173,31 @@ export default function Shell({ children }) {
     buying = onPlay && mode === "buy",
     mood = st ? moodOf(st.character.happiness) : null,
     held = !!st?.floorZero && +new Date(st.floorZero.releaseAt) > serverTime(); // serving a sentence in Floor O (N-QRS Custody): no shop; the phone still works (the apps follow their own rules)
+  // The bar stays on screen above every panel, so each tab first puts away whatever panel is open over the game (the phone, Settings).
+  const closePanels = () => {
+    setPhone(false);
+    setSettingsOpen(false);
+  };
   const goHome = () => {
+    closePanels();
     setPlayMode("home");
     if (path !== "/home") router.push("/home");
   };
   const goBuy = () => {
+    closePanels();
     setPlayMode("buy");
     if (path !== "/home") router.push("/home");
+  };
+  const goMap = () => {
+    closePanels();
+    setPlayMode("home");
+    window.dispatchEvent(new Event("oau:nav-map")); // already on the map and standing inside a building? this steps you back out to it
+  };
+  const togglePhone = () => {
+    setSettingsOpen(false);
+    if (phone) return setPhone(false);
+    setPhoneApp(null);
+    setPhone(true);
   };
   return (
     <>
@@ -230,63 +249,19 @@ export default function Shell({ children }) {
         <main className={"page" + (creating ? " wide" : "")}>{children}</main>
       )}
       {st && !hideBars && (
-        <nav className="nav" aria-label="Main">
-          <Link
-            href="/home"
-            aria-current={onPlay && !buying ? "page" : undefined}
-            data-active={onPlay && !buying ? "1" : undefined}
-            onClick={goHome}
-          >
-            <Icon name="home" weight={onPlay && !buying ? "fill" : "regular"} />
-            <span>Home</span>
-          </Link>
-          <button
-            type="button"
-            data-active={buying ? "1" : undefined}
-            aria-current={buying ? "page" : undefined}
-            disabled={held}
-            title={held ? "Not while you are in Floor O (N-QRS Custody)" : undefined}
-            onClick={goBuy}
-          >
-            <Icon name="bag" weight={buying ? "fill" : "regular"} />
-            <span>Buy</span>
-          </button>
-          <Link
-            href="/map"
-            aria-current={path === "/map" ? "page" : undefined}
-            data-active={path === "/map" ? "1" : undefined}
-            onClick={() => setPlayMode("home")}
-          >
-            <Icon name="map" weight={path === "/map" ? "fill" : "regular"} />
-            <span>Map</span>
-          </Link>
-          <button
-            type="button"
-            ref={opener}
-            data-sound="none"
-            data-active={phone ? "1" : undefined}
-            aria-expanded={phone}
-            aria-haspopup="dialog"
-            onClick={() => {
-              setPhoneApp(null);
-              setPhone(true);
-            }}
-          >
-            <span className="nav-ico">
-              <Icon name="phone" weight={phone ? "fill" : "regular"} />
-              {unreadChats > 0 && (
-                <i
-                  className="nav-badge"
-                  role="status"
-                  aria-label={`${unreadChats} unread messages`}
-                >
-                  {unreadChats > 9 ? "9+" : unreadChats}
-                </i>
-              )}
-            </span>
-            <span>Phone</span>
-          </button>
-        </nav>
+        <BottomNav
+          path={path}
+          onPlay={onPlay}
+          buying={buying}
+          held={held}
+          phoneOpen={phone}
+          unread={unreadChats}
+          opener={opener}
+          onHome={goHome}
+          onBuy={goBuy}
+          onMap={goMap}
+          onPhone={togglePhone}
+        />
       )}
       {(!st || hideBars) && <SoundToggle />}
       <Phone

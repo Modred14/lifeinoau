@@ -26,7 +26,9 @@ export default function PlayerMenu() {
   }, [pick]);
   if (!pick) return null;
   const W = typeof window === "undefined" ? 1024 : window.innerWidth, H = typeof window === "undefined" ? 768 : window.innerHeight, below = pick.y < 150;
-  const style = { left: Math.max(8, Math.min(W - 228, pick.x - 110)), ...(below ? { top: Math.min(H - 150, (pick.bottom ?? pick.y) + 10) } : { bottom: H - pick.y + 10 }) };
+  // the menu always stays above the bottom bar, wherever the tag it belongs to is on screen
+  const floor = typeof document === "undefined" ? H : Math.min(H, (document.querySelector(".nav")?.getBoundingClientRect().top ?? H) - 8);
+  const style = { left: Math.max(8, Math.min(W - 228, pick.x - 110)), ...(below ? { top: Math.min(floor - 150, (pick.bottom ?? pick.y) + 10) } : { bottom: H - Math.min(pick.y - 10, floor) }) };
   const sub = [pick.faculty, pick.level ? `${pick.level}L` : ""].filter(Boolean).join(" · ");
   return (
     <div className="pm" ref={box} style={style} role="dialog" aria-label={`${pick.name}, player options`} data-below={below ? "1" : undefined}>

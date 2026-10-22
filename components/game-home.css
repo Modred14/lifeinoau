@@ -2,7 +2,7 @@
 .gx { --gx-top: 82px; --gx-bottom: 102px; --sheet-h: 316px; --glass: rgba(15, 23, 41, 0.7); --glass-line: rgba(255, 255, 255, 0.11); --lift: 0 18px 40px -18px rgba(0, 0, 0, 0.7);
   position: fixed; inset: 0; z-index: 5; overflow: hidden; animation: gx-in 600ms var(--ease) both; }
 @keyframes gx-in { from { opacity: 0; } }
-.gx[data-mode="buy"] { --gx-bottom: calc(var(--nav-h) + var(--sheet-h) + 34px); }
+.gx[data-mode="buy"] { --gx-bottom: calc(var(--nav-h) + var(--safe-b) + var(--sheet-h) + 34px); }
 .gx[data-mode="buy"][data-sheet="min"] { --sheet-h: 62px; }
 
 /* a calm evening sky behind the diorama */
@@ -135,7 +135,7 @@
   .gx-me { bottom: calc(var(--nav-h) + var(--safe-b) + 20px); }
   .gx-me-card { padding: 8px 12px 8px 8px; } .gx-needs { grid-template-columns: repeat(3, 64px); gap: 8px; } .gx-face { width: 48px; min-height: 48px; }
   .gx-scene { top: calc(var(--gx-top) + 40px); }
-  .gx[data-mode="home"] { --gx-bottom: calc(var(--nav-h) + 96px); }
+  .gx[data-mode="home"] { --gx-bottom: calc(var(--nav-h) + var(--safe-b) + 96px); }
   .gx-tl { width: min(300px, calc(100% - 2 * var(--edge) - 72px)); }
   .gx-do { top: auto; bottom: calc(var(--nav-h) + var(--safe-b) + 20px); transform: none; padding: 6px; border-radius: 24px; }
   .gx-tr { top: calc(var(--safe-t) + 140px); }
@@ -167,7 +167,7 @@
   .bs-buy { min-height: 38px; } .bs-own { top: 12px; left: 12px; }
 }
 /* the room is the menu: what tapping the bed or the phone offers, and the sleeping panel */
-.gx-use, .gx-sleep { position: absolute; z-index: 6; left: var(--edge); right: var(--edge); bottom: calc(var(--nav-h) + 22px); max-width: 380px; margin: 0 auto; display: grid; gap: 8px; padding: 16px 18px; border-radius: 22px; background: var(--glass); backdrop-filter: blur(18px) saturate(1.35); -webkit-backdrop-filter: blur(18px) saturate(1.35); border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35); animation: gx-in 260ms var(--ease) both; }
+.gx-use, .gx-sleep { position: absolute; z-index: 6; left: var(--edge); right: var(--edge); bottom: calc(var(--nav-h) + var(--safe-b) + 22px); max-width: 380px; margin: 0 auto; display: grid; gap: 8px; padding: 16px 18px; border-radius: 22px; background: var(--glass); backdrop-filter: blur(18px) saturate(1.35); -webkit-backdrop-filter: blur(18px) saturate(1.35); border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35); animation: gx-in 260ms var(--ease) both; }
 .gx-use h2, .gx-sleep h2 { display: flex; align-items: center; gap: 8px; margin: 0; font: 600 1.05rem var(--font-head); }
 .gx-use p, .gx-sleep p { margin: 0; font-size: 0.9rem; line-height: 1.4; }
 .gx-use .go, .gx-sleep .go { min-height: 46px; margin-top: 4px; }

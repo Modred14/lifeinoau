@@ -1,6 +1,6 @@
 /* components/travel.css: the travel sheet, the trip screen (mini map, controls) and the inside-a-building screen. Flat dark surfaces, one main button per panel. */
 .stage[data-trip="1"] .bl, .stage[data-trip="1"] .stage-ctrls, .stage[data-trip="1"] .stage-hint { display: none !important; }
-body[data-trip] .nav, body[data-trip] .map-chrome { display: none !important; }
+body[data-trip] .map-chrome { display: none !important; } /* the bottom bar is never hidden: see components/bottom-nav.css */
 
 /* ---- the sheet: how do you want to go? Flat dark surface; one main button; everything else quieter ---- */
 .ts-scrim { position: fixed; inset: 0; z-index: 60; background: var(--scrim); display: flex; align-items: flex-end; justify-content: center; }

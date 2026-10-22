@@ -1,0 +1,69 @@
+/* components/bottom-nav.css: the persistent bottom bar and the layer contract that keeps it on screen.
+
+   Why the bar used to vanish: it sat at z-index 30 while the phone, travel sheets, building interiors and dialogs are full-screen layers at 60-95,
+   so every one of them covered it; the trip screen hid it outright; and none of those layers left any room for it.
+
+   The contract now:
+   1. The bar is one fixed layer (--z-nav) above every in-game layer (the highest is the lecture fight at 300). Only toasts (1000) sit higher.
+   2. --nav-band is the bar's real footprint above the bottom edge. --nav-h (the spacing the pages and the home screen already use) follows it.
+   3. While the bar is mounted, <body data-nav="on">. Every full-screen layer below redefines --safe-b (the bottom inset all of them already use for
+      their sheets, footers and joysticks) as "device inset + the bar", so their bottom controls stop above the bar instead of under it. */
+:root {
+  --z-nav: 500;
+  --nav-gap: 16px; /* between the bar and the bottom edge (the device's own inset comes on top) */
+  --nav-bar-h: 72px; /* 58px buttons + 2 x 6px padding + 2px border */
+  --nav-band: calc(var(--nav-gap) + var(--nav-bar-h));
+}
+/* a phone held sideways has little height to give: the bar gets slimmer */
+@media (max-height: 480px) {
+  :root { --nav-gap: 8px; --nav-bar-h: 58px; }
+}
+
+.nav {
+  position: fixed; z-index: var(--z-nav); bottom: calc(var(--safe-b) + var(--nav-gap)); left: 50%; transform: translateX(-50%);
+  width: min(520px, calc(100% - 2 * var(--edge))); display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 6px;
+  background: rgba(13, 19, 33, 0.8); backdrop-filter: blur(20px) saturate(1.3); -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.12); border-radius: var(--r-pill); box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.75);
+}
+.nav a, .nav button:not(:where(.campus-world *)) { min-height: 58px; flex-direction: column; gap: 3px; font-size: 0.76rem; font-weight: 500; border-radius: var(--r-pill); border: 0; background: transparent; color: var(--muted); padding: 6px 4px; transition: background-color var(--t-base) var(--ease), color var(--t-base) var(--ease), transform var(--t-fast) var(--ease); }
+.nav a { display: inline-flex; align-items: center; justify-content: center; }
+.nav [data-active="1"] { background: #fff; color: #0d1321; font-weight: 600; }
+.nav a:hover:not([data-active="1"]), .nav button:not(:where(.campus-world *)):hover:not(:disabled):not([data-active="1"]) { color: var(--text); background-color: rgba(255, 255, 255, 0.09); }
+.nav [data-active="1"]:hover { background-color: #fff; }
+@media (max-height: 480px) {
+  .nav a, .nav button:not(:where(.campus-world *)) { min-height: 44px; padding: 4px; gap: 1px; }
+}
+
+/* ---- the layers that must leave room for the bar ---- */
+body[data-nav="on"] :is(.ph-scrim, .ts-scrim, .cl-scrim, .cd-scrim, .th-pre-scrim, .sheet-scrim, .bi, .bi3, .th, .lf, .sx, .er, .nf) {
+  --safe-b: calc(env(safe-area-inset-bottom, 0px) + var(--nav-band));
+}
+/* dialogs that sit in the MIDDLE of the screen on wider windows (they are bottom sheets on phones): the screen around them reserves the bar's room, and
+   the card itself goes back to the plain device inset because it no longer reaches the edge */
+@media (min-width: 720px) {
+  body[data-nav="on"] .ts-scrim { padding-bottom: var(--safe-b); }
+  body[data-nav="on"] .ts { --safe-b: env(safe-area-inset-bottom, 0px); max-height: min(86dvh, 760px, calc(100dvh - var(--nav-band) - env(safe-area-inset-bottom, 0px) - 16px)); }
+}
+@media (min-width: 560px) {
+  body[data-nav="on"] .cd-scrim { padding-bottom: calc(24px + var(--safe-b)); }
+  body[data-nav="on"] .cd { --safe-b: env(safe-area-inset-bottom, 0px); max-height: min(92dvh, calc(100dvh - 48px - var(--nav-band) - env(safe-area-inset-bottom, 0px))); }
+}
+@media (min-width: 760px) {
+  body[data-nav="on"] .cl-scrim { padding-bottom: var(--safe-b); }
+  body[data-nav="on"] .cl { --safe-b: env(safe-area-inset-bottom, 0px); max-height: min(88dvh, calc(100dvh - var(--nav-band) - env(safe-area-inset-bottom, 0px) - 16px)); }
+}
+/* centred cards: the card's own scroll area ends above the bar */
+body[data-nav="on"] .bi { padding-bottom: calc(16px + var(--safe-b)); }
+body[data-nav="on"] .th-pre-scrim { padding-bottom: calc(12px + var(--safe-b)); }
+/* the phone: the handset ends above the bar (a real phone: its Close button and the handset both move up with it) */
+@media (min-width: 561px) {
+  body[data-nav="on"] .ph-scrim { padding-bottom: calc(16px + var(--safe-b)); }
+  body[data-nav="on"] .ph { height: min(830px, calc(100dvh - 32px - var(--safe-b))); }
+}
+@media (max-width: 560px) {
+  body[data-nav="on"] .ph { height: calc(100dvh - var(--safe-t) - 76px - var(--safe-b)); }
+}
+/* settings: a full page, so the page itself ends above the bar, and its floating save bar and toast sit on top of that */
+body[data-nav="on"] .sx { padding-bottom: var(--safe-b); }
+body[data-nav="on"] .sx-bar-fixed { bottom: var(--safe-b); padding-bottom: 12px; }
+body[data-nav="on"] .sx-toast { bottom: calc(20px + var(--safe-b)); }

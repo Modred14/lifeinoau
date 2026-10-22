@@ -109,6 +109,8 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
   }, [focus, sceneReady, rings]);
   useEffect(() => { if (pendingOpen.current && near && near.activity === pendingOpen.current.activity) { setOpen(pendingOpen.current); pendingOpen.current = null; } }, [near]);
   useEffect(() => { if (open && !(near && near.activity === open.activity)) setOpen(null); }, [near, open]); // walking away from a ring closes its panel
+  // the bottom bar stays on screen in here: its Map tab steps you out to the map (a prisoner in a cell, or a lecture fight in progress, stays put)
+  useEffect(() => { const h = () => { if (cell || fight || incident || after) return; setOpen(null); setInfo(false); onLeave(); }; window.addEventListener("oau:nav-map", h); return () => window.removeEventListener("oau:nav-map", h); }, [onLeave, cell, fight, incident, after]);
   useEffect(() => { const k = (e) => { if (e.key !== "Escape") return; if (open) setOpen(null); else if (info) setInfo(false); else if (!cell) onLeave(); }; document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [onLeave, info, open]);
 
   // ---- the charge desk in Floor O ("Settle your bill") ----
