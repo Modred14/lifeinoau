@@ -29,17 +29,22 @@ const openMenu = (pick) => window.dispatchEvent(new CustomEvent("oau:player-menu
 /**
  * container: the element the 3D canvas lives in (it must be positioned). camera: the scene's camera.
  * selfName / selfId: your own character, which never gets a tag. unit: scene units per metre (the trip scene is drawn at 0.1).
+ * gap: pixels between the bottom of a tag and the anchor (the top of the head), kept at any tag scale.
  * visible(tag, cameraPos, headPos) -> false hides a tag (used inside buildings so nobody is named through a wall).
  * onPick(pick) replaces the default menu. Returns { set, remove, has, ids, update, dispose }.
  */
-export function createPlayerTags({ container, camera, selfName = "", selfId = "", unit = 1, maxDist = 28, fadeFrom = 20, visible = null, onPick = null }) {
+export function createPlayerTags({ container, camera, selfName = "", selfId = "", unit = 1, maxDist = 28, fadeFrom = 20, gap = 4, visible = null, onPick = null }) {
   const layer = document.createElement("div");
   layer.className = "pt-layer"; layer.dataset.playerTags = "1";
   layer.style.cssText = "position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:6";
   container.appendChild(layer);
   const tags = new Map(), self = { id: selfId, name: selfName }, cp = new THREE.Vector3(), hp = new THREE.Vector3(), pr = new THREE.Vector3();
   let W = layer.clientWidth || 1, H = layer.clientHeight || 1, dead = false;
-  const ro = typeof ResizeObserver === "function" ? new ResizeObserver(() => { W = layer.clientWidth || 1; H = layer.clientHeight || 1; }) : null; ro?.observe(layer);
+  // The tag layer covers exactly the canvas' container, so a tag's pixel position is the projected point scaled to the layer's own size. The size is
+  // re-read whenever the layer resizes (rotating a phone, the address bar sliding away) and again on the first frames, when the layout may still be settling.
+  const measure = () => { const w = layer.clientWidth || 1, h = layer.clientHeight || 1; if (w !== W || h !== H) { W = w; H = h; for (const t of tags.values()) t.x = t.y = -9999; } };
+  const ro = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null; ro?.observe(layer);
+  let settle = 8;
   const gone = (ids) => { if (ids.length) window.dispatchEvent(new CustomEvent("oau:player-gone", { detail: { ids } })); };
 
   /** Add or refresh the tag of one player. anchor: an Object3D at the top of their head (it moves with them). Returns false if the player may not have a tag. */
@@ -68,6 +73,7 @@ export function createPlayerTags({ container, camera, selfName = "", selfId = ""
   /** Place every tag: call once per frame, after the camera has moved. */
   function update() {
     if (dead || !tags.size) return;
+    if (settle > 0) { settle--; measure(); }
     camera.updateMatrixWorld(); camera.getWorldPosition(cp);
     for (const t of tags.values()) {
       let on = shown(t.anchor), d = 0;
@@ -78,8 +84,9 @@ export function createPlayerTags({ container, camera, selfName = "", selfId = ""
       }
       if (on !== t.vis) { t.vis = on; t.el.style.visibility = on ? "visible" : "hidden"; }
       if (!on) continue;
-      const x = (pr.x * 0.5 + 0.5) * W, y = (-pr.y * 0.5 + 0.5) * H, s = d < 8 ? 1 : Math.max(0.82, 1 - (d - 8) / 70), o = d > fadeFrom ? Math.max(0.35, 1 - (d - fadeFrom) / (maxDist - fadeFrom)) : 1;
-      if (Math.abs(x - t.x) > 0.4 || Math.abs(y - t.y) > 0.4 || Math.abs(s - t.s) > 0.01) { t.x = x; t.y = y; t.s = s; t.el.style.transform = `translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0) translate(-50%,-100%) scale(${s.toFixed(2)})`; }
+      // NDC (-1..1, y up) -> layer pixels (y down). The tag's bottom-centre sits on the anchor (transform-origin is the bottom centre, so scaling never moves it).
+      const x = (pr.x * 0.5 + 0.5) * W, y = (-pr.y * 0.5 + 0.5) * H, s = d < 6 ? 1 : Math.max(0.88, 1 - (d - 6) / 90), o = d > fadeFrom ? Math.max(0.35, 1 - (d - fadeFrom) / (maxDist - fadeFrom)) : 1;
+      if (Math.abs(x - t.x) > 0.1 || Math.abs(y - t.y) > 0.1 || Math.abs(s - t.s) > 0.01) { t.x = x; t.y = y; t.s = s; t.el.style.transform = `translate3d(${x.toFixed(1)}px,${(y - gap * s).toFixed(1)}px,0) translate(-50%,-100%) scale(${s.toFixed(2)})`; }
       if (Math.abs(o - t.o) > 0.02) { t.o = o; t.el.style.opacity = o.toFixed(2); }
       const z = Math.max(1, 1000 - Math.round(d)); if (z !== t.z) { t.z = z; t.el.style.zIndex = z; } // the nearer one is on top when two overlap
     }

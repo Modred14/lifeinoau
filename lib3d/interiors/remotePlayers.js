@@ -10,6 +10,8 @@ import { lookKey } from "../../lib/look.js";
 export const REMOTE_MAX = 12;   // avatars are heavy, so only the nearest few are built
 export const REMOTE_RANGE = 22; // metres: farther away they are hidden (and so is their tag)
 const RUN_AT = 2.6, SPEED_CAP = 4.4, SNAP = 14;
+const HEAD_TOP = 0.11, HEAD_GAP = 0.07; // the head joint sits about 0.89 of the height up, so the crown is 0.11 x height above it; the name floats a hand's width over that
+const wp = new THREE.Vector3();
 
 /**
  * scene: where avatars go. makeAvatar(look, gender) -> Promise<avatar> (createAvatar). tags: a playerTags layer. floorY(f): height of floor f.
@@ -29,8 +31,8 @@ export function createRemotePlayers({ scene, makeAvatar, tags, floorY = () => 0,
     const holder = new THREE.Group(), anchor = new THREE.Object3D(); anchor.position.y = 2.05; holder.add(anchor); holder.visible = false; scene.add(holder);
     const e = { id: p.id, name: p.name, key: lookKey(p.look, p.gender), holder, anchor, av: null, fallback: null, x: p.x, z: p.z, tx: p.x, tz: p.z, floor: p.floor ?? 0, yaw: 0, cur: null, anim: null, meta: {}, dead: false, height: 1.75, v: 0 };
     entries.set(p.id, e);
-    const ready = (h) => { if (e.dead || dead) return false; e.height = h; anchor.position.y = h + 0.3; tags.set(e.id, { name: e.name, anchor, meta: e.meta }); return true; };
-    makeAvatar(p.look ?? null, p.gender === "F" ? "F" : "M").then((av) => { if (!ready(av.height ?? 1.75)) { av.dispose?.(); return; } e.av = av; holder.add(av.root); })
+    const ready = (h) => { if (e.dead || dead) return false; e.height = h; anchor.position.y = h + HEAD_GAP; tags.set(e.id, { name: e.name, anchor, meta: e.meta }); return true; };
+    makeAvatar(p.look ?? null, p.gender === "F" ? "F" : "M").then((av) => { if (!ready(av.height ?? 1.75)) { av.dispose?.(); return; } e.av = av; e.head = av.bone?.("Head") ?? null; holder.add(av.root); })
       .catch(() => { // the model would not load: a plain figure stands in, so the name never floats over nothing
         const m = new THREE.Mesh(new THREE.CapsuleGeometry(0.25, 1.1, 4, 8).translate(0, 0.8, 0), new THREE.MeshStandardMaterial({ color: "#2f62c4" }));
         if (!ready(1.75)) { m.geometry.dispose(); m.material.dispose(); return; } e.fallback = m; holder.add(m); });
@@ -57,6 +59,18 @@ export function createRemotePlayers({ scene, makeAvatar, tags, floorY = () => 0,
     }
   }
 
+  /**
+   * Put the name anchor straight above the character's real head: the Head bone's world position (so it follows walking, sitting, lying down and every
+   * other animation), lifted along world-up so the name stays upright and level even when the head tilts. Without a skeleton the standing height is used.
+   * The bone's world matrix is refreshed up its own parent chain (holder included), so this is exact on the frame the pose changed.
+   */
+  function followHead(e) {
+    const bone = e.head;
+    if (!bone) { e.anchor.position.set(0, e.height + HEAD_GAP, 0); return; }
+    bone.getWorldPosition(wp); wp.y += e.height * HEAD_TOP + HEAD_GAP; e.holder.worldToLocal(wp);
+    if (Number.isFinite(wp.x + wp.y + wp.z)) e.anchor.position.copy(wp); else e.anchor.position.set(0, e.height + HEAD_GAP, 0);
+  }
+
   /** Every frame: glide each avatar to its latest spot, pick walk / run / idle / the activity pose, and hide the ones on another floor or far away. */
   function update(t, dt, P) {
     if (dead) return;
@@ -74,9 +88,8 @@ export function createRemotePlayers({ scene, makeAvatar, tags, floorY = () => 0,
       if (e.detained && !pose) { const cell = cellAt(cells, e.x, e.z, -0.4); want = moving ? "detainedPace" : cell && cell.z1 - e.z < 1.1 ? "detainedHold" : "lookAround"; if (!av.has?.(want)) want = moving ? "walk" : "idle"; }
       if (want !== e.cur && av.has?.(want) && av.play(want, { fade: 0.25 })) e.cur = want;
       if (moving) av.setSpeed?.(Math.max(0.6, Math.min(1.6, e.v / 2.2))); else av.setSpeed?.(1);
-      // the name stays just above the head, lower when they sit and lower still when they lie down
-      const k = /sleep|lie|lay/.test(e.cur ?? "") ? 0.42 : /sit/.test(e.cur ?? "") ? 0.74 : 1; e.anchor.position.y = e.height * k + 0.3;
       av.update(t, dt);
+      followHead(e); // after the pose is applied, so the name rides the head as it walks, sits or lies down
     }
   }
 

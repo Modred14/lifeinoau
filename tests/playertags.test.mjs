@@ -94,5 +94,27 @@ rp.sync(Array.from({ length: 40 }, (_, i) => P("m" + i, "M" + i, i, 0)), { x: 0,
 chk("only the nearest few are built", rp.count() === REMOTE_MAX);
 rp.sync([P("m1", "M1", 1, 0)], { x: 0, z: 0 }); rp.sync([P("m1", "M1", 1, 0)], { x: 0, z: 0 }); await new Promise((r) => setTimeout(r, 5));
 chk("a player who reconnects appears once, never twice", rp.ids().join() === "m1" && scene.children.length === 1);
+// the name rides the real head bone: sitting lowers the head, the name follows it exactly, and it stays upright above it
+{
+  const sc = new THREE.Scene(), headBone = new THREE.Bone(); headBone.position.y = 1.55;
+  const mk = async () => { const root = new THREE.Group(); root.add(headBone); return { root, height: 1.75, bone: (n) => (n === "Head" ? headBone : null), has: () => true, play: () => true, setSpeed() {}, update() {}, dispose() {} }; };
+  const r2 = createRemotePlayers({ scene: sc, makeAvatar: mk, tags: { set() { return true; }, remove() {} }, self: { name: "Ada" } });
+  r2.sync([P("h1", "Head", 5, 6)], { x: 5, z: 6 }); await new Promise((r) => setTimeout(r, 5)); r2.update(1, 0.016, { x: 5, z: 6, fl: 0 });
+  const holder2 = sc.children[0], anchor2 = holder2.children[0], wpos = new THREE.Vector3();
+  anchor2.getWorldPosition(wpos); const stand = wpos.y;
+  chk("standing: the name is just over the crown (not 0.3 m of empty air)", Math.abs(stand - (1.55 + 1.75 * 0.11 + 0.07 + 0.02)) < 0.02);
+  headBone.position.y = 0.9; r2.update(1.1, 0.016, { x: 5, z: 6, fl: 0 }); anchor2.getWorldPosition(wpos);
+  chk("sitting: the head drops and the name drops with it", Math.abs(wpos.y - (0.9 + 1.75 * 0.11 + 0.07 + 0.02)) < 0.02 && wpos.y < stand - 0.5);
+  chk("it stays over the character, not beside it", Math.abs(wpos.x - 5) < 1e-6 && Math.abs(wpos.z - 6) < 1e-6);
+  r2.dispose();
+}
+// a resized layer re-maps the tag: the same head lands at the same fraction of the new size
+{
+  const b2 = new El("div"), t2 = createPlayerTags({ container: b2, camera: cam, maxDist: 28 }); t2.set("r", { name: "Resize", anchor: head(0, 2, -8) }); t2.update();
+  const x1 = parseFloat(/translate3d\(([\d.]+)px/.exec(t2.layer.children[0].style.transform)[1]);
+  b2.children[0].clientWidth = 400; b2.children[0].clientHeight = 300; for (let i = 0; i < 9; i++) t2.update();
+  const x2 = parseFloat(/translate3d\(([\d.]+)px/.exec(t2.layer.children[0].style.transform)[1]);
+  chk("after the layer shrinks to half, the tag is at half the x (same spot on the head)", Math.abs(x2 * 2 - x1) < 1); t2.dispose();
+}
 rp.dispose(); chk("dispose frees everything", rp.count() === 0 && scene.children.length === 0);
 process.exit(bad ? 1 : 0);
