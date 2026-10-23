@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "../Icon";
+import { Spinner } from "../Loader";
 import PlayerAvatar from "../PlayerAvatar";
 import { call, naira, loggedOut } from "@/lib/client";
 import { toast } from "@/lib/toast";
@@ -156,7 +157,7 @@ export default function SettingsApp({ onHome, onClose, onOpenApp, onLogout, logg
 
   /* ---------------------------------- pages ---------------------------------- */
 
-  const needData = !d ? (loadFailed ? <div className="st-retry st-big"><Icon name="alert" size={26} /><p>Your settings did not load. Check your connection.</p><button type="button" className="go" onClick={load}>Try again</button></div> : <div className="ph-spin" role="status" aria-label="Loading your settings"><span className="ph-spin-ring" /></div>) : null;
+  const needData = !d ? (loadFailed ? <div className="st-retry st-big"><Icon name="alert" size={26} /><p>Your settings did not load. Check your connection.</p><button type="button" className="go" onClick={load}>Try again</button></div> : <Spinner label="Loading your settings" />) : null;
 
   const pages = {
     profile: needData ?? (

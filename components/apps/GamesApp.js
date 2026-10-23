@@ -4,6 +4,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "../Icon";
+import { Spinner } from "../Loader";
 import { call, notifyError } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { gamesGet, gamesPost, koboNaira, nairaOf } from "@/lib/games/gamesClient";
@@ -86,7 +87,7 @@ export default function GamesApp({ onHome }) {
         {lobby && <span className="gm-wallet" aria-label="Your cash"><Icon name="coins" size={15} weight="fill" /><b className="num">{koboNaira(lobby.balanceKobo)}</b></span>}
       </header>
       {err && !lobby && <div className="gm-pad"><p className="gm-note">{err}</p><button type="button" className="gm-btn" onClick={load}>Try again</button></div>}
-      {!lobby && !err && <div className="gm-pad gm-center"><i className="gm-spin" aria-hidden="true" /></div>}
+      {!lobby && !err && <Spinner label="Loading games" />}
       {lobby && setup && <Setup key={setup.id} game={setup} lobby={lobby} busy={busy} run={run} openMatch={openMatch} onPractice={() => setPractice(true)} />}
       {lobby && !setup && (
         <>

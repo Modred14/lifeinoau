@@ -5,3 +5,4 @@
 import { createContext } from "react";
 
 export const InPhone = createContext(false);
+export const PhoneLoading = createContext(null);

@@ -6,7 +6,7 @@ import { useGame, useResource } from "@/lib/gameStore";
 import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
 import PlayerAvatar from "@/components/PlayerAvatar";
-import ForbesBoard, { ForbesSkeleton } from "./ForbesBoard";
+import ForbesBoard from "./ForbesBoard";
 
 const TABS = [
   ["forbes", "FORBES"],
@@ -57,7 +57,7 @@ export default function Boards() {
           onRetry={load}
         />
       )}
-      {!b && !failed && (key === "forbes" ? <ForbesSkeleton /> : <Loader label="Loading leaderboards" />)}
+      {!b && !failed && <Loader label={key === "forbes" ? "Loading Forbes OAU" : "Loading leaderboards"} />}
       {b?.unavailable && (
         <div className="card">
           <p>{b.unavailable}</p>

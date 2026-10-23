@@ -155,8 +155,10 @@
 /* ---------- the Bet app is a dark, full-height app that scrolls inside itself ---------- */
 .ph[data-app="bet"] .ph-status { color: #fff; }
 .ph[data-app="bet"] .ph-home i { background: rgba(255, 255, 255, 0.9); }
-.ph[data-app="bet"] .pa { --bg: #0b0e13; color-scheme: dark; }
+.ph[data-app="bet"] .pa { --bg: #0b0e13; --spin: #27c46f; --spin-track: #232c38; color-scheme: dark; }
 .ph[data-app="bet"] .pa-body { overflow: hidden; padding-bottom: 0; }
+/* The Games app owns a dark surface inside its page; keep that surface during its initial load too. */
+.ph[data-app="games"] .pa { --bg: #0d1016; --blue: #2fcf79; --spin: #2fcf79; --spin-track: #2a3342; color-scheme: dark; background: #0d1016; }
 /* the leaderboards app (FORBES OAU, see components/apps/forbes.css): light page with OAU green accents */
 .ph[data-app="forbes"] .ph-status { color: #101828; }
 .ph[data-app="forbes"] .ph-home i { background: rgba(16, 24, 40, 0.78); }
@@ -169,15 +171,15 @@
 @keyframes ph-spin { to { transform: rotate(360deg); } }
 @keyframes ph-spin-in { to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .ph-spin-ring { animation-duration: 2.4s; } }
-/* When the spinner is all an app has to show, the white page steps aside and it turns on the phone's own wallpaper (the skyline stays, the icons hide). */
-.ph[data-app]:has(.pa-content > .ph-spin):not(:has(.pa-content > :not(.ph-spin, .top))) .pa { background: transparent; --text: #fff; --blue: #fff; }
-.ph[data-app]:has(.pa-content > .ph-spin):not(:has(.pa-content > :not(.ph-spin, .top))) .ph-body { visibility: hidden; }
-.ph[data-app]:has(.pa-content > .ph-spin):not(:has(.pa-content > :not(.ph-spin, .top))) .ph-status,
-.ph[data-app]:has(.pa-content > .ph-spin):not(:has(.pa-content > :not(.ph-spin, .top))) .pa-bar h2 { color: #fff; }
-.ph[data-app]:has(.pa-content > .ph-spin):not(:has(.pa-content > :not(.ph-spin, .top))) .ph-home i { background: rgba(255, 255, 255, 0.9); }
-.ph[data-app]:has(.pa-content > .ph-spin):not(:has(.pa-content > :not(.ph-spin, .top))) .pa-back { color: #fff; }
-.ph[data-app]:has(.pa-content > .ph-spin):not(:has(.pa-content > :not(.ph-spin, .top))) .ph-spin { --spin: #fff; --spin-track: rgba(255, 255, 255, 0.28); }
-.ph[data-app]:has(.pa-content > .ph-spin):not(:has(.pa-content > :not(.ph-spin, .top))) .ph-spin { min-height: min(540px, calc(100dvh - 250px)); }
+/* A loading app gets one opaque, full-screen layer painted with that app's own background. */
+.ph[data-loading="true"] .pa { z-index: 7; }
+.ph[data-loading="true"] .ph-status,
+.ph[data-loading="true"] .ph-home,
+.ph[data-loading="true"] .ph-close { visibility: hidden; }
+.ph[data-loading="true"] .pa-body { overflow: hidden; }
+.ph-app-loading { position: absolute; z-index: 20; inset: 0; display: grid; place-items: center; overflow: hidden; background: inherit; pointer-events: auto; }
+.ph-app-loading .ph-spin-ring { width: 40px; height: 40px; border-radius: 50%; border: 4px solid var(--spin-track, rgba(16, 24, 40, 0.12)); border-top-color: var(--spin, var(--blue, #2563eb)); opacity: 0; animation: ph-spin 0.8s linear infinite, ph-spin-in 200ms 150ms var(--ease) forwards; }
+@media (prefers-reduced-motion: reduce) { .ph-app-loading .ph-spin-ring { animation-duration: 2.4s, 200ms; } }
 /* the Jobs app's shift desk */
 .shift-on { display: grid; gap: 8px; }
 .shift-bar { height: 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }

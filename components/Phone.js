@@ -6,7 +6,7 @@ import { Icon } from "./Icon";
 import { naira, call } from "@/lib/client";
 import { CLASS_INFO } from "@/lib/classes.js";
 import { playSound } from "@/lib/sound";
-import { InPhone } from "./phoneContext";
+import { InPhone, PhoneLoading } from "./phoneContext";
 import { serverDate } from "@/lib/serverClock";
 import { applyPwaUpdate, checkPwaUpdate, usePwaUpdate } from "@/lib/pwa";
 import MessagesApp from "./apps/MessagesApp";
@@ -93,7 +93,15 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
   const unread = useChat((s) => s.unread); // pushed by the chat connection: nothing is polled for it any more
   const gamesBadge = useGamesBadge(open); // challenges waiting for you, or a match where it is your move
   const updateAvailable = usePwaUpdate();
+  const [appLoading, setAppLoading] = useState(false);
+  const loadingSpinners = useRef(new Set());
   const wasOpen = useRef(false);
+
+  const reportAppLoading = useCallback((id, active) => {
+    if (active) loadingSpinners.current.add(id);
+    else loadingSpinners.current.delete(id);
+    setAppLoading(loadingSpinners.current.size > 0);
+  }, []);
 
   useEffect(() => {
     // the handset slides up and away with a sound, whichever way it was opened or closed
@@ -130,10 +138,11 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
   const Cur = cur?.C;
   return (
     <InPhone.Provider value={true}>
+    <PhoneLoading.Provider value={reportAppLoading}>
     <div className="ph-scrim" data-over={initialWith ? "1" : undefined} onClick={onClose}>
-      <div className="ph" role="dialog" aria-modal="true" aria-label="Phone" data-app={app ?? undefined} onClick={(e) => e.stopPropagation()}>
+      <div className="ph" role="dialog" aria-modal="true" aria-label="Phone" data-app={app ?? undefined} data-loading={appLoading ? "true" : undefined} onClick={(e) => e.stopPropagation()}>
         <div className="ph-screen">
-          <div className="ph-status">
+          <div className="ph-status" aria-hidden={appLoading || undefined}>
             <b className="num">{clock(now, true)}</b>
             <span className="ph-notch" aria-hidden="true" />
             <span className="ph-sys">
@@ -180,29 +189,31 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
           {cur && (
             <section className="pa" key={app + (initialWith ?? "") + (peer ?? "")} aria-label={cur.name}>
               {!cur.own && (
-                <header className="pa-bar">
+                <header className="pa-bar" aria-hidden={appLoading || undefined} inert={appLoading || undefined}>
                   <button type="button" className="pa-back" onClick={home} aria-label="Back to home screen">
                     <Icon name="back" size={24} weight="bold" />
                   </button>
                   <h2>{cur.name}</h2>
                 </header>
               )}
-              <div className="pa-body">
+              <div className="pa-body" aria-hidden={appLoading || undefined} inert={appLoading || undefined}>
                 {Cur ? (cur.own ? <Cur onHome={home} onClose={onClose} onOpenApp={openApp} onLogout={onLogout} loggingOut={loggingOut} /> : <div className="pa-content"><Cur onOpenApp={openApp} onClose={onClose} /></div>) : <MessagesApp onHome={home} initialWho={app === "messages" ? (peer ?? initialWith) : null} />}
               </div>
+              {appLoading && <div className="ph-app-loading" role="status" aria-live="polite" aria-busy="true" aria-label={`Loading ${cur.name}`}><span className="ph-spin-ring" aria-hidden="true" /></div>}
             </section>
           )}
 
-          <button type="button" className="ph-home" data-sound={app ? "home" : "none"} onClick={() => (app ? home() : onClose())} aria-label={app ? "Go to home screen" : "Close phone"}>
+          <button type="button" className="ph-home" data-sound={app ? "home" : "none"} onClick={() => (app ? home() : onClose())} aria-label={app ? "Go to home screen" : "Close phone"} aria-hidden={appLoading || undefined} tabIndex={appLoading ? -1 : undefined}>
             <i />
           </button>
         </div>
-        <button type="button" className="ph-close" data-sound="none" onClick={onClose} aria-label="Close phone">
+        <button type="button" className="ph-close" data-sound="none" onClick={onClose} aria-label="Close phone" aria-hidden={appLoading || undefined} tabIndex={appLoading ? -1 : undefined}>
           <Icon name="close" size={18} />
           Close
         </button>
       </div>
     </div>
+    </PhoneLoading.Provider>
     </InPhone.Provider>
   );
 }

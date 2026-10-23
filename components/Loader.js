@@ -1,7 +1,7 @@
 // components/Loader.js
 "use client";
-import { useContext, useLayoutEffect, useRef } from "react";
-import { InPhone } from "./phoneContext";
+import { useContext, useId, useLayoutEffect, useRef } from "react";
+import { InPhone, PhoneLoading } from "./phoneContext";
 import "./loader.css";
 import { LOGO_VIEWBOX, LOGO_RATIO, LOGO_SUN, LOGO_PARTS } from "./logoData";
 
@@ -86,6 +86,12 @@ export default function Loader({ label = "Loading", showLabel = true, fullscreen
 }
 /** The phone's loading state: one ring, turning. Shows on the phone's own wallpaper when it is all that is on the page (see phone.css). */
 export function Spinner({ label = "Loading", className = "" }) {
+  const reportLoading = useContext(PhoneLoading), id = useId();
+  useLayoutEffect(() => {
+    if (!reportLoading) return;
+    reportLoading(id, true);
+    return () => reportLoading(id, false);
+  }, [reportLoading, id]);
   return (
     <div className={("ph-spin " + className).trim()} role="status" aria-live="polite" aria-busy="true">
       <span className="ph-spin-ring" aria-hidden="true" />
