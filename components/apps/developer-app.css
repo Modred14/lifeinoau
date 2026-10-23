@@ -1,0 +1,74 @@
+/* components/apps/developer-app.css: the Developer app inside the phone. A dark page with a gold accent, like the rest of Life in OAU's night look.
+   The home-screen tile and the dark page theme live here (not in phone.css) so the app is self-contained. Mobile first. */
+.ph-ico[data-tone="dev"] { background: linear-gradient(165deg, #1d2740, #0b1020); color: #f0c35a; } /* dark navy tile, gold glyph */
+.ph[data-app="developer"] .ph-status { color: #f4f1e8; }
+.ph[data-app="developer"] .ph-home i { background: rgba(244, 241, 232, 0.85); }
+.ph[data-app="developer"] .pa { --bg: #0b1020; --surface: #131a2e; --raised: #1a2340; --text: #f4f1e8; --muted: #9aa5c0; --line: rgba(244, 241, 232, 0.1); --field: #5b6788; --green-text: #5fdc9c; --gold-text: #f0c35a; --danger-text: #ff8a80; --ring: #f0c35a; --blue: #f0c35a; color-scheme: dark; background: radial-gradient(120% 40% at 50% 0%, #1e2b52 0%, transparent 70%), #0b1020; }
+.ph[data-app="developer"] .pa-back:hover:not(:disabled) { background: rgba(240, 195, 90, 0.12); }
+
+.dv { display: grid; gap: 12px; padding-top: 2px; color: var(--text); }
+.dv > * { animation: dv-rise 420ms var(--ease) both; }
+.dv > :nth-child(2) { animation-delay: 60ms; } .dv > :nth-child(3) { animation-delay: 100ms; } .dv > :nth-child(4) { animation-delay: 140ms; }
+.dv > :nth-child(5) { animation-delay: 180ms; } .dv > :nth-child(6) { animation-delay: 220ms; } .dv > :nth-child(7) { animation-delay: 260ms; } .dv > :nth-child(8) { animation-delay: 300ms; }
+@keyframes dv-rise { from { opacity: 0; transform: translateY(14px); } }
+
+/* identity */
+.dv-hero { display: grid; justify-items: center; gap: 4px; padding: 10px 0 4px; text-align: center; }
+.dv-avatar { position: relative; width: 104px; height: 104px; margin-bottom: 8px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(150deg, #2b3a6e, #121a33); box-shadow: 0 0 0 3px #0b1020, 0 0 0 5px #f0c35a, 0 18px 36px -14px rgba(240, 195, 90, 0.45); animation: dv-glow 4.5s ease-in-out infinite; }
+.dv-monogram { font: 800 3.1rem/1 var(--font-head); color: #f0c35a; letter-spacing: -0.04em; }
+.dv-badge { position: absolute; right: -4px; bottom: -2px; width: 34px; height: 34px; border-radius: 10px; box-shadow: 0 0 0 3px #0b1020, 0 6px 12px -4px rgba(0, 0, 0, 0.6); }
+@keyframes dv-glow { 50% { box-shadow: 0 0 0 3px #0b1020, 0 0 0 5px #f0c35a, 0 18px 44px -10px rgba(240, 195, 90, 0.7); } }
+.dv .dv-name { margin: 0; font: 800 1.55rem/1.15 var(--font-head); letter-spacing: -0.02em; }
+.dv .dv-nick { margin: 0; color: var(--muted); font-size: 0.92rem; }
+.dv .dv-role { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0 0; padding: 6px 12px; border-radius: 999px; background: rgba(240, 195, 90, 0.12); color: #f0c35a; font-size: 0.8rem; font-weight: 600; }
+
+/* the Message button */
+.pa-content button.dv-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 50px; border-radius: 16px; font: 700 1rem var(--font-ui); transition: transform 140ms var(--ease), background-color 140ms; }
+.pa-content button.dv-primary { background: linear-gradient(180deg, #f6cf6b, #e0a52e); color: #1a1405; border: 0; box-shadow: 0 12px 24px -12px rgba(240, 195, 90, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.45); }
+.pa-content button.dv-primary:hover:not(:disabled) { background: linear-gradient(180deg, #ffd978, #e8ad36); border-color: transparent; }
+.pa-content button.dv-primary:active:not(:disabled) { transform: scale(0.98); }
+.pa-content button.dv-primary:disabled { opacity: 0.7; cursor: progress; }
+.dv-error { display: flex; align-items: flex-start; gap: 8px; margin: -2px 0 0; padding: 11px 13px; border-radius: 14px; background: rgba(255, 138, 128, 0.12); color: var(--danger-text); font-size: 0.88rem; line-height: 1.4; }
+.dv-error svg { flex: none; margin-top: 1px; }
+
+/* cards */
+.dv-card { display: grid; gap: 10px; padding: 16px; border-radius: 22px; background: var(--surface); border: 1px solid var(--line); }
+.dv .dv-h { margin: 0; font: 700 0.74rem var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold-text); }
+.dv .dv-p { margin: 0; font-size: 0.93rem; line-height: 1.55; color: var(--text); opacity: 0.92; }
+
+/* contact links */
+.dv-link { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: var(--raised); color: var(--text); text-decoration: none; min-height: 52px; transition: transform 140ms var(--ease), background-color 140ms; }
+.dv-link:hover, .dv-link:focus-visible { background: #222d52; transform: translateY(-1px); }
+.dv-link > svg:first-child { flex: none; color: #f0c35a; }
+.dv-link > svg:last-child { flex: none; margin-left: auto; color: var(--muted); }
+.dv-link > span { display: grid; min-width: 0; font-size: 0.93rem; font-weight: 600; overflow-wrap: anywhere; }
+.dv-link small { color: var(--muted); font-size: 0.72rem; font-weight: 500; }
+.dv a:focus-visible, .dv button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+/* skills */
+.dv-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.dv-chips li, .dv-chips i { font-style: normal; padding: 7px 13px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line); font-size: 0.84rem; font-weight: 600; animation: dv-pop 360ms var(--ease) both; animation-delay: calc(var(--i, 0) * 45ms + 220ms); }
+.dv-chips-sm li, .dv-chips-sm i { padding: 4px 10px; font-size: 0.74rem; font-weight: 600; color: var(--muted); background: rgba(255, 255, 255, 0.04); }
+@keyframes dv-pop { from { opacity: 0; transform: scale(0.85); } }
+
+/* featured project */
+.dv-feature { background: linear-gradient(160deg, #1c2748, #131a2e 60%); border-color: rgba(240, 195, 90, 0.28); }
+.dv-feature-top { display: flex; align-items: center; gap: 12px; }
+.dv-feature-top img { flex: none; width: 52px; height: 52px; border-radius: 14px; box-shadow: 0 8px 16px -8px rgba(0, 0, 0, 0.7); }
+.dv-feature-top div { display: grid; min-width: 0; }
+.dv-feature-top b { font: 700 1.1rem var(--font-head); }
+.dv-feature-top small { color: var(--muted); font-size: 0.82rem; }
+.dv .dv-here { margin: 0; font-size: 0.78rem; font-weight: 600; color: #5fdc9c; }
+
+/* other projects */
+.dv-projects { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.dv-project { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; padding: 13px 14px; border-radius: 16px; background: var(--raised); color: var(--text); text-decoration: none; transition: transform 140ms var(--ease), background-color 140ms; }
+.dv-project:hover, .dv-project:focus-visible { background: #222d52; transform: translateY(-1px); }
+.dv-project > svg { color: var(--muted); }
+.dv-project-t { display: grid; min-width: 0; }
+.dv-project-t b { font: 700 0.98rem var(--font-head); }
+.dv-project-t small { color: var(--muted); font-size: 0.78rem; }
+.dv-project-d { grid-column: 1 / -1; font-size: 0.85rem; line-height: 1.45; color: var(--text); opacity: 0.85; }
+.dv-project .dv-chips { grid-column: 1 / -1; gap: 6px; }
+
+@media (prefers-reduced-motion: reduce) { .dv > *, .dv-chips li, .dv-chips i, .dv-avatar { animation: none; } .dv-link, .dv-project, .pa-content button.dv-btn { transition: none; } }

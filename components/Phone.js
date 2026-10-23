@@ -24,6 +24,7 @@ import HireApp from "./apps/HireApp";
 import RideApp from "./apps/RideApp";
 import OffishallApp from "./apps/OffishallApp";
 import GuideApp from "./apps/GuideApp";
+import DeveloperApp from "./apps/DeveloperApp";
 import SugApp from "./apps/SugApp";
 import BetApp from "./bet/BetApp";
 import GamesApp, { useGamesBadge } from "./apps/GamesApp";
@@ -49,9 +50,10 @@ const APPS = {
   sug: { name: "SUG", icon: "hall", tone: "navy", C: SugApp }, // the Students' Union Government: elections, government, Assembly
   settings: { name: "Settings", icon: "gear", tone: "graphite", own: true, C: SettingsApp }, // draws its own header: it has pages of its own, so Back steps out of a page before it leaves the app
   guide: { name: "OAU Guide", icon: "study", tone: "lime", C: GuideApp }, // generated from lib/features.js
+  developer: { name: "Developer", icon: "code", tone: "dev", C: DeveloperApp }, // who made Life in OAU; its Message button opens the real Messages app on the developer's player
 };
 export const PHONE_APPS = Object.keys(APPS);
-const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "spending", "forbes", "awards", "housing", "ride", "offishall", "hire", "bet", "games", "sug", "guide", "settings"];
+const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "spending", "forbes", "awards", "housing", "ride", "offishall", "hire", "bet", "games", "sug", "guide", "developer", "settings"];
 /** In Floor O (N-QRS Custody) the PHONE keeps working: custody stops you leaving, not using your phone. Only the apps that are about getting somewhere (rides, drivers, moving house) are
  *  tucked away. Every app that stays follows its own rules: the server still refuses anything custody forbids (working a shift, going out...) with a clear message. */
 const CUSTODY_HIDDEN = ["ride", "hire", "housing"];
@@ -84,6 +86,7 @@ function Tile({ name, icon, tone, onClick, badge, first, sound }) {
 export default function Phone({ open, onClose, st, held = false, firstApp, initialApp, initialWith = null, onShop, onLogout, loggingOut }) {
   const [now, setNow] = useState(() => serverDate());
   const [app, setApp] = useState(null);
+  const [peer, setPeer] = useState(null); // the player Messages should open on when another app sends you there (the Developer app's Message button)
   const unread = useChat((s) => s.unread); // pushed by the chat connection: nothing is polled for it any more
   const gamesBadge = useGamesBadge(open); // challenges waiting for you, or a match where it is your move
   const wasOpen = useRef(false);
@@ -95,6 +98,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
   }, [open]);
   useEffect(() => {
     if (!open) return;
+    setPeer(null);
     setApp(APPS[initialApp] && (!held || !CUSTODY_HIDDEN.includes(initialApp)) ? initialApp : null);
     setNow(serverDate());
     const t = setInterval(() => setNow(serverDate()), 15000);
@@ -114,6 +118,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
     return () => document.removeEventListener("keydown", k, true);
   }, [open, app, onClose]);
   const home = useCallback(() => setApp(null), []);
+  const openApp = useCallback((id, who = null) => { setPeer(typeof who === "string" ? who : null); setApp(id); }, []); // `who` is only ever a player name from the server
   if (!open) return null;
   const c = st?.character, a = st?.academics, info = c && CLASS_INFO[c.class];
   const cur = app && APPS[app];
@@ -151,7 +156,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
               )}
               <div className="ph-grid">
                 {(held ? GRID.filter((id) => !CUSTODY_HIDDEN.includes(id)) : GRID).map((id, k) => (
-                  <Tile key={id} {...APPS[id]} badge={id === "messages" ? unread : id === "games" ? gamesBadge : 0} first={k === 0 ? firstApp : undefined} onClick={() => setApp(id)} />
+                  <Tile key={id} {...APPS[id]} badge={id === "messages" ? unread : id === "games" ? gamesBadge : 0} first={k === 0 ? firstApp : undefined} onClick={() => openApp(id)} />
                 ))}
                 {!held && <Tile name="Shop" icon="bag" tone="mint" sound="none" onClick={onShop} />}
                 <Tile name={loggingOut ? "Leaving…" : "Log out"} icon="logout" tone="slate" onClick={onLogout} />
@@ -161,7 +166,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
           </div>
 
           {cur && (
-            <section className="pa" key={app + (initialWith ?? "")} aria-label={cur.name}>
+            <section className="pa" key={app + (initialWith ?? "") + (peer ?? "")} aria-label={cur.name}>
               {!cur.own && (
                 <header className="pa-bar">
                   <button type="button" className="pa-back" onClick={home} aria-label="Back to home screen">
@@ -171,7 +176,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
                 </header>
               )}
               <div className="pa-body">
-                {Cur ? (cur.own ? <Cur onHome={home} onClose={onClose} onOpenApp={setApp} onLogout={onLogout} loggingOut={loggingOut} /> : <div className="pa-content"><Cur onOpenApp={setApp} onClose={onClose} /></div>) : <MessagesApp onHome={home} initialWho={app === "messages" ? initialWith : null} />}
+                {Cur ? (cur.own ? <Cur onHome={home} onClose={onClose} onOpenApp={openApp} onLogout={onLogout} loggingOut={loggingOut} /> : <div className="pa-content"><Cur onOpenApp={openApp} onClose={onClose} /></div>) : <MessagesApp onHome={home} initialWho={app === "messages" ? (peer ?? initialWith) : null} />}
               </div>
             </section>
           )}
