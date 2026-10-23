@@ -172,12 +172,10 @@
 @keyframes ph-spin-in { to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .ph-spin-ring { animation-duration: 2.4s; } }
 /* A loading app gets one opaque, full-screen layer painted with that app's own background. */
-.ph[data-loading="true"] .pa { z-index: 7; }
-.ph[data-loading="true"] .ph-status,
-.ph[data-loading="true"] .ph-home,
+.ph[data-loading="true"] .pa { z-index: 5; }
 .ph[data-loading="true"] .ph-close { visibility: hidden; }
 .ph[data-loading="true"] .pa-body { overflow: hidden; }
-.ph-app-loading { position: absolute; z-index: 20; inset: 0; display: grid; place-items: center; overflow: hidden; background: inherit; pointer-events: auto; }
+.ph-app-loading { position: absolute; z-index: 20; inset: var(--pad-t) 0 26px; display: grid; place-items: center; overflow: hidden; background: inherit; pointer-events: auto; }
 .ph-app-loading .ph-spin-ring { width: 40px; height: 40px; border-radius: 50%; border: 4px solid var(--spin-track, rgba(16, 24, 40, 0.12)); border-top-color: var(--spin, var(--blue, #2563eb)); opacity: 0; animation: ph-spin 0.8s linear infinite, ph-spin-in 200ms 150ms var(--ease) forwards; }
 @media (prefers-reduced-motion: reduce) { .ph-app-loading .ph-spin-ring { animation-duration: 2.4s, 200ms; } }
 /* the Jobs app's shift desk */

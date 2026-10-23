@@ -19,8 +19,8 @@ chk("Shell announces the phone state without navigating", /data-phone/.test(shel
 chk("the Shop tile does not pull you out of a building", /dataset\.inside/.test(shell) && /dataset\.inside = "1"/.test(bi));
 const phone = read("components/Phone.js"), loader = read("components/Loader.js"), context = read("components/phoneContext.js");
 chk("shared phone spinners report loading to the phone shell", /PhoneLoading\.Provider/.test(phone) && /PhoneLoading/.test(loader) && /reportLoading\(id, true\)/.test(loader) && /PhoneLoading = createContext\(null\)/.test(context));
-chk("the loading layer covers and centers over the complete app screen", /\.ph-app-loading \{[^}]*inset: 0[^}]*display: grid; place-items: center/s.test(phoneCss) && /\.ph\[data-loading="true"\] \.pa \{ z-index: 7/.test(phoneCss));
-chk("phone chrome is hidden while an app is loading", /\.ph\[data-loading="true"\] \.ph-status,[\s\S]*?\.ph-close \{ visibility: hidden; \}/.test(phoneCss));
+chk("the loading layer centers within the app area below the status bar and above the home indicator", /\.ph-app-loading \{[^}]*inset: var\(--pad-t\) 0 26px[^}]*display: grid; place-items: center/s.test(phoneCss));
+chk("the status bar and home indicator remain above the loading page", /\.ph-status \{[^}]*z-index: 6/.test(phoneCss) && /\.ph-home \{[^}]*z-index: 8/.test(phoneCss) && /\.ph\[data-loading="true"\] \.pa \{ z-index: 5/.test(phoneCss));
 chk("Games uses the shared spinner instead of its inline loading layout", /<Spinner label="Loading games"/.test(read("components/apps/GamesApp.js")) && !/gm-center"><i className="gm-spin"/.test(read("components/apps/GamesApp.js")));
 chk("Settings uses the shared spinner so its header and controls are covered", /<Spinner label="Loading your settings"/.test(read("components/apps/SettingsApp.js")));
 chk("Forbes initial load uses the shared spinner instead of a skeleton UI", /<Loader label=\{key === "forbes" \? "Loading Forbes OAU"/.test(read("components/apps/LeaderboardsApp.js")));

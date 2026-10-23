@@ -142,7 +142,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
     <div className="ph-scrim" data-over={initialWith ? "1" : undefined} onClick={onClose}>
       <div className="ph" role="dialog" aria-modal="true" aria-label="Phone" data-app={app ?? undefined} data-loading={appLoading ? "true" : undefined} onClick={(e) => e.stopPropagation()}>
         <div className="ph-screen">
-          <div className="ph-status" aria-hidden={appLoading || undefined}>
+          <div className="ph-status">
             <b className="num">{clock(now, true)}</b>
             <span className="ph-notch" aria-hidden="true" />
             <span className="ph-sys">
@@ -203,7 +203,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
             </section>
           )}
 
-          <button type="button" className="ph-home" data-sound={app ? "home" : "none"} onClick={() => (app ? home() : onClose())} aria-label={app ? "Go to home screen" : "Close phone"} aria-hidden={appLoading || undefined} tabIndex={appLoading ? -1 : undefined}>
+          <button type="button" className="ph-home" data-sound={app ? "home" : "none"} onClick={() => (app ? home() : onClose())} aria-label={app ? "Go to home screen" : "Close phone"}>
             <i />
           </button>
         </div>
