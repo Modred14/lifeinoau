@@ -23,6 +23,7 @@ import SettingsApp from "./apps/SettingsApp";
 import HousingApp from "./apps/HousingApp";
 import HireApp from "./apps/HireApp";
 import RideApp from "./apps/RideApp";
+import VouchersApp from "./apps/VouchersApp";
 import OffishallApp from "./apps/OffishallApp";
 import GuideApp from "./apps/GuideApp";
 import DeveloperApp from "./apps/DeveloperApp";
@@ -45,6 +46,7 @@ const APPS = {
   housing: { name: "Housing", icon: "home", tone: "sky", C: HousingApp },
   hire: { name: "Hire", icon: "driver", tone: "indigo", C: HireApp },
   ride: { name: "Ride", icon: "ride", tone: "orange", C: RideApp },
+  vouchers: { name: "Vouchers", icon: "gift", tone: "green", C: VouchersApp },
   offishall: { name: "Clothing", icon: "shirt", tone: "fashion", C: OffishallApp }, // clothes shop + wardrobe
   bet: { name: "Bet", icon: "ticket", tone: "bet", own: true, C: BetApp }, // draws its own header and tab bar, like Messages
   games: { name: "Games", icon: "game", tone: "games", own: true, C: GamesApp }, // draws its own header, like Bet and Messages
@@ -54,7 +56,7 @@ const APPS = {
   developer: { name: "Developer", icon: "code", tone: "dev", C: DeveloperApp }, // who made Life in OAU; its Message button opens the real Messages app on the developer's player
 };
 export const PHONE_APPS = Object.keys(APPS);
-const GRID = ["messages", "jobs", "courses", "invest", "love", "parties", "spending", "forbes", "awards", "housing", "ride", "offishall", "hire", "bet", "games", "sug", "guide", "developer", "settings"];
+const GRID = ["messages", "jobs", "courses", "invest", "vouchers", "love", "parties", "spending", "forbes", "awards", "housing", "ride", "offishall", "hire", "bet", "games", "sug", "guide", "developer", "settings"];
 /** In Floor O (N-QRS Custody) the PHONE keeps working: custody stops you leaving, not using your phone. Only the apps that are about getting somewhere (rides, drivers, moving house) are
  *  tucked away. Every app that stays follows its own rules: the server still refuses anything custody forbids (working a shift, going out...) with a clear message. */
 const CUSTODY_HIDDEN = ["ride", "hire", "housing"];

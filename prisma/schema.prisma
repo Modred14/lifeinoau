@@ -136,6 +136,7 @@ model Character {
   faculty            Faculty        @relation(fields: [facultyId], references: [id])
   account            Account?
   notifications      Notification[]
+  voucherRedemptions VoucherRedemption[]
 
   @@index([facultyId])
   @@index([placeId, placeAt])
@@ -167,6 +168,7 @@ model LedgerEntry {
   createdAt       DateTime @default(now())
   debit           Account  @relation("debit", fields: [debitAccountId], references: [id])
   credit          Account  @relation("credit", fields: [creditAccountId], references: [id])
+  voucherRedemption VoucherRedemption?
 
   @@index([debitAccountId, createdAt])
   @@index([creditAccountId, createdAt])
@@ -200,6 +202,50 @@ model AuditLog {
   target    String?
   detail    Json?
   createdAt DateTime @default(now())
+}
+
+// Voucher pools are funded once from WORLD when activated. Claims consume the pool and credit a player in one transaction.
+// Only a hash of the randomly generated redemption code is stored; it is never returned by player-facing APIs.
+model Voucher {
+  id                 String   @id @default(cuid())
+  label              String
+  codeHash           String   @unique
+  rewardKobo         BigInt
+  totalPoolKobo      BigInt
+  remainingPoolKobo  BigInt
+  maxWinners         Int
+  claimedWinners     Int      @default(0)
+  maxPerPlayer       Int?
+  startsAt           DateTime
+  endsAt             DateTime
+  status             String   @default("DRAFT") // DRAFT | ACTIVE | PAUSED | EXHAUSTED
+  fundedAt           DateTime?
+  createdBy          String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  redemptions        VoucherRedemption[]
+
+  @@index([status, startsAt, endsAt])
+}
+
+// Each claim is immutable audit evidence and is linked to the exact ledger credit that paid it.
+model VoucherRedemption {
+  id             BigInt      @id @default(autoincrement())
+  voucherId      String
+  characterId    String
+  payoutKobo     BigInt
+  ordinal        Int
+  playerUse      Int
+  requestId      String      @unique
+  ledgerEntryId  BigInt      @unique
+  createdAt      DateTime    @default(now())
+  voucher        Voucher     @relation(fields: [voucherId], references: [id], onDelete: Restrict)
+  character      Character   @relation(fields: [characterId], references: [id], onDelete: Restrict)
+  ledgerEntry    LedgerEntry @relation(fields: [ledgerEntryId], references: [id], onDelete: Restrict)
+
+  @@unique([voucherId, ordinal])
+  @@unique([voucherId, characterId, playerUse])
+  @@index([characterId, createdAt])
 }
 
 // One row per processed action request. The unique key makes replays (double-taps, retries) harmless.

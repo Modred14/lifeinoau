@@ -1,0 +1,45 @@
+.vc { display: grid; gap: 20px; color: #f7f8f8; padding: 4px 2px 22px; }
+.vc-intro { display: flex; align-items: center; gap: 12px; }
+.vc-mark { width: 48px; height: 48px; border-radius: 16px; display: grid; place-items: center; color: #9cf0c1; background: linear-gradient(145deg, #164b37, #1e7651); border: 1px solid #45b77d55; }
+.vc-intro h2 { margin: 0; font-size: 1.15rem; }
+.vc-intro p { margin: 3px 0 0; color: #aab6b1; font-size: .83rem; }
+.vc-form { display: grid; gap: 9px; padding: 16px; border: 1px solid #ffffff16; border-radius: 20px; background: linear-gradient(145deg, #17221f, #121b1a); }
+.vc-form label { font-weight: 700; font-size: .88rem; }
+.vc-entry { display: flex; align-items: stretch; gap: 8px; }
+.vc-entry input { min-width: 0; flex: 1; height: 48px; border: 1px solid #ffffff22; border-radius: 13px; color: #fff; background: #0c1212; padding: 0 12px; font: inherit; letter-spacing: .06em; text-transform: uppercase; outline: none; }
+.vc-entry input:focus { border-color: #49c986; box-shadow: 0 0 0 3px #49c98624; }
+.vc-entry input::placeholder { color: #74817b; letter-spacing: 0; text-transform: none; }
+.vc-entry button { flex: none; min-width: 92px; border: 0; border-radius: 13px; padding: 0 14px; color: #092015; background: #63d69a; font: inherit; font-weight: 800; cursor: pointer; }
+.vc-entry button:disabled { opacity: .48; cursor: default; }
+.vc-form > small { color: #94a29b; font-size: .75rem; line-height: 1.45; }
+.vc-section { display: grid; gap: 10px; }
+.vc-section-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.vc-section-head h3 { margin: 0; font-size: .96rem; }
+.vc-section-head > button { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #ffffff20; border-radius: 10px; color: #b8c8c0; background: #ffffff08; }
+.vc-section-head > span { color: #91a099; font-size: .8rem; }
+.vc-list { display: grid; gap: 9px; }
+.vc-card { padding: 14px; border-radius: 17px; border: 1px solid #ffffff16; background: #17201f; }
+.vc-card-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 9px; }
+.vc-card-head > b { font-size: .88rem; }
+.vc-status { flex: none; border-radius: 999px; padding: 4px 8px; color: #9ee9bd; background: #2b94602c; font-size: .68rem; font-weight: 700; }
+.vc-scheduled { color: #f3d58c; background: #b2872425; }
+.vc-expired, .vc-exhausted { color: #c2c8c6; background: #89928c2b; }
+.vc-card > strong { display: block; font-size: 1.3rem; letter-spacing: -.02em; }
+.vc-card > strong small { color: #9ba8a2; font-size: .73rem; font-weight: 500; letter-spacing: 0; }
+.vc-stats { display: flex; justify-content: space-between; gap: 8px; margin: 10px 0 8px; color: #a8b4ae; font-size: .72rem; }
+.vc-stats b { color: #fff; }
+.vc-progress { height: 5px; overflow: hidden; border-radius: 9px; background: #ffffff16; }
+.vc-progress i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #35ae70, #8ee1ad); }
+.vc-empty { display: grid; justify-items: center; gap: 5px; padding: 22px 10px; border: 1px dashed #ffffff24; border-radius: 16px; color: #99a7a0; text-align: center; }
+.vc-empty svg { color: #80c99d; margin-bottom: 2px; }
+.vc-empty b { color: #d8dfdb; font-size: .85rem; }
+.vc-empty span, .vc-no-history { font-size: .76rem; }
+.vc-no-history { color: #9aa8a1; margin: 0; }
+.vc-history { display: grid; }
+.vc-history-row { display: flex; align-items: center; gap: 10px; min-height: 58px; border-bottom: 1px solid #ffffff12; }
+.vc-history-icon { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 10px; color: #8ce0af; background: #30935c2b; }
+.vc-history-info { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.vc-history-info b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8rem; }
+.vc-history-info small { color: #94a29b; font-size: .68rem; }
+.vc-history-row > strong { color: #9ce5b7; font-size: .8rem; white-space: nowrap; }
+@media (max-width: 420px) { .vc { gap: 16px; } .vc-form { padding: 13px; } .vc-entry button { min-width: 78px; padding: 0 10px; } .vc-stats { font-size: .67rem; } }
