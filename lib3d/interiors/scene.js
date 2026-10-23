@@ -237,18 +237,21 @@ export async function createInteriorScene(container, c, opts = {}) {
       if (act.prop) { const g = act.prop; g.visible = k > 0.15; g.position.set(P.x, fl(P.fl), P.z); g.rotation.y = P.yaw; }
     }
   };
-  const onKey = (e, down) => { if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName ?? "")) return; const k = e.key.toLowerCase(); if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", "shift", "q", "e"].includes(k)) { down ? keys.add(k) : keys.delete(k); e.preventDefault?.(); }
+  // Suspended = a layer sits on top of the room (the phone, see components/BuildingInside.js): the room keeps drawing and everything stays where it is,
+  // but keys, the stick, dragging, the wheel and the "use" button are ignored, so nothing done on that layer can move or turn the player behind it.
+  let suspended = false;
+  const onKey = (e, down) => { if (suspended || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName ?? "")) return; const k = e.key.toLowerCase(); if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", "shift", "q", "e"].includes(k)) { down ? keys.add(k) : keys.delete(k); e.preventDefault?.(); }
     if (down && (k === "f" || k === "enter" || k === " ")) { activate(); e.preventDefault?.(); } if (down && k === "v") api.toggleView(); };
   const kd = (e) => onKey(e, true), ku = (e) => onKey(e, false); window.addEventListener("keydown", kd); window.addEventListener("keyup", ku);
   // drag to turn the camera, wheel to zoom
   const el = renderer.domElement; let drag = null;
-  const pd = (e) => { drag = { id: e.pointerId, x: e.clientX, y: e.clientY }; el.setPointerCapture?.(e.pointerId); }, pm = (e) => { if (!drag || drag.id !== e.pointerId) return; camYaw -= (e.clientX - drag.x) * 0.006; camPitch = Math.max(0.12, Math.min(1.25, camPitch + (e.clientY - drag.y) * 0.004)); drag.x = e.clientX; drag.y = e.clientY; }, pu = (e) => { if (drag?.id === e.pointerId) drag = null; };
-  const wh = (e) => { camDist = Math.max(1.6, Math.min(10, camDist * (1 + Math.sign(e.deltaY) * 0.08))); };
+  const pd = (e) => { if (suspended) return; drag = { id: e.pointerId, x: e.clientX, y: e.clientY }; el.setPointerCapture?.(e.pointerId); }, pm = (e) => { if (!drag || drag.id !== e.pointerId) return; camYaw -= (e.clientX - drag.x) * 0.006; camPitch = Math.max(0.12, Math.min(1.25, camPitch + (e.clientY - drag.y) * 0.004)); drag.x = e.clientX; drag.y = e.clientY; }, pu = (e) => { if (drag?.id === e.pointerId) drag = null; };
+  const wh = (e) => { if (suspended) return; camDist = Math.max(1.6, Math.min(10, camDist * (1 + Math.sign(e.deltaY) * 0.08))); };
   el.addEventListener("pointerdown", pd); el.addEventListener("pointermove", pm); el.addEventListener("pointerup", pu); el.addEventListener("pointercancel", pu); el.addEventListener("wheel", wh, { passive: true });
 
   let chatSelf = null; const greets = new Map();
   function chatWith(i) { const p = people.find((q) => q.i === i); if (!p || p.chat) return; p.chat = { t: 0 }; chatSelf = { t: 0, i }; const n = (greets.get(i) ?? 0) + 1; greets.set(i, n); opts.onChat?.({ name: p.n.studentName ?? "Student", line: greetLine(p.seed, n), reply: chatLine(p.seed, n) }); }
-  function activate() { if (!near || locked) return; if (near.h.action === "chat") { chatWith(near.h.npcIndex); return; } opts.onHub?.(near.h); }
+  function activate() { if (suspended || !near || locked) return; if (near.h.action === "chat") { chatWith(near.h.npcIndex); return; } opts.onHub?.(near.h); }
   const setClip = (av, name, o) => { if (!av || !av.has?.(name)) return false; return av.play(name, o); };
 
   // ---- people ----
@@ -332,9 +335,9 @@ export async function createInteriorScene(container, c, opts = {}) {
   const setVis = () => { for (let f = 0; f < c.floors; f++) { groups[f].visible = f <= P.fl; for (const m of ceilMeshes[f]) m.visible = !(view === "overhead" && f >= P.fl); } for (const m of canopyMeshes) m.visible = view !== "overhead"; };
   stage.onFrame((t, dt) => {
     // movement
-    let mx = (input.jx ?? 0), mz = (input.jy ?? 0); if (keys.has("a") || keys.has("arrowleft")) mx -= 1; if (keys.has("d") || keys.has("arrowright")) mx += 1; if (keys.has("w") || keys.has("arrowup")) mz += 1; if (keys.has("s") || keys.has("arrowdown")) mz -= 1;
+    let mx = suspended ? 0 : (input.jx ?? 0), mz = suspended ? 0 : (input.jy ?? 0); if (keys.has("a") || keys.has("arrowleft")) mx -= 1; if (keys.has("d") || keys.has("arrowright")) mx += 1; if (keys.has("w") || keys.has("arrowup")) mz += 1; if (keys.has("s") || keys.has("arrowdown")) mz -= 1;
     if (keys.has("q")) camYaw += dt * 1.8; if (keys.has("e")) camYaw -= dt * 1.8;
-    const mag = Math.min(1, Math.hypot(mx, mz)); P.run = !!input.run || keys.has("shift");
+    const mag = Math.min(1, Math.hypot(mx, mz)); P.run = !suspended && (!!input.run || keys.has("shift"));
     const px0 = P.x, pz0 = P.z;
     if (mag > 0.05 && !exited && !locked) {
       if (route) { route.done(false); route = null; } // taking the controls ends an automatic walk
@@ -384,7 +387,9 @@ export async function createInteriorScene(container, c, opts = {}) {
   });
   setVis();
   const api = {
-    stage, setYaw(y) { camYaw = y; }, teleport(x, z, floor = 0) { P.x = x; P.z = z; P.fl = floor; P.y = c.floorY[floor] ?? 0; }, get view() { return view; }, get state() { return { x: P.x, z: P.z, y: P.y, floor: P.fl, yaw: P.yaw, people: people.length, exited }; }, setView(v) { view = v; setVis(); }, toggleView() { view = view === "follow" ? "overhead" : "follow"; setVis(); return view; }, use: activate, playIncident, stopIncident, get incident() { return inc ? { id: inc.id, outcome: inc.outcome } : null }, setPose(list, id) { pose = list?.length ? list : null; endAct(); if (pose && id) { act = null; beginAct(id); } },
+    stage, setYaw(y) { camYaw = y; },
+    /** true while a layer (the phone) covers the room: input is ignored, and any key, drag or stick already in progress is let go (on the way in AND on the way out, so nothing keeps walking by itself). Nothing else changes. */
+    setSuspended(v) { suspended = !!v; keys.clear(); drag = null; input.jx = input.jy = 0; input.run = false; }, get suspended() { return suspended; }, teleport(x, z, floor = 0) { P.x = x; P.z = z; P.fl = floor; P.y = c.floorY[floor] ?? 0; }, get view() { return view; }, get state() { return { x: P.x, z: P.z, y: P.y, floor: P.fl, yaw: P.yaw, people: people.length, exited }; }, setView(v) { view = v; setVis(); }, toggleView() { view = view === "follow" ? "overhead" : "follow"; setVis(); return view; }, use: activate, playIncident, stopIncident, get incident() { return inc ? { id: inc.id, outcome: inc.outcome } : null }, setPose(list, id) { pose = list?.length ? list : null; endAct(); if (pose && id) { act = null; beginAct(id); } },
     /** A club show the server confirmed: draws it, and makes whoever it is about (you, or another player in the room) play a gesture. */
     playClubShow(show) {
       if (!clubFx || !show) return; clubFx.play(show); const parts = show.data?.parts ?? [], me = String(opts.selfName ?? "").trim().toLowerCase(), isMe = (n) => String(n ?? "").trim().toLowerCase() === me;

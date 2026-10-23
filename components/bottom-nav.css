@@ -55,12 +55,13 @@ body[data-nav="on"] :is(.ph-scrim, .ts-scrim, .cl-scrim, .cd-scrim, .th-pre-scri
 /* centred cards: the card's own scroll area ends above the bar */
 body[data-nav="on"] .bi { padding-bottom: calc(16px + var(--safe-b)); }
 body[data-nav="on"] .th-pre-scrim { padding-bottom: calc(12px + var(--safe-b)); }
-/* the phone: the handset ends above the bar (a real phone: its Close button and the handset both move up with it) */
-@media (min-width: 561px) {
+/* the phone: the handset ends above the bar (a real phone: its Close button and the handset both move up with it).
+   It is a layer above the building interiors (see phone.css, z-index 85) and the bar is above it, so the Phone tab stays tappable while it is open. */
+@media (min-width: 641px) {
   body[data-nav="on"] .ph-scrim { padding-bottom: calc(16px + var(--safe-b)); }
-  body[data-nav="on"] .ph { height: min(830px, calc(100dvh - 32px - var(--safe-b))); }
+  body[data-nav="on"] .ph { height: min(830px, calc(100dvh - 32px - var(--safe-t) - var(--safe-b))); }
 }
-@media (max-width: 560px) {
+@media (max-width: 640px) {
   body[data-nav="on"] .ph { height: calc(100dvh - var(--safe-t) - 76px - var(--safe-b)); }
 }
 /* settings: a full page, so the page itself ends above the bar, and its floating save bar and toast sit on top of that */

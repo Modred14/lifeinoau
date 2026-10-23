@@ -142,8 +142,15 @@ export default function Shell({ children }) {
       window.removeEventListener("oau:message", message);
     };
   }, []);
+  // The phone is a layer on top of whatever screen you are on (a building's interior, the map, a trip): opening or closing it never changes that screen.
+  // What it does tell the screen underneath: <body data-phone="open"> plus "oau:phone-state" (true/false), so a 3D room can stop reading keys and touches while it is up.
+  const phoneShown = phone && !!st;
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent("oau:phone-state", { detail: phone }));
+    if (phoneShown) document.body.dataset.phone = "open"; else delete document.body.dataset.phone;
+    window.dispatchEvent(new CustomEvent("oau:phone-state", { detail: phoneShown }));
+    return () => { delete document.body.dataset.phone; };
+  }, [phoneShown]);
+  useEffect(() => {
     if (!phone) setPhoneWith(null); // the next time the phone opens normally it is not tied to the last name tag
   }, [phone]);
   async function logout() {
@@ -273,6 +280,8 @@ export default function Shell({ children }) {
           opener.current?.focus();
         }}
         onShop={() => {
+          // the shop is its own screen: from inside a building it would take you out of the room, so the phone stays up and says so
+          if (document.body.dataset.inside) return toast.info("You are inside a building. Step outside to use the shop.", { id: "shop-inside" });
           setPhone(false);
           goBuy();
         }}

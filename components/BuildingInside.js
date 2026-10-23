@@ -3,7 +3,7 @@
 // inside right now and the same actions the map card offers. The 3D code is loaded only when you go in and freed when you step outside.
 // If the browser cannot start WebGL, the old card (place, people, actions) is shown instead, so nothing is lost.
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "./Icon";
@@ -37,6 +37,17 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
   const [sceneReady, setSceneReady] = useState(false), confrontRef = useRef(null);
   const box = useRef(null), api = useRef(null), [input] = useState(() => ({ jx: 0, jy: 0, run: false, hold(v) { this.run = v; } })), router = useRouter(), leave = useRef(onLeave);
   useEffect(() => { leave.current = onLeave; });
+  // While this room is on screen <body data-inside="1">: anything outside it (the phone's Shop tile) can tell that leaving this screen would take you out of the building.
+  useLayoutEffect(() => { document.body.dataset.inside = "1"; return () => { delete document.body.dataset.inside; }; }, []);
+  // The phone (components/Phone.js, opened from the bottom bar) is a layer ON TOP of this room: nothing here is unmounted, moved or rebuilt. The room keeps drawing behind
+  // the dimmed phone, and only stops listening (keys, stick, drag, wheel) while it is open, so using the phone cannot walk or turn you. Shell announces it with
+  // "oau:phone-state" and keeps <body data-phone="open"> for a room that finishes loading while the phone is already up.
+  useEffect(() => {
+    const hold = (on) => { if (on) { input.jx = input.jy = 0; input.run = false; } api.current?.setSuspended?.(on); };
+    const h = (e) => hold(!!e.detail);
+    window.addEventListener("oau:phone-state", h); return () => window.removeEventListener("oau:phone-state", h);
+  }, [input]);
+  useEffect(() => { if (sceneReady) api.current?.setSuspended?.(document.body.dataset.phone === "open"); }, [sceneReady]);
   const peopleRef = useRef(null), selfRef = useRef(selfName); selfRef.current = selfName;
   // who else is in here: the list, and (for those who have reported where they stand) their avatars and name tags in the 3D room. Asked every few seconds,
   // and at once when the tab comes back, so someone who left or disconnected drops out of the room within moments.

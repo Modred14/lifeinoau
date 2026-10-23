@@ -1,8 +1,11 @@
 /* components/phone.css: the phone. A glossy handset with a bright home screen of app icons; every app opens on the same
    screen as a clean, light, rounded page. On a real phone the handset sits inside the game with a Close button above it. */
-.ph-scrim { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(8, 12, 22, 0.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: ph-fade 220ms var(--ease); padding: 16px; }
+/* The phone is a layer ON TOP of whatever screen you are on: a building's interior (.bi3, 75), the trip fade (80), the map sheets (60-70). It sits at 85, above all of
+   those and below dialogs (.cd-scrim, settings: 90) and the bottom bar (--z-nav, 500) and the toasts (1000). The screen behind stays mounted and visible, dimmed and softly blurred.
+   The scrim catches every touch: nothing reaches the room behind it, and a swipe on it cannot scroll or pull the page. */
+.ph-scrim { --z-phone: 85; position: fixed; inset: 0; z-index: var(--z-phone); display: grid; place-items: center; background: rgba(8, 12, 22, 0.5); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); animation: ph-fade 220ms var(--ease); touch-action: none; overscroll-behavior: contain; padding: calc(16px + var(--safe-t)) max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); }
 @keyframes ph-fade { from { opacity: 0; } }
-.ph { position: relative; width: min(392px, 100%); height: min(830px, calc(100dvh - 32px)); border-radius: 54px; padding: 10px; background: #0a0b0f; box-shadow: 0 0 0 1.5px #3a3f4b, 0 0 0 4px #0a0b0f, 0 40px 100px -24px rgba(0, 0, 0, 0.8); animation: ph-up 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.ph { position: relative; width: min(392px, 100%); height: min(830px, calc(100dvh - 32px - var(--safe-t))); border-radius: 54px; padding: 10px; background: #0a0b0f; box-shadow: 0 0 0 1.5px #3a3f4b, 0 0 0 4px #0a0b0f, 0 40px 100px -24px rgba(0, 0, 0, 0.8); animation: ph-up 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 @keyframes ph-up { from { transform: translateY(48px) scale(0.96); opacity: 0; } }
 .ph-screen { --pad-t: 50px; position: relative; height: 100%; border-radius: 44px; overflow: hidden; display: flex; flex-direction: column; color: #fff; isolation: isolate; background: linear-gradient(180deg, #3a3fb0 0%, #5b3fd9 18%, #7b3ce6 38%, #b4459f 56%, #ee6a2c 76%, #f98d19 90%, #fbb82e 100%); }
 
@@ -127,14 +130,16 @@
 
 
 /* ---------- on a real phone: the handset sits inside the game, Close floats above it ---------- */
-@media (max-width: 560px) {
-  .ph-scrim { padding: 0 14px calc(14px + var(--safe-b)); place-items: end center; }
+@media (max-width: 640px) {
+  .ph-scrim { padding: 0 max(14px, env(safe-area-inset-right, 0px)) calc(14px + var(--safe-b)) max(14px, env(safe-area-inset-left, 0px)); place-items: end center; }
   .ph { width: 100%; max-width: 392px; height: calc(100dvh - var(--safe-t) - 76px); border-radius: 46px; padding: 8px; }
   .ph-screen { --pad-t: 46px; border-radius: 38px; }
   .ph-status { padding: 12px 22px 0; }
   .ph-notch { width: 100px; height: 29px; }
   .ph-close { top: -58px; right: 4px; min-height: 44px; }
 }
+/* a phone held sideways (or a short window): the handset gets slimmer chrome so the apps keep as much room as possible above the bar */
+@media (max-height: 520px) and (min-width: 641px) { .ph { border-radius: 38px; padding: 6px; } .ph-screen { --pad-t: 38px; border-radius: 32px; } .ph-status { padding: 8px 20px 0; font-size: 0.8rem; } .ph-notch { width: 84px; height: 22px; margin-top: 2px; } .ph-close { top: 8px; } }
 @media (max-height: 760px) { .ph-ico { width: 58px; height: 58px; border-radius: 19px; } .ph-grid { gap: 14px 4px; } .ph-time { font-size: 3.8rem; } .ph-wallet { margin: 14px 0 18px; } }
 @media (max-height: 640px) { .ph-ico { width: 52px; height: 52px; border-radius: 17px; } .ph-time { font-size: 3.1rem; } .ph-date { margin-bottom: 10px; } .ph-mode { display: none; } .ph-wallet { margin: 12px 0 14px; } }
 @media (prefers-reduced-motion: reduce) { .pa, .ph, .ph-scrim, .ph-sheet { animation: none; } }
@@ -173,5 +178,4 @@
 .shift-why { color: var(--warn-text, #f5b942); }
 @media (prefers-reduced-motion: reduce) { .shift-bar > i { transition: none; } }.ph-ico[data-tone="lime"] { background: linear-gradient(165deg, #b8e35a, #5fa21e); } /* the OAU Guide app */
 
-/* Opened from a player's name tag while inside a building or on a trip (those screens sit at z-index 75 to 90): the phone must be on top of them. */
-.ph-scrim[data-over="1"] { z-index: 95; }
+/* Opened from a player's name tag while inside a building or on a trip: the same layer as always (85), above those screens. */
