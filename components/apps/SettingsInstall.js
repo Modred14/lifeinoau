@@ -19,6 +19,15 @@ export default function SettingsInstall() {
   useEffect(() => { refreshInstall(); }, []);
 
   async function install() {
+    if (s.kind === "ios" && typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({ title: "Life in OAU", url: window.location.href });
+        toast.info("Choose Add to Home Screen in the Share menu to finish installing.");
+      } catch (error) {
+        if (error?.name !== "AbortError") toast.info("Open the Share menu and choose Add to Home Screen.");
+      }
+      return;
+    }
     setBusy(true);
     const out = await promptInstall();
     setBusy(false);
@@ -38,7 +47,7 @@ export default function SettingsInstall() {
         {s.kind === "ios" && <><b>Add Life in OAU to your home screen</b><p>On {deviceName === "iPhone or iPad" ? "iPhone and iPad" : "this device"} you do this from the Share menu.</p></>}
         {s.kind === "manual" && <><b>Install Life in OAU</b><p>Your browser can install the game from its menu.</p></>}
         {s.kind === "unsupported" && <><b>This browser cannot install the game</b><p>{s.why}</p></>}
-        {s.kind === "available" && <button type="button" className="go st-installbtn" disabled={busy} onClick={install}>{busy ? "Opening…" : "Install game"}</button>}
+        {(s.kind === "available" || s.kind === "ios") && <button type="button" className="go st-installbtn" disabled={busy} onClick={install}>{busy ? "Opening…" : s.kind === "ios" ? "Open Share menu" : "Install game"}</button>}
       </div>
 
       {(s.kind === "ios" || s.kind === "manual") && (
