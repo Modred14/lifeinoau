@@ -146,6 +146,13 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
                 <p className="ph-date">{dateLine(now)}</p>
                 {/* <span className="ph-mode"><Icon name={isNight(now) ? "moon" : "sun"} size={17} weight="fill" />{isNight(now) ? "Night mode" : "Day mode"}</span> */}
               </div>
+              {updateAvailable && (
+                <div className="ph-update" role="status">
+                  <span className="ph-update-mark" aria-hidden="true"><Icon name="spin" size={18} weight="bold" /></span>
+                  <span className="ph-update-copy"><b>New update available</b><small>Refresh to get the latest version.</small></span>
+                  <button type="button" onClick={applyPwaUpdate}>Reload</button>
+                </div>
+              )}
               {st && (
                 <div className="ph-wallet" aria-label="Wallet">
                   <span className="ph-wallet-ico"><Icon name="coins" size={22} weight="fill" /></span>
@@ -156,13 +163,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
                   <span className="ph-wallet-wk">Week {st.week}</span>
                 </div>
               )}
-              {updateAvailable && (
-                <div className="ph-update" role="status">
-                  <span className="ph-update-mark" aria-hidden="true"><Icon name="spin" size={18} weight="bold" /></span>
-                  <span className="ph-update-copy"><b>New update available</b><small>Refresh to get the latest version.</small></span>
-                  <button type="button" onClick={applyPwaUpdate}>Reload</button>
-                </div>
-              )}
+             
               <div className="ph-grid">
                 {(held ? GRID.filter((id) => !CUSTODY_HIDDEN.includes(id)) : GRID).map((id, k) => (
                   <Tile key={id} {...APPS[id]} badge={id === "messages" ? unread : id === "games" ? gamesBadge : 0} first={k === 0 ? firstApp : undefined} onClick={() => openApp(id)} />
