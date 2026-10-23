@@ -102,6 +102,7 @@
 
 /* ---- appearance ---- */
 .st-view { position: relative; height: 300px; margin: 0 0 20px; border-radius: 22px; overflow: hidden; background: linear-gradient(180deg, #e9eef8, #f5f6f8); }
+.st-view > .stage { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: inherit; background: transparent; }
 .st-caption { position: absolute; left: 0; right: 0; bottom: 0; display: grid; gap: 1px; padding: 22px 16px 12px; background: linear-gradient(0deg, rgba(245, 246, 248, 0.96), rgba(245, 246, 248, 0)); pointer-events: none; }
 .st-caption b { font-size: 1rem; }
 .st-caption span { color: var(--muted); font-size: 0.84rem; }

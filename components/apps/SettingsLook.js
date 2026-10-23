@@ -1,7 +1,7 @@
 // components/apps/SettingsLook.js: Settings > Appearance, inside the phone.
 // Two kinds of change, each saved by the server rule that owns it:
 //   - body (man / woman), hairstyle, skin tone and height: previewed in 3D, kept when "Save appearance" succeeds (/api/settings, lib/profileService.js saveAppearance);
-//   - clothes: an outfit made of clothes the player OWNS from the Offishall Store, worn with one tap (/api/wardrobe, lib/wardrobeService.js). The server refuses to change clothes
+//   - clothes: an outfit made of clothes the player OWNS from Offishall Stores, worn with one tap (/api/wardrobe, lib/wardrobeService.js). The server refuses to change clothes
 //     from anywhere else, so this page never pretends to: it only offers what the wardrobe really allows.
 // A saved look is written into the game state and every profile picture at once, so the room, the map, buildings, messages and other players all show it.
 "use client";
@@ -119,14 +119,14 @@ export default function SettingsLook({ data, store, onDirty, onOpenApp, router }
         </div>
       </Group>
 
-      <Group title="Clothes" foot="Clothes come from the Offishall Store. Everything you buy is yours for good, and you can change outfits here or in the store whenever you like.">
+      <Group title="Clothes" foot="Clothes come from Offishall Stores. Everything you buy is yours for good, and you can change outfits here or in the store whenever you like.">
         <div className="st-pad">
           <p className="st-wearing"><Icon name="shirt" size={16} weight="fill" /> Wearing: <b>{!w ? "…" : worn ? names(worn) : "Your starter outfit"}</b></p>
           {bodyChanging && <Note icon="lockS">Save your body change first. Your clothes are chosen for the body you have saved.</Note>}
           {!w && !loadFailed && <p className="st-muted">Loading your wardrobe…</p>}
           {loadFailed && <div className="st-retry"><p>Your wardrobe did not load.</p><button type="button" onClick={loadWardrobe}>Try again</button></div>}
           {w && !bodyChanging && (mine.length === 0 ? (
-            <p className="st-muted">You do not own any clothes yet. Buy some at the Offishall Store and they will appear here.</p>
+            <p className="st-muted">You do not own any clothes yet. Buy some at Offishall Stores and they will appear here.</p>
           ) : (<>
             {sections.map(([title, list]) => list.length > 0 && (
               <div key={title} className="st-field"><div className="st-fh"><h4>{title}</h4></div>
@@ -142,7 +142,7 @@ export default function SettingsLook({ data, store, onDirty, onOpenApp, router }
               <button type="button" disabled={wearBusy || !worn} onClick={() => dress({ action: "starter" }, "You are back in your starter outfit.")}>Starter outfit</button>
             </div>
           </>))}
-          <button type="button" className="st-wide" onClick={() => onOpenApp?.("offishall")}><Icon name="bag" size={18} weight="fill" /> Open the Offishall Store</button>
+          <button type="button" className="st-wide" onClick={() => onOpenApp?.("offishall")}><Icon name="bag" size={18} weight="fill" /> Open Offishall Stores</button>
         </div>
       </Group>
 

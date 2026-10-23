@@ -20,9 +20,8 @@ import { resetAll } from "@/lib/optimistic";
 import { resetBoot, setPlayMode } from "@/lib/ui";
 import { usePrefs } from "@/lib/prefs";
 import { MUSIC } from "@/lib/sound";
-import { useInstall } from "@/lib/pwa";
+import { useInstall, promptInstall } from "@/lib/pwa";
 import { lookKey } from "@/lib/look";
-import { NAME_RE, NAME_RULE, cleanName } from "@/lib/profileRules";
 import { Group, NavRow, InfoRow, ToggleRow, SliderRow, Segmented, Status, Note, Sheet, savePref } from "./settingsKit";
 import SettingsLook from "./SettingsLook";
 import SettingsInstall from "./SettingsInstall";
@@ -31,41 +30,9 @@ import "./settings-app.css";
 
 const PAGES = { profile: "Profile", appearance: "Appearance", gameplay: "Gameplay", audio: "Audio", notifications: "Notifications", accessibility: "Accessibility", privacy: "Privacy & Security", install: "Install Game" };
 const STAT_LABEL = [["health", "Health"], ["energy", "Energy"], ["happiness", "Happiness"], ["academics", "Academics"], ["popularity", "Popularity"]];
-const when = (iso) => new Date(iso).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" });
 const bodyName = (g) => (g === "F" ? "Woman" : "Man");
 
 /* ---------------------------------- sheets that edit one thing ---------------------------------- */
-
-function NameSheet({ p, store, onClose, router }) {
-  const [name, setName] = useState(p.name), [s, setS] = useState(null);
-  const clean = cleanName(name), bad = clean && !NAME_RE.test(clean), same = clean === p.name, busy = s?.kind === "busy";
-  async function save(e) {
-    e.preventDefault();
-    if (same || bad || !clean || busy) return;
-    setS({ kind: "busy", text: "Saving…" });
-    const r = await call("/api/settings", { action: "name", name: clean });
-    if (r.status === 401) return loggedOut(router);
-    if (r.failed) return setS({ kind: "error", text: r.error || "Could not change your name." });
-    store.pushDone((x) => (x ? { ...x, profile: { ...x.profile, name: r.name }, editable: { ...x.editable, nameChangeAvailableAt: r.changed ? new Date(Date.now() + 7 * 864e5).toISOString() : x.editable.nameChangeAvailableAt } } : x));
-    game.pushDone((st) => (st ? { ...st, character: { ...st.character, name: r.name } } : st));
-    if (r.changed) { avatarDirectory.forget(p.name); avatarDirectory.seed(r.name, p.gender, p.look, p.lookKey); } // the old name no longer exists; the new one keeps the same look
-    window.dispatchEvent(new Event("game:refresh"));
-    if (r.changed) toast.success("Your name was changed.");
-    onClose();
-  }
-  return (
-    <Sheet title="Change your name" onClose={onClose} busy={busy}>
-      <p className="st-sheetlead">This is the name other players see. You can change it once a week.</p>
-      <form onSubmit={save}>
-        <label className="st-label" htmlFor="st-name">Character name</label>
-        <input id="st-name" type="text" value={name} maxLength={20} autoComplete="off" aria-invalid={!!bad} aria-describedby="st-name-h" onChange={(e) => { setName(e.target.value); setS(null); }} />
-        <span id="st-name-h" className={"st-help" + (bad ? " bad" : "")}>{NAME_RULE}</span>
-        <Status s={s} />
-        <div className="st-btns"><button type="button" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="go" disabled={same || !!bad || !clean || busy}>{busy ? "Saving…" : "Save name"}</button></div>
-      </form>
-    </Sheet>
-  );
-}
 
 function EmailSheet({ p, store, onClose, router }) {
   const [email, setEmail] = useState(""), [pw, setPw] = useState(""), [s, setS] = useState(null), busy = s?.kind === "busy";
@@ -137,6 +104,13 @@ export default function SettingsApp({ onHome, onClose, onOpenApp, onLogout, logg
   const [busyBlock, setBusyBlock] = useState(null);
   const onAuth = useCallback(() => loggedOut(router), [router]);
   const pref = (group, key, opts) => (value) => savePref(group, key, value, { onAuth, ...opts });
+  async function installGame() {
+    if (install.kind !== "available") { go("install"); return; }
+    const result = await promptInstall();
+    if (result === "accepted") toast.success("Installing Life in OAU. Look for it on your home screen.");
+    else if (result === "dismissed") toast.info("No problem. You can install it any time from Settings.");
+    else go("install");
+  }
 
   const go = useCallback((id) => setPage(id), []);
   const back = useCallback(async () => {
@@ -193,8 +167,8 @@ export default function SettingsApp({ onHome, onClose, onOpenApp, onLogout, logg
           <p>{bodyName(p.gender)} · {p.faculty.replace(/^Faculty of /, "")} · {p.level}L</p>
           <div className="st-tags"><span>{p.class}</span>{p.office && <span>{p.office}</span>}{p.graduated && <span>Graduated{p.classification ? `, ${p.classification}` : ""}</span>}{p.personalities?.map((x) => <span key={x}>{x}</span>)}</div>
         </div>
-        <Group title="Personal information" foot="Your name can be changed once a week. Your body, hair and clothes are on the Appearance page.">
-          <NavRow icon="person" tone="blue" title="Name" value={p.name} sub={d.editable.nameChangeAvailableAt ? `You can change it again on ${when(d.editable.nameChangeAvailableAt)}` : "Shown to other players"} disabled={!!d.editable.nameChangeAvailableAt} onClick={() => setSheet("name")} />
+        <Group title="Personal information" foot="Your name cannot be changed. Your body, hair and clothes are on the Appearance page.">
+          <InfoRow title="Name" value={p.name} lock />
           <NavRow icon="sparkle" tone="rose" title="Gender" value={bodyName(p.gender)} sub="Change in Appearance" onClick={() => go("appearance")} />
           <NavRow icon="send" tone="sky" title="Email" value={p.email} sub="The email you log in with" onClick={() => setSheet("email")} />
         </Group>
@@ -332,7 +306,7 @@ export default function SettingsApp({ onHome, onClose, onOpenApp, onLogout, logg
               <NavRow icon="shield" tone="navy" title="Privacy & Security" sub="Visibility, blocked players, password" onClick={() => go("privacy")} />
             </Group>
             <Group title="App">
-              <NavRow icon="phone" tone="green" title="Install Game" sub="Add Life in OAU to your home screen" value={installState} onClick={() => go("install")} />
+              <NavRow icon="phone" tone="green" title="Install Game" sub="Add Life in OAU to your home screen" value={installState} onClick={installGame} />
             </Group>
             <Group title="Start over" tone="danger" foot="Delete your character and begin a brand new life. You will be asked to confirm, and nothing changes until you do.">
               <NavRow icon="undo" tone="rose" title="Start a new life" sub="Reset your character and progress" danger onClick={() => setSheet("life")} />
@@ -340,7 +314,6 @@ export default function SettingsApp({ onHome, onClose, onOpenApp, onLogout, logg
           </>
         ) : pages[page]}
       </div>
-      {sheet === "name" && p && <NameSheet p={p} store={store} onClose={() => setSheet(null)} router={router} />}
       {sheet === "email" && p && <EmailSheet p={p} store={store} onClose={() => setSheet(null)} router={router} />}
       {sheet === "password" && <PasswordSheet onClose={() => setSheet(null)} router={router} />}
       {sheet === "life" && <NewLifeSheet name={me?.name} onClose={() => setSheet(null)} onDone={lifeDone} router={router} />}
