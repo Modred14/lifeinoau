@@ -176,7 +176,7 @@ Grouped by job. Files marked *pure* have no database access and are the easiest 
 
 | Group | Files |
 |---|---|
-| Foundation | `rules.js` (hostel and class rules, transfer limits), `rng.js` (secure random), `clock.js` (week from server time), `auth.js` (sessions), `client.js` (browser helper), `ratelimit.js` |
+| Foundation | `rules.js` (hostel, class and player-to-player transfer rules), `rng.js` (secure random), `clock.js` (week from server time), `auth.js` (sessions), `client.js` (browser helper), `ratelimit.js` |
 | Money | `ledger.js` (**the only code allowed to move money**) |
 | Weekly simulation | `tick.js` (catches a player up on missed weeks: allowance, rent, exams, sessions, childcare, businesses, investments valuation) |
 | Rules (*pure*) | `engine.js` (actions, risk, exams, progression), `parties.js`, `relationships.js`, `jobs.js`, `business.js`, `market.js`, `achievements.js`, `curriculum.js` (courses and fictional lecturers), `courses.js` (attendance, preparation, exams, surprise tests) |

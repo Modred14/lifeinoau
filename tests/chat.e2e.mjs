@@ -132,6 +132,27 @@ try {
   ok(th.messages.at(-1).kind === 1 && th.messages.at(-1).mine === true, "the money card is in the thread history");
   const replay = await sendMoney(db, alice.userId, { to: bob.name, amountNaira: 5000, memo: "for jollof", requestId: "req-" + tag });
   ok(replay.duplicate === true && (await db.message.count({ where: { chatId: m.msg.chat, kind: 1 } })) === 1, "replaying a transfer adds no second card");
+  let capErr = null; try { await sendMoney(db, alice.userId, { to: bob.name, amountNaira: 5_000_001, memo: "", requestId: "cap-" + tag }); } catch (e) { capErr = e; }
+  ok(capErr?.status === 400, "amounts above ₦5,000,000 are rejected");
+  await db.actionLog.update({ where: { characterId_requestId: { characterId: alice.id, requestId: "req-" + tag } }, data: { createdAt: new Date(Date.now() - 61_000) } });
+  const concurrent = await Promise.allSettled([
+    sendMoney(db, alice.userId, { to: bob.name, amountNaira: 100, memo: "", requestId: "parallel-a-" + tag }),
+    sendMoney(db, alice.userId, { to: cara.name, amountNaira: 100, memo: "", requestId: "parallel-b-" + tag }),
+  ]);
+  const wins = concurrent.filter((x) => x.status === "fulfilled" && x.value.ok && !x.value.duplicate).length;
+  const cooldowns = concurrent.filter((x) => x.status === "rejected" && x.reason.status === 429).length;
+  ok(wins === 1 && cooldowns === 1, "concurrent transfers serialize: one succeeds and the other hits cooldown");
+  const cooldownErr = await sendMoney(db, alice.userId, { to: bob.name, amountNaira: 100, memo: "", requestId: "cooldown-" + tag }).catch((e) => e);
+  ok(cooldownErr.status === 429, "a successful transfer starts a one-minute cooldown");
+  const latestTransfer = await db.actionLog.findFirst({ where: { characterId: alice.id, action: "transfer" }, orderBy: { createdAt: "desc" } });
+  await db.actionLog.update({ where: { id: latestTransfer.id }, data: { createdAt: new Date(Date.now() - 61_000) } });
+  const accountBeforeFailure = await db.account.findUnique({ where: { characterId: alice.id } });
+  await db.account.update({ where: { id: accountBeforeFailure.id }, data: { balance: 5_000n } });
+  const failed = await sendMoney(db, alice.userId, { to: bob.name, amountNaira: 100, memo: "", requestId: "failed-" + tag }).catch((e) => e);
+  const unchangedBalance = (await db.account.findUnique({ where: { id: accountBeforeFailure.id } })).balance === 5_000n;
+  await db.account.update({ where: { id: accountBeforeFailure.id }, data: { balance: accountBeforeFailure.balance } });
+  const afterFailure = await sendMoney(db, alice.userId, { to: bob.name, amountNaira: 100, memo: "", requestId: "after-failure-" + tag }).catch((e) => e);
+  ok(failed.status === 402 && unchangedBalance && afterFailure.ok, "insufficient-funds failure does not charge or trigger a cooldown");
 
   // --- block: silent for the blocked player, hides presence
   const bl = await safety(db, bob.userId, { action: "block", name: alice.name });

@@ -1,6 +1,6 @@
 // tests/p2p.test.mjs
 import { transferInTx, InsufficientFunds } from "../lib/ledger.js";
-import { feeFor, P2P, cleanText } from "../lib/rules.js";
+import { feeFor, P2P, cleanText, transferCooldownRemaining } from "../lib/rules.js";
 const A = {
     a: { id: "a", kind: "PLAYER", balance: 10_000_000n },
     b: { id: "b", kind: "PLAYER", balance: 0n },
@@ -81,11 +81,9 @@ console.log(
   L.length,
   "(first leg was written, the DB transaction rolls it back; see note)",
 );
-console.log(
-  "fee on N100 =",
-  feeFor(10_000n),
-  "kobo | daily cap N",
-  P2P.dailyKobo / 100n,
-  "| cleanText:",
-  JSON.stringify(cleanText("hi\u0000 there\n" + "x".repeat(600), 20)),
-);
+if (P2P.maxNaira !== 5_000_000 || P2P.cooldownMs !== 60_000 || "dailyKobo" in P2P) throw new Error("P2P rules are incorrect");
+if (transferCooldownRemaining(null, 100_000) !== 0) throw new Error("A first transfer must not be delayed");
+if (transferCooldownRemaining(new Date(100_000), 159_999) !== 1) throw new Error("Cooldown must last one minute");
+if (transferCooldownRemaining(new Date(100_000), 160_000) !== 0) throw new Error("Cooldown must expire after one minute");
+if (feeFor(10_000n) !== 200n) throw new Error("Fee changed unexpectedly");
+console.log("per-transfer cap, cooldown expiry, fee and text sanitization:", P2P.maxNaira, P2P.cooldownMs, JSON.stringify(cleanText("hi\u0000 there\n" + "x".repeat(600), 20)));

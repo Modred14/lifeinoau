@@ -1124,7 +1124,7 @@ function Pay({ name, g, draft, setDraft, close, onSent, router, reopen }) {
           Send {valid ? fmt(n) : "money"}
         </button>
         <p className="mut ms-limits">
-          ₦100 to ₦5,000,000 each, ₦10,000,000 a day.
+          ₦100 to ₦5,000,000 per transfer. Wait 1 minute between successful transfers.
         </p>
       </div>
     </form>
