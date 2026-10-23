@@ -1,0 +1,112 @@
+/* components/apps/forbes.css: FORBES OAU, the richest-players board inside the phone (see ForbesBoard.js and the data-app="forbes" rules in phone.css).
+   Deep oak-green stage, brass-gold wordmark, gold / silver / bronze podium. Everything on the screen is prefixed `fb-`. */
+
+/* ---------- the phone shell, dark, while the leaderboards app is open (all of its tabs) ---------- */
+.ph[data-app="forbes"] .pa-bar h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } /* the wordmark below is the title */
+.ph[data-app="forbes"] .pa-content [role="tablist"] { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(244, 236, 214, 0.1); }
+.ph[data-app="forbes"] .pa-content [role="tablist"] > button { color: #98a89f; }
+.ph[data-app="forbes"] .pa-content [role="tablist"] > button:hover:not(:disabled):not(.on) { background: rgba(255, 255, 255, 0.07); color: #f4ecd6; }
+.ph[data-app="forbes"] .pa-content [role="tablist"] > button.on,
+.ph[data-app="forbes"] .pa-content [role="tablist"] > button[aria-selected="true"] { background: linear-gradient(180deg, #f8dc86, #d9a233); color: #1d1604; box-shadow: 0 6px 16px -8px rgba(240, 195, 90, 0.8); }
+.ph[data-app="forbes"] .pa-content button:not([role="tab"]):not(.go):not(.danger):not(.fb-hit) { background: rgba(255, 255, 255, 0.07); border-color: rgba(244, 236, 214, 0.14); color: #f4ecd6; box-shadow: none; }
+.ph[data-app="forbes"] .pa-content button:not([role="tab"]):not(.go):not(.danger):not(.fb-hit):hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); border-color: rgba(240, 195, 90, 0.4); }
+.ph[data-app="forbes"] .pa-content .card { background: var(--surface); border: 1px solid var(--line); }
+.ph[data-app="forbes"] .pa-content .rk { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+
+/* ---------- the board ---------- */
+.fb { --ink: #07110d; --gold: #f0c35a; --ivory: #f4ecd6; --mute: #98a89f; --line: rgba(244, 236, 214, 0.1); container-type: inline-size; position: relative; margin: 0 -4px; padding-bottom: 6px; color: var(--ivory); }
+.fb h3, .fb p { margin: 0; }
+
+.fb-hero { position: relative; text-align: center; padding: 10px 0 2px; }
+.fb-hero::before { content: ""; position: absolute; z-index: -1; left: 50%; top: -30px; width: 120%; height: 190px; transform: translateX(-50%); background: radial-gradient(closest-side, rgba(240, 195, 90, 0.2), transparent); pointer-events: none; }
+.fb-mark { font: 800 clamp(2rem, 11cqw, 2.6rem) / 1 var(--font-head); letter-spacing: 0.045em; text-transform: uppercase; background: linear-gradient(180deg, #fff3c4 0%, #f0c35a 48%, #b9852a 100%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 6px 18px rgba(240, 195, 90, 0.28)); }
+.fb-tag { margin-top: 8px; color: var(--mute); font-size: 0.84rem; line-height: 1.4; }
+
+/* podium: three plinths on the stage, the leader in the middle and tallest */
+.fb-podium { list-style: none; margin: 18px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1.16fr 1fr; align-items: end; gap: 6px; }
+.fb-pod { --m1: #f0b98a; --m2: #9a5a2c; --glow: rgba(208, 138, 86, 0.5); --h: 50px; --s: clamp(54px, 19cqw, 70px); display: flex; flex-direction: column; align-items: center; min-width: 0; animation: fb-rise 640ms var(--ease) both; }
+.fb-pod[data-metal="1"] { --m1: #fff0b8; --m2: #b9852a; --glow: rgba(240, 195, 90, 0.7); --h: 96px; --s: clamp(76px, 27cqw, 96px); }
+.fb-pod[data-metal="2"] { --m1: #f4f7fb; --m2: #8e99a8; --glow: rgba(205, 213, 223, 0.45); --h: 70px; }
+.fb-pod[data-place="3"] { animation-delay: 80ms; } .fb-pod[data-place="2"] { animation-delay: 220ms; } .fb-pod[data-place="1"] { animation-delay: 380ms; }
+.fb-pod-empty { visibility: hidden; animation: none; }
+.fb-crown { position: relative; z-index: 2; width: 32px; margin-bottom: -9px; filter: drop-shadow(0 4px 8px rgba(240, 195, 90, 0.55)); animation: fb-crown 700ms var(--ease) 820ms both; }
+.fb-ring { position: relative; display: grid; width: var(--s); aspect-ratio: 1; padding: 3px; border-radius: 50%; background: conic-gradient(from 200deg, var(--m1), var(--m2), var(--m1), var(--m2), var(--m1)); box-shadow: 0 12px 26px -12px var(--glow), 0 0 0 5px rgba(255, 255, 255, 0.03); }
+.fb-pod[data-metal="1"] .fb-ring { box-shadow: 0 14px 36px -10px var(--glow), 0 0 0 6px rgba(240, 195, 90, 0.1); }
+.fb-pod-name { max-width: 100%; margin-top: 9px; padding: 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 0.86rem / 1.15 var(--font-head); color: var(--ivory); }
+.fb-pod-val { margin-top: 2px; font: 800 1rem / 1.2 var(--font-head); color: var(--m1); }
+.fb-plinth { position: relative; overflow: hidden; display: grid; place-items: start center; width: 100%; height: var(--h); margin-top: 10px; padding-top: 10px; border-radius: 16px 16px 0 0; background: linear-gradient(180deg, var(--m1) 0%, var(--m2) 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 -12px 30px -16px var(--glow); }
+.fb-plinth b { font: 800 1.7rem / 1 var(--font-head); color: rgba(10, 18, 13, 0.74); }
+.fb-pod[data-metal="1"] .fb-plinth b { font-size: 2.1rem; }
+.fb-pod[data-metal="1"] .fb-plinth::after { content: ""; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.6) 50%, transparent 62%); transform: translateX(-130%); animation: fb-sheen 1.5s ease-out 1.2s 1 forwards; }
+
+/* the stage floor: every ranked player, one row each */
+.fb-sheet { list-style: none; margin: 0; padding: 4px 0; border: 1px solid var(--line); border-top: 2px solid rgba(240, 195, 90, 0.5); border-radius: 0 0 22px 22px; background: linear-gradient(180deg, #14261d 0%, #0d1a14 100%); box-shadow: 0 24px 40px -28px #000; overflow: hidden; }
+.fb-row { position: relative; border-top: 1px solid var(--line); animation: fb-in 380ms var(--ease) both; animation-delay: calc(var(--i) * 30ms + 520ms); }
+.fb-row:first-child { border-top: 0; }
+.fb-row[data-me] { background: linear-gradient(90deg, rgba(240, 195, 90, 0.16), transparent 75%); box-shadow: inset 3px 0 0 var(--gold); }
+.pa-content .fb .fb-hit { display: grid; grid-template-columns: 28px 44px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; min-height: 64px; padding: 10px 14px; margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: inherit; font: inherit; text-align: left; transition: background 160ms; }
+.pa-content .fb button.fb-hit { cursor: pointer; }
+.pa-content .fb button.fb-hit:hover:not(:disabled) { background: rgba(255, 255, 255, 0.045); border-color: transparent; }
+.pa-content .fb button.fb-hit:active:not(:disabled) { background: rgba(255, 255, 255, 0.08); }
+.pa-content .fb button.fb-hit:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+.fb-pos { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; font: 700 0.92rem / 1 var(--font-head); color: var(--mute); }
+.fb-row[data-top] .fb-pos { color: #0b140f; background: linear-gradient(160deg, var(--m1), var(--m2)); box-shadow: 0 4px 12px -4px var(--glow); }
+.fb-row[data-top="1"] { --m1: #fff0b8; --m2: #b9852a; --glow: rgba(240, 195, 90, 0.8); }
+.fb-row[data-top="2"] { --m1: #f4f7fb; --m2: #8e99a8; --glow: rgba(205, 213, 223, 0.6); }
+.fb-row[data-top="3"] { --m1: #f0b98a; --m2: #9a5a2c; --glow: rgba(208, 138, 86, 0.6); }
+.fb-row[data-top] .fb-av { box-shadow: 0 0 0 2px var(--m2); }
+.fb-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fb-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.fb-name b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 0.96rem / 1.2 var(--font-head); color: var(--ivory); }
+.fb-id small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.76rem; color: var(--mute); }
+.fb-cls, .fb-you { flex: none; padding: 2px 6px; border-radius: 6px; font: 700 0.62rem / 1.2 var(--font-ui); font-style: normal; letter-spacing: 0.04em; }
+.fb-cls { color: var(--c, var(--mute)); background: color-mix(in srgb, var(--c, #98a89f) 15%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, #98a89f) 35%, transparent); }
+.fb-cls[data-cls="LAPO"] { --c: var(--lapo); } .fb-cls[data-cls="MAPO"] { --c: var(--mapo); } .fb-cls[data-cls="NEPO"] { --c: var(--nepo); }
+.fb-you { color: #1d1604; background: var(--gold); }
+.fb-worth { display: inline-flex; align-items: center; gap: 6px; font: 800 1rem / 1 var(--font-head); color: var(--gold); white-space: nowrap; }
+.fb-worth svg { color: var(--mute); transition: transform 260ms var(--ease); }
+.fb-row[data-open] .fb-worth svg { transform: rotate(180deg); }
+
+/* a fortune broken down: opens under its row */
+.fb-detail { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 320ms var(--ease); }
+.fb-row[data-open] .fb-detail { grid-template-rows: 1fr; }
+.fb-detail-in { min-height: 0; overflow: hidden; }
+.fb-detail-pad { padding: 2px 14px 14px 52px; }
+.fb-bar { display: flex; gap: 2px; height: 8px; border-radius: 99px; overflow: hidden; background: rgba(255, 255, 255, 0.07); }
+.fb-bar i { display: block; height: 100%; transition: width 560ms var(--ease) 60ms; }
+.fb-bar i[data-k="cash"], .fb-legend li[data-k="cash"]::before { background: #3fd08a; }
+.fb-bar i[data-k="business"], .fb-legend li[data-k="business"]::before { background: #f0c35a; }
+.fb-bar i[data-k="investments"], .fb-legend li[data-k="investments"]::before { background: #8fc3ff; }
+.fb-legend { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.fb-legend li { display: grid; grid-template-columns: 8px 1fr auto 36px; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--mute); }
+.fb-legend li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; }
+.fb-legend b { font-weight: 600; color: var(--ivory); }
+.fb-legend em { font-style: normal; text-align: right; }
+
+.fb-foot { margin-top: 12px; text-align: center; font-size: 0.76rem; line-height: 1.55; color: var(--mute); }
+.fb-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 34px 22px; margin-top: 18px; border-radius: 22px; text-align: center; color: var(--gold); }
+.fb-empty b { font: 700 1.05rem var(--font-head); color: var(--ivory); }
+.fb-empty p { max-width: 26ch; color: var(--mute); font-size: 0.86rem; line-height: 1.45; }
+
+/* loading: the same shapes, resting */
+.fb-skel .fb-ring, .fb-skel .fb-plinth, .fb-sk-line, .fb-sk-av, .fb-sk-dot { background: linear-gradient(100deg, #1a2e24 30%, #26443a 50%, #1a2e24 70%) 0 0 / 200% 100%; animation: fb-shimmer 1.4s linear infinite; box-shadow: none; }
+.fb-skel .fb-pod { animation: none; }
+.fb-skel .fb-sk-line { width: 70%; height: 12px; margin-top: 12px; border-radius: 6px; }
+.fb-sk-row { display: flex; align-items: center; gap: 12px; padding: 14px; }
+.fb-sk-row .fb-sk-line { flex: 1; margin: 0; width: auto; }
+.fb-sk-dot { width: 24px; height: 24px; border-radius: 50%; } .fb-sk-av { width: 44px; height: 44px; border-radius: 50%; }
+
+@keyframes fb-rise { from { opacity: 0; transform: translateY(30px); } }
+@keyframes fb-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes fb-crown { from { opacity: 0; transform: translateY(-16px) scale(0.7) rotate(-8deg); } }
+@keyframes fb-sheen { to { transform: translateX(130%); } }
+@keyframes fb-shimmer { to { background-position: -200% 0; } }
+
+@container (max-width: 310px) {
+  .pa-content .fb .fb-hit { grid-template-columns: 24px 40px minmax(0, 1fr) auto; gap: 8px; padding: 9px 10px; }
+  .fb-detail-pad { padding-left: 42px; }
+  .fb-pod-val { font-size: 0.9rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fb *, .fb *::before, .fb *::after { animation: none !important; transition-duration: 0.01ms !important; }
+}

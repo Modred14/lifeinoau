@@ -1,11 +1,12 @@
 // components/apps/LeaderboardsApp.js: lives inside the phone (see components/Phone.js)
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { naira } from "@/lib/client";
-import { useResource } from "@/lib/gameStore";
+import { useGame, useResource } from "@/lib/gameStore";
 import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
 import PlayerAvatar from "@/components/PlayerAvatar";
+import ForbesBoard, { ForbesSkeleton } from "./ForbesBoard";
 
 const TABS = [
   ["forbes", "FORBES"],
@@ -22,6 +23,13 @@ export default function Boards() {
   // instead of blanking the screen and asking the server again every time. A slow answer for one tab can never land on another.
   const [key, setKey] = useState("forbes");
   const { d: b, load, loadFailed: failed } = useResource("/api/leaderboard?board=" + key);
+  const me = useGame()?.character?.name;
+  // The server recomputes a board about once a minute: while the app is open and visible, ask again at that pace so the ranking never goes stale.
+  // A refresh that fails keeps the board already on screen.
+  useEffect(() => {
+    const t = setInterval(() => { if (document.visibilityState === "visible") load(); }, 60_000);
+    return () => clearInterval(t);
+  }, [load]);
   return (
     <>
       <div className="top">
@@ -49,13 +57,14 @@ export default function Boards() {
           onRetry={load}
         />
       )}
-      {!b && !failed && <Loader label="Loading leaderboards" />}
+      {!b && !failed && (key === "forbes" ? <ForbesSkeleton /> : <Loader label="Loading leaderboards" />)}
       {b?.unavailable && (
         <div className="card">
           <p>{b.unavailable}</p>
         </div>
       )}
-      {b && !b.unavailable && (
+      {b && !b.unavailable && key === "forbes" && <ForbesBoard board={b} me={me} />}
+      {b && !b.unavailable && key !== "forbes" && (
         <div className="card">
           <b>{b.title}</b>
           {b.note && <p className="mut">{b.note}</p>}
