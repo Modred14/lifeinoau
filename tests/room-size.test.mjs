@@ -1,5 +1,5 @@
 // tests/room-size.test.mjs
-// The player's room is roughly twice the floor area it used to be (school halls 8x6 and 9x7 cells, the one-bedroom place 8x8, the flats 8x10).
+// The player's room is about three times the floor area it used to be (school halls 8x6 and 9x7 cells, the one-bedroom place 8x8, the flats 8x10).
 // Checks the new sizes, that every plan is still sound (doorways, front door, windows, decorations), that what every home comes with fits and nothing
 // is walled in, that the character can walk everywhere (the same findPath the 3D room uses), and that a heavily furnished room still works.
 // Pure Node: no database, no browser.
@@ -15,11 +15,11 @@ const SCHOOL = ["Awo", "Fajuyi", "Moremi", "Angola", "Mozambique", "Hogwarts"].f
 // ---- the new sizes (the old area is what the rooms were before) ----
 const OLD = { school: 8 * 6, bigSchool: 9 * 7, studio: 8 * 8, flat: 8 * 10 };
 const ratio = (now, old) => +(now / old).toFixed(2);
-chk("a school room is about twice its old floor area (12x8 for 8x6)", SCHOOL_ROOM.join("x") === "12x8" && ratio(area({ w: 12, d: 8 }), OLD.school) >= 1.8 && ratio(area({ w: 12, d: 8 }), OLD.school) <= 2.2);
-chk("the two big school halls are about twice theirs (13x10 for 9x7)", BIG_SCHOOL_ROOM.join("x") === "13x10" && ratio(130, OLD.bigSchool) >= 1.8 && ratio(130, OLD.bigSchool) <= 2.2);
-chk("Ojaja and off campus are about twice the old one-bedroom place", ratio(LAYOUTS.studio.w * LAYOUTS.studio.d, OLD.studio) >= 1.8 && ratio(LAYOUTS.studio.w * LAYOUTS.studio.d, OLD.studio) <= 2.2, LAYOUTS.studio.w + "x" + LAYOUTS.studio.d);
-chk("both flats are about twice the old flat size", ["flat1", "flat2"].every((k) => ratio(LAYOUTS[k].w * LAYOUTS[k].d, OLD.flat) >= 1.8 && ratio(LAYOUTS[k].w * LAYOUTS[k].d, OLD.flat) <= 2.2));
-chk("roomFor() reports the real sizes the server and the 3D room both use", [["Awo", 12, 8], ["Angola", 13, 10], ["Mozambique", 13, 10], ["Ojaja", 11, 12], ["Off-campus", 11, 12], ["1-Bedroom Flat", 11, 14], ["2-Bedroom Flat", 11, 14]].every(([h, w, d]) => { const r = roomFor(h, "p"); return r.w === w && r.d === d; }));
+chk("a school room is about three times its old floor area (16x9 for 8x6)", SCHOOL_ROOM.join("x") === "16x9" && ratio(144, OLD.school) >= 2.8 && ratio(144, OLD.school) <= 3.2);
+chk("the two big school halls are about three times theirs (19x10 for 9x7)", BIG_SCHOOL_ROOM.join("x") === "19x10" && ratio(190, OLD.bigSchool) >= 2.8 && ratio(190, OLD.bigSchool) <= 3.2);
+chk("Ojaja and off campus are about three times the old one-bedroom place", ratio(LAYOUTS.studio.w * LAYOUTS.studio.d, OLD.studio) >= 2.8 && ratio(LAYOUTS.studio.w * LAYOUTS.studio.d, OLD.studio) <= 3.2, LAYOUTS.studio.w + "x" + LAYOUTS.studio.d);
+chk("both flats are about three times the old flat size", ["flat1", "flat2"].every((k) => ratio(LAYOUTS[k].w * LAYOUTS[k].d, OLD.flat) >= 2.8 && ratio(LAYOUTS[k].w * LAYOUTS[k].d, OLD.flat) <= 3.2));
+chk("roomFor() reports the real sizes the server and the 3D room both use", [["Awo", 16, 9], ["Fajuyi", 16, 9], ["ETF", 16, 9], ["Moremi", 16, 9], ["Akintola", 16, 9], ["Alumni", 16, 9], ["Angola", 19, 10], ["Mozambique", 19, 10], ["Ojaja", 14, 14], ["Off-campus", 14, 14], ["1-Bedroom Flat", 15, 16], ["2-Bedroom Flat", 15, 16]].every(([h, w, d]) => { const r = roomFor(h, "p"); return r.w === w && r.d === d; }));
 chk("the plans are exactly the size HOME_SIZE says", Object.entries(HOME_SIZE).every(([k, [w, d]]) => LAYOUTS[k].w === w && LAYOUTS[k].d === d && LAYOUTS[k].grid.length === d && LAYOUTS[k].grid.every((r) => r.length === w)));
 
 // ---- every plan is still sound ----

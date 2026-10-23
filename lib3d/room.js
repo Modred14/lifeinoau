@@ -406,7 +406,7 @@ export function createRoomScene(container, cb = {}) {
   };
   const cellWorld = (cx, cz) => [cx + 0.5 - W / 2, cz + 0.5 - D / 2];
   // a bigger room means a longer walk: the pace rises a little with the size (up to a third faster) so crossing it never drags; the 8x6 room's pace is the base
-  const walkSpeed = () => 1.9 * Math.min(1.35, Math.max(1, Math.hypot(W, D) / 12));
+  const walkSpeed = () => 1.9 * Math.min(1.7, Math.max(1, Math.hypot(W, D) / 12));
   const placedList = () =>
     [...items.values()].map((i) => ({ ...i.data, placed: true }));
 
