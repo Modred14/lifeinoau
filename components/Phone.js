@@ -8,7 +8,7 @@ import { CLASS_INFO } from "@/lib/classes.js";
 import { playSound } from "@/lib/sound";
 import { InPhone } from "./phoneContext";
 import { serverDate } from "@/lib/serverClock";
-import { applyPwaUpdate, usePwaUpdate } from "@/lib/pwa";
+import { applyPwaUpdate, checkPwaUpdate, usePwaUpdate } from "@/lib/pwa";
 import MessagesApp from "./apps/MessagesApp";
 import { chat, useChat } from "@/lib/chat";
 import CareerApp from "./apps/CareerApp";
@@ -102,6 +102,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
   }, [open]);
   useEffect(() => {
     if (!open) return;
+    void checkPwaUpdate(); // ask the browser quietly when the player opens the phone
     setPeer(null);
     setApp(APPS[initialApp] && (!held || !CUSTODY_HIDDEN.includes(initialApp)) ? initialApp : null);
     setNow(serverDate());
