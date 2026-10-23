@@ -98,7 +98,7 @@ function RegisterSheet({ d, onClose, doIt }) {
             {d.races.map((r) => <option key={r.position} value={r.position}>{r.title}{r.seats > 1 ? ` (${r.seats} seats)` : ""}</option>)}
           </select>
         </label>
-        {race ? <p className="sg-hint">{race.about} Spending cap: {nairaN(race.group === "EXECUTIVE" ? Number(BigInt(d.cycle.spendCapExecKobo) / 100n) : Number(BigInt(d.cycle.spendCapAssemblyKobo) / 100n))}.</p> : null}
+        {race ? <p className="sg-hint">{race.about} Spending cap: {nairaN(race.group === "EXECUTIVE" ? Number(BigInt(d.cycle.spendCapExecKobo) / 100n) : Number(BigInt(d.cycle.spendCapAssemblyKobo) / 100n))}.{race.pay ? ` Pay in office: ${race.pay}.` : ""}</p> : null}
         <label>Slogan <small>{f.slogan.length}/{L.slogan}</small><input type="text" value={f.slogan} maxLength={L.slogan} onChange={set("slogan")} placeholder="A line students will remember" /></label>
         <label>About you <small>{f.intro.length}/{L.intro}</small><textarea rows={3} value={f.intro} maxLength={L.intro} onChange={set("intro")} placeholder="Who you are and why you are standing" /></label>
         <label>Manifesto <small>{f.manifesto.length}/{L.manifesto}</small><textarea rows={6} value={f.manifesto} maxLength={L.manifesto} onChange={set("manifesto")} placeholder="What you will do in office" /></label>
@@ -201,7 +201,7 @@ function Race({ position, onBack }) {
   return (
     <div className="sg-stack">
       <button type="button" className="sg-back" onClick={onBack}><Icon name="back" size={16} weight="bold" /> All races</button>
-      <div className="sg-banner" data-stage={h.cycle?.stage}><small>{race.seats > 1 ? `${race.seats} seats` : "1 seat"}</small><h2>{race.title}</h2><p>{r?.about}</p></div>
+      <div className="sg-banner" data-stage={h.cycle?.stage}><small>{race.seats > 1 ? `${race.seats} seats` : "1 seat"}</small><h2>{race.title}</h2><p>{r?.about}</p>{r?.pay ? <p><b>Pay in office:</b> {r.pay}</p> : null}</div>
       {race.status === "RUNOFF" && h.me.votingOpen ? <Note tone="info" title="Runoff">The vote ended level for the last seat. Only the tied candidates are on this ballot.</Note> : null}
       {voted ? <Note tone="good" title="You have voted in this race">Your vote is private and cannot be changed.</Note> : h.me.votingOpen && !h.me.mayVote ? <Note tone="warn" title="You cannot vote">{h.me.voterIssues.join(" ")}</Note> : null}
       {!h.me.votingOpen && h.cycle?.stage !== "RESULTS" ? <Note tone="info">{h.cycle?.stageHint}</Note> : null}
