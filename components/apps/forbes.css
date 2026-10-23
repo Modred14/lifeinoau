@@ -7,7 +7,7 @@
 .ph[data-app="forbes"] .pa-content [role="tablist"] > button { color: var(--muted); }
 .ph[data-app="forbes"] .pa-content [role="tablist"] > button:hover:not(:disabled):not(.on) { background: var(--raised); color: var(--text); }
 .ph[data-app="forbes"] .pa-content [role="tablist"] > button.on,
-.ph[data-app="forbes"] .pa-content [role="tablist"] > button[aria-selected="true"] { background: #16a34a; color: #fff; box-shadow: 0 6px 16px -8px rgba(22, 163, 74, 0.55); }
+.ph[data-app="forbes"] .pa-content [role="tablist"] > button[aria-selected="true"] { background: #0d8a45; color: #fff; box-shadow: 0 6px 16px -8px rgba(22, 163, 74, 0.55); }
 .ph[data-app="forbes"] .pa-content button:not([role="tab"]):not(.go):not(.danger):not(.fb-hit) { background: var(--surface); border-color: var(--line); color: var(--text); box-shadow: none; }
 .ph[data-app="forbes"] .pa-content button:not([role="tab"]):not(.go):not(.danger):not(.fb-hit):hover:not(:disabled) { background: var(--raised); border-color: rgba(22, 163, 74, 0.35); }
 .ph[data-app="forbes"] .pa-content .card { background: var(--surface); border: 1px solid var(--line); }
@@ -24,16 +24,16 @@
 
 /* podium: three plinths on the stage, the leader in the middle and tallest */
 .fb-podium { list-style: none; margin: 18px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1.16fr 1fr; align-items: end; gap: 6px; }
-.fb-pod { --m1: #f0b98a; --m2: #9a5a2c; --glow: rgba(208, 138, 86, 0.5); --h: 50px; --s: clamp(54px, 19cqw, 70px); display: flex; flex-direction: column; align-items: center; min-width: 0; animation: fb-rise 640ms var(--ease) both; }
-.fb-pod[data-metal="1"] { --m1: #fff0b8; --m2: #b9852a; --glow: rgba(240, 195, 90, 0.7); --h: 96px; --s: clamp(76px, 27cqw, 96px); }
-.fb-pod[data-metal="2"] { --m1: #f4f7fb; --m2: #8e99a8; --glow: rgba(205, 213, 223, 0.45); --h: 70px; }
+.fb-pod { --m1: #f0b98a; --m2: #9a5a2c; --label: #84451e; --glow: rgba(208, 138, 86, 0.5); --h: 50px; --s: clamp(54px, 19cqw, 70px); display: flex; flex-direction: column; align-items: center; min-width: 0; animation: fb-rise 640ms var(--ease) both; }
+.fb-pod[data-metal="1"] { --m1: #fff0b8; --m2: #b9852a; --label: #765300; --glow: rgba(240, 195, 90, 0.7); --h: 96px; --s: clamp(76px, 27cqw, 96px); }
+.fb-pod[data-metal="2"] { --m1: #f4f7fb; --m2: #8e99a8; --label: #4d5968; --glow: rgba(205, 213, 223, 0.45); --h: 70px; }
 .fb-pod[data-place="3"] { animation-delay: 80ms; } .fb-pod[data-place="2"] { animation-delay: 220ms; } .fb-pod[data-place="1"] { animation-delay: 380ms; }
 .fb-pod-empty { visibility: hidden; animation: none; }
 .fb-crown { position: relative; z-index: 2; width: 32px; margin-bottom: -9px; filter: drop-shadow(0 4px 8px rgba(240, 195, 90, 0.55)); animation: fb-crown 700ms var(--ease) 820ms both; }
 .fb-ring { position: relative; display: grid; width: var(--s); aspect-ratio: 1; padding: 3px; border-radius: 50%; background: conic-gradient(from 200deg, var(--m1), var(--m2), var(--m1), var(--m2), var(--m1)); box-shadow: 0 12px 26px -12px var(--glow), 0 0 0 5px rgba(255, 255, 255, 0.03); }
 .fb-pod[data-metal="1"] .fb-ring { box-shadow: 0 14px 36px -10px var(--glow), 0 0 0 6px rgba(240, 195, 90, 0.1); }
 .fb-pod-name { max-width: 100%; margin-top: 9px; padding: 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 0.86rem / 1.15 var(--font-head); color: var(--ivory); }
-.fb-pod-val { margin-top: 2px; font: 800 1rem / 1.2 var(--font-head); color: var(--m1); }
+.fb-pod-val { margin-top: 2px; font: 800 1rem / 1.2 var(--font-head); color: var(--label); }
 .fb-plinth { position: relative; overflow: hidden; display: grid; place-items: start center; width: 100%; height: var(--h); margin-top: 10px; padding-top: 10px; border-radius: 16px 16px 0 0; background: linear-gradient(180deg, var(--m1) 0%, var(--m2) 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 -12px 30px -16px var(--glow); }
 .fb-plinth b { font: 800 1.7rem / 1 var(--font-head); color: rgba(10, 18, 13, 0.74); }
 .fb-pod[data-metal="1"] .fb-plinth b { font-size: 2.1rem; }
@@ -50,7 +50,7 @@
 .pa-content .fb button.fb-hit:active:not(:disabled) { background: rgba(22, 163, 74, 0.1); }
 .pa-content .fb button.fb-hit:focus-visible { outline: 2px solid #16a34a; outline-offset: -2px; }
 .fb-pos { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; font: 700 0.92rem / 1 var(--font-head); color: var(--mute); }
-.fb-row[data-top] .fb-pos { color: #0b140f; background: linear-gradient(160deg, var(--m1), var(--m2)); box-shadow: 0 4px 12px -4px var(--glow); }
+.fb-row[data-top] .fb-pos { color: #101828; background: var(--m1); box-shadow: inset 0 0 0 1px var(--m2), 0 4px 12px -4px var(--glow); }
 .fb-row[data-top="1"] { --m1: #fff0b8; --m2: #b9852a; --glow: rgba(240, 195, 90, 0.8); }
 .fb-row[data-top="2"] { --m1: #f4f7fb; --m2: #8e99a8; --glow: rgba(205, 213, 223, 0.6); }
 .fb-row[data-top="3"] { --m1: #f0b98a; --m2: #9a5a2c; --glow: rgba(208, 138, 86, 0.6); }
@@ -61,8 +61,8 @@
 .fb-id small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.76rem; color: var(--mute); }
 .fb-cls, .fb-you { flex: none; padding: 2px 6px; border-radius: 6px; font: 700 0.62rem / 1.2 var(--font-ui); font-style: normal; letter-spacing: 0.04em; }
 .fb-cls { color: var(--c, var(--mute)); background: color-mix(in srgb, var(--c, #98a89f) 15%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, #98a89f) 35%, transparent); }
-.fb-cls[data-cls="LAPO"] { --c: var(--lapo); } .fb-cls[data-cls="MAPO"] { --c: var(--mapo); } .fb-cls[data-cls="NEPO"] { --c: var(--nepo); }
-.fb-you { color: #fff; background: #16a34a; }
+.fb-cls[data-cls="LAPO"] { --c: #a84300; } .fb-cls[data-cls="MAPO"] { --c: #245b91; } .fb-cls[data-cls="NEPO"] { --c: #805600; }
+.fb-you { color: #fff; background: #0d8a45; }
 .fb-worth { display: inline-flex; align-items: center; gap: 6px; font: 800 1rem / 1 var(--font-head); color: var(--gold); white-space: nowrap; }
 .fb-worth svg { color: var(--mute); transition: transform 260ms var(--ease); }
 .fb-row[data-open] .fb-worth svg { transform: rotate(180deg); }
