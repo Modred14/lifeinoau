@@ -21,7 +21,7 @@ import {
   spawnCell,
   cellsOf,
 } from "../lib/room.js";
-import { sizeOf, isOutdoor } from "../lib/furniture.js";
+import { ITEMS, sizeOf, isOutdoor } from "../lib/furniture.js";
 import { layoutOf, wallRuns, zoneAt } from "../lib/layouts.js";
 
 const WALL_H = 3.4, // rooms are about twice the floor area they were, so the walls (the ceiling line) rise a little with them
