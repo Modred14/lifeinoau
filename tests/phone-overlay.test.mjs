@@ -21,6 +21,7 @@ const phone = read("components/Phone.js"), loader = read("components/Loader.js")
 chk("shared phone spinners report loading to the phone shell", /PhoneLoading\.Provider/.test(phone) && /PhoneLoading/.test(loader) && /reportLoading\(id, true\)/.test(loader) && /PhoneLoading = createContext\(null\)/.test(context));
 chk("the loading layer centers within the app area below the status bar and above the home indicator", /\.ph-app-loading \{[^}]*inset: var\(--pad-t\) 0 26px[^}]*display: grid; place-items: center/s.test(phoneCss));
 chk("the status bar and home indicator remain above the loading page", /\.ph-status \{[^}]*z-index: 6/.test(phoneCss) && /\.ph-home \{[^}]*z-index: 8/.test(phoneCss) && /\.ph\[data-loading="true"\] \.pa \{ z-index: 5/.test(phoneCss));
+chk("the close button stays visible and accessible while loading", !/\.ph\[data-loading="true"\] \.ph-close/.test(phoneCss) && /className="ph-close"[^>]*aria-label="Close phone"\s*>/.test(phone));
 chk("Games uses the shared spinner instead of its inline loading layout", /<Spinner label="Loading games"/.test(read("components/apps/GamesApp.js")) && !/gm-center"><i className="gm-spin"/.test(read("components/apps/GamesApp.js")));
 chk("Settings uses the shared spinner so its header and controls are covered", /<Spinner label="Loading your settings"/.test(read("components/apps/SettingsApp.js")));
 chk("Forbes initial load uses the shared spinner instead of a skeleton UI", /<Loader label=\{key === "forbes" \? "Loading Forbes OAU"/.test(read("components/apps/LeaderboardsApp.js")));

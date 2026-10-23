@@ -207,7 +207,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
             <i />
           </button>
         </div>
-        <button type="button" className="ph-close" data-sound="none" onClick={onClose} aria-label="Close phone" aria-hidden={appLoading || undefined} tabIndex={appLoading ? -1 : undefined}>
+        <button type="button" className="ph-close" data-sound="none" onClick={onClose} aria-label="Close phone">
           <Icon name="close" size={18} />
           Close
         </button>
