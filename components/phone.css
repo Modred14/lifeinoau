@@ -150,11 +150,12 @@
 .ph[data-app="bet"] .ph-home i { background: rgba(255, 255, 255, 0.9); }
 .ph[data-app="bet"] .pa { --bg: #0b0e13; color-scheme: dark; }
 .ph[data-app="bet"] .pa-body { overflow: hidden; padding-bottom: 0; }
-/* the leaderboards app (FORBES OAU, see components/apps/forbes.css): a dark oak-green page */
-.ph[data-app="forbes"] .ph-status { color: #f4ecd6; }
-.ph[data-app="forbes"] .ph-home i { background: rgba(244, 236, 214, 0.85); }
-.ph[data-app="forbes"] .pa { --bg: #07110d; --surface: #0f1d17; --raised: #162a21; --text: #f4ecd6; --muted: #98a89f; --line: rgba(244, 236, 214, 0.1); --field: #5d7068; --green-text: #5fdc9c; --gold-text: #f0c35a; --danger-text: #ff8a80; --ring: #f0c35a; --blue: #f0c35a; color-scheme: dark; background: radial-gradient(120% 46% at 50% 0%, #1d2b13 0%, transparent 70%), #07110d; }
-.ph[data-app="forbes"] .pa-back:hover:not(:disabled) { background: rgba(240, 195, 90, 0.12); }
+/* the leaderboards app (FORBES OAU, see components/apps/forbes.css): light page with OAU green accents */
+.ph[data-app="forbes"] .ph-status { color: #101828; }
+.ph[data-app="forbes"] .ph-home i { background: rgba(16, 24, 40, 0.78); }
+.ph[data-app="forbes"] .pa { --bg: #fff; --surface: #f5f8f6; --raised: #eaf3ed; --text: #101828; --muted: #66756b; --line: rgba(16, 24, 40, 0.09); --field: #c3d0c7; --green: #16a34a; --green-text: #0d8a45; --gold-text: #0d8a45; --danger-text: #d92d20; --ring: #16a34a; --blue: #16a34a; color-scheme: light; background: radial-gradient(120% 46% at 50% 0%, #e4f5e9 0%, transparent 70%), #fff; }
+.ph[data-app="forbes"] .pa-back:hover:not(:disabled) { background: rgba(22, 163, 74, 0.1); }
+.ph[data-app="forbes"] .pa-body { overflow-x: hidden; touch-action: pan-y; }
 /* ---------- loading inside the handset: one spinner, no logo ---------- */
 .ph-spin { --spin: var(--blue, #2563eb); --spin-track: rgba(16, 24, 40, 0.12); display: grid; place-items: center; min-height: 260px; opacity: 0; animation: ph-spin-in 200ms 150ms var(--ease) forwards; } /* appears after 150ms, so a quick load never flashes it */
 .ph-spin-ring { width: 40px; height: 40px; border-radius: 50%; border: 4px solid var(--spin-track); border-top-color: var(--spin); animation: ph-spin 0.8s linear infinite; }

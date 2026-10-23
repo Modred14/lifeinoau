@@ -1,25 +1,25 @@
 /* components/apps/forbes.css: FORBES OAU, the richest-players board inside the phone (see ForbesBoard.js and the data-app="forbes" rules in phone.css).
-   Deep oak-green stage, brass-gold wordmark, gold / silver / bronze podium. Everything on the screen is prefixed `fb-`. */
+   Light leaderboard with OAU green accents and gold / silver / bronze podium. Everything on the screen is prefixed `fb-`. */
 
-/* ---------- the phone shell, dark, while the leaderboards app is open (all of its tabs) ---------- */
+/* ---------- the phone shell while the leaderboards app is open (all of its tabs) ---------- */
 .ph[data-app="forbes"] .pa-bar h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } /* the wordmark below is the title */
-.ph[data-app="forbes"] .pa-content [role="tablist"] { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(244, 236, 214, 0.1); }
-.ph[data-app="forbes"] .pa-content [role="tablist"] > button { color: #98a89f; }
-.ph[data-app="forbes"] .pa-content [role="tablist"] > button:hover:not(:disabled):not(.on) { background: rgba(255, 255, 255, 0.07); color: #f4ecd6; }
+.ph[data-app="forbes"] .pa-content [role="tablist"] { background: var(--surface); border: 1px solid var(--line); }
+.ph[data-app="forbes"] .pa-content [role="tablist"] > button { color: var(--muted); }
+.ph[data-app="forbes"] .pa-content [role="tablist"] > button:hover:not(:disabled):not(.on) { background: var(--raised); color: var(--text); }
 .ph[data-app="forbes"] .pa-content [role="tablist"] > button.on,
-.ph[data-app="forbes"] .pa-content [role="tablist"] > button[aria-selected="true"] { background: linear-gradient(180deg, #f8dc86, #d9a233); color: #1d1604; box-shadow: 0 6px 16px -8px rgba(240, 195, 90, 0.8); }
-.ph[data-app="forbes"] .pa-content button:not([role="tab"]):not(.go):not(.danger):not(.fb-hit) { background: rgba(255, 255, 255, 0.07); border-color: rgba(244, 236, 214, 0.14); color: #f4ecd6; box-shadow: none; }
-.ph[data-app="forbes"] .pa-content button:not([role="tab"]):not(.go):not(.danger):not(.fb-hit):hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); border-color: rgba(240, 195, 90, 0.4); }
+.ph[data-app="forbes"] .pa-content [role="tablist"] > button[aria-selected="true"] { background: #16a34a; color: #fff; box-shadow: 0 6px 16px -8px rgba(22, 163, 74, 0.55); }
+.ph[data-app="forbes"] .pa-content button:not([role="tab"]):not(.go):not(.danger):not(.fb-hit) { background: var(--surface); border-color: var(--line); color: var(--text); box-shadow: none; }
+.ph[data-app="forbes"] .pa-content button:not([role="tab"]):not(.go):not(.danger):not(.fb-hit):hover:not(:disabled) { background: var(--raised); border-color: rgba(22, 163, 74, 0.35); }
 .ph[data-app="forbes"] .pa-content .card { background: var(--surface); border: 1px solid var(--line); }
-.ph[data-app="forbes"] .pa-content .rk { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+.ph[data-app="forbes"] .pa-content .rk { background: var(--raised); color: var(--text); }
 
 /* ---------- the board ---------- */
-.fb { --ink: #07110d; --gold: #f0c35a; --ivory: #f4ecd6; --mute: #98a89f; --line: rgba(244, 236, 214, 0.1); container-type: inline-size; position: relative; margin: 0 -4px; padding-bottom: 6px; color: var(--ivory); }
+.fb { --ink: #101828; --gold: #0d8a45; --ivory: #101828; --mute: #66756b; --line: rgba(16, 24, 40, 0.1); container-type: inline-size; position: relative; margin: 0 -4px; padding-bottom: 6px; color: var(--ivory); overflow-x: clip; }
 .fb h3, .fb p { margin: 0; }
 
 .fb-hero { position: relative; text-align: center; padding: 10px 0 2px; }
-.fb-hero::before { content: ""; position: absolute; z-index: -1; left: 50%; top: -30px; width: 120%; height: 190px; transform: translateX(-50%); background: radial-gradient(closest-side, rgba(240, 195, 90, 0.2), transparent); pointer-events: none; }
-.fb-mark { font: 800 clamp(2rem, 11cqw, 2.6rem) / 1 var(--font-head); letter-spacing: 0.045em; text-transform: uppercase; background: linear-gradient(180deg, #fff3c4 0%, #f0c35a 48%, #b9852a 100%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 6px 18px rgba(240, 195, 90, 0.28)); }
+.fb-hero::before { content: ""; position: absolute; z-index: -1; left: 50%; top: -30px; width: 120%; height: 190px; transform: translateX(-50%); background: radial-gradient(closest-side, rgba(22, 163, 74, 0.14), transparent); pointer-events: none; }
+.fb-mark { font: 800 clamp(2rem, 11cqw, 2.6rem) / 1 var(--font-head); letter-spacing: 0.045em; text-transform: uppercase; background: linear-gradient(180deg, #168c43 0%, #0d8a45 55%, #086333 100%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 6px 18px rgba(22, 163, 74, 0.16)); }
 .fb-tag { margin-top: 8px; color: var(--mute); font-size: 0.84rem; line-height: 1.4; }
 
 /* podium: three plinths on the stage, the leader in the middle and tallest */
@@ -40,15 +40,15 @@
 .fb-pod[data-metal="1"] .fb-plinth::after { content: ""; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.6) 50%, transparent 62%); transform: translateX(-130%); animation: fb-sheen 1.5s ease-out 1.2s 1 forwards; }
 
 /* the stage floor: every ranked player, one row each */
-.fb-sheet { list-style: none; margin: 0; padding: 4px 0; border: 1px solid var(--line); border-top: 2px solid rgba(240, 195, 90, 0.5); border-radius: 0 0 22px 22px; background: linear-gradient(180deg, #14261d 0%, #0d1a14 100%); box-shadow: 0 24px 40px -28px #000; overflow: hidden; }
+.fb-sheet { list-style: none; margin: 0; padding: 4px 0; border: 1px solid var(--line); border-top: 2px solid rgba(22, 163, 74, 0.45); border-radius: 0 0 22px 22px; background: linear-gradient(180deg, #fff 0%, #f5f8f6 100%); box-shadow: 0 14px 30px -26px rgba(16, 24, 40, 0.4); overflow: hidden; }
 .fb-row { position: relative; border-top: 1px solid var(--line); animation: fb-in 380ms var(--ease) both; animation-delay: calc(var(--i) * 30ms + 520ms); }
 .fb-row:first-child { border-top: 0; }
-.fb-row[data-me] { background: linear-gradient(90deg, rgba(240, 195, 90, 0.16), transparent 75%); box-shadow: inset 3px 0 0 var(--gold); }
+.fb-row[data-me] { background: linear-gradient(90deg, rgba(22, 163, 74, 0.12), transparent 75%); box-shadow: inset 3px 0 0 var(--gold); }
 .pa-content .fb .fb-hit { display: grid; grid-template-columns: 28px 44px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; min-height: 64px; padding: 10px 14px; margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: inherit; font: inherit; text-align: left; transition: background 160ms; }
 .pa-content .fb button.fb-hit { cursor: pointer; }
-.pa-content .fb button.fb-hit:hover:not(:disabled) { background: rgba(255, 255, 255, 0.045); border-color: transparent; }
-.pa-content .fb button.fb-hit:active:not(:disabled) { background: rgba(255, 255, 255, 0.08); }
-.pa-content .fb button.fb-hit:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+.pa-content .fb button.fb-hit:hover:not(:disabled) { background: rgba(22, 163, 74, 0.06); border-color: transparent; }
+.pa-content .fb button.fb-hit:active:not(:disabled) { background: rgba(22, 163, 74, 0.1); }
+.pa-content .fb button.fb-hit:focus-visible { outline: 2px solid #16a34a; outline-offset: -2px; }
 .fb-pos { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; font: 700 0.92rem / 1 var(--font-head); color: var(--mute); }
 .fb-row[data-top] .fb-pos { color: #0b140f; background: linear-gradient(160deg, var(--m1), var(--m2)); box-shadow: 0 4px 12px -4px var(--glow); }
 .fb-row[data-top="1"] { --m1: #fff0b8; --m2: #b9852a; --glow: rgba(240, 195, 90, 0.8); }
@@ -62,7 +62,7 @@
 .fb-cls, .fb-you { flex: none; padding: 2px 6px; border-radius: 6px; font: 700 0.62rem / 1.2 var(--font-ui); font-style: normal; letter-spacing: 0.04em; }
 .fb-cls { color: var(--c, var(--mute)); background: color-mix(in srgb, var(--c, #98a89f) 15%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, #98a89f) 35%, transparent); }
 .fb-cls[data-cls="LAPO"] { --c: var(--lapo); } .fb-cls[data-cls="MAPO"] { --c: var(--mapo); } .fb-cls[data-cls="NEPO"] { --c: var(--nepo); }
-.fb-you { color: #1d1604; background: var(--gold); }
+.fb-you { color: #fff; background: #16a34a; }
 .fb-worth { display: inline-flex; align-items: center; gap: 6px; font: 800 1rem / 1 var(--font-head); color: var(--gold); white-space: nowrap; }
 .fb-worth svg { color: var(--mute); transition: transform 260ms var(--ease); }
 .fb-row[data-open] .fb-worth svg { transform: rotate(180deg); }
@@ -72,9 +72,9 @@
 .fb-row[data-open] .fb-detail { grid-template-rows: 1fr; }
 .fb-detail-in { min-height: 0; overflow: hidden; }
 .fb-detail-pad { padding: 2px 14px 14px 52px; }
-.fb-bar { display: flex; gap: 2px; height: 8px; border-radius: 99px; overflow: hidden; background: rgba(255, 255, 255, 0.07); }
+.fb-bar { display: flex; gap: 2px; height: 8px; border-radius: 99px; overflow: hidden; background: rgba(16, 24, 40, 0.08); }
 .fb-bar i { display: block; height: 100%; transition: width 560ms var(--ease) 60ms; }
-.fb-bar i[data-k="cash"], .fb-legend li[data-k="cash"]::before { background: #3fd08a; }
+.fb-bar i[data-k="cash"], .fb-legend li[data-k="cash"]::before { background: #16a34a; }
 .fb-bar i[data-k="business"], .fb-legend li[data-k="business"]::before { background: #f0c35a; }
 .fb-bar i[data-k="investments"], .fb-legend li[data-k="investments"]::before { background: #8fc3ff; }
 .fb-legend { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
@@ -89,7 +89,7 @@
 .fb-empty p { max-width: 26ch; color: var(--mute); font-size: 0.86rem; line-height: 1.45; }
 
 /* loading: the same shapes, resting */
-.fb-skel .fb-ring, .fb-skel .fb-plinth, .fb-sk-line, .fb-sk-av, .fb-sk-dot { background: linear-gradient(100deg, #1a2e24 30%, #26443a 50%, #1a2e24 70%) 0 0 / 200% 100%; animation: fb-shimmer 1.4s linear infinite; box-shadow: none; }
+.fb-skel .fb-ring, .fb-skel .fb-plinth, .fb-sk-line, .fb-sk-av, .fb-sk-dot { background: linear-gradient(100deg, #e5eee8 30%, #d2e4d8 50%, #e5eee8 70%) 0 0 / 200% 100%; animation: fb-shimmer 1.4s linear infinite; box-shadow: none; }
 .fb-skel .fb-pod { animation: none; }
 .fb-skel .fb-sk-line { width: 70%; height: 12px; margin-top: 12px; border-radius: 6px; }
 .fb-sk-row { display: flex; align-items: center; gap: 12px; padding: 14px; }

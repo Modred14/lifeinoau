@@ -39,7 +39,7 @@ const APPS = {
   love: { name: "Love", icon: "love", tone: "rose", C: RelationshipApp },
   parties: { name: "Parties", icon: "party", tone: "violet", C: PartiesApp },
   spending: { name: "Spending", icon: "receipt", tone: "rose", C: SpendingApp }, // club spending history (0203, Royal Divas, Quantum)
-  forbes: { name: "Forbes", icon: "forbes", tone: "amber", C: LeaderboardsApp },
+  forbes: { name: "Forbes", icon: "forbes", tone: "green", C: LeaderboardsApp },
   awards: { name: "Awards", icon: "medal", tone: "orange", C: AchievementsApp },
   housing: { name: "Housing", icon: "home", tone: "sky", C: HousingApp },
   hire: { name: "Hire", icon: "driver", tone: "indigo", C: HireApp },
