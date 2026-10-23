@@ -70,6 +70,7 @@ export const metadata = {
       "max-snippet": -1,
     },
   },
+  appleWebApp: { capable: true, title: "OAU Life", statusBarStyle: "black-translucent" },
   formatDetection: {
     email: false,
     address: false,

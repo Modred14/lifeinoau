@@ -1,5 +1,5 @@
-const CACHE = "oau-campus-v3";
-const SHELL = ["/", "/play", "/offline.html"];
+const CACHE = "oau-campus-v4";
+const SHELL = ["/", "/home", "/offline.html"]; // /home is the installed app's start_url (see src/app/manifest.js); /play only redirects to it
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
 });

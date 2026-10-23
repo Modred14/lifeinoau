@@ -8,6 +8,7 @@ import { allowed, tooMany } from "@/lib/ratelimit";
 import { pingRealtime } from "@/lib/realtimeNotify";
 import { GameError, safety } from "@/lib/gameService";
 import { getSettingsView, saveName, saveAppearance, saveSettings, changePassword, changeEmail } from "@/lib/profileService";
+import { newLifeCheck, startNewLife } from "@/lib/newLifeService";
 export const dynamic = "force-dynamic"; // never cache API responses
 const db = (globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } }));
 const fail = (m, s = 400) => Response.json({ error: m }, { status: s });
@@ -24,13 +25,16 @@ export async function GET() {
   try { return Response.json(await getSettingsView(db, uid)); } catch (e) { return oops(e); }
 }
 
-// action -> [rate-limit key, max, window ms, handler]. Sensitive ones (password, email) are counted in Postgres so every server instance agrees.
+// action -> [rate-limit key, max, window ms, handler]. Sensitive ones (password, email, new life) are counted in Postgres so every server instance agrees.
 const ACTIONS = {
   name: ["name", 10, 3_600_000, (uid, b) => saveName(db, uid, b.name)],
   appearance: ["look", 60, 3_600_000, (uid, b) => saveAppearance(db, uid, { gender: b.gender, look: b.look })],
   preferences: ["prefs", 120, 3_600_000, (uid, b) => saveSettings(db, uid, b.settings)],
   password: ["acct:pw", 5, 3_600_000, (uid, b) => changePassword(db, uid, { current: b.current, next: b.next })],
   email: ["acct:email", 5, 3_600_000, (uid, b) => changeEmail(db, uid, { password: b.password, email: b.email })],
+  // "Start a new life": the check only reads; the reset needs the confirmation token and the password, and is counted per account (wrong passwords count too)
+  newLifeCheck: ["lifecheck", 30, 60_000, (uid) => newLifeCheck(db, uid)],
+  newLife: ["acct:life", 5, 3_600_000, (uid, b) => startNewLife(db, uid, { password: b.password, confirm: b.confirm })],
 };
 
 export async function POST(req) {

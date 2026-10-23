@@ -17,10 +17,8 @@ import { toast } from "@/lib/toast";
 import { game, useGame } from "@/lib/gameStore";
 import { serverDate, serverTime } from "@/lib/serverClock";
 import { initPrefs, syncPrefsFrom } from "@/lib/prefs";
-import dynamic from "next/dynamic";
 import "./prefs.css";
 
-const SettingsScreen = dynamic(() => import("./SettingsScreen"), { ssr: false }); // loaded only when someone opens Settings
 
 const moodOf = (h) =>
   h >= 80
@@ -44,7 +42,6 @@ export default function Shell({ children }) {
     st = g?.character?.hostel ? g : null,
     unreadChats = useChat((x) => x.unread),
     [phone, setPhone] = useState(false),
-    [settingsOpen, setSettingsOpen] = useState(false),
     [phoneApp, setPhoneApp] = useState(null),
     [phoneWith, setPhoneWith] = useState(null), // a player to open a chat with (set when you tap "Message" on a name tag)
     [clock, setClock] = useState(null),
@@ -90,7 +87,7 @@ export default function Shell({ children }) {
   useEffect(() => { initPrefs(); }, []);
   useEffect(() => { syncPrefsFrom(g?.character); }, [g?.character?.settings]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const open = () => { setPhone(false); setSettingsOpen(true); }; // the phone's Settings app (and anything else) asks for the Settings screen with this event
+    const open = () => { setPhoneApp("settings"); setPhoneWith(null); setPhone(true); }; // anything that asks for Settings (event "oau:settings") opens the phone on the Settings app
     window.addEventListener("oau:settings", open);
     return () => window.removeEventListener("oau:settings", open);
   }, []);
@@ -173,10 +170,9 @@ export default function Shell({ children }) {
     buying = onPlay && mode === "buy",
     mood = st ? moodOf(st.character.happiness) : null,
     held = !!st?.floorZero && +new Date(st.floorZero.releaseAt) > serverTime(); // serving a sentence in Floor O (N-QRS Custody): no shop; the phone still works (the apps follow their own rules)
-  // The bar stays on screen above every panel, so each tab first puts away whatever panel is open over the game (the phone, Settings).
+  // The bar stays on screen above every panel, so each tab first puts away whatever panel is open over the game (the phone, with Settings inside it).
   const closePanels = () => {
     setPhone(false);
-    setSettingsOpen(false);
   };
   const goHome = () => {
     closePanels();
@@ -194,7 +190,6 @@ export default function Shell({ children }) {
     window.dispatchEvent(new Event("oau:nav-map")); // already on the map and standing inside a building? this steps you back out to it
   };
   const togglePhone = () => {
-    setSettingsOpen(false);
     if (phone) return setPhone(false);
     setPhoneApp(null);
     setPhone(true);
@@ -282,7 +277,6 @@ export default function Shell({ children }) {
           goBuy();
         }}
       />
-      {settingsOpen && g?.character && <SettingsScreen onClose={() => setSettingsOpen(false)} onLogout={logout} loggingOut={loggingOut} />}
       {st && <PlayerMenu />}
     </>
   );

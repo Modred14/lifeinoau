@@ -4,3 +4,13 @@ html[data-large-text] { font-size: 118.75%; } /* every rem grows by 19%: 16px be
 html[data-high-contrast] { --text: #ffffff; --muted: #d4dbe6; --line: rgba(255, 255, 255, 0.32); --surface: #0a0f1c; --raised: #131c30; --bg: #05080f; --field: #b7c3d8; --green-text: #66f0aa; --gold-text: #ffd27a; --danger-text: #ff9c9c; }
 html[data-high-contrast] button:focus-visible, html[data-high-contrast] a:focus-visible, html[data-high-contrast] input:focus-visible, html[data-high-contrast] [tabindex]:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
 html[data-hide-name-tags] .pt-tag { display: none !important; }
+
+/* Gameplay > Left-handed controls: the on-screen stick and the buttons trade sides (walking, and driving: steering and pedals). Gameplay > Control hints: the how-to-move line in buildings. */
+html[data-left-handed] .th-stick { left: auto; right: 22px; }
+html[data-left-handed] .th-run { right: auto; left: 22px; }
+html[data-left-handed] .th-steer { left: auto; right: 18px; }
+html[data-left-handed] .th-pedals { right: auto; left: 18px; flex-direction: row-reverse; }
+html[data-hide-hints] .bi3-help { display: none; }
+/* The phone's apps are a light page with their own colours (components/phone.css), so high contrast gets its own light version there: darker text, stronger borders. */
+html[data-high-contrast] .pa { --text: #000000; --muted: #2b3340; --line: rgba(16, 24, 40, 0.38); --field: #475467; --green-text: #046c35; --gold-text: #8a3b00; --danger-text: #b42318; }
+html[data-high-contrast] .pa button:focus-visible, html[data-high-contrast] .pa input:focus-visible, html[data-high-contrast] .pa select:focus-visible, html[data-high-contrast] .pa [tabindex]:focus-visible { outline: 3px solid #000; outline-offset: 2px; }

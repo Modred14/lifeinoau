@@ -5,12 +5,14 @@
 import { useEffect, useState } from "react";
 import "./error-screen.css";
 import Logo from "./Logo";
+import { initPwa } from "@/lib/pwa";
 import { Icon } from "./Icon";
 
 export default function OfflineGate() {
   const [offline, setOffline] = useState(false), [checking, setChecking] = useState(false), [still, setStill] = useState(false);
 
   useEffect(() => {
+    initPwa(); // listen for the browser's install prompt from the very start (Settings > Install Game shows it)
     setOffline(!navigator.onLine);
     const down = () => setOffline(true), up = () => { setOffline(false); setStill(false); };
     window.addEventListener("offline", down);

@@ -7,6 +7,7 @@ import { currentWeek } from "@/lib/clock";
 import { drawClass, lifestyle } from "@/lib/rng";
 import { PERSONALITIES, allowedHostels, startingTransport } from "@/lib/rules";
 import { cleanLook, withoutWear } from "@/lib/look";
+import { carriedSettings } from "@/lib/newLifeService";
 export const dynamic = "force-dynamic"; // never cache API responses
 const db = (globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } }));
 const bad = (m, s = 400) => Response.json({ error: m }, { status: s });
@@ -49,6 +50,7 @@ export async function POST(req) {
           hostel: "",
           transport: startingTransport(cls),
           look: withoutWear(cleanLook(b.look, b.gender)), // the starter outfit is free; store clothes only come from the Offishall Store
+          settings: (await carriedSettings(tx, userId)) ?? undefined, // after "Start a new life" the player's preferences carry over (audio, gameplay, notifications, privacy)
           lastTickWeek: week - 1,
           lastParentCallWeek: week,
           joinedWeek: week,

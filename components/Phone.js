@@ -47,7 +47,7 @@ const APPS = {
   bet: { name: "Bet", icon: "ticket", tone: "bet", own: true, C: BetApp }, // draws its own header and tab bar, like Messages
   games: { name: "Games", icon: "game", tone: "games", own: true, C: GamesApp }, // draws its own header, like Bet and Messages
   sug: { name: "SUG", icon: "hall", tone: "navy", C: SugApp }, // the Students' Union Government: elections, government, Assembly
-  settings: { name: "Settings", icon: "gear", tone: "graphite", C: SettingsApp },
+  settings: { name: "Settings", icon: "gear", tone: "graphite", own: true, C: SettingsApp }, // draws its own header: it has pages of its own, so Back steps out of a page before it leaves the app
   guide: { name: "OAU Guide", icon: "study", tone: "lime", C: GuideApp }, // generated from lib/features.js
 };
 export const PHONE_APPS = Object.keys(APPS);
@@ -171,7 +171,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
                 </header>
               )}
               <div className="pa-body">
-                {Cur ? (cur.own ? <Cur onHome={home} onClose={onClose} /> : <div className="pa-content"><Cur onOpenApp={setApp} onClose={onClose} /></div>) : <MessagesApp onHome={home} initialWho={app === "messages" ? initialWith : null} />}
+                {Cur ? (cur.own ? <Cur onHome={home} onClose={onClose} onOpenApp={setApp} onLogout={onLogout} loggingOut={loggingOut} /> : <div className="pa-content"><Cur onOpenApp={setApp} onClose={onClose} /></div>) : <MessagesApp onHome={home} initialWho={app === "messages" ? initialWith : null} />}
               </div>
             </section>
           )}
