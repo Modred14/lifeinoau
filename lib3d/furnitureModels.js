@@ -92,6 +92,13 @@ const BUILD = {
     box(g, [0.03, 1.9, 0.03], [0.93, 0.05, 0.4], STEEL); box(g, [0.03, 0.03, 0.62], [0.93, 1.95, 0.1], STEEL); box(g, [0.02, 1.7, 0.6], [0.93, 0.2, 0.1], "#7fb7d8", { transparent: true, opacity: 0.55 }); // curtain
     cyl(g, [0.05, 0.05, 0.02], [0.62, 1.9, -0.18], STEEL);
   },
+  // the separate toilet: a toilet and a pedestal basin on a tiled strip
+  toilet: (g) => {
+    box(g, [1.88, 0.03, 0.86], [0, 0, 0], "#c9d3d9", { roughness: 0.5 });                                                  // tiled floor
+    box(g, [0.4, 0.22, 0.5], [-0.4, 0.03, 0.02], WHITE, { roughness: 0.3 }); box(g, [0.36, 0.06, 0.4], [-0.4, 0.25, 0.04], "#eef2f4", { roughness: 0.3 }); // toilet base and seat
+    box(g, [0.38, 0.4, 0.16], [-0.4, 0.25, -0.3], WHITE, { roughness: 0.3 });                                             // cistern
+    cyl(g, [0.04, 0.06, 0.7], [0.4, 0.03, -0.3], WHITE); box(g, [0.42, 0.1, 0.34], [0.4, 0.73, -0.22], WHITE, { roughness: 0.3 }); cyl(g, [0.015, 0.015, 0.14], [0.4, 0.83, -0.34], STEEL); // pedestal basin and tap
+  },
   single_bed: (g) => bed(g, false, "#5b6bd6"),
   double_bed: (g) => bed(g, true, "#c2455a"),
   wardrobe: (g) => {

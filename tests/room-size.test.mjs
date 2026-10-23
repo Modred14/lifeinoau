@@ -1,7 +1,8 @@
 // tests/room-size.test.mjs
-// The player's room is about three times the floor area it used to be (school halls 8x6 and 9x7 cells, the one-bedroom place 8x8, the flats 8x10).
-// Checks the new sizes, that every plan is still sound (doorways, front door, windows, decorations), that what every home comes with fits and nothing
-// is walled in, that the character can walk everywhere (the same findPath the 3D room uses), and that a heavily furnished room still works.
+// The size of the player's room: the school halls, and the homes with several rooms (Ojaja, off campus and the two flats), whose plans are sized by their rooms.
+// Checks the sizes, that every room of a plan is exactly the size it was given, that every plan is sound (doorways, front door, windows, decorations),
+// that what every home comes with fits and nothing is walled in, that the character can walk everywhere (the same findPath the 3D room uses),
+// and that a heavily furnished room still works.
 // Pure Node: no database, no browser.
 import { roomFor, SCHOOL_ROOM, BIG_SCHOOL_ROOM, fits, autoPlace, blockedCells, findPath, spawnCell, doorCells, consistent, cutOff, outdoorSlots, isOutsideCell } from "../lib/room.js";
 import { LAYOUTS, HOME_SIZE, layoutOf, zoneAt, canStep, wallRuns, doorCellsOf } from "../lib/layouts.js";
@@ -13,14 +14,28 @@ const area = (r) => r.w * r.d;
 const SCHOOL = ["Awo", "Fajuyi", "Moremi", "Angola", "Mozambique", "Hogwarts"].filter((h) => { try { return roomFor(h).theme === "dorm"; } catch { return false; } });
 
 // ---- the new sizes (the old area is what the rooms were before) ----
-const OLD = { school: 8 * 6, bigSchool: 9 * 7, studio: 8 * 8, flat: 8 * 10 };
+const OLD = { school: 8 * 6, bigSchool: 9 * 7 };
 const ratio = (now, old) => +(now / old).toFixed(2);
 chk("a school room is about three times its old floor area (16x9 for 8x6)", SCHOOL_ROOM.join("x") === "16x9" && ratio(144, OLD.school) >= 2.8 && ratio(144, OLD.school) <= 3.2);
 chk("the two big school halls are about three times theirs (19x10 for 9x7)", BIG_SCHOOL_ROOM.join("x") === "19x10" && ratio(190, OLD.bigSchool) >= 2.8 && ratio(190, OLD.bigSchool) <= 3.2);
-chk("Ojaja and off campus are about three times the old one-bedroom place", ratio(LAYOUTS.studio.w * LAYOUTS.studio.d, OLD.studio) >= 2.8 && ratio(LAYOUTS.studio.w * LAYOUTS.studio.d, OLD.studio) <= 3.2, LAYOUTS.studio.w + "x" + LAYOUTS.studio.d);
-chk("both flats are about three times the old flat size", ["flat1", "flat2"].every((k) => ratio(LAYOUTS[k].w * LAYOUTS[k].d, OLD.flat) >= 2.8 && ratio(LAYOUTS[k].w * LAYOUTS[k].d, OLD.flat) <= 3.2));
-chk("roomFor() reports the real sizes the server and the 3D room both use", [["Awo", 16, 9], ["Fajuyi", 16, 9], ["ETF", 16, 9], ["Moremi", 16, 9], ["Akintola", 16, 9], ["Alumni", 16, 9], ["Angola", 19, 10], ["Mozambique", 19, 10], ["Ojaja", 14, 14], ["Off-campus", 14, 14], ["1-Bedroom Flat", 15, 16], ["2-Bedroom Flat", 15, 16]].every(([h, w, d]) => { const r = roomFor(h, "p"); return r.w === w && r.d === d; }));
+chk("roomFor() reports the real sizes the server and the 3D room both use (school halls)", [["Awo", 16, 9], ["Fajuyi", 16, 9], ["ETF", 16, 9], ["Moremi", 16, 9], ["Akintola", 16, 9], ["Alumni", 16, 9], ["Angola", 19, 10], ["Mozambique", 19, 10]].every(([h, w, d]) => { const r = roomFor(h, "p"); return r.w === w && r.d === d; }));
+// The rooms of each home, [width, depth] in cells (a cell is about 0.9 m). A plan is as big as it needs to be to hold them: the hall is what is left over.
+const HOME_PLANS = {
+  ojaja: { home: "Ojaja", size: [10, 11], rooms: { bed: [10, 8], kitchen: [4, 3], bath: [3, 3] } },
+  offcampus: { home: "Off-campus", size: [15, 10], rooms: { bed: [8, 7], living: [7, 6], kitchen: [4, 4], bath: [3, 3] } },
+  flat1: { home: "1-Bedroom Flat", size: [13, 16], rooms: { bed: [8, 8], living: [10, 8], kitchen: [5, 5], bath: [4, 3], toilet: [3, 3] } },
+  flat2: { home: "2-Bedroom Flat", size: [20, 16], rooms: { bed1: [9, 8], bed2: [8, 7], living: [11, 9], kitchen: [6, 5], bath: [4, 4], toilet: [3, 3] } },
+};
+chk("roomFor() reports the real sizes of the homes: the plan, not one of the rooms", Object.values(HOME_PLANS).every(({ home, size }) => { const r = roomFor(home, "p"); return r.w === size[0] && r.d === size[1]; }));
 chk("the plans are exactly the size HOME_SIZE says", Object.entries(HOME_SIZE).every(([k, [w, d]]) => LAYOUTS[k].w === w && LAYOUTS[k].d === d && LAYOUTS[k].grid.length === d && LAYOUTS[k].grid.every((r) => r.length === w)));
+chk("every home has its own plan, and the plans are the sizes the rooms need", Object.keys(HOME_PLANS).every((k) => LAYOUTS[k] && HOME_SIZE[k].join("x") === HOME_PLANS[k].size.join("x")) && Object.keys(LAYOUTS).length === Object.keys(HOME_PLANS).length);
+// every room is a full rectangle of exactly its size (no room is cut short by another), and the hall is only what is left
+for (const [id, { rooms }] of Object.entries(HOME_PLANS)) {
+  const L = LAYOUTS[id], boxOf = (zid) => { const cs = L.grid.flatMap((r, z) => r.map((zn, x) => (zn.id === zid ? [x, z] : null))).filter(Boolean), xs = cs.map((c) => c[0]), zs = cs.map((c) => c[1]); return { n: cs.length, w: Math.max(...xs) - Math.min(...xs) + 1, d: Math.max(...zs) - Math.min(...zs) + 1 }; };
+  const got = Object.fromEntries(Object.keys(rooms).map((k) => [k, L.zones.some((z) => z.id === k) ? boxOf(k) : null]));
+  chk(`${id}: every room is exactly its size (${Object.entries(rooms).map(([k, [w, d]]) => `${k} ${w}x${d}`).join(", ")})`, Object.entries(rooms).every(([k, [w, d]]) => got[k] && got[k].w === w && got[k].d === d && got[k].n === w * d), JSON.stringify(got));
+  chk(`${id}: nothing but those rooms and the hall is in the plan, and the rooms and the hall fill it`, L.zones.every((z) => z.kind === "passage" || rooms[z.id]) && L.zones.reduce((s, z) => s + boxOf(z.id).n, 0) === L.w * L.d);
+}
 
 // ---- every plan is still sound ----
 for (const [id, L] of Object.entries(LAYOUTS)) {

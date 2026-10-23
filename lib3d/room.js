@@ -48,8 +48,8 @@ function dispose(obj) {
   });
 }
 
-// floors of the wet rooms and the passage in a home with several rooms: cool tiles in the kitchen and bathroom, pale ones in the passage
-const ZONE_TILE = { kitchen: ["#c3c7c9", "#b6bbbf"], bath: ["#c8ced6", "#bcc3cc"], passage: ["#ece6d9", "#e2dbcb"] };
+// floors of the wet rooms and the hall in a home with several rooms: cool tiles in the kitchen, bathroom and toilet, pale ones in the hall
+const ZONE_TILE = { kitchen: ["#c3c7c9", "#b6bbbf"], bath: ["#c8ced6", "#bcc3cc"], toilet: ["#c8ced6", "#bcc3cc"], passage: ["#ece6d9", "#e2dbcb"] };
 function floorTexture(W, D, theme, wood, kindAt) {
   const S = 64,
     c = document.createElement("canvas");

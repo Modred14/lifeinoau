@@ -14,7 +14,7 @@ import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
 import "./housing-app.css";
 
-const FLOOR = { bed: "#f1e7d3", kitchen: "#c9cdd0", bath: "#c8d3df", passage: "#efe9db", living: "#e8dcc4", dining: "#efe3cb", store: "#e3e0da" };
+const FLOOR = { bed: "#f1e7d3", kitchen: "#c9cdd0", bath: "#c8d3df", toilet: "#d3dce6", passage: "#efe9db", living: "#e8dcc4" };
 
 /** The floor plan of a home, drawn small: rooms in colour, walls in black, gaps where the doors are. */
 function Plan({ home }) {
