@@ -22,7 +22,7 @@ import { usePrefs } from "@/lib/prefs";
 import { MUSIC } from "@/lib/sound";
 import { useInstall, promptInstall } from "@/lib/pwa";
 import { lookKey } from "@/lib/look";
-import { Group, NavRow, InfoRow, ToggleRow, SliderRow, Segmented, Status, Note, Sheet, savePref } from "./settingsKit";
+import { Group, NavRow, InfoRow, ToggleRow, Segmented, Status, Note, Sheet, savePref } from "./settingsKit";
 import SettingsLook from "./SettingsLook";
 import SettingsInstall from "./SettingsInstall";
 import NewLifeSheet from "./SettingsNewLife";
@@ -219,13 +219,11 @@ export default function SettingsApp({ onHome, onClose, onOpenApp, onLogout, logg
       <>
         <Group title="Background music" foot={`${MUSIC.title} · ${MUSIC.artist}`}>
           <ToggleRow icon="music" tone="orange" title="Music" sub="The song that plays while you play" checked={prefs.audio.music} onChange={pref("audio", "music")} />
-          <SliderRow id="st-music" title="Volume" value={prefs.audio.musicVolume} disabled={!prefs.audio.music} onChange={pref("audio", "musicVolume", { delay: 500 })} />
         </Group>
         <Group title="Sound effects">
           <ToggleRow icon="sound" tone="amber" title="Sound effects" sub="Taps, clicks and alerts" checked={prefs.audio.sfx} onChange={pref("audio", "sfx")} />
-          <SliderRow id="st-sfx" title="Volume" value={prefs.audio.sfxVolume} disabled={!prefs.audio.sfx} onChange={pref("audio", "sfxVolume", { delay: 500 })} />
         </Group>
-        <p className="st-foot">{!prefs.audio.music && !prefs.audio.sfx ? "The game is silent." : "Changes apply at once, everywhere in the game."} They are saved to your account, so they follow you to any device. Browsers start sound after your first tap.</p>
+        <p className="st-foot">{!prefs.audio.music && !prefs.audio.sfx ? "The game is silent." : "Changes apply at once, everywhere in the game."} These choices are saved to your account. Browsers start sound after your first tap.</p>
       </>
     ),
 

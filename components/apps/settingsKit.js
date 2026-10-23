@@ -99,17 +99,6 @@ export function ToggleRow({ icon, tone, title, sub, checked, onChange, disabled 
   );
 }
 
-/** A 0-100 slider row. `onChange` runs on every movement (so the sound follows the finger); saving is the caller's business. */
-export function SliderRow({ id, title, value, onChange, disabled, min = 0, max = 100, step = 1 }) {
-  return (
-    <div className="st-row st-slide" data-disabled={disabled ? "1" : undefined}>
-      <label htmlFor={id}>{title}</label>
-      <input id={id} type="range" min={min} max={max} step={step} value={value} disabled={disabled} onInput={(e) => onChange(Number(e.currentTarget.value))} aria-valuetext={`${value} percent`} />
-      <output htmlFor={id} className="num">{value}%</output>
-    </div>
-  );
-}
-
 /** Two or three choices side by side. */
 export function Segmented({ label, value, options, onPick, disabled }) {
   return (
