@@ -764,8 +764,8 @@ export function createRoomScene(container, cb = {}) {
   // ----- sleeping: walk to the bed, sit on it, lie down. To wake: sit up, stand, then walk to where the player tapped -----
   // There is no sit animation in the avatar library, so sitting is the normal idle pose lowered onto the bed and leaned back a little
   // (the legs are inside the mattress). Every step is a smooth blend, so the character never jumps from one place to another.
-  const USE_KIND = { iron_bunk: "bed", single_bed: "bed", double_bed: "bed", nightstand: "phone", desk: "phone" };
-  const BED_TOP = { iron_bunk: 0.5, single_bed: 0.62, double_bed: 0.62 }; // height of the mattress top, from the furniture models
+  const USE_KIND = { iron_bunk: "bed", single_bed: "bed", double_bed: "bed", luxury_bed: "bed", nightstand: "phone", desk: "phone" };
+  const BED_TOP = { iron_bunk: 0.5, single_bed: 0.62, double_bed: 0.62, luxury_bed: 0.62 }; // height of the mattress top, from the furniture models
   const HIP = 1.0, SIT_TILT = 0.3; // hip height of the character, and how far its back leans when sitting up (radians)
   const ease = (x) => x * x * (3 - 2 * x);
   const mix = (a, b, k) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, z: a.z + (b.z - a.z) * k, yaw: lerpAngle(a.yaw, b.yaw, k), th: a.th + (b.th - a.th) * k });

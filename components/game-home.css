@@ -122,7 +122,8 @@
 .bs-thumb img { width: 112px; height: 112px; object-fit: contain; animation: gx-pop 300ms var(--ease) both; filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.3)); }
 .bs-meta { display: flex; gap: 6px; font-size: 0.74rem; color: var(--muted); margin: 2px 0 4px; } .bs-score { display: inline-flex; gap: 3px; align-items: center; color: var(--gold-text); font-weight: 600; } .bs-size { margin-left: auto; }
 .bs-own { position: absolute; z-index: 1; top: 14px; left: 14px; padding: 2px 9px; border-radius: 999px; background: rgba(13, 19, 33, 0.82); font-size: 0.72rem; font-weight: 600; color: var(--green-text); }
-.bs-buy { min-height: 42px; border-radius: 14px; padding: 8px 10px; font-size: 0.88rem; }
+.bs-luxury { position: absolute; z-index: 1; top: 14px; right: 14px; padding: 3px 8px; border-radius: 999px; background: #f1d391; color: #33240a; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.03em; }
+.bs-buy { display: flex; justify-content: space-between; align-items: center; min-height: 42px; border-radius: 14px; padding: 8px 10px; font-size: 0.88rem; }
 .bs-card[data-poor="1"] .bs-buy { background: rgba(255, 255, 255, 0.08); color: var(--muted); }
 .bs-card[data-poor="1"] .bs-thumb img { opacity: 0.6; filter: grayscale(0.5); }
 

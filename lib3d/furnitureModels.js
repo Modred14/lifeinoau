@@ -173,6 +173,20 @@ const BUILD = {
     for (const y of [0.2, 0.43]) { box(g, [0.66, 0.015, 0.02], [0, y, 0.34], "#d7b679"); cyl(g, [0.035, 0.035, 0.03], [0, y + 0.03, 0.35], STEEL); }
     for (const x of [-0.28, 0.28]) for (const z of [-0.22, 0.22]) box(g, [0.06, 0.12, 0.06], [x, 0, z], WOOD_D);
   },
+  bedside_lamp: (g) => {
+    cyl(g, [0.2, 0.25, 0.06], [0, 0, 0], WOOD_D);
+    cyl(g, [0.045, 0.055, 0.55], [0, 0.06, 0], STEEL, { metalness: 0.55 });
+    cyl(g, [0.19, 0.07, 0.22], [0, 0.59, 0], "#fff0c4", { emissive: "#ffd98b", emissiveIntensity: 1.1 });
+  },
+  dressing_table: (g) => {
+    box(g, [1.7, 0.1, 0.68], [0, 0.78, 0], WOOD_L);
+    for (const x of [-0.72, 0.72]) box(g, [0.24, 0.7, 0.62], [x, 0.08, 0], WOOD);
+    for (const x of [-0.72, 0.72]) { box(g, [0.17, 0.025, 0.015], [x, 0.42, 0.32], WOOD_D); cyl(g, [0.025, 0.025, 0.02], [x, 0.46, 0.34], STEEL); }
+    box(g, [0.94, 1.02, 0.075], [0, 0.87, -0.27], WOOD_D);
+    box(g, [0.78, 0.86, 0.025], [0, 0.91, -0.22], "#b9cdd2", { metalness: 0.78, roughness: 0.12 });
+    for (const x of [-0.76, 0.76]) box(g, [0.08, 0.12, 0.08], [x, 0, -0.25], WOOD_D);
+    box(g, [0.46, 0.38, 0.42], [0, 0, 0.58], "#a37b56"); box(g, [0.5, 0.08, 0.5], [0, 0.42, 0.58], "#c99b61");
+  },
   premium_wardrobe: (g) => {
     box(g, [1.9, 2.18, 0.86], [0, 0, 0], "#6e4a2c");
     for (const x of [-0.47, 0.47]) {
@@ -236,6 +250,11 @@ const BUILD = {
     const m = new THREE.Mesh(new THREE.BoxGeometry(1.86, 0.025, 1.86), [mat("#8a3a2a"), mat("#8a3a2a"), new THREE.MeshStandardMaterial({ map: rugTex(), roughness: 1 }), mat("#8a3a2a"), mat("#8a3a2a"), mat("#8a3a2a")]);
     m.position.y = 0.0125; m.receiveShadow = true; g.add(m);
   },
+  premium_rug: (g) => {
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(1.86, 0.035, 1.86), mat("#b59a6b", { roughness: 1 })); edge.position.y = 0.0175; edge.receiveShadow = true; g.add(edge);
+    const top = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.012, 1.72), [mat("#274f48"), mat("#274f48"), new THREE.MeshStandardMaterial({ map: rugTex(), roughness: 1 }), mat("#274f48"), mat("#274f48"), mat("#274f48")]);
+    top.position.y = 0.041; top.receiveShadow = true; g.add(top);
+  },
   armchair: (g) => seat(g, "#e1a43b"),
   sofa: (g) => { seat(g, "#2f8f83", 1.86); box(g, [0.5, 0.12, 0.5], [-0.5, 0.52, 0.1], "#e8a23a").rotation.y = 0.3; },
   loveseat: (g) => premiumSofa(g, "#859b91", 1.72),
@@ -264,7 +283,7 @@ const BUILD = {
   curtain_stand: (g) => {
     box(g, [0.82, 0.08, 0.18], [0, 0, 0], STEEL);
     for (const x of [-0.34, 0.34]) box(g, [0.045, 1.9, 0.045], [x, 0.05, 0], STEEL);
-    cyl(g, [0.025, 0.025, 0.8], [0, 1.92, 0], "#c9a45f", { metalness: 0.7 });
+    cyl(g, [0.025, 0.025, 0.8], [0, 1.92, 0], "#c9a45f", { metalness: 0.7 }).rotation.z = Math.PI / 2;
     for (const x of [-0.2, 0.2]) box(g, [0.38, 1.72, 0.035], [x, 0.12, 0], x < 0 ? "#678b78" : "#8c6074", { roughness: 0.95 });
   },
   wall_art: (g) => framedDisplay(g),
@@ -280,7 +299,7 @@ const BUILD = {
   wall_clock: (g) => {
     box(g, [0.08, 1.7, 0.08], [0, 0, 0], WOOD_D);
     box(g, [0.52, 0.72, 0.08], [0, 0.94, 0], WOOD);
-    cyl(g, [0.23, 0.23, 0.035], [0, 1.05, 0.06], WHITE);
+    cyl(g, [0.23, 0.23, 0.035], [0, 1.05, 0.1], WHITE).rotation.x = Math.PI / 2;
     cyl(g, [0.018, 0.018, 0.05], [0, 1.05, 0.1], "#252a36");
     box(g, [0.018, 0.16, 0.014], [0.035, 1.1, 0.12], "#252a36").rotation.z = -0.5;
     box(g, [0.018, 0.12, 0.014], [-0.03, 1.02, 0.12], "#252a36").rotation.z = 0.9;
@@ -359,10 +378,14 @@ const BUILD = {
   },
 };
 
+/** Exposed for the catalogue test: every item the shop can sell needs a real model, not the generic placeholder. */
+export const FURNITURE_MODEL_KEYS = Object.freeze(Object.keys(BUILD));
+
 /** A fresh model of the item: { group, w, d } where the group is centred on its footprint and `group.userData.spin` (if any) is a part that should spin. */
 export function buildFurniture(key) {
   const def = ITEMS[key], g = new THREE.Group(); g.name = key;
-  (BUILD[key] ?? ((x) => box(x, [def.w - 0.1, 0.8, def.d - 0.1], [0, 0, 0], "#888")))(g);
+  if (!def || !BUILD[key]) throw new Error(`Missing furniture model: ${key}`);
+  BUILD[key](g);
   g.userData.key = key;
   g.traverse((o) => { if (o.isMesh && !o.material.map) o.material.flatShading = false; });
   return g;

@@ -137,6 +137,7 @@ export default function BuySheet({
                 {owned[k] > 0 && (
                   <span className="bs-own">Owned {owned[k]}</span>
                 )}
+                {d.luxury && <span className="bs-luxury">Luxury</span>}
                 <Thumb k={k} />
                 <b>{d.name}</b>
                 <span className="mut bs-sub">{d.blurb}</span>
@@ -155,7 +156,7 @@ export default function BuySheet({
                   aria-label={can ? `Buy ${d.name} for ${fmtN(d.price)}` : `${d.name}, ${fmtN(d.price)}. You need ${fmtN(need)} more to buy it`}
                   onClick={() => onBuy(k)}
                 >
-                  <b className="num">{fmtN(d.price)}</b>
+                  <span>Buy</span><b className="num">{fmtN(d.price)}</b>
                 </button>
               </article>
             );
