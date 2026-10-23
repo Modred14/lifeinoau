@@ -42,6 +42,81 @@ export const posterTex = (n) => once("poster" + n, () => canvasTex(128, 160, (g,
 
 const WOOD = "#b07a4a", WOOD_L = "#d2a46f", WOOD_D = "#6e4a2c", WHITE = "#f1efe9", DARK = "#252a36", STEEL = "#aeb7c4";
 
+function catalogPiece(g, key) {
+  const def = ITEMS[key], wood = ["#8b5e3c", "#b18359", "#69462f"][key.length % 3], metal = ["#b7c1c6", "#c8a65d", "#303845"][key.charCodeAt(0) % 3];
+  const accent = ["#4f9d84", "#d98c60", "#7399bf", "#b66d82", "#7c6ba4"][key.charCodeAt(key.length - 1) % 5];
+  const top = (w = 0.84, d = 0.65, y = 0.72, color = wood) => box(g, [w, 0.07, d], [0, y, 0], color);
+  const legs = (w = 0.68, d = 0.48, h = 0.68, color = wood) => { for (const x of [-1, 1]) for (const z of [-1, 1]) box(g, [0.055, h, 0.055], [x * w / 2, 0, z * d / 2], color); };
+  const appliance = (w, h, d, color = "#e5e8e9") => { box(g, [w, h, d], [0, 0, 0], color, { metalness: 0.18, roughness: 0.38 }); box(g, [w * 0.82, h * 0.55, 0.018], [0, h * 0.15, d / 2 + 0.012], "#252a32", { roughness: 0.2 }); box(g, [0.035, h * 0.3, 0.035], [w * 0.34, h * 0.18, d / 2 + 0.04], metal); };
+  const pointLight = (color, intensity, distance, position) => { const l = new THREE.PointLight(color, intensity, distance, 2); l.position.set(...position); g.add(l); };
+  if (["kitchen_island", "quartz_counter"].includes(key)) { box(g, [1.72, 0.78, 0.76], [0, 0, 0], key === "quartz_counter" ? "#e8e5dd" : wood); top(1.82, 0.84, 0.8, key === "quartz_counter" ? "#d7d3ca" : "#eee7da"); box(g, [0.35, 0.03, 0.24], [0.47, 0.85, -0.06], "#8ea5aa", { metalness: 0.75 }); }
+  else if (["bar_stool", "racing_chair"].includes(key)) { cyl(g, [0.28, 0.31, 0.12], [0, 0.62, 0], accent); cyl(g, [0.04, 0.05, 0.62], [0, 0, 0], metal); cyl(g, [0.24, 0.28, 0.05], [0, 0.12, 0], metal); if (key === "racing_chair") { box(g, [0.62, 0.72, 0.14], [0, 0.77, -0.24], accent); box(g, [0.18, 0.08, 0.12], [0, 1.05, -0.15], metal); } else for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; box(g, [0.045, 0.55, 0.045], [Math.cos(a) * 0.2, 0, Math.sin(a) * 0.2], metal); } }
+  else if (["pantry_cabinet", "bathroom_vanity", "display_cabinet", "shoe_rack", "coat_stand", "storage_boxes", "washing_machine", "ironing_board", "laundry_basket"].includes(key)) {
+    if (key === "washing_machine") { appliance(0.78, 1.15, 0.68); cyl(g, [0.27, 0.27, 0.035], [0, 0.48, 0.36], "#88a7b1", { transparent: true, opacity: 0.8, metalness: 0.6 }, 32); }
+    else if (key === "ironing_board") { const b = box(g, [0.48, 0.06, 1.02], [0, 0.8, 0], WHITE); b.rotation.z = -0.04; for (const x of [-0.18, 0.18]) { const leg = box(g, [0.035, 0.8, 0.035], [x, 0, 0], metal); leg.rotation.z = x * 0.2; } box(g, [0.2, 0.18, 0.36], [0, 0.89, 0.12], "#252a32"); }
+    else if (key === "coat_stand") { cyl(g, [0.22, 0.25, 0.06], [0, 0, 0], wood); cyl(g, [0.035, 0.045, 1.6], [0, 0.05, 0], wood); for (let i = 0; i < 5; i++) { const a = i * Math.PI * 2 / 5; const h = box(g, [0.04, 0.38, 0.04], [Math.cos(a) * 0.12, 1.35, Math.sin(a) * 0.12], metal); h.rotation.z = Math.sin(a) * 0.75; } }
+    else if (key === "storage_boxes") for (let i = 0; i < 3; i++) { box(g, [0.72 - i * 0.08, 0.28, 0.58 - i * 0.06], [0, i * 0.3, 0], ["#b7a58c", "#788a7d", "#c3a87c"][i]); box(g, [0.2, 0.025, 0.02], [0, i * 0.3 + 0.14, 0.3], metal); }
+    else if (key === "laundry_basket") { cyl(g, [0.3, 0.36, 0.72], [0, 0, 0], "#ae8a62", {}, 12); cyl(g, [0.3, 0.3, 0.04], [0, 0.72, 0], "#d3bd9a", {}, 12); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, strip = box(g, [0.025, 0.67, 0.025], [Math.cos(a) * 0.28, 0.03, Math.sin(a) * 0.28], "#806347"); strip.rotation.y = -a; } }
+    else if (key === "shoe_rack") { for (let y = 0; y < 3; y++) { box(g, [0.82, 0.05, 0.34], [0, 0.18 + y * 0.42, 0], wood); for (let i = 0; i < 2; i++) { const shoe = box(g, [0.28, 0.12, 0.14], [-0.2 + i * 0.4, 0.22 + y * 0.42, 0.1], ["#322b29", "#ae6546"][i]); shoe.rotation.y = -0.15; } } legs(0.72, 0.28, 1.35); }
+    else { box(g, [0.86, key === "display_cabinet" ? 1.85 : 1.55, 0.55], [0, 0.08, 0], key === "bathroom_vanity" ? "#eee9df" : wood); for (const y of key === "display_cabinet" ? [0.15, 0.65, 1.2, 1.8] : [0.45, 0.95]) box(g, [0.78, 0.035, 0.5], [0, y, 0.02], key === "display_cabinet" ? "#9dcbd2" : metal, { transparent: key === "display_cabinet", opacity: 0.5 }); if (key === "bathroom_vanity") { cyl(g, [0.31, 0.35, 0.12], [0, 1.7, 0], WHITE); cyl(g, [0.025, 0.025, 0.25], [0.15, 1.73, -0.22], metal); } }
+  }
+  else if (["french_fridge", "microwave_solo", "built_in_oven", "electric_kettle", "blender", "dish_rack"].includes(key)) {
+    if (key === "french_fridge") { appliance(0.94, 1.86, 0.72); box(g, [0.02, 1.65, 0.015], [0, 0.08, 0.38], metal); box(g, [0.08, 0.35, 0.03], [0.16, 0.82, 0.4], "#627c88"); }
+    else if (key === "microwave_solo" || key === "built_in_oven") { appliance(0.78, 0.58, 0.58, "#cbd1d5"); box(g, [0.68, 0.4, 0.02], [0, 0.08, 0.31], "#253139"); cyl(g, [0.04, 0.04, 0.035], [0.31, 0.3, 0.34], metal); }
+    else if (key === "electric_kettle") { cyl(g, [0.23, 0.26, 0.48], [0, 0, 0], "#e8e4dc"); cyl(g, [0.19, 0.22, 0.035], [0, 0.48, 0], metal); const h = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.025, 8, 24, Math.PI), mat(DARK)); h.rotation.x = Math.PI / 2; h.position.set(0, 0.44, -0.02); g.add(h); }
+    else if (key === "blender") { box(g, [0.4, 0.15, 0.38], [0, 0, 0], WHITE); const jug = cyl(g, [0.17, 0.22, 0.55], [0, 0.15, 0], "#a9cbd0", { transparent: true, opacity: 0.62, roughness: 0.1 }); jug.material.side = THREE.DoubleSide; cyl(g, [0.21, 0.035, 0.04], [0, 0.7, 0], DARK); }
+    else { box(g, [0.82, 0.08, 0.42], [0, 0.55, 0], metal); for (let i = 0; i < 4; i++) box(g, [0.04, 0.36, 0.04], [-0.35 + i * 0.23, 0.62, 0], metal); for (let i = 0; i < 3; i++) box(g, [0.12, 0.24, 0.025], [-0.25 + i * 0.25, 0.67, 0], WHITE); }
+  }
+  else if (["bathtub", "shower_enclosure", "towel_rail", "soap_set", "toilet_roll_holder", "bath_mirror"].includes(key)) {
+    if (key === "bathtub") { box(g, [1.72, 0.55, 0.84], [0, 0.08, 0], WHITE, { roughness: 0.25 }); box(g, [1.48, 0.05, 0.62], [0, 0.57, 0], "#9ed3df", { transparent: true, opacity: 0.7 }); for (const x of [-0.68, 0.68]) box(g, [0.08, 0.18, 0.75], [x, 0, 0], metal); }
+    else if (key === "shower_enclosure") { box(g, [0.95, 0.05, 0.9], [0, 0.02, 0], "#c8d1d5"); for (const x of [-0.45, 0.45]) box(g, [0.035, 1.75, 0.035], [x, 0.07, -0.42], metal); box(g, [0.9, 1.7, 0.025], [0, 0.08, -0.42], "#a4d3e2", { transparent: true, opacity: 0.35 }); }
+    else if (key === "bath_mirror") { cyl(g, [0.48, 0.48, 0.06], [0, 1.05, 0], glow("#e7f5f2", 0.7), {}, 40); cyl(g, [0.4, 0.4, 0.025], [0, 1.05, 0.04], "#99bcc6", { metalness: 0.75, roughness: 0.12 }, 40); }
+    else if (key === "towel_rail") { for (const x of [-0.3, 0.3]) box(g, [0.04, 0.8, 0.04], [x, 0.2, 0], metal); for (const y of [0.35, 0.65, 0.95]) box(g, [0.65, 0.035, 0.04], [0, y, 0], metal); box(g, [0.54, 0.32, 0.03], [0, 0.55, 0.06], WHITE); }
+    else if (key === "soap_set") { for (let i = 0; i < 3; i++) { cyl(g, [0.1, 0.13, 0.25 + i * 0.06], [-0.25 + i * 0.25, 0, 0], ["#d8c8ad", "#9bb2a2", "#d5dce2"][i]); cyl(g, [0.025, 0.025, 0.06], [-0.25 + i * 0.25, 0.25 + i * 0.06, 0], metal); } }
+    else { cyl(g, [0.22, 0.22, 0.05], [0, 0.05, 0], metal); cyl(g, [0.035, 0.035, 0.72], [0, 0.08, 0], metal); cyl(g, [0.15, 0.15, 0.035], [0, 0.74, 0], WHITE); }
+  }
+  else if (["pendant_cluster", "led_strip", "recessed_spotlight", "wall_sconce", "table_lamp", "neon_sign", "smart_ambient_light"].includes(key)) {
+    if (key === "pendant_cluster") { box(g, [0.74, 0.05, 0.2], [0, 1.72, 0], metal); for (const x of [-0.25, 0, 0.25]) { cyl(g, [0.018, 0.018, 0.52], [x, 1.2, 0], metal); cyl(g, [0.13, 0.17, 0.25], [x, 0.94, 0], glow("#f3d89d", 1.3)); pointLight("#ffd991", 0.55, 3.2, [x, 0.8, 0]); } }
+    else if (key === "led_strip") { box(g, [0.82, 0.04, 0.82], [0, 0.03, 0], DARK); for (let i = 0; i < 4; i++) { const c = ["#28d7e5", "#7556ef", "#ea5598", "#52df8e"][i], strip = box(g, [0.76, 0.035, 0.045], [0, 0.1 + i * 0.12, 0], glow(c, 1.7)); strip.rotation.y = i * 0.35; if (i % 2 === 0) pointLight(c, 0.45, 2.4, [0, 0.45 + i * 0.12, 0]); } }
+    else if (key === "recessed_spotlight") for (let i = 0; i < 3; i++) { const x = i * 0.3 - 0.3; box(g, [0.24, 0.06, 0.24], [x, 1.5, 0], metal); cyl(g, [0.09, 0.1, 0.18], [x, 1.3, 0], glow("#fff0b8", 1.5)); pointLight("#fff0cf", 0.35, 2.6, [x, 1.1, 0]); }
+    else if (key === "wall_sconce") { box(g, [0.78, 1.5, 0.06], [0, 0.05, -0.06], wood); for (const x of [-0.22, 0.22]) { box(g, [0.05, 0.56, 0.05], [x, 0.25, 0], metal); cyl(g, [0.14, 0.07, 0.28], [x, 0.67, 0], glow("#ffe9ba", 1.2)); pointLight("#ffdf9e", 0.45, 2.8, [x, 0.72, 0.15]); } }
+    else if (key === "table_lamp") { cyl(g, [0.2, 0.24, 0.08], [0, 0, 0], wood); cyl(g, [0.05, 0.06, 0.48], [0, 0.08, 0], metal); cyl(g, [0.21, 0.12, 0.35], [0, 0.56, 0], glow("#f1dfbd", 0.9)); pointLight("#ffdda1", 0.5, 2.6, [0, 0.7, 0]); }
+    else if (key === "neon_sign") { box(g, [0.9, 1.25, 0.08], [0, 0.15, -0.08], DARK); for (let i = 0; i < 3; i++) { const c = ["#ec5da8", "#4edee2", "#f5c34f"][i], line = box(g, [0.58 - i * 0.11, 0.035, 0.025], [0, 0.88 - i * 0.28, 0], glow(c, 2)); line.rotation.z = i === 1 ? -0.12 : 0.12; if (i === 1) pointLight(c, 0.6, 3, [0, 0.55, 0.18]); } }
+    else { cyl(g, [0.25, 0.34, 0.08], [0, 0, 0], metal); cyl(g, [0.1, 0.13, 1.75], [0, 0.08, 0], glow("#8a62ff", 1.7)); for (let i = 0; i < 4; i++) box(g, [0.12, 0.04, 0.12], [0, 0.3 + i * 0.38, 0], glow(["#47d8ff", "#ad6eff", "#ff63a7", "#66e4a4"][i], 1.5)); pointLight("#a584ff", 0.8, 3.5, [0, 1.1, 0]); }
+  }
+  else if (["round_dining_set", "balcony_set", "garden_bench", "hammock", "garden_fountain", "planter_trio", "garden_lights"].includes(key)) {
+    if (key === "round_dining_set" || key === "balcony_set") { cyl(g, [key === "round_dining_set" ? 0.52 : 0.38, key === "round_dining_set" ? 0.52 : 0.38, 0.08], [0, 0.72, 0], wood, {}, 28); cyl(g, [0.09, 0.13, 0.68], [0, 0.03, 0], wood); for (const a of [0, Math.PI]) { const x = Math.cos(a) * 0.72; box(g, [0.44, 0.08, 0.42], [x, 0.42, 0], accent); box(g, [0.44, 0.48, 0.06], [x, 0.48, -0.18], wood); } }
+    else if (key === "garden_bench") { box(g, [1.55, 0.11, 0.52], [0, 0.52, 0], wood); for (let y = 0; y < 4; y++) box(g, [1.55, 0.08, 0.08], [0, 0.7 + y * 0.23, -0.22], wood); for (const x of [-0.65, 0.65]) { box(g, [0.08, 0.54, 0.08], [x, 0, 0], wood); box(g, [0.08, 1.4, 0.08], [x, 0.5, -0.22], wood); } }
+    else if (key === "hammock") { for (const x of [-0.78, 0.78]) { const p = box(g, [0.08, 1.52, 0.08], [x, 0, 0], wood); p.rotation.z = x * 0.16; } const cloth = box(g, [1.4, 0.06, 0.5], [0, 0.55, 0], accent); cloth.rotation.z = 0.1; }
+    else if (key === "garden_fountain") { cyl(g, [0.55, 0.65, 0.2], [0, 0, 0], "#b9b4a6"); cyl(g, [0.27, 0.32, 0.65], [0, 0.2, 0], "#d4cfc1"); cyl(g, [0.42, 0.22, 0.11], [0, 0.83, 0], "#b7b3a8"); cyl(g, [0.035, 0.035, 0.4], [0, 0.94, 0], "#72c4d1", { transparent: true, opacity: 0.65 }); }
+    else if (key === "planter_trio") for (let i = 0; i < 3; i++) { const x = (i - 1) * 0.33; cyl(g, [0.14, 0.22, 0.32 + (i % 2) * 0.12], [x, 0, 0], ["#b96743", "#d0aa7d", "#73806a"][i]); for (let j = 0; j < 4; j++) { const leaf = box(g, [0.05, 0.35 + (j % 2) * 0.1, 0.04], [x + (j - 1.5) * 0.04, 0.4, (j % 2) * 0.06], "#4a9867"); leaf.rotation.z = (j - 1.5) * 0.2; } }
+    else { for (let i = 0; i < 3; i++) { const x = (i - 1) * 0.4; cyl(g, [0.09, 0.12, 0.42], [x, 0, 0], metal); cyl(g, [0.15, 0.07, 0.16], [x, 0.42, 0], glow("#ffe2a4", 1.4)); } }
+  }
+  else if (["gaming_station", "ultrawide_monitor", "soundbar", "projector", "record_player"].includes(key)) {
+    if (key === "gaming_station" || key === "ultrawide_monitor") { deskTop(g, key === "gaming_station" ? "#242632" : wood); const screen = box(g, [key === "gaming_station" ? 0.86 : 1.44, 0.72, 0.06], [0, 1.0, -0.25], DARK); box(g, [key === "gaming_station" ? 0.78 : 1.34, 0.62, 0.012], [0, 1.01, -0.215], key === "gaming_station" ? glow("#7457cf", 0.9) : "#6394ab"); box(g, [0.08, 0.3, 0.08], [0, 0.8, -0.24], metal); if (key === "gaming_station") { box(g, [0.26, 0.65, 0.42], [0.72, 0.02, -0.1], DARK); box(g, [0.1, 0.5, 0.34], [0.67, 0.08, -0.1], glow("#53d7da", 1.1)); seat(g, accent, 0.7); } }
+    else if (key === "soundbar") { box(g, [0.94, 0.14, 0.16], [0, 0.18, 0], DARK); for (let x = -0.35; x <= 0.36; x += 0.18) cyl(g, [0.04, 0.04, 0.02], [x, 0.18, 0.09], metal).rotation.x = Math.PI / 2; box(g, [0.34, 0.42, 0.3], [0, 0, -0.2], DARK); }
+    else if (key === "projector") { box(g, [0.72, 0.28, 0.52], [0, 0.1, 0], WHITE); cyl(g, [0.12, 0.12, 0.04], [0, 0.22, 0.27], "#82c6df", { metalness: 0.6 }, 28); box(g, [0.08, 1.3, 0.05], [-0.4, 0, -0.2], metal); box(g, [0.9, 1.15, 0.035], [0, 0.07, -0.25], "#eee9dc"); }
+    else { box(g, [0.86, 0.1, 0.62], [0, 0.42, 0], wood); cyl(g, [0.26, 0.26, 0.05], [0, 0.48, 0], DARK); box(g, [0.04, 0.18, 0.04], [0.3, 0.55, 0], metal); }
+  }
+  else if (["acoustic_wall", "photo_collage", "floating_shelf", "decorative_mirror", "wallpaper_roll", "fluted_wall_panel", "terrazzo_finish", "herringbone_floor", "marble_floor"].includes(key)) {
+    if (key === "floating_shelf") { for (let y = 0.42; y < 1.5; y += 0.44) { box(g, [0.86, 0.06, 0.22], [0, y, 0], wood); for (let i = 0; i < 3; i++) box(g, [0.11, 0.24 + (i % 2) * 0.05, 0.1], [-0.25 + i * 0.25, y + 0.08, 0], ["#d8bc82", "#598470", "#7997ad"][i]); } }
+    else if (key === "photo_collage") { for (let i = 0; i < 5; i++) { const x = (i % 3 - 1) * 0.31, y = 0.44 + Math.floor(i / 3) * 0.55; box(g, [0.29, 0.42, 0.04], [x, y, 0], wood); box(g, [0.23, 0.34, 0.018], [x, y, 0.03], ["#d98c60", "#6a94a4", "#c9aa6c", "#8a739c", "#598470"][i]); } }
+    else if (key === "decorative_mirror") { for (let i = 0; i < 12; i++) { const a = i * Math.PI / 6, ray = box(g, [0.06, 0.32, 0.035], [Math.sin(a) * 0.4, 1.0 + Math.cos(a) * 0.4, 0], "#c6a35e"); ray.rotation.z = -a; } cyl(g, [0.3, 0.3, 0.05], [0, 1, 0.03], "#a9c9cf", { metalness: 0.8, roughness: 0.12 }, 32); }
+    else { box(g, [0.9, 1.55, 0.08], [0, 0.05, 0], key === "marble_floor" ? "#e9e5dc" : key === "herringbone_floor" ? wood : key === "terrazzo_finish" ? "#cfcbbd" : key === "acoustic_wall" ? "#282d35" : "#b7ab91"); if (key === "fluted_wall_panel" || key === "acoustic_wall") for (let x = -0.4; x <= 0.4; x += 0.12) box(g, [0.035, 1.5, 0.08], [x, 0.05, 0.08], key === "acoustic_wall" ? "#725a44" : "#63452f"); if (key === "marble_floor") for (let i = 0; i < 4; i++) { const vein = box(g, [0.7, 0.01, 0.018], [(i - 1.5) * 0.08, 0.2 + i * 0.3, 0.08], "#929895"); vein.rotation.z = 0.24; } if (key === "wallpaper_roll") for (let i = 0; i < 7; i++) { const leaf = box(g, [0.12, 0.27, 0.025], [-0.35 + (i % 3) * 0.32, 0.3 + Math.floor(i / 3) * 0.45, 0.07], "#4b8b67"); leaf.rotation.z = i % 2 ? -0.4 : 0.4; } if (key === "herringbone_floor") for (let i = 0; i < 6; i++) { const plank = box(g, [0.31, 0.03, 0.12], [-0.3 + (i % 3) * 0.3, 0.85, -0.3 + Math.floor(i / 3) * 0.2], wood); plank.rotation.y = i % 2 ? Math.PI / 2 : 0; } if (key === "terrazzo_finish") for (let i = 0; i < 20; i++) ball(g, 0.035, [Math.sin(i * 3) * 0.4, 0.15 + (i % 6) * 0.22, 0.09], ["#719587", "#bb896e", "#e8e1d4"][i % 3]); }
+  }
+  else if (["aquarium", "sculpture", "indoor_waterfall", "book_stack", "decorative_tray", "fruit_bowl"].includes(key)) {
+    if (key === "aquarium") { box(g, [0.94, 1.0, 0.52], [0, 0, 0], wood); box(g, [0.9, 0.7, 0.46], [0, 1.02, 0], "#74b8c6", { transparent: true, opacity: 0.38, metalness: 0.25 }); for (let i = 0; i < 5; i++) { const fish = ball(g, 0.075, [Math.sin(i * 5) * 0.33, 0.72 + (i % 3) * 0.17, 0.25], ["#f5b344", "#ed7892", "#6fc6d5"][i % 3]); fish.scale.set(1.4, 0.7, 0.45); } box(g, [0.88, 0.05, 0.44], [0, 1.4, 0], glow("#a9efff", 0.8)); }
+    else if (key === "sculpture") { const s = new THREE.Mesh(new THREE.TorusKnotGeometry(0.25, 0.09, 96, 12), mat("#a87c43", { metalness: 0.78, roughness: 0.22 })); s.position.y = 0.85; g.add(s); box(g, [0.58, 0.2, 0.48], [0, 0.1, 0], "#b4a894"); }
+    else if (key === "indoor_waterfall") { box(g, [0.82, 1.65, 0.26], [0, 0.05, -0.12], "#454a4d"); for (let i = 0; i < 8; i++) box(g, [0.72, 0.025, 0.08], [0, 0.2 + i * 0.18, 0.05], "#555d60"); box(g, [0.9, 0.18, 0.42], [0, 0.02, 0.12], "#4e5960"); for (let i = 0; i < 5; i++) box(g, [0.03, 0.62, 0.025], [-0.24 + i * 0.12, 0.72, 0.02], glow("#69c8da", 0.8)); }
+    else if (key === "fruit_bowl") { cyl(g, [0.36, 0.25, 0.16], [0, 0.1, 0], "#d7aa5d"); for (let i = 0; i < 5; i++) ball(g, 0.12, [Math.sin(i * 4) * 0.19, 0.29 + (i % 2) * 0.06, Math.cos(i * 4) * 0.15], ["#e25942", "#e8b83e", "#6eaa62"][i % 3]); }
+    else if (key === "book_stack") for (let i = 0; i < 4; i++) { const b = box(g, [0.62 - (i % 2) * 0.08, 0.12, 0.46], [0, i * 0.14, 0], ["#567d72", "#c79460", "#7c7390", "#d9d0ba"][i]); b.rotation.y = i % 2 ? 0.1 : -0.08; }
+    else { box(g, [0.8, 0.07, 0.52], [0, 0.12, 0], "#bd9d5d"); cyl(g, [0.14, 0.14, 0.07], [-0.18, 0.18, 0], "#f0dfb4"); cyl(g, [0.11, 0.11, 0.05], [0.2, 0.18, 0.05], "#70947e"); }
+  }
+  else if (key === "decorative_tray") { box(g, [0.82, 0.06, 0.56], [0, 0.06, 0], "#c29a55", { metalness: 0.68 }); for (const x of [-0.38, 0.38]) box(g, [0.04, 0.07, 0.56], [x, 0.1, 0], "#d3b878", { metalness: 0.65 }); for (const x of [-0.2, 0.18]) cyl(g, [0.09, 0.11, 0.18], [x, 0.12, 0], x < 0 ? "#eee1ca" : "#6c9879"); }
+  else { top(); legs(); }
+  g.userData.finish = def?.finish ?? null;
+}
+
 function bed(g, wide, sheet) {
   const W = wide ? 1.92 : 0.92, D = 1.92;
   box(g, [W, 0.3, D], [0, 0, 0], WOOD_D);
@@ -376,6 +451,15 @@ const BUILD = {
     box(g, [0.18, 0.07, 0.01], [0, 1.45, 0.205], glow("#4aa8ff", 1.3)); box(g, [0.34, 0.5, 0.02], [0, 0.35, 0.205], "#e5e9ee");
     cyl(g, [0.02, 0.02, 0.5], [0.2, 1.7, -0.1], STEEL);
   },
+  ...Object.fromEntries([
+    "kitchen_island", "bar_stool", "pantry_cabinet", "quartz_counter", "french_fridge", "microwave_solo", "built_in_oven", "electric_kettle", "blender", "dish_rack", "fruit_bowl", "round_dining_set",
+    "bathtub", "shower_enclosure", "bathroom_vanity", "towel_rail", "soap_set", "toilet_roll_holder", "laundry_basket", "bath_mirror",
+    "pendant_cluster", "led_strip", "recessed_spotlight", "wall_sconce", "table_lamp", "neon_sign", "smart_ambient_light",
+    "wallpaper_roll", "fluted_wall_panel", "terrazzo_finish", "herringbone_floor", "marble_floor", "acoustic_wall", "photo_collage", "floating_shelf", "decorative_mirror",
+    "gaming_station", "racing_chair", "ultrawide_monitor", "soundbar", "projector", "record_player",
+    "balcony_set", "garden_bench", "planter_trio", "garden_fountain", "hammock", "garden_lights",
+    "aquarium", "sculpture", "indoor_waterfall", "display_cabinet", "shoe_rack", "coat_stand", "storage_boxes", "washing_machine", "ironing_board", "book_stack", "decorative_tray"
+  ].map((key) => [key, (g) => catalogPiece(g, key)])),
 };
 
 /** Exposed for the catalogue test: every item the shop can sell needs a real model, not the generic placeholder. */

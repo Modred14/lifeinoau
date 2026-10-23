@@ -91,6 +91,20 @@ function floorTexture(W, D, theme, wood, kindAt) {
   return t;
 }
 
+const finishMaps = {};
+function finishTexture(kind, repeatX = 1, repeatY = 1) {
+  const cacheKey = `${kind}:${repeatX}:${repeatY}`;
+  if (finishMaps[cacheKey]) return finishMaps[cacheKey];
+  const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d");
+  const fill = (color) => { g.fillStyle = color; g.fillRect(0, 0, 256, 256); };
+  if (kind === "terrazzo") { fill("#d8d2c6"); for (let i = 0; i < 180; i++) { g.fillStyle = ["#739285", "#ad8068", "#777f83", "#eee7da"][i % 4]; g.beginPath(); g.ellipse((i * 73) % 256, (i * 137) % 256, 2 + i % 5, 2 + (i * 3) % 4, i, 0, Math.PI * 2); g.fill(); } }
+  else if (kind === "marble") { fill("#eeeae2"); g.strokeStyle = "rgba(95,105,106,.42)"; g.lineWidth = 3; for (let i = -2; i < 7; i++) { g.beginPath(); g.moveTo(i * 55, 0); g.bezierCurveTo(i * 55 + 40, 80, i * 55 - 26, 150, i * 55 + 22, 256); g.stroke(); } }
+  else if (kind === "herringbone") { fill("#a8794e"); for (let y = -64; y < 320; y += 64) for (let x = -64; x < 320; x += 64) { g.fillStyle = ((x + y) / 64) % 2 ? "#bd9165" : "#946844"; g.fillRect(x, y, 62, 30); g.fillStyle = "rgba(255,235,210,.16)"; g.fillRect(x + 3, y + 3, 56, 2); } }
+  else if (kind === "botanical") { fill("#e8e0d0"); for (let i = 0; i < 12; i++) { const x = (i * 67) % 256, y = (i * 113) % 256; g.strokeStyle = "#67836c"; g.lineWidth = 3; g.beginPath(); g.moveTo(x, y + 38); g.quadraticCurveTo(x + 20, y + 10, x + 6, y - 24); g.stroke(); for (const d of [-1, 1]) { g.fillStyle = d < 0 ? "#829a75" : "#b3a56f"; g.beginPath(); g.ellipse(x + d * 11, y + 8, 7, 15, d * 0.7, 0, Math.PI * 2); g.fill(); } } }
+  else { fill("#73543c"); for (let x = 0; x < 256; x += 22) { g.fillStyle = x % 44 ? "#815f43" : "#694a33"; g.fillRect(x, 0, 17, 256); g.fillStyle = "rgba(230,190,140,.12)"; g.fillRect(x + 2, 0, 2, 256); } }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeatX, repeatY); t.anisotropy = 8; finishMaps[cacheKey] = t; return t;
+}
+
 // where a spot `at` (in cells along a wall, 0 to its length) sits in that wall's own frame (see buildRoom)
 const wallX = (side, at, W, D) => ({ N: at - W / 2, S: W / 2 - at, W: D / 2 - at, E: at - D / 2 })[side];
 
@@ -379,6 +393,7 @@ export function createRoomScene(container, cb = {}) {
   scene.add(tap);
 
   let builtShape = "",
+    finishItems = [],
     room = null,
     theme = null,
     W = 0,
@@ -458,6 +473,9 @@ export function createRoomScene(container, cb = {}) {
       side,
       side,
     ]);
+    floor.name = "room-floor-surface";
+    floor.material[2].userData.defaultMap = tex;
+    floor.material[2].userData.defaultColor = floor.material[2].color.clone();
     floor.position.y = -0.17;
     floor.receiveShadow = true;
     world.add(floor);
@@ -487,6 +505,8 @@ export function createRoomScene(container, cb = {}) {
         new THREE.BoxGeometry(len, WALL_H, 0.24),
         mat(theme.wall, { roughness: 0.92 }),
       );
+      body.name = "room-wall-surface";
+      body.material.userData.defaultColor = body.material.color.clone();
       body.position.set(0, WALL_H / 2, -0.12);
       body.castShadow = true;
       body.receiveShadow = true;
@@ -671,6 +691,7 @@ export function createRoomScene(container, cb = {}) {
     return it;
   }
   function setItems(list) {
+    finishItems = list.filter((i) => i.placed && i.x != null && ITEMS[i.key]?.surface);
     const want = new Map(
       list.filter((i) => i.placed && i.x != null).map((i) => [String(i.id), i]),
     );
@@ -687,8 +708,26 @@ export function createRoomScene(container, cb = {}) {
       } else if (!have) addItem(d, !firstItems);
     }
     firstItems = false;
+    applyRoomFinishes();
     keepAvatarFree();
     updateMarker();
+  }
+  function applyRoomFinishes() {
+    if (!room) return;
+    const latest = (surface) => [...finishItems].reverse().find((i) => ITEMS[i.key]?.surface === surface);
+    const floorFinish = latest("floor"), wallFinish = latest("wall");
+    world.traverse((o) => {
+      if (o.name === "room-floor-surface") {
+        const material = o.material[2], def = floorFinish && ITEMS[floorFinish.key];
+        material.map = def ? finishTexture(def.finish, W, D) : material.userData.defaultMap;
+        material.color.copy(material.userData.defaultColor); material.needsUpdate = true;
+      }
+      if (o.name === "room-wall-surface") {
+        const def = wallFinish && ITEMS[wallFinish.key];
+        o.material.map = def ? finishTexture(def.finish, Math.max(1, Math.round(W / 2)), 2) : null;
+        o.material.color.copy(o.material.userData.defaultColor); o.material.needsUpdate = true;
+      }
+    });
   }
   let firstItems = true;
   function select(id, silent) {

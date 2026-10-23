@@ -21,6 +21,9 @@ chk("every purchasable furniture item has a valid price and shop category", Obje
 chk("all shop catalogue items have dedicated 3D models for the room and previews", Object.keys(ITEMS).every((key) => FURNITURE_MODEL_KEYS.includes(key)));
 chk("the catalogue includes table styles across affordable, mid-range and luxury prices", ITEMS.center_table_glass.price < ITEMS.center_table_wood.price && ITEMS.center_table_wood.price < ITEMS.center_table_marble.price && ITEMS.center_table_marble.price < ITEMS.center_table_designer.price);
 chk("luxury items are discoverable both in their room category and Luxury Collection", ["velvet_sofa", "center_table_marble", "luxury_bed", "designer_light"].every((key) => ITEMS[key].luxury && ITEMS[key].shop !== "luxury"));
+const expandedKeys = ["kitchen_island", "french_fridge", "bathtub", "shower_enclosure", "pendant_cluster", "neon_sign", "wallpaper_roll", "marble_floor", "gaming_station", "projector", "balcony_set", "garden_fountain", "aquarium", "indoor_waterfall", "shoe_rack", "washing_machine"];
+chk("the expanded shop adds distinct kitchen, bath, lighting, finish, entertainment, outdoor and lifestyle items", expandedKeys.every((key) => ITEMS[key] && inShop(key) && Number.isSafeInteger(ITEMS[key].price) && ITEMS[key].price > 0));
+chk("room finish purchases are marked as persistent floor or wall finishes", ["terrazzo_finish", "herringbone_floor", "marble_floor", "wallpaper_roll", "fluted_wall_panel"].every((key) => ITEMS[key].surface && ITEMS[key].finish));
 // The production renderer is browser-only; a no-op canvas is enough to construct its procedural display textures in this model smoke test.
 const ctx = new Proxy({}, { get: (_target, key) => typeof key === "string" ? (() => {}) : undefined });
 globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) };
