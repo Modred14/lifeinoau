@@ -67,6 +67,59 @@ function deskTop(g, top = WOOD_L) {
   for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(g, [0.07, 0.78, 0.07], [sx * 0.88, 0, sz * 0.38], WOOD_D);
 }
 
+function centreTable(g, top, base, glass = false) {
+  const topMat = glass ? mat("#bde7ef", { transparent: true, opacity: 0.58, metalness: 0.18, roughness: 0.12 }) : top;
+  box(g, [1.68, 0.09, 0.68], [0, 0.48, 0], topMat);
+  for (const [x, z] of [[-0.68, -0.24], [0.68, -0.24], [-0.68, 0.24], [0.68, 0.24]]) box(g, [0.07, 0.48, 0.07], [x, 0, z], base);
+  if (!glass) box(g, [1.42, 0.05, 0.48], [0, 0.2, 0], WOOD_D);
+}
+
+function mediaStand(g, width = 1.72, color = WOOD) {
+  box(g, [width, 0.46, 0.48], [0, 0, 0], color);
+  box(g, [width + 0.04, 0.06, 0.52], [0, 0.46, 0], WOOD_L);
+  for (const x of [-width * 0.29, width * 0.29]) box(g, [0.025, 0.34, 0.01], [x, 0.06, 0.245], WOOD_D);
+  for (const x of [-width * 0.42, width * 0.42]) box(g, [0.08, 0.08, 0.08], [x, 0, 0], DARK);
+}
+
+function framedDisplay(g, colors = ["#e07c55", "#f2c46f", "#23877a"]) {
+  // The existing placement grid is floor-based, so framed art uses a stable little easel rather than clipping into a wall.
+  for (const x of [-0.28, 0.28]) { const leg = box(g, [0.035, 1.18, 0.035], [x, 0, -0.12], WOOD_D); leg.rotation.x = -0.12; }
+  box(g, [0.72, 0.82, 0.06], [0, 0.64, 0], WOOD_D);
+  box(g, [0.62, 0.72, 0.025], [0, 0.68, 0.045], WHITE);
+  box(g, [0.54, 0.64, 0.018], [0, 0.69, 0.062], colors[0]);
+  ball(g, 0.2, [-0.1, 0.78, 0.09], colors[1], {}, [0.8, 1, 0.06]);
+  box(g, [0.3, 0.22, 0.018], [0.14, 0.52, 0.09], colors[2]);
+}
+
+function floorLamp(g, shade = "#fff0c4", metal = STEEL) {
+  cyl(g, [0.24, 0.27, 0.06], [0, 0, 0], metal, { metalness: 0.65, roughness: 0.28 });
+  cyl(g, [0.025, 0.035, 1.48], [0, 0.05, 0], metal, { metalness: 0.65, roughness: 0.28 });
+  cyl(g, [0.2, 0.05, 0.3], [0, 1.47, 0], shade, { emissive: shade, emissiveIntensity: 0.8, roughness: 0.5 });
+}
+
+function vase(g, color, flowers = false) {
+  cyl(g, [0.16, 0.28, 0.42], [0, 0, 0], color, { roughness: 0.3 });
+  cyl(g, [0.09, 0.16, 0.11], [0, 0.4, 0], color, { roughness: 0.3 });
+  if (flowers) {
+    for (let i = 0; i < 5; i++) {
+      const a = i * Math.PI * 0.4, x = Math.cos(a) * 0.1, z = Math.sin(a) * 0.1;
+      cyl(g, [0.012, 0.018, 0.42], [x, 0.5, z], "#3a8b56");
+      ball(g, 0.075, [x, 0.96 + (i % 2) * 0.06, z], ["#e65f72", "#f4bf42", "#a56fd1"][i % 3]);
+    }
+  }
+}
+
+function premiumSofa(g, color, width = 2.5) {
+  box(g, [width, 0.3, 1.18], [0, 0.22, 0], color);
+  box(g, [width, 0.76, 0.2], [0, 0.45, -0.48], color);
+  for (const x of [-width / 2 + 0.12, width / 2 - 0.12]) box(g, [0.2, 0.52, 1.0], [x, 0.22, -0.02], color);
+  for (const x of [-width * 0.27, 0, width * 0.27]) {
+    box(g, [width * 0.24, 0.14, 0.84], [x, 0.39, 0.08], WHITE, { roughness: 0.95 });
+    box(g, [width * 0.2, 0.32, 0.12], [x, 0.57, -0.35], WHITE, { roughness: 0.95 });
+  }
+  for (const x of [-width * 0.4, width * 0.4]) for (const z of [-0.42, 0.42]) box(g, [0.08, 0.12, 0.08], [x, 0, z], WOOD_D);
+}
+
 const BUILD = {
   // school-hostel bunk: bare iron frame, thin worn mattresses, a ladder. Nothing stylish.
   iron_bunk: (g) => {
@@ -101,6 +154,11 @@ const BUILD = {
   },
   single_bed: (g) => bed(g, false, "#5b6bd6"),
   double_bed: (g) => bed(g, true, "#c2455a"),
+  luxury_bed: (g) => {
+    bed(g, true, "#385b50");
+    box(g, [1.98, 1.05, 0.13], [0, 0.28, -0.95], "#d5b77e", { metalness: 0.12 });
+    box(g, [1.82, 0.82, 0.1], [0, 0.38, -0.86], "#355b4b");
+  },
   wardrobe: (g) => {
     box(g, [1.9, 2.15, 0.84], [0, 0, 0], WOOD_L); box(g, [1.94, 0.07, 0.88], [0, 2.15, 0], WOOD); box(g, [0.03, 2.0, 0.02], [0, 0.07, 0.43], WOOD_D);
     for (const s of [-1, 1]) { box(g, [0.04, 0.34, 0.05], [s * 0.1, 0.95, 0.45], "#2b2f3a"); box(g, [0.78, 1.8, 0.015], [s * 0.46, 0.17, 0.425], WOOD, { roughness: 0.6 }); }
@@ -108,6 +166,21 @@ const BUILD = {
   nightstand: (g) => {
     box(g, [0.62, 0.55, 0.56], [0, 0, 0], WOOD); box(g, [0.5, 0.2, 0.02], [0, 0.28, 0.285], WOOD_D); box(g, [0.12, 0.03, 0.03], [0, 0.4, 0.3], "#2b2f3a");
     cyl(g, [0.05, 0.07, 0.16], [0, 0.55, 0], DARK); cyl(g, [0.12, 0.17, 0.2], [0, 0.7, 0], "#ffe7b0", { emissive: "#ffd27a", emissiveIntensity: 0.9 });
+  },
+  bedside_table_deluxe: (g) => {
+    box(g, [0.78, 0.62, 0.66], [0, 0, 0], "#80552f");
+    box(g, [0.84, 0.07, 0.72], [0, 0.62, 0], "#c99b61");
+    for (const y of [0.2, 0.43]) { box(g, [0.66, 0.015, 0.02], [0, y, 0.34], "#d7b679"); cyl(g, [0.035, 0.035, 0.03], [0, y + 0.03, 0.35], STEEL); }
+    for (const x of [-0.28, 0.28]) for (const z of [-0.22, 0.22]) box(g, [0.06, 0.12, 0.06], [x, 0, z], WOOD_D);
+  },
+  premium_wardrobe: (g) => {
+    box(g, [1.9, 2.18, 0.86], [0, 0, 0], "#6e4a2c");
+    for (const x of [-0.47, 0.47]) {
+      box(g, [0.84, 2.0, 0.035], [x, 0.08, 0.45], "#a67c52");
+      box(g, [0.7, 1.8, 0.02], [x, 0.18, 0.48], "#b9cdd2", { metalness: 0.82, roughness: 0.12 });
+      cyl(g, [0.025, 0.025, 0.08], [x + (x < 0 ? 0.32 : -0.32), 1.02, 0.49], "#c7a45d", { metalness: 0.7 });
+    }
+    box(g, [1.98, 0.08, 0.92], [0, 2.18, 0], "#c99b61");
   },
   desk: (g) => {
     deskTop(g); box(g, [0.5, 0.55, 0.78], [0.6, 0.22, 0], WOOD); box(g, [0.42, 0.14, 0.02], [0.6, 0.5, 0.4], WOOD_D); box(g, [0.1, 0.03, 0.03], [0.6, 0.56, 0.41], "#2b2f3a");
@@ -128,6 +201,11 @@ const BUILD = {
     box(g, [0.86, 1.9, 0.4], [0, 0, -0.2], WOOD); box(g, [0.78, 1.8, 0.02], [0, 0.05, -0.02], WOOD_D);
     const r = rng(3), cols = ["#c0392b", "#2980b9", "#27ae60", "#f1c40f", "#8e44ad", "#e67e22", "#ecf0f1"];
     for (let s = 0; s < 4; s++) { box(g, [0.82, 0.03, 0.38], [0, 0.42 + s * 0.42, -0.2], WOOD_L); let x = -0.36; while (x < 0.34) { const w = 0.05 + r() * 0.05, h = 0.22 + r() * 0.12; box(g, [w, h, 0.26], [x + w / 2, 0.05 + s * 0.42 + 0.0, -0.2], cols[Math.floor(r() * cols.length)]); x += w + 0.01; } }
+  },
+  display_shelf: (g) => {
+    box(g, [0.82, 1.82, 0.42], [0, 0, -0.18], "#795233");
+    for (const y of [0.12, 0.56, 1.0, 1.44, 1.82]) box(g, [0.9, 0.055, 0.5], [0, y, 0], "#c89b61");
+    for (let i = 0; i < 7; i++) { const x = -0.34 + (i % 3) * 0.32, y = 0.2 + Math.floor(i / 3) * 0.44; box(g, [0.16, 0.26, 0.16], [x, y, 0.08], ["#e8a23a", "#507d69", "#7183b3"][i % 3]); }
   },
   gaming_pc: (g) => {
     deskTop(g, "#1c2230"); box(g, [0.26, 0.55, 0.46], [0.7, 0.85, -0.05], "#14171f"); box(g, [0.02, 0.45, 0.4], [0.575, 0.9, -0.05], glow("#7c4dff", 1.6));
@@ -160,6 +238,66 @@ const BUILD = {
   },
   armchair: (g) => seat(g, "#e1a43b"),
   sofa: (g) => { seat(g, "#2f8f83", 1.86); box(g, [0.5, 0.12, 0.5], [-0.5, 0.52, 0.1], "#e8a23a").rotation.y = 0.3; },
+  loveseat: (g) => premiumSofa(g, "#859b91", 1.72),
+  velvet_sofa: (g) => premiumSofa(g, "#315a4c", 2.42),
+  designer_sofa: (g) => premiumSofa(g, "#715b7c", 2.55),
+  center_table_glass: (g) => centreTable(g, "#d2a46f", STEEL, true),
+  center_table_wood: (g) => centreTable(g, "#a87547", WOOD_D),
+  center_table_marble: (g) => {
+    centreTable(g, mat("#e8e5de", { roughness: 0.28 }), "#b99b66");
+    for (const x of [-0.5, 0.5]) { const vein = box(g, [0.72, 0.006, 0.012], [x, 0.53, 0.02], "#8a9290"); vein.rotation.y = x * 0.35; }
+  },
+  center_table_designer: (g) => {
+    const gold = mat("#c49b56", { metalness: 0.78, roughness: 0.22 });
+    centreTable(g, mat("#bce7e8", { transparent: true, opacity: 0.52, metalness: 0.25, roughness: 0.08 }), gold, true);
+    cyl(g, [0.26, 0.38, 0.3], [0, 0.08, 0], gold, { metalness: 0.78 });
+  },
+  tv_stand: (g) => mediaStand(g, 1.78, "#5d402d"),
+  smart_tv: (g) => tvOn(g, screenTex("match"), 1.62),
+  large_smart_tv: (g) => {
+    mediaStand(g, 1.86, "#242a32");
+    const frame = box(g, [1.82, 1.12, 0.08], [0, 0.52, -0.11], "#101218");
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(1.72, 1.02), new THREE.MeshStandardMaterial({ map: screenTex("match"), emissive: "#ffffff", emissiveMap: screenTex("match"), emissiveIntensity: 0.9, roughness: 0.3 }));
+    frame.add(scr); scr.position.set(0, 0, 0.044);
+  },
+  floor_lamp: (g) => floorLamp(g),
+  curtain_stand: (g) => {
+    box(g, [0.82, 0.08, 0.18], [0, 0, 0], STEEL);
+    for (const x of [-0.34, 0.34]) box(g, [0.045, 1.9, 0.045], [x, 0.05, 0], STEEL);
+    cyl(g, [0.025, 0.025, 0.8], [0, 1.92, 0], "#c9a45f", { metalness: 0.7 });
+    for (const x of [-0.2, 0.2]) box(g, [0.38, 1.72, 0.035], [x, 0.12, 0], x < 0 ? "#678b78" : "#8c6074", { roughness: 0.95 });
+  },
+  wall_art: (g) => framedDisplay(g),
+  framed_photos: (g) => {
+    for (const x of [-0.25, 0.25]) {
+      box(g, [0.42, 0.58, 0.055], [x, 0.82, 0], WOOD_D);
+      box(g, [0.34, 0.5, 0.025], [x, 0.84, 0.04], WHITE);
+      ball(g, 0.13, [x, 0.9, 0.058], x < 0 ? "#d58a65" : "#678b78", {}, [0.72, 1, 0.05]);
+      box(g, [0.3, 0.16, 0.02], [x, 0.68, 0.06], x < 0 ? "#f0c978" : "#7d94b5");
+    }
+    for (const x of [-0.3, 0.3]) { const leg = box(g, [0.035, 0.95, 0.035], [x, 0, -0.16], WOOD_D); leg.rotation.x = -0.12; }
+  },
+  wall_clock: (g) => {
+    box(g, [0.08, 1.7, 0.08], [0, 0, 0], WOOD_D);
+    box(g, [0.52, 0.72, 0.08], [0, 0.94, 0], WOOD);
+    cyl(g, [0.23, 0.23, 0.035], [0, 1.05, 0.06], WHITE);
+    cyl(g, [0.018, 0.018, 0.05], [0, 1.05, 0.1], "#252a36");
+    box(g, [0.018, 0.16, 0.014], [0.035, 1.1, 0.12], "#252a36").rotation.z = -0.5;
+    box(g, [0.018, 0.12, 0.014], [-0.03, 1.02, 0.12], "#252a36").rotation.z = 0.9;
+    for (const x of [-0.27, 0.27]) box(g, [0.08, 0.1, 0.08], [x, 0, 0], WOOD_D);
+  },
+  vase: (g) => vase(g, "#3f7890"),
+  flower_arrangement: (g) => vase(g, "#eee4d2", true),
+  chandelier: (g) => {
+    floorLamp(g, "#fff0bf", "#b89a5d");
+    for (const a of [0, 2.1, 4.2]) { const x = Math.cos(a) * 0.24, z = Math.sin(a) * 0.24; ball(g, 0.095, [x, 1.3, z], "#bde7ef", { transparent: true, opacity: 0.72, emissive: "#ffe4a0", emissiveIntensity: 0.5 }); }
+  },
+  designer_light: (g) => {
+    const gold = mat("#c39a57", { metalness: 0.72, roughness: 0.25 });
+    cyl(g, [0.25, 0.32, 0.06], [0, 0, 0], gold);
+    for (let i = 0; i < 3; i++) { const a = i * Math.PI * 2 / 3, x = Math.cos(a) * 0.17, z = Math.sin(a) * 0.17; const stem = box(g, [0.035, 1.5, 0.035], [x, 0.05, z], gold); stem.rotation.z = Math.cos(a) * 0.2; ball(g, 0.15, [x * 1.8, 1.55 + i * 0.06, z * 1.8], ["#e9d5a5", "#bad9e1", "#f4d3cd"][i], { emissive: "#fff0c0", emissiveIntensity: 1.1 }); }
+  },
+  accent_chair: (g) => seat(g, "#72536e", 0.86, true),
   plant: (g) => {
     cyl(g, [0.24, 0.17, 0.4], [0, 0, 0], "#c97b4a"); cyl(g, [0.22, 0.22, 0.04], [0, 0.38, 0], "#3a2a1c");
     const r = rng(11); for (let i = 0; i < 9; i++) { const a = (i / 9) * Math.PI * 2 + r(), tilt = 0.12 + r() * 0.25, h = 0.7 + r() * 0.75;

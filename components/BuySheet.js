@@ -46,18 +46,18 @@ export default function BuySheet({
   onToggle,
 }) {
   const stored = items.filter((i) => !i.placed),
-    [cat, setCat] = useState("sleep"),
+    [cat, setCat] = useState("living"),
     owned = useMemo(() => {
       const m = {};
       for (const i of items) m[i.key] = (m[i.key] ?? 0) + 1;
       return m;
     }, [items]);
-  const tab = cat === "storage" && !stored.length ? "sleep" : cat;
+  const tab = cat === "storage" && !stored.length ? "living" : cat;
   const bal = BigInt(balanceKobo ?? "0") / 100n,
     list =
       tab === "storage"
         ? []
-        : ITEM_KEYS.filter((k) => inShop(k) && ITEMS[k].cat === tab).sort(
+        : ITEM_KEYS.filter((k) => inShop(k) && (ITEMS[k].shop === tab || (tab === "luxury" && ITEMS[k].luxury))).sort(
             (a, b) => ITEMS[a].price - ITEMS[b].price,
           );
   return (
