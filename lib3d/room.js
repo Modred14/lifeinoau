@@ -24,7 +24,7 @@ import {
 import { sizeOf, isOutdoor } from "../lib/furniture.js";
 import { layoutOf, wallRuns, zoneAt } from "../lib/layouts.js";
 
-const WALL_H = 3.1,
+const WALL_H = 3.4, // rooms are about twice the floor area they were, so the walls (the ceiling line) rise a little with them
   CUT = 0.09,
   UNIT_HEIGHT = 1.95; // a person is ~1.95 cells tall (a cell is about 0.9 m)
 const DIRS = { N: [0, -1], S: [0, 1], W: [-1, 0], E: [1, 0] };
@@ -405,6 +405,8 @@ export function createRoomScene(container, cb = {}) {
     wantedFace: null,
   };
   const cellWorld = (cx, cz) => [cx + 0.5 - W / 2, cz + 0.5 - D / 2];
+  // a bigger room means a longer walk: the pace rises a little with the size (up to a third faster) so crossing it never drags; the 8x6 room's pace is the base
+  const walkSpeed = () => 1.9 * Math.min(1.35, Math.max(1, Math.hypot(W, D) / 12));
   const placedList = () =>
     [...items.values()].map((i) => ({ ...i.data, placed: true }));
 
@@ -555,6 +557,10 @@ export function createRoomScene(container, cb = {}) {
     place("S", windowDecor(theme, 1.5, 1.2), -W * 0.15, 0.95);
     place("S", posterDecor(3, theme), W * 0.2, 1.6);
     place("S", clockDecor(theme), W * 0.32, 2.4);
+    // the walls are long now: a second window on the north, south and east walls (clear of the curtains and fittings already there), so none of them looks bare
+    place("N", windowDecor(theme), -W * 0.36, 0.95);
+    place("S", windowDecor(theme, 1.3, 1.2), -W * 0.36, 0.95);
+    place("E", windowDecor(theme, 1.3, 1.25), -D * 0.35, 0.95);
     }
     // the lawn around the room
     for (let i = 0; i < 14; i++) {
@@ -578,7 +584,10 @@ export function createRoomScene(container, cb = {}) {
       far: 40,
     });
     sun.shadow.camera.updateProjectionMatrix();
-    lamp.position.set(0, 2.55, 0);
+    const span = Math.hypot(W, D); // one lamp in the middle: its reach and strength grow with the room so the far corners are not left dim
+    lamp.position.set(0, WALL_H - 0.55, 0);
+    lamp.distance = Math.max(12, span * 0.95);
+    lamp.intensity = 14 * Math.max(1, Math.sqrt((W * D) / 48));
     itemsRoot.position.set(0, 0, 0);
     const shape = `${W}x${D}:${room.layout ?? ""}`;
     if (shape !== builtShape) { // a different home: the character walks in again
@@ -1159,7 +1168,7 @@ export function createRoomScene(container, cb = {}) {
           dx = gx - me.x,
           dz = gz - me.z,
           dist = Math.hypot(dx, dz),
-          step = 1.9 * dt;
+          step = walkSpeed() * dt;
         moving = true;
         me.yaw = lerpAngle(me.yaw, Math.atan2(dx, dz), 1 - Math.exp(-dt * 12));
         if (dist <= step) {

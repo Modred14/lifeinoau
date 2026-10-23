@@ -19,7 +19,10 @@ for (const h of HOMES) {
   chk(`${h}: the front door is on the south wall and the doorways join touching cells`, L.entry.z === L.d - 1 && L.doors.every(([a, b, c, d]) => Math.abs(a - c) + Math.abs(b - d) === 1 && zoneAt(L, a, b).id !== zoneAt(L, c, d).id));
   chk(`${h}: walking cannot cross a wall`, !canStep(L, [0, 0], [0, 0 + 1]) || zoneAt(L, 0, 0).id === zoneAt(L, 0, 1).id);
 }
-{ const L = layoutOf(roomFor("2-Bedroom Flat")); chk("2-bedroom flat: bedroom 1 and bedroom 2 are not joined to each other", !canStep(L, [3, 2], [4, 2]) && !canStep(L, [3, 3], [4, 3]) && canStep(L, [3, 3], [3, 4])); }
+{ const L = layoutOf(roomFor("2-Bedroom Flat")), cellsOfZone = (id) => L.grid.flatMap((r, z) => r.map((zn, x) => (zn.id === id ? [x, z] : null))).filter(Boolean);
+  const across = cellsOfZone("bed1").flatMap(([x, z]) => [[1, 0], [0, 1], [-1, 0], [0, -1]].map(([dx, dz]) => [[x, z], [x + dx, z + dz]])).filter(([, n]) => zoneAt(L, n[0], n[1])?.id === "bed2");
+  const into = L.doors.filter(([a, b, c, d]) => [zoneAt(L, a, b).id, zoneAt(L, c, d).id].sort().join() === "bed1,dining");
+  chk("2-bedroom flat: bedroom 1 and bedroom 2 are not joined to each other", across.length > 0 && across.every(([a, b]) => !canStep(L, a, b)) && into.length === 1 && canStep(L, [into[0][0], into[0][1]], [into[0][2], into[0][3]])); }
 
 // ---- furniture belongs in the right room ----
 for (const h of HOMES) {
@@ -32,8 +35,10 @@ for (const h of HOMES) {
 }
 function cellsOk(p, doors) { const [w, d] = ITEMS[p.key].w ? (p.rot % 2 ? [ITEMS[p.key].d, ITEMS[p.key].w] : [ITEMS[p.key].w, ITEMS[p.key].d]) : [1, 1]; for (let i = 0; i < w; i++) for (let j = 0; j < d; j++) if (doors.has([p.x + i, p.z + j].join())) return false; return true; }
 { const room = roomFor("1-Bedroom Flat", "p"), none = [];
-  chk("the toilet only goes in the bathroom and the cooker only in the kitchen", fits(room, none, "ensuite", 5, 4, 0) && !fits(room, none, "ensuite", 0, 0, 0) && fits(room, none, "gas_cooker", 0, 6, 0) && !fits(room, none, "gas_cooker", 4, 7, 0) && !fits(room, none, "sofa", 5, 4, 0));
-  chk("nothing stands in the passage, and an item cannot sit across a wall", !fits(room, none, "plant", 3, 4, 0) && !fits(room, none, "wardrobe", 3, 3, 0) && !fits(room, none, "sofa", 2, 7, 0));
+  const L1 = layoutOf(room), zc = (kind) => L1.grid.flatMap((r, z) => r.map((zn, x) => (zn.kind === kind ? [x, z] : null))).filter(Boolean), canStand = (key, cells) => cells.some(([x, z]) => fits(room, none, key, x, z, 0));
+  chk("the toilet only goes in the bathroom and the cooker only in the kitchen", canStand("ensuite", zc("bath")) && !canStand("ensuite", zc("bed")) && canStand("gas_cooker", zc("kitchen")) && !canStand("gas_cooker", zc("living")) && !canStand("sofa", zc("bath")));
+  const wallPairs = L1.grid.flatMap((r, z) => r.map((zn, x) => (zoneAt(L1, x + 1, z) && zoneAt(L1, x + 1, z).id !== zn.id ? [x, z] : null))).filter(Boolean); // a spot where a 2-wide item would straddle a wall
+  chk("nothing stands in the passage, and an item cannot sit across a wall", !canStand("plant", zc("passage")) && wallPairs.length > 0 && !canStand("sofa", wallPairs) && !canStand("wardrobe", doorCellsOf(L1)));
   chk("a bought bed goes to a bedroom and a bought sofa to the sitting room", (() => { const L = layoutOf(room), b = autoPlace(room, none, "single_bed"), s = autoPlace(room, none, "sofa"); return zoneAt(L, b.x, b.z).kind === "bed" && zoneAt(L, s.x, s.z).kind === "living"; })());
   chk("a fridge goes to the kitchen first", (() => { const f = autoPlace(room, none, "fridge"); return zoneAt(layoutOf(room), f.x, f.z).kind === "kitchen"; })()); }
 

@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { call, naira } from "@/lib/client";
 import { confirmAction } from "@/lib/confirm";
+import { serverTime } from "@/lib/serverClock";
 import { toast } from "@/lib/toast";
 import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
@@ -37,7 +38,7 @@ function Timetable({ cycle }) {
   rows.push(["Term begins", cycle.termStartsAt ?? null]);
   return (
     <ol className="sg-time">
-      {rows.filter(([, at]) => at).map(([label, at]) => <li key={label} data-past={at <= Date.now() ? "1" : undefined}><span>{label}</span><b>{when(at)}</b></li>)}
+      {rows.filter(([, at]) => at).map(([label, at]) => <li key={label} data-past={at <= serverTime() ? "1" : undefined}><span>{label}</span><b>{when(at)}</b></li>)}
     </ol>
   );
 }
@@ -137,7 +138,7 @@ function Election({ d, load, onOpen }) {
       <Eligibility me={me} />
       <MyCandidacy me={me} cycle={cycle} doIt={doIt} />
       {me.canRegister ? <button type="button" className="go sg-cta" onClick={() => setReg(true)}>Stand for office · {naira(cycle.nominationFeeKobo)}</button> : !me.candidacy && me.registerWhy ? <Note tone="info">{me.registerWhy}</Note> : null}
-      <Section title="Timetable"><Timetable cycle={{ ...cycle, termStartsAt: null }} /></Section>
+      <Section title="Timetable" hint="All times are game time (West Africa Time)."><Timetable cycle={{ ...cycle, termStartsAt: null }} /></Section>
       <Section title="Executive" hint="One winner each.">{ex.map((r) => <RaceRow key={r.position} r={r} me={me} onOpen={onOpen} />)}</Section>
       <Section title="Student Representative Assembly" hint="The Speaker, the Deputy Speaker and 30 Honourable Members.">{asm.map((r) => <RaceRow key={r.position} r={r} me={me} onOpen={onOpen} />)}</Section>
       {reg ? <RegisterSheet d={d} doIt={doIt} onClose={() => setReg(false)} /> : null}

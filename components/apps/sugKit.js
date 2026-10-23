@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { call } from "@/lib/client";
 import { run, useResource } from "@/lib/gameStore";
 import { serverTime } from "@/lib/serverClock";
+import { GAME_TIME_ZONE } from "@/lib/campus-clock";
 
 /** The server's clock, re-read every `ms`. */
 export function useNow(ms = 1000) {
@@ -64,8 +65,10 @@ export function Countdown({ at, label }) {
   return <span className="sg-count" role="timer" aria-label={label}>{at <= now ? "now" : left(at, now)}</span>;
 }
 
-const fmt = new Intl.DateTimeFormat("en-NG", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
-export const when = (t) => (t ? fmt.format(new Date(t)) : "–");
+// Every election date is shown in the game's own time zone (West Africa Time), whatever the device's zone is, so the timetable, the countdowns and the
+// notifications all name the same moment: "Sun, 25 Oct, 11:59 PM".
+const fmt = new Intl.DateTimeFormat("en-NG", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: GAME_TIME_ZONE });
+export const when = (t) => (t ? fmt.format(new Date(t)).replace(/\s?(am|pm)/i, (m) => " " + m.trim().toUpperCase()) : "–");
 export const nairaN = (n) => "₦" + Number(n).toLocaleString("en-NG");
 
 /** A message box that is always readable (not a tiny red line): used for "why you can't" and for hints. */
