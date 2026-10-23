@@ -235,9 +235,9 @@ export default function SettingsApp({ onHome, onClose, onOpenApp, onLogout, logg
           <ToggleRow icon="move" tone="violet" title="Left-handed controls" sub="Swap the stick and the buttons to the other side" checked={prefs.gameplay.leftHanded} onChange={pref("gameplay", "leftHanded")} />
           <ToggleRow icon="list" tone="slate" title="Show control hints" sub="The “how to move” line inside buildings" checked={prefs.gameplay.controlHints} onChange={pref("gameplay", "controlHints")} />
         </Group>
-        <Group title="Display">
+        {/* <Group title="Display">
           <ToggleRow icon="users" tone="teal" title="Show player name tags" sub="Names above other real players. You can still find players in Messages." checked={prefs.gameplay.nameTags} onChange={pref("gameplay", "nameTags")} />
-        </Group>
+        </Group> */}
       </>
     ),
 
