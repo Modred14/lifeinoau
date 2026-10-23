@@ -72,6 +72,8 @@
 .gx-tr { position: absolute; z-index: 4; right: var(--edge); top: calc(var(--safe-t) + 86px); display: flex; gap: 8px; }
 .gx-round { width: 46px; min-height: 46px; padding: 0; border-radius: 50%; background: var(--glass); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid var(--glass-line); box-shadow: var(--lift); }
 .gx-round:hover:not(:disabled) { background-color: rgba(40, 56, 90, 0.9); }
+.gx-garage-toggle { color: var(--green-text); }
+.gx-tr--garage { z-index: 6; }
 
 /* bottom left: you */
 .gx-me { position: absolute; z-index: 4; left: var(--edge); bottom: calc(var(--safe-b) + 24px); display: grid; gap: 8px; justify-items: start; }
@@ -153,6 +155,7 @@
 /* phones: keep the room clear. The academics card shrinks to one line and the turn buttons go (dragging turns the room). */
 @media (max-width: 560px) {
   .gx-tr { display: none; }
+  .gx-tr--garage { display: flex; top: calc(var(--safe-t) + 8px); right: 8px; }
   .gx-acad { padding: 8px 14px; } .gx-acad .gx-bar, .gx-acad .gx-strikes, .gx-acad .gx-acad-top p { display: none; }
   .gx-acad-top { align-items: center; } .gx-cgpa { text-align: right; grid-auto-flow: column; gap: 8px; align-items: baseline; } .gx-cgpa b { font-size: 1.3rem; }
   .gx-alert { padding: 10px 12px; } .gx-alert > div:first-of-type p { display: none; }

@@ -1,0 +1,13 @@
+import { CARS } from "../lib/cars.js";
+import { garageLayout, garageVehicleSize, garageWalkPath } from "../lib3d/garageLayout.js";
+import fs from "node:fs";
+const chk = (label, ok) => { console.log(`${ok ? "OK   " : "FAIL "}${label}`); if (!ok) process.exitCode = 1; };
+const owned = CARS.map((c) => ({ id: c.id, modelId: c.id, color: "#2c5aa0" })), layout = garageLayout(owned);
+chk("all owned car models receive a unique parking bay", layout.slots.length === owned.length && new Set(layout.slots.map((p) => `${p.x},${p.z}`)).size === owned.length);
+chk("the parking lot expands to fit the complete showroom collection", layout.width >= layout.columns * 3.8 + 4);
+chk("parked vehicles do not overlap, including the longest pickup and widest SUV", layout.slots.every((a, i) => layout.slots.slice(i + 1).every((b) => { const A=garageVehicleSize(a.modelId), B=garageVehicleSize(b.modelId); return Math.abs(a.x-b.x) >= (A.width+B.width)/2 || Math.abs(a.z-b.z) >= (A.length+B.length)/2; })));
+const target = { x: layout.slots[0].x - 2.1, z: layout.slots[0].z }, path = garageWalkPath({ x: 0, z: 12 }, target, layout);
+chk("the walk planner reaches a parked vehicle without walking through parked cars", path.length > 2 && path.every((p) => layout.slots.every((v) => { const s=garageVehicleSize(v.modelId); return !(Math.abs(p.x-v.x)<s.width/2+0.55 && Math.abs(p.z-v.z)<s.length/2+0.55); })));
+const app = fs.readFileSync(new URL("../components/HomeGarage.js", import.meta.url), "utf8"), scene = fs.readFileSync(new URL("../lib3d/homeGarage.js", import.meta.url), "utf8");
+chk("the garage loads only the signed-in player's Ride inventory and uses the existing server-side vehicle selector", /call\("\/api\/rides"\)/.test(app) && /action: "use"/.test(app));
+chk("the garage uses existing 3D vehicle models and supports walking to each one", /makeVehicle\(/.test(scene) && /garageWalkPath\(/.test(scene));

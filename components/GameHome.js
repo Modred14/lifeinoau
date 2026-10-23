@@ -19,6 +19,7 @@ import { serverTime } from "@/lib/serverClock";
 import { Icon } from "./Icon";
 import BuySheet from "./BuySheet";
 import PlayerAvatar from "./PlayerAvatar";
+import HomeGarage from "./HomeGarage";
 import "./game-home.css";
 
 const RoomStage = dynamic(() => import("./RoomStage"), {
@@ -70,7 +71,8 @@ export default function GameHome({
   const rd = useStore(roomStore),
     [selected, setSelected] = useState(null),
     [collapsed, setCollapsed] = useState(false),
-    [needsOpen, setNeedsOpen] = useState(false);
+    [needsOpen, setNeedsOpen] = useState(false),
+    [garageOpen, setGarageOpen] = useState(false);
   const api = useRef(null),
     queue = useRef(Promise.resolve()),
     ids = useRef(new Map()); // temporary id of an item that was just bought -> its real id once the server has answered
@@ -364,7 +366,7 @@ export default function GameHome({
         <i />
       </div>
       <div className="gx-scene">
-        <RoomStage
+        {garageOpen ? <HomeGarage character={c} onBack={() => setGarageOpen(false)} /> : <RoomStage
           room={roomReady ? rd.room : null}
           items={roomReady ? rd.items : null}
           roomError={roomReady ? null : roomErr}
@@ -381,7 +383,7 @@ export default function GameHome({
           onSleepCancel={() => setGoing(null)}
           apiRef={api}
           tool={tool}
-        />
+        />}
       </div>
 
       {/* top left: what needs attention */}
@@ -504,8 +506,8 @@ export default function GameHome({
       </div>
 
       {/* top right: look around */}
-      <div className="gx-tr">
-        <button
+      <div className={"gx-tr" + (garageOpen ? " gx-tr--garage" : "")}>
+        {!garageOpen && <><button
           type="button"
           className="gx-round"
           aria-label="Turn the room left"
@@ -520,6 +522,9 @@ export default function GameHome({
           onClick={() => api.current?.rotateView(1)}
         >
           <Icon name="rotateRight" size={20} />
+        </button></>}
+        <button type="button" className="gx-round gx-garage-toggle" aria-label={garageOpen ? "Return to your room" : "Open your home garage"} title={garageOpen ? "Return to your room" : "Open your home garage"} onClick={() => { setGarageOpen((v) => !v); setSelected(null); setUse(null); }}>
+          <Icon name={garageOpen ? "hostel" : "ride"} size={20} />
         </button>
       </div>
 

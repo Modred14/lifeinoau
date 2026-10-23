@@ -1,0 +1,16 @@
+.hg { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; background: #c2d1d2; }
+.hg-canvas { position: absolute; inset: 0; touch-action: none; }
+.hg-label,.hg-card,.hg-empty,.hg-error,.hg-loading { position: absolute; z-index: 2; color: #172321; background: rgba(250,252,249,.92); border: 1px solid rgba(30,55,43,.15); box-shadow: 0 12px 32px rgba(13,27,23,.18); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.hg-label { top: 16px; left: 16px; display: grid; gap: 3px; padding: 11px 15px; border-radius: 14px; }
+.hg-label b { font-size: .92rem; } .hg-label span,.hg-meta,.hg-empty span { color: #5d6c63; font-size: .78rem; }
+.hg-card { right: 16px; bottom: calc(var(--nav-h, 64px) + var(--safe-b, 0px) + 18px); width: min(300px, calc(100% - 32px)); display: grid; gap: 6px; padding: 16px; border-radius: 18px; }
+.hg-card > b { font-size: 1.05rem; padding-right: 26px; } .hg-eyebrow { color: #28724b; font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.hg-x { position: absolute; top: 10px; right: 10px; width: 32px; height: 32px; border: 0; border-radius: 50%; background: #edf2ed; color: #314139; }
+.hg-drive { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; padding: 11px 13px; border: 0; border-radius: 12px; background: #26754e; color: white; font-weight: 750; }
+.hg-drive:disabled { background: #aeb9b1; color: #f8faf8; }
+.hg-empty,.hg-error,.hg-loading { left: 50%; top: 50%; transform: translate(-50%,-50%); display: grid; gap: 6px; width: min(330px, calc(100% - 36px)); padding: 16px 18px; border-radius: 16px; text-align: center; }
+.hg-error { color: #8a302d; } .hg-error button { border: 0; border-radius: 9px; background: #26754e; color: white; padding: 8px; font-weight: 700; }
+.hg-loading { display: flex; align-items: center; justify-content: center; color: #33423a; } .hg-loading i { width: 18px; height: 18px; border: 2px solid #cad9cf; border-top-color: #26754e; border-radius: 50%; animation: hg-spin .8s linear infinite; }
+@keyframes hg-spin { to { transform: rotate(360deg); } }
+@media (max-width: 640px) { .hg-label { top: 8px; left: 8px; padding: 8px 11px; } .hg-card { right: 9px; bottom: calc(var(--nav-h, 58px) + var(--safe-b, 0px) + 8px); width: min(270px, calc(100% - 18px)); padding: 13px; } }
+@media (prefers-reduced-motion: reduce) { .hg-loading i { animation-duration: 2.4s; } }
