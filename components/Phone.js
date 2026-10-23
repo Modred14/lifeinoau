@@ -8,6 +8,7 @@ import { CLASS_INFO } from "@/lib/classes.js";
 import { playSound } from "@/lib/sound";
 import { InPhone } from "./phoneContext";
 import { serverDate } from "@/lib/serverClock";
+import { applyPwaUpdate, usePwaUpdate } from "@/lib/pwa";
 import MessagesApp from "./apps/MessagesApp";
 import { chat, useChat } from "@/lib/chat";
 import CareerApp from "./apps/CareerApp";
@@ -89,6 +90,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
   const [peer, setPeer] = useState(null); // the player Messages should open on when another app sends you there (the Developer app's Message button)
   const unread = useChat((s) => s.unread); // pushed by the chat connection: nothing is polled for it any more
   const gamesBadge = useGamesBadge(open); // challenges waiting for you, or a match where it is your move
+  const updateAvailable = usePwaUpdate();
   const wasOpen = useRef(false);
 
   useEffect(() => {
@@ -152,6 +154,13 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
                     <small>{a.cgpa && `CGPA ${a.cgpa ?? "–"} · `}Energy {c.energy}%</small>
                   </span>
                   <span className="ph-wallet-wk">Week {st.week}</span>
+                </div>
+              )}
+              {updateAvailable && (
+                <div className="ph-update" role="status">
+                  <span className="ph-update-mark" aria-hidden="true"><Icon name="spin" size={18} weight="bold" /></span>
+                  <span className="ph-update-copy"><b>New update available</b><small>Refresh to get the latest version.</small></span>
+                  <button type="button" onClick={applyPwaUpdate}>Reload</button>
                 </div>
               )}
               <div className="ph-grid">

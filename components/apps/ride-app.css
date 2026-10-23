@@ -1,12 +1,12 @@
 /* components/apps/ride-app.css: the Ride app (YK Autos) inside the phone. Same light page as Hire: one card per car. */
 .rd { display: grid; gap: 12px; padding-top: 2px; }
-.rd-hero { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 20px; background: linear-gradient(135deg, #1b1f2a, #0d1017); color: #fff; }
-.rd-logo { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 14px; background: #e7b84a; color: #1b1f2a; font: 800 1.05rem var(--font-head); letter-spacing: -0.02em; flex: none; }
+.rd-hero { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 20px; background: linear-gradient(135deg, #eff9f2, #dff1e5); color: #183b2b; border: 1px solid rgba(13, 138, 69, 0.18); }
+.rd-logo { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 14px; background: #168c43; color: #fff; font: 800 1.05rem var(--font-head); letter-spacing: -0.02em; flex: none; }
 .rd-hero b { display: block; font: 700 1.2rem var(--font-head); letter-spacing: -0.01em; }
 .rd-hero span:not(.rd-logo) { font-size: 0.82rem; opacity: 0.85; }
 .rd-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface); }
 .rd-tabs button { padding: 9px 8px; border: 0; border-radius: 11px; background: transparent; color: var(--muted); font: 600 0.88rem var(--font-body, inherit); cursor: pointer; }
-.rd-tabs button[aria-selected="true"] { background: #1b1f2a; color: #fff; }
+.rd-tabs button[aria-selected="true"] { background: #0d8a45; color: #fff; }
 .rd-card { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 0; border-radius: 20px; background: var(--surface); text-align: left; cursor: pointer; color: var(--text); }
 .rd-static { cursor: default; }
 .rd-ico { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; background: #e6ecf5; color: #36507a; flex: none; }
@@ -19,7 +19,7 @@
 .rd-tag[data-k="listings"] { background: #dff5e7; color: #17633a; }
 .rd-tag[data-k="estimate"] { background: #ffefc2; color: #8a5a00; }
 .rd-tag[data-k="none"] { background: #eceef2; color: #5b6475; }
-.rd-tag[data-k="own"] { background: #1b1f2a; color: #fff; }
+.rd-tag[data-k="own"] { background: #e4f3e9; color: #0d6b3b; }
 .pa-content button.rd-use { width: auto; padding: 8px 16px; flex: none; }
 .rd-stage { border-radius: 20px; background: linear-gradient(180deg, #e9eef6, #cfd8e6); overflow: hidden; }
 .cp-canvas { display: block; width: 100%; height: 190px; }
@@ -29,12 +29,12 @@
 .rd-specs { margin: 0; padding: 12px 16px; list-style: none; display: grid; gap: 6px; border-radius: 20px; background: var(--surface); font-size: 0.88rem; color: var(--text); }
 .rd-paints { display: flex; gap: 10px; flex-wrap: wrap; padding: 0 4px; }
 .rd-dot { width: 30px; height: 30px; padding: 0; border-radius: 50%; border: 2px solid transparent; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25); cursor: pointer; }
-.rd-dot[data-on="1"] { border-color: #fff; box-shadow: 0 0 0 3px #1b1f2a; }
+.rd-dot[data-on="1"] { border-color: #fff; box-shadow: 0 0 0 3px #0d8a45; }
 .rd-paintname { padding: 0 4px; color: var(--muted); font-size: 0.8rem; }
 .rd-price { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 0 4px; }
 .rd-price b { font: 700 1.3rem var(--font-head); letter-spacing: -0.01em; color: var(--text); }
 .rd-note { margin: 0 4px; color: var(--muted); font-size: 0.78rem; line-height: 1.4; }
-.rd-own { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 16px; background: #dff5e7; color: #17633a; font-weight: 700; font-size: 0.9rem; }
+.rd-own { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 16px; background: #e4f3e9; color: #0d6b3b; font-weight: 700; font-size: 0.9rem; }
 .pa-content button.rd-go { width: 100%; }
 .pa-content button.rd-go[data-poor="1"] { opacity: 0.7; }
 .pa-content button.rd-back, .pa-content button.rd-map { justify-self: start; display: inline-flex; align-items: center; gap: 6px; }

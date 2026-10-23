@@ -2,7 +2,7 @@
 .ph-ico[data-tone="dev"] { background: linear-gradient(165deg, #58d98d, #16a05a); color: #fff; }
 .ph[data-app="developer"] .ph-status { color: #101828; }
 .ph[data-app="developer"] .ph-home i { background: rgba(16, 24, 40, 0.78); }
-.ph[data-app="developer"] .pa { --bg: #fff; --surface: #f5f8f6; --raised: #eaf3ed; --text: #101828; --muted: #66756b; --line: rgba(16, 24, 40, 0.09); --field: #c3d0c7; --green: #16a34a; --green-text: #0d8a45; --gold-text: #0d8a45; --danger-text: #d92d20; --ring: #16a34a; --blue: #16a34a; color-scheme: light; background: radial-gradient(120% 36% at 50% 0%, #e4f5e9 0%, transparent 72%), #fff; }
+.ph[data-app="developer"] .pa { --bg: #fff; --surface: #f5f8f6; --raised: #eaf3ed; --text: #101828; --muted: #66756b; --line: rgba(16, 24, 40, 0.09); --field: #c3d0c7; --green: #16a34a; --green-secondary: #0d8a45; --green-text: var(--green-secondary); --gold-text: var(--green-secondary); --danger-text: #d92d20; --ring: var(--green); --blue: var(--green); color-scheme: light; background: radial-gradient(120% 36% at 50% 0%, #e4f5e9 0%, transparent 72%), #fff; }
 .ph[data-app="developer"] .pa-back:hover:not(:disabled) { background: rgba(22, 163, 74, 0.1); }
 
 .dv { display: grid; gap: 12px; padding-top: 2px; color: var(--text); }
@@ -14,12 +14,12 @@
 /* identity */
 .dv-hero { display: grid; justify-items: center; gap: 4px; padding: 10px 0 4px; text-align: center; }
 .dv-avatar { position: relative; width: 104px; height: 104px; margin-bottom: 8px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(150deg, #d9f2e1, #eff8f1); box-shadow: 0 0 0 3px #fff, 0 0 0 5px #16a34a, 0 18px 36px -14px rgba(22, 163, 74, 0.28); animation: dv-glow 4.5s ease-in-out infinite; }
-.dv-monogram { font: 800 3.1rem/1 var(--font-head); color: #0d8a45; letter-spacing: -0.04em; }
+.dv-monogram { font: 800 3.1rem/1 var(--font-head); color: var(--green-secondary); letter-spacing: -0.04em; }
 .dv-badge { position: absolute; right: -4px; bottom: -2px; width: 34px; height: 34px; border-radius: 10px; box-shadow: 0 0 0 3px #fff, 0 6px 12px -4px rgba(16, 24, 40, 0.22); }
 @keyframes dv-glow { 50% { box-shadow: 0 0 0 3px #fff, 0 0 0 5px #16a34a, 0 18px 44px -10px rgba(22, 163, 74, 0.4); } }
 .dv .dv-name { margin: 0; font: 800 1.55rem/1.15 var(--font-head); letter-spacing: -0.02em; }
 .dv .dv-nick { margin: 0; color: var(--muted); font-size: 0.92rem; }
-.dv .dv-role { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0 0; padding: 6px 12px; border-radius: 999px; background: rgba(22, 163, 74, 0.1); color: #0d8a45; font-size: 0.8rem; font-weight: 600; }
+.dv .dv-role { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0 0; padding: 6px 12px; border-radius: 999px; background: rgba(22, 163, 74, 0.1); color: var(--green-secondary); font-size: 0.8rem; font-weight: 600; }
 
 /* the Message button */
 .pa-content button.dv-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 50px; border-radius: 16px; font: 700 1rem var(--font-ui); transition: transform 140ms var(--ease), background-color 140ms; }
@@ -38,7 +38,7 @@
 /* contact links */
 .dv-link { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: var(--raised); color: var(--text); text-decoration: none; min-height: 52px; transition: transform 140ms var(--ease), background-color 140ms; }
 .dv-link:hover, .dv-link:focus-visible { background: #dcefe2; transform: translateY(-1px); }
-.dv-link > svg:first-child { flex: none; color: #0d8a45; }
+.dv-link > svg:first-child { flex: none; color: var(--green-secondary); }
 .dv-link > svg:last-child { flex: none; margin-left: auto; color: var(--muted); }
 .dv-link > span { display: grid; min-width: 0; font-size: 0.93rem; font-weight: 600; overflow-wrap: anywhere; }
 .dv-link small { color: var(--muted); font-size: 0.72rem; font-weight: 500; }
@@ -57,7 +57,7 @@
 .dv-feature-top div { display: grid; min-width: 0; }
 .dv-feature-top b { font: 700 1.1rem var(--font-head); }
 .dv-feature-top small { color: var(--muted); font-size: 0.82rem; }
-.dv .dv-here { margin: 0; font-size: 0.78rem; font-weight: 600; color: #0d8a45; }
+.dv .dv-here { margin: 0; font-size: 0.78rem; font-weight: 600; color: var(--green-secondary); }
 
 /* other projects */
 .dv-projects { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }

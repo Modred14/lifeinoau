@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import "./error-screen.css";
 import Logo from "./Logo";
-import { initPwa } from "@/lib/pwa";
+import { initPwa, watchPwaUpdates } from "@/lib/pwa";
 import { Icon } from "./Icon";
 
 export default function OfflineGate() {
@@ -18,7 +18,7 @@ export default function OfflineGate() {
     window.addEventListener("offline", down);
     window.addEventListener("online", up);
     if ("serviceWorker" in navigator) {
-      if (process.env.NODE_ENV === "production") navigator.serviceWorker.register("/sw.js").catch(() => {});
+      if (process.env.NODE_ENV === "production") navigator.serviceWorker.register("/sw.js").then(watchPwaUpdates).catch(() => {});
       else navigator.serviceWorker.getRegistrations().then(async (registrations) => {
         for (const registration of registrations) {
           if (registration.active && new URL(registration.active.scriptURL).pathname === "/sw.js") await registration.unregister();

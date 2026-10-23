@@ -36,6 +36,13 @@
 .ph-wallet-t b { font: 700 1.12rem/1.15 var(--font-head); letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ph-wallet-t small { font-size: 0.76rem; color: #6b6483; line-height: 1.25; }
 .ph-wallet-wk { flex: none; padding: 11px 17px; border-radius: 999px; background: #ff6a00; color: #fff; font: 700 0.9rem/1 var(--font-ui); white-space: nowrap; }
+.ph-update { display: flex; align-items: center; gap: 10px; margin: -13px 0 21px; padding: 10px 12px; border: 1px solid rgba(31, 125, 82, 0.2); border-radius: 16px; background: #eff9f3; color: #183b2b; box-shadow: 0 8px 20px -16px rgba(16, 85, 53, 0.55); }
+.ph-update-mark { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: #d9f0e2; color: #23794e; }
+.ph-update-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.ph-update-copy b { font: 700 0.82rem/1.15 var(--font-ui); }
+.ph-update-copy small { color: #557162; font: 500 0.7rem/1.2 var(--font-ui); }
+.ph-update button { flex: none; border: 0; border-radius: 999px; padding: 8px 12px; background: #24784d; color: #fff; font: 700 0.74rem/1 var(--font-ui); cursor: pointer; }
+.ph-update button:focus-visible { outline: 2px solid #174d32; outline-offset: 2px; }
 
 /* the apps */
 .ph-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px 4px; }

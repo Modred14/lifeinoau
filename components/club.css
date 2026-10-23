@@ -97,9 +97,9 @@
 
 /* ---- Spending History (phone app) ---- */
 .sp { display: grid; gap: 12px; }
-.sp-total { padding: 16px; border-radius: var(--r-md); background: #241a05; border: 1px solid #ffd24a; }
-.sp-total small { color: #ffd24a; font-weight: 700; letter-spacing: 0.06em; }
-.sp-total b { display: block; font: 800 1.9rem var(--font-head); color: #ffe27a; word-break: break-word; }
+.sp-total { padding: 16px; border-radius: var(--r-md); background: linear-gradient(145deg, #f1faf4, #e5f4ea); border: 1px solid rgba(13, 138, 69, 0.22); }
+.sp-total small { color: #0d6b3b; font-weight: 700; letter-spacing: 0.06em; }
+.sp-total b { display: block; font: 800 1.9rem var(--font-head); color: #155c37; word-break: break-word; }
 .sp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
 .sp-stat { padding: 10px 12px; border-radius: var(--r-sm); background: var(--raised); border: 1px solid var(--line); }
 .sp-stat small { color: var(--muted); display: block; }
@@ -110,7 +110,7 @@
 .sp-item { padding: 10px 12px; border-radius: var(--r-sm); background: var(--raised); border: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; }
 .sp-item h4 { margin: 0; font: 700 0.78rem var(--font-head); letter-spacing: 0.08em; color: var(--muted); }
 .sp-item b { font-size: 0.98rem; }
-.sp-item .amt { grid-row: 1 / span 2; grid-column: 2; align-self: center; font: 800 1rem var(--font-head); color: var(--gold-text); }
+.sp-item .amt { grid-row: 1 / span 2; grid-column: 2; align-self: center; font: 800 1rem var(--font-head); color: #0d8a45; }
 .sp-item small { color: var(--muted); grid-column: 1; }
 .sp-ok { color: var(--green-text); font-weight: 700; }
 .sp-empty { text-align: center; padding: 28px 12px; border-radius: var(--r-md); background: var(--raised); border: 1px dashed var(--line); color: var(--muted); }
