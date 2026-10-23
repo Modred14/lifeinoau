@@ -347,8 +347,10 @@ export async function createInteriorScene(container, c, opts = {}) {
     } else if (route && !exited && !locked) { // walking to a ring by itself, the way a player would
       const [tx, tz] = route.pts[route.i], dx = tx - P.x, dz = tz - P.z, d = Math.hypot(dx, dz), step = 1.9 * dt;
       if (d < 0.12) { route.i++; if (route.i >= route.pts.length) { const r = route; route = null; P.moving = 0; r.done(true); } }
-      else { const k = Math.min(step, d) / d, n = Math.max(1, Math.ceil(Math.min(step, d) / 0.08)); for (let q = 0; q < n; q++) movePlayer(c, P, (dx * k) / n, (dz * k) / n);
-        let dh = Math.atan2(dx, dz) - P.yaw; dh = ((dh + Math.PI * 3) % (Math.PI * 2)) - Math.PI; P.yaw += dh * Math.min(1, dt * 12); P.moving = 0.5; P.run = false; }
+      else { const k = Math.min(step, d) / d, n = Math.max(1, Math.ceil(Math.min(step, d) / 0.08)), sx = P.x, sz = P.z; for (let q = 0; q < n; q++) movePlayer(c, P, (dx * k) / n, (dz * k) / n);
+        route.stuck = Math.hypot(P.x - sx, P.z - sz) < step * 0.15 ? (route.stuck ?? 0) + dt : 0; // something is in the way (a player, a door): give up after a moment instead of pushing forever
+        if (route.stuck > 1.6) { const r = route; route = null; P.moving = 0; r.done(false); } else {
+        let dh = Math.atan2(dx, dz) - P.yaw; dh = ((dh + Math.PI * 3) % (Math.PI * 2)) - Math.PI; P.yaw += dh * Math.min(1, dt * 12); P.moving = 0.5; P.run = false; } }
     } else P.moving = 0;
     if (cell) { const q = clampToCell(cell, P.x, P.z, CELL_MARGIN); P.x = q.x; P.z = q.z; P.fl = cell.floor ?? 0; }
     else if (lockedCells && cellAt(lockedCells, P.x, P.z, 0)) { P.x = px0; P.z = pz0; } // the cells are locked: that step is undone
@@ -403,6 +405,10 @@ export async function createInteriorScene(container, c, opts = {}) {
     setSelfLook(look, gender) { const k = lookKey(look, gender ?? "M"); if (k === selfKey) return; selfKey = k; loadSelf(look ?? null, gender ?? "M"); },
     /** The real players in this building (from /api/travel?at=): each { id, name, gender, look, level, faculty, x, z, floor, anim? }. Anyone not in the list is removed. */
     setRemotePlayers(list) { remote.sync(list, { x: P.x, z: P.z }); }, get remoteIds() { return remote.ids(); },
+    /** How far the automatic walk to (x, z) is along the real route (metres), or null when there is no route. Same planner walkTo uses; walks nothing. */
+    routeInfo(x, z) { const nv = c.navPlayer[P.fl], path = nv.path(P.x, P.z, x, z); if (!path || path.length < 1) return null; let len = 0, px = P.x, pz = P.z; for (const q of [...path.slice(1), [x, z]]) { len += Math.hypot(q[0] - px, q[1] - pz); px = q[0]; pz = q[1]; } return { length: len, speed: 1.9 }; },
+    /** Stops an automatic walk where the character stands (the walkTo promise resolves false). */
+    cancelWalk() { if (route) { const r = route; route = null; P.moving = 0; r.done(false); } }, get walking() { return !!route; },
     /** Walk to a point on the current floor by the shortest clear path. Resolves true on arrival, false if it could not or you took the controls. */
     walkTo(x, z) { return new Promise((resolve) => { if (route) route.done(false); const nv = c.navPlayer[P.fl], path = nv.path(P.x, P.z, x, z); if (!path || path.length < 1) { resolve(false); return; } route = { pts: [...path.slice(1), [x, z]], i: 0, done: resolve }; }); },
     dispose() { alive = false; for (const t of clubTimers) clearTimeout(t); clubTimers.clear(); clubFx?.dispose(); remote.dispose(); tags.dispose(); stopIncident(); if (route) { route.done(false); route = null; } window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); el.removeEventListener("pointerdown", pd); el.removeEventListener("pointermove", pm); el.removeEventListener("pointerup", pu); el.removeEventListener("pointercancel", pu); el.removeEventListener("wheel", wh);

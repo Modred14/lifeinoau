@@ -19,17 +19,20 @@ const chips = (a = {}) => Object.entries(a).filter(([k, v]) => NAMES[k] && v).ma
 const needsCourse = (k) => k === "course_attend" || k === "course_study" || k === "course_test";
 
 /** `api` is a ref to the 3D scene, `rings` the activity rings drawn in it, `open` the ring whose panel is showing, `onClose` closes it, `onLeave` leaves the building. */
-export default function ActivityLayer({ api, rings, open, onClose, onLeave, ready }) {
+export default function ActivityLayer({ api, rings, open, onClose, onLeave, ready, onState, onRun, controlRef }) {
   const [st, setSt] = useState(null), [run, setRun] = useState(null), [busy, setBusy] = useState(false), [course, setCourse] = useState(""), [tick, setTick] = useState(() => serverTime()), [done, setDone] = useState(null), [fold, setFold] = useState(false); // the panel opens expanded; the person can fold it with the arrow. (was: opens folded; the person unfolds it
   const runRef = useRef(null), finishing = useRef(false), e0 = useRef(0); // e0: energy when the run began (for the rising bar while sleeping)
   const pos = () => { const s = api.current?.state; return s ? { x: s.x, z: s.z, floor: s.floor } : null; };
   const ring = (id) => rings.find((r) => r.activity === id);
 
   const refresh = useCallback(async () => {
-    const r = await call("/api/activity"); if (r.failed) return null;
+    const r = await call("/api/activity"); if (r.failed) { onState?.({ failed: true, error: r.error }); return null; }
     setSt(r); if (r.run && !runRef.current) { runRef.current = r.run; setRun(r.run); } if (!r.run && runRef.current && !finishing.current) { runRef.current = null; setRun(null); api.current?.setPose(null); }
     setCourse((c) => c || r.courses?.[0]?.code || ""); return r;
   }, [api]);
+  useEffect(() => { onState?.(st); }, [st]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { onRun?.(run ? run.hubId : null); }, [run?.hubId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (controlRef) controlRef.current = { refresh }; }, [controlRef, refresh]);
   const stop = useCallback((why) => { runRef.current = null; setRun(null); api.current?.setPose(null); if (why) toast.info(why); }, [api]);
 
   // where you stand: reported on arrival and every few seconds, only while the tab is showing
@@ -74,7 +77,7 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
   const info = open ? st?.hubs?.find((h) => h.id === open.activity) : null;
   const begin = async (param) => {
     if (!info || busy || run) return; const p = pos(); if (!p) return;
-    if (info.kind === "hustle_risky" && !(await confirmAction({ title: "Back-Room Deal: VERY RISKY", message: `You either make ₦${HUSTLE.risky.min.toLocaleString("en-NG")} to ₦${HUSTLE.risky.max.toLocaleString("en-NG")}, or N-QRS catches you and you serve ${HUSTLE.risky.jailMin} to ${HUSTLE.risky.jailMax} minutes inside Floor O (N-QRS Custody). You can only try once a day.`, confirmLabel: "Take the risk", tone: "danger" }))) return;
+    if (info.kind === "hustle_risky" && !open?.confirmed && !(await confirmAction({ title: "Back-Room Deal: VERY RISKY", message: `You either make ₦${HUSTLE.risky.min.toLocaleString("en-NG")} to ₦${HUSTLE.risky.max.toLocaleString("en-NG")}, or N-QRS catches you and you serve ${HUSTLE.risky.jailMin} to ${HUSTLE.risky.jailMax} minutes inside Floor O (N-QRS Custody). You can only try once a day.`, confirmLabel: "Take the risk", tone: "danger" }))) return;
     if (param === "cheat" && !(await confirmAction({ title: "Cheat in the exam?", message: "If you are caught you score very low, get a strike and may be suspended. If not, you gain marks.", confirmLabel: "Cheat anyway", tone: "danger" }))) return;
     setBusy(true); setDone(null);
     const startE = st?.energy ?? null, h0 = rings.find((q) => q.activity === info.id);
@@ -86,6 +89,14 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
     e0.current = startE ?? st?.energy ?? 0; const cur = { id: "", activityId: r.activityId, hubId: info.id, endsAt: r.endsAt, startedAt: r.endsAt - (r.sec ?? ACTIVITY_SECONDS) * 1000 }; runRef.current = cur; setRun(cur); setTick(serverTime()); api.current?.setPose(r.anim, r.activityId);
     if (r.paid) game.refresh();
   };
+  // The activities panel walked the character here: start the plain activities at once (the person already pressed "walk there" knowing the price).
+  // Anything that needs a choice (a course, the exam) or a confirmation (risky) waits for the person at the ring.
+  const autoed = useRef(null);
+  useEffect(() => {
+    if (!open?.auto || autoed.current === open || !st || !info || run || busy || info.blocked) return;
+    autoed.current = open; if (info.kind !== "stats" && info.kind !== "hustle_safe") return;
+    begin();
+  }, [open, st, info, run, busy]); // eslint-disable-line react-hooks/exhaustive-deps
   const cancel = async () => { await call("/api/activity", { op: "cancel" }); stop("You stopped. A fee already paid is not refunded."); refresh(); };
 
   const sec = run ? Math.max(0, Math.ceil((run.endsAt - tick) / 1000)) : 0, total = run ? Math.max(1, Math.round((run.endsAt - run.startedAt) / 1000)) : 1;
@@ -98,7 +109,7 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
         <div className="bi3-act" role="dialog" aria-label={open.label}>
           <div className="bi3-act-h">
             <button type="button" className="bi3-act-tg" aria-expanded={!fold} onClick={() => setFold((f) => !f)} data-sound="none">
-              <Icon name={info?.icon ?? "sparkle"} size={22} weight="fill" /><b>{open.label}</b><span className="bi3-chev" aria-hidden="true"><Icon name="down" size={16} /></span>
+              <Icon name={info?.icon ?? "sparkle"} size={22} weight="fill" /><b>{open.label}</b>{info?.kind === "hustle_risky" && <i className="bp-risky">RISKY</i>}<span className="bi3-chev" aria-hidden="true"><Icon name="down" size={16} /></span>
             </button>
             <button type="button" className="bi3-x" aria-label="Close" onClick={onClose} data-sound="none"><Icon name="close" size={18} /></button>
             {run && <i className="bi3-act-bar" style={{ width: `${Math.min(100, (1 - sec / total) * 100)}%` }} />}
@@ -107,6 +118,7 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
           {!st ? <p className="mut">Checking…</p> : !info ? <p className="mut">That is not available right now.</p> : (
             <>
               <p className="bi3-act-sub">{info.sub}</p>
+              {info.kind === "hustle_risky" && <p className="bi3-act-why" role="note"><i className="bp-risky">RISKY</i> You may be caught: cash is seized and you serve time in Floor O (N-QRS Custody).</p>}
               {run ? (
                 <>
                   <div className="bi3-prog" aria-label="Progress"><i style={{ width: `${Math.min(100, (1 - sec / total) * 100)}%` }} /></div>

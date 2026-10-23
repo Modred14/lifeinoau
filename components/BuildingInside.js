@@ -16,6 +16,7 @@ import { confirmAction } from "@/lib/confirm";
 import { toast } from "@/lib/toast";
 import LectureFight, { ResultCard } from "./LectureFight";
 import ActivityLayer from "./ActivityLayer";
+import BuildingPanel from "./BuildingPanel";
 import ClubLayer from "./ClubLayer";
 import { isClub, clubStatus, HOURS_LABEL } from "@/lib/clubs.js";
 import { ICON_OF } from "@/lib3d/landmarks.js";
@@ -119,6 +120,11 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
     pendingOpen.current = ring;
   }, [focus, sceneReady, rings]);
   useEffect(() => { if (pendingOpen.current && near && near.activity === pendingOpen.current.activity) { setOpen(pendingOpen.current); pendingOpen.current = null; } }, [near]);
+  // The Building Activities Panel (components/BuildingPanel.js) walks the character to a ring with the scene's own walkTo, then calls onArrive: the ring's panel
+  // opens through the same pendingOpen path as "Go and start" on the map, so it only opens once the character really stands at the ring.
+  const [actState, setActState] = useState(null), [runHub, setRunHub] = useState(null), [arrived, setArrived] = useState(0), actCtl = useRef(null);
+  const onArrive = (ring, opts = {}) => { pendingOpen.current = { ...ring, ...opts }; setArrived((n) => n + 1); };
+  useEffect(() => { const p = pendingOpen.current; if (p && near && near.activity === p.activity) { setOpen(p); pendingOpen.current = null; } }, [arrived]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (open && !(near && near.activity === open.activity)) setOpen(null); }, [near, open]); // walking away from a ring closes its panel
   // the bottom bar stays on screen in here: its Map tab steps you out to the map (a prisoner in a cell, or a lecture fight in progress, stays put)
   useEffect(() => { const h = () => { if (cell || fight || incident || after) return; setOpen(null); setInfo(false); onLeave(); }; window.addEventListener("oau:nav-map", h); return () => window.removeEventListener("oau:nav-map", h); }, [onLeave, cell, fight, incident, after]);
@@ -188,7 +194,8 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
             <button type="button" className="bi3-btn" aria-label="About this place" onClick={() => setInfo(true)} data-sound="none"><Icon name="users" size={18} /></button>
           </div>
           {near && !open && <button type="button" className={`bi3-use${near.activity ? " act" : ""}`} onClick={() => api.current?.use()} data-sound="none"><Icon name={near.activity ? "timer" : "sparkle"} size={18} weight="fill" /> {near.label} <kbd>F</kbd></button>}
-          <ActivityLayer api={api} rings={rings} open={open} ready onClose={() => setOpen(null)} onLeave={onLeave} />
+          <ActivityLayer api={api} rings={rings} open={open} ready onClose={() => setOpen(null)} onLeave={onLeave} onState={setActState} onRun={setRunHub} controlRef={actCtl} />
+          <BuildingPanel place={place} rings={rings} state={actState} api={api} ready={sceneReady} runHubId={runHub} ringOpen={open} character={gs?.character} jailed={isJailed(gs?.character ?? {}, serverTime())} balanceKobo={gs?.balanceKobo ?? null} onArrive={onArrive} onReload={() => { setActState(null); actCtl.current?.refresh(); }} />
           {isClub(place.id) && <ClubLayer place={place} api={api} ready={sceneReady} selfName={selfName} people={people ?? []} onLeave={onLeave} />}
           {banner}
           <p className="bi3-help">{cell ? "Walk around your cell with WASD or the stick · drag to look · V changes view · open the phone for messages, bank and games" : "Walk with WASD or the stick · Shift to run · drag to look · V changes view · walk out of the door to leave"}</p>

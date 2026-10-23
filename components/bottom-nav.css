@@ -13,6 +13,8 @@
   --nav-gap: 16px; /* between the bar and the bottom edge (the device's own inset comes on top) */
   --nav-bar-h: 72px; /* 58px buttons + 2 x 6px padding + 2px border */
   --nav-band: calc(var(--nav-gap) + var(--nav-bar-h));
+  --bp-bg: rgba(13, 19, 33, 0.94); /* the one surface the activities panel and the bar share (components/building-panel.css) */
+  --bp-line: rgba(255, 255, 255, 0.12);
 }
 /* a phone held sideways has little height to give: the bar gets slimmer */
 @media (max-height: 480px) {
@@ -68,3 +70,13 @@ body[data-nav="on"] .th-pre-scrim { padding-bottom: calc(12px + var(--safe-b)); 
 body[data-nav="on"] .sx { padding-bottom: var(--safe-b); }
 body[data-nav="on"] .sx-bar-fixed { bottom: var(--safe-b); padding-bottom: 12px; }
 body[data-nav="on"] .sx-toast { bottom: calc(20px + var(--safe-b)); }
+
+/* ---- docked: the building activities panel sits right above the bar and the two are ONE surface ----
+   While <body data-dock="on"> the bar stops floating: it goes flush with the bottom edge, takes the panel's width and background, keeps only the
+   side borders, and draws no top edge (the panel draws the single top border). The device's bottom inset becomes the bar's own padding, and the
+   gap that the floating bar used to leave is no longer part of the band the other layers must clear. */
+body[data-dock="on"] { --nav-gap: 0px; --nav-band: var(--nav-bar-h); }
+body[data-dock="on"] .nav {
+  bottom: 0; width: min(560px, 100%); box-sizing: border-box; padding-bottom: calc(6px + var(--safe-b));
+  background: var(--bp-bg); border: 0 solid var(--bp-line); border-width: 0 1px; border-radius: 0; box-shadow: none;
+}
