@@ -2,7 +2,7 @@
 // One trip across the campus, in 3D. It takes over the map's camera, then runs the whole story:
 //   keke / bus / a car with a driver:  the vehicle is sent to the kerb nearest you, you WALK to its right-hand door round whatever is in the way, step in, it drives the
 //                                      road route at its own speed (nothing is timed: the journey takes distance / speed), you step out at the kerb and walk to the door.
-//   trek / your own car:               you steer (stick, keys or buttons); a mini map shows the way; your car stays on the road; a building door waits for an explicit tap.
+//   trek / your own car:               you steer (stick, keys or buttons); a mini map shows the way; your car stays on the road; when you reach the building you go in.
 // What happens is decided by lib3d/tripflow.js (the state machine) on top of lib3d/tripplan.js (the plan and the estimate), lib3d/walker.js (people), lib3d/trafficsim.js
 // (vehicles) and lib3d/collide.js (what is solid). This file draws it: the camera, the avatar, the vehicle models, the guide ribbon, the door, the mini map.
 // The fare is settled with the server in the background the moment the ride stops (o.onArrive); you do not wait for it to step out and walk. Everything you do is local and immediate;
@@ -190,7 +190,7 @@ export async function startTrip(env, o) {
     const inVeh = inVehNow(), v = flow.vehicle, t = inVeh && v ? v : P, sp = Math.abs(F.speed ?? 0);
     const headYaw = inVeh && v ? yawOf2(v.hx, v.hz) + Math.PI : camYaw; // camera yaw: the direction from the target back to the camera
     if (inVeh) { const d = angDiff(camYaw, headYaw); camYaw += d * (1 - Math.exp(-dt * (F.phase === "ride" ? 5 : 3))); }
-    else if (["alight", "door", "doorstep", "opening", "enter", "intro", "board", "approach"].includes(F.phase) && WK.mode !== "manual" && !pointer.active) { const want = yawOf2(P.hx, P.hz) + Math.PI, d = angDiff(camYaw, want); camYaw += d * (1 - Math.exp(-dt * 1.6)); }
+    else if (["alight", "door", "enter", "intro", "board", "approach"].includes(F.phase) && WK.mode !== "manual" && !pointer.active) { const want = yawOf2(P.hx, P.hz) + Math.PI, d = angDiff(camYaw, want); camYaw += d * (1 - Math.exp(-dt * 1.6)); }
     // in a vehicle, looking round springs back to the road ahead; on foot the view stays exactly where the player put it (it never swings by itself while they steer)
     if (inVeh && !pointer.active && time - userAt > 1.2) { userYaw *= Math.exp(-dt * 2.2); userPitch *= Math.exp(-dt * 1.4); }
     if (!inVeh) userYaw = 0;
@@ -212,8 +212,7 @@ export async function startTrip(env, o) {
     const inp = read(), viewYaw = camYaw + (inVehNow() ? userYaw : 0), f = { x: Math.sin(viewYaw + Math.PI), z: Math.cos(viewYaw + Math.PI) }, // the stick is relative to the view the player SEES
        r = { x: -f.z, z: f.x }, ax = (inp.fwd - inp.back) * f.x + inp.right * r.x, az = (inp.fwd - inp.back) * f.z + inp.right * r.z, m = Math.min(1, Math.hypot(ax, az));
     traffic.update(dt);
-    const interact = !!input.interact; if (interact) input.interact = false;
-    flow.update(dt, { dx: ax, dz: az, mag: m, run: inp.run, gas: inp.gas, brake: inp.brake, steer: inp.steer, interact });
+    flow.update(dt, { dx: ax, dz: az, mag: m, run: inp.run, gas: inp.gas, brake: inp.brake, steer: inp.steer });
     lastPhase = F.phase;
     drawPerson(dt); drawVehicle(dt); if (door) door.open(F.doorK);
     beam.material.opacity = 0.2 + Math.sin(time * 3) * 0.08; ring.scale.setScalar(1 + Math.sin(time * 3) * 0.08); hornT = Math.max(0, hornT - dt);
@@ -224,7 +223,7 @@ export async function startTrip(env, o) {
     if (gd.show) { rb.mesh.visible = true; if (gd.rev !== rbRev || time - rbAt > (gd.kind === "drive" ? 0.12 : 0.2)) { rbRev = gd.rev; rbAt = time; rb.set(gd.pts, gd.s, gd.kind === "walk" ? 1.3 : 2.4, gd.kind === "walk" ? "#4aa8ff" : "#2fe38a"); } rb.tex.offset.y -= dt * 1.6; } else rb.mesh.visible = false;
     const live = { x: pos.x, z: pos.z, hx: pos.hx, hz: pos.hz, route: { pts: gd.pts, len: gd.len }, mode: gd.kind === "walk" ? "trek" : "drive", dest: { x: B.front.x, z: B.front.z } }, mini = o.miniCanvas?.(), prev = o.previewCanvas?.();
     if (mini) drawMini(mini, base, live); if (prev) drawPreview(prev, base, live);
-    if (time - lastState > 0.1) { lastState = time; o.onState?.({ phase: F.phase, mode, auto, eta: F.eta, left: F.eta, remain: Math.round(flow.remainMetres()), speed: Math.round(Math.abs(F.speed ?? 0) * 3.6), canHorn: mode === "car" && F.phase === "drive", canArrive: !!F.canArrive, canOpenDoor: F.phase === "door" && !!B.building, estimate: plan.secs, notice: F.notice, routeKind: gd.kind, routeLen: Math.round(gd.len), settling: F.pay === "pending" && ["door", "doorstep", "opening", "enter"].includes(F.phase), walking: F.phase === "approach" && WK.mode, autoWalk: WK.mode === "auto", parts: plan.parts }); }
+    if (time - lastState > 0.1) { lastState = time; o.onState?.({ phase: F.phase, mode, auto, eta: F.eta, left: F.eta, remain: Math.round(flow.remainMetres()), speed: Math.round(Math.abs(F.speed ?? 0) * 3.6), canHorn: mode === "car" && F.phase === "drive", estimate: plan.secs, notice: F.notice, routeKind: gd.kind, routeLen: Math.round(gd.len), settling: F.pay === "pending" && ["door", "enter"].includes(F.phase), walking: F.phase === "approach" && WK.mode, autoWalk: WK.mode === "auto", parts: plan.parts }); }
   });
 
   const api = {

@@ -9,7 +9,7 @@ import { fmtDuration } from "@/lib/travel.js";
 import "./travel.css";
 
 const TEXT = {
-  intro: "Getting ready…", approach: "Walking to your ride", board: "Getting in…", ride: "On the way", paying: "Paying the fare…", alight: "Getting out…", walk: "Walking to the door", door: "At the entrance", doorstep: "Making room for the door", opening: "Opening the door…", enter: "Going in…", inside: "Going in…",
+  intro: "Getting ready…", approach: "Walking to your ride", board: "Getting in…", ride: "On the way", paying: "Paying the fare…", alight: "Getting out…", walk: "Walking to the door", door: "Going in…", enter: "Going in…", inside: "Going in…",
 };
 
 /** Stops the browser scrolling, zooming, selecting or opening a menu under a finger that is steering. */
@@ -33,13 +33,13 @@ export function Hold({ className, label, onDown, onUp, children }) {
 }
 
 export default function TripHud({ trip, placeName, st, input, miniRef, previewRef, onCancel }) {
-  const [preview, setPreview] = useState(false), phase = st?.phase ?? "intro", drive = trip.mode === "car" && !trip.driver, steering = phase === "drive", walking = ["trek", "approach", "walk", "doorstep"].includes(phase);
+  const [preview, setPreview] = useState(false), phase = st?.phase ?? "intro", drive = trip.mode === "car" && !trip.driver, steering = phase === "drive", walking = ["trek", "approach", "walk"].includes(phase);
   useEffect(() => { if (!preview) return; const k = (e) => e.key === "Escape" && setPreview(false); document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [preview]);
   const m = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + " km" : n + " m");
   const vname = trip.mode === "bus" ? "bus" : trip.mode === "keke" ? "keke" : "car";
   const line = st?.settling ? "Confirming your fare…" : steering ? `Drive to ${placeName}` : phase === "trek" ? `Walk to ${placeName}` : phase === "approach" ? `${st?.autoWalk ? "Walking" : "Walk"} to the ${vname}` : phase === "ride" ? `${vname[0].toUpperCase() + vname.slice(1)} to ${placeName}` : TEXT[phase] ?? "";
   // how long is left: the same arithmetic as the estimate on the travel sheet, from where everything is right now
-  const eta = st?.eta != null && !["door", "doorstep", "opening", "inside"].includes(phase) ? fmtDuration(st.eta) : "";
+  const eta = st?.eta != null && phase !== "inside" ? fmtDuration(st.eta) : "";
   return (
     <div className="th" data-phase={phase} style={{ WebkitTouchCallout: "none", userSelect: "none", WebkitUserSelect: "none" }}>
       <button type="button" className="th-cancel ghost" onClick={onCancel} data-sound="none"><Icon name="close" size={16} /> Cancel</button>
@@ -51,8 +51,6 @@ export default function TripHud({ trip, placeName, st, input, miniRef, previewRe
         <b>{line}</b>
         <span className="num">{eta ? `${eta} left` : ""}{st && ["trek", "drive", "ride", "walk"].includes(phase) ? ` · ${m(st.remain)}` : ""}{st && ["drive", "ride"].includes(phase) ? ` · ${st.speed} km/h` : ""}</span>
       </div>
-      {st?.canOpenDoor && phase === "door" && <button type="button" className="th-open-door" onClick={() => { input.interact = true; playSound("tap"); }}><Icon name="door" size={19} /> Open Door</button>}
-      {st?.canArrive && steering && <button type="button" className="th-open-door" onClick={() => { input.interact = true; playSound("tap"); }}>Park &amp; walk</button>}
       {walking && (<><Stick input={input} /><Hold className="th-btn th-run" label="Run" onDown={() => (input.run = true)} onUp={() => (input.run = false)}>RUN</Hold></>)}
       {steering && (
         <>
