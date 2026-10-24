@@ -303,6 +303,7 @@ function Inbox({ onHome, onOpen }) {
         </button>
       </header>
       {late && <Banner kind={late} />}
+      {/* Temporarily hidden while browser push delivery is being verified.
       <section className="ms-push" aria-label="Browser message notifications">
         <div>
           <b>Browser notifications</b>
@@ -317,6 +318,7 @@ function Inbox({ onHome, onOpen }) {
           </button>
         )}
       </section>
+      */}
       <div className="ms-search">
         <Icon name="search" size={18} />
         <input
