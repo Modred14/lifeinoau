@@ -20,6 +20,7 @@ function match(row, where = {}) {
     if (k === "AND") return c.every((w) => match(row, w));
     if (k === "NOT") return !match(row, c);
     if (k.includes("_") && isObj(c) && !(k in row)) return match(row, c); // compound unique key
+    if (k === "user" && row.user === undefined) return true; // a filter on the account (e.g. not archived): the fake rows carry no account, so it constrains nothing
     return cond(row[k], c);
   });
 }

@@ -12,6 +12,7 @@ import { pathToFileURL } from "node:url";
 import { Server } from "socket.io";
 import { verifyChatPass, bodyIsSigned } from "../lib/chatAuth.js";
 import * as core from "../lib/chatCore.js";
+import { gateOf } from "../lib/accountGate.js";
 import { sendChatPush } from "../lib/chatPush.js";
 
 const GRACE_MS = 4000; // a reload or a network blip reconnects within this time, so nobody flickers to "offline"
@@ -62,9 +63,17 @@ export function createRealtime({ db, secret, origins = [], log = console, graceM
     allowRequest: (req, cb) => cb(null, allow(req.headers.origin)),
   });
 
+  // A chat pass lasts two hours, so a suspended or closed account is also refused here (one small query per connection, not per message).
+  // If that query itself fails the player is let in: the website's own routes still refuse them.
+  async function accountBlocked(characterId) {
+    try {
+      const rows = await db.$queryRaw`SELECT u."status", u."statusUntil" FROM "Character" c JOIN "User" u ON u."id" = c."userId" WHERE c."id" = ${characterId}`;
+      return rows?.[0] ? !gateOf(rows[0]).ok : false;
+    } catch { return false; }
+  }
   io.use(async (socket, next) => {
-    try { socket.data.me = await verifyChatPass(secret, socket.handshake.auth?.token); next(); }
-    catch { next(new Error("auth")); }
+    try { socket.data.me = await verifyChatPass(secret, socket.handshake.auth?.token); } catch { return next(new Error("auth")); }
+    next(await accountBlocked(socket.data.me.id) ? new Error("auth") : undefined);
   });
 
   const room = (id) => "u:" + id; // everything addressed to one player (all their devices)
@@ -237,6 +246,11 @@ export function createRealtime({ db, secret, origins = [], log = console, graceM
         }
         const nm = await core.namesOf(db, [e.blockedId]);
         io.to(room(e.blockerId)).emit("block", { name: nm.get(e.blockedId), on }); // the blocker's other devices
+      } else if (e?.type === "online") { // the admin dashboard asks who has an open socket right now (exact: a player with no socket is not in `live`)
+        return done(200, { ok: true, ids: [...live.keys()] });
+      } else if (e?.type === "kick") { // an administrator suspended or closed this account: drop every connection it has
+        if (typeof e.characterId !== "string") return done(400, { error: "bad event" });
+        io.in(room(e.characterId)).disconnectSockets(true);
       } else return done(400, { error: "unknown event" });
       done(200, { ok: true });
     } catch (err) { log.error?.("[realtime] internal", err); done(500); }

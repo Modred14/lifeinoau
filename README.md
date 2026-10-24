@@ -5,6 +5,8 @@ OAU Life now includes the Campuslife world, focused on Obafemi Awolowo Universit
 
 `/play` opens the live campus. `/home` keeps the original room and daily actions, `/map` keeps the original OAU map, and the **OAU apps** button opens the existing phone apps. The campus phone adds its timetable, registration, handouts, shops, events, union, errands and travel tools. `/rider` is the restricted errands board.
 
+On `/map`, tap a floating destination label to start a collision-aware walking route. Building entrances are resolved from their footprints and road access; the avatar stops outside a closed door until **Open Door** is pressed. Driving remains manual; when you stop near the planned destination, choose **Park & walk** to continue on foot.
+
 ## Run locally
 
 Use Node.js 22.9 or newer and PostgreSQL. From a normal clone:
@@ -54,6 +56,24 @@ npm run staff -w @campuslife/server -- grant rider "OAU character name"
 npm run staff -w @campuslife/server -- list
 npm run staff -w @campuslife/server -- revoke rider "OAU character name"
 ```
+
+## Administrator console
+
+Open `/admin` while signed in as an administrator (anyone else gets a plain 404). Grant the role from the server, never from the website:
+
+```sh
+node scripts/make-admin.js you@example.com
+```
+
+Pages: Overview (real analytics with their definitions), Online players (live), All players (every account since launch, with CSV export), a player file with every action, Forbes OAU, Economy, Moderation, Game systems, Announcements and the Audit log.
+
+- **Money** is exact: amounts are typed as text, handled as BigInt kobo and never rounded. There is no cap on administrative grants other than the database's own bigint limit (₦92,233,720,368,547,758.07). Every change is one transaction with its audit row, safe to retry, and records admin, player, amount, reason, time, previous and new balance.
+- **Delete** archives an account (`User.status = DELETED`): it can never log in and disappears from search, maps, chat and leaderboards, but the ledger and character are kept so money still adds up. It can be restored. **Suspend** is timed or until restored, and takes effect on the next request and on the chat socket.
+- **Presence** (online, idle, disconnected, offline) comes from heartbeats and the realtime server, never from "recently active". Set `REALTIME_URL` so Idle can be detected.
+- **History**: per-account login and activity tracking starts with the migration `20261022130000_admin_console`. Older accounts show the newest of the game's earlier signals (presence, map heartbeats, action log); accounts erased by hand before this cannot be listed, and none are invented.
+- Game rules (prices, pay, cooldowns) are constants in code, so that page is read only. Faculty difficulty and the SUG calendar are live-editable.
+
+Tests: `node tests/admin-console.test.mjs` (no database) runs with `npm test`. `tests/pg/admin/run.sh` runs the database suites against a throwaway Postgres (see the header of that file).
 
 ## Checks
 

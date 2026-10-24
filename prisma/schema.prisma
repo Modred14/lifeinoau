@@ -34,7 +34,21 @@ model User {
   adultAckAt   DateTime   @default(now())
   role         String     @default("PLAYER") // PLAYER | ADMIN
   createdAt    DateTime   @default(now())
+  // Account standing, set only by an administrator (lib/adminModeration.js) and enforced on every request (lib/accountGate.js).
+  //   ACTIVE | SUSPENDED (until statusUntil, or until restored when that is empty) | DELETED (archived: the record, character and ledger are kept)
+  status       String     @default("ACTIVE")
+  statusReason String?
+  statusUntil  DateTime?
+  statusAt     DateTime?
+  statusBy     String? // the administrator who set it
+  lastLoginAt  DateTime?
+  lastActiveAt DateTime? // touched by any signed-in request, at most once every two minutes (lib/accountGate.js)
+  loginCount   Int        @default(0)
   character    Character?
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([lastActiveAt])
 }
 
 model Faculty {
@@ -108,7 +122,7 @@ model Character {
   sessionStartWeek   Int            @default(1) // game week the current level began; sessions are 12 weeks
   failedSessions     Int            @default(0) // consecutive failed sessions (2 = academic withdrawal)
   graduated          Boolean        @default(false)
-  hideFromForbes     Boolean        @default(false) // left off the FORBES OAU board (set from the database by the owner; there is no screen for it)
+  hideFromForbes     Boolean        @default(false) // left off the FORBES OAU board (set from the admin dashboard, see ForbesExclusion)
   graduatedWeek      Int?
   finalCgpaX100      Int?
   classification     String?
@@ -202,7 +216,24 @@ model AuditLog {
   action    String
   target    String?
   detail    Json?
+  status    String   @default("OK") // OK | FAILED (a refused or failed administrator operation is kept so it can be investigated)
+  requestId String? // the request id of the operation; a partial unique index (migration) makes a repeated OK request harmless
+  error     String? // why a FAILED operation failed
   createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([target, createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+}
+
+// A player kept off the FORBES OAU board by an administrator. Character.hideFromForbes is the flag the ranking reads; this row says who, when and why,
+// and nothing but an administrator ever removes it, so a ranking refresh can never bring the player back.
+model ForbesExclusion {
+  characterId String   @id
+  reason      String
+  byAdminId   String
+  createdAt   DateTime @default(now())
 }
 
 // Voucher pools are funded once from WORLD when activated. Claims consume the pool and credit a player in one transaction.

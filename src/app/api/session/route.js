@@ -5,6 +5,7 @@
 import { PrismaClient } from "@prisma/client";
 import { readSession, startSession, endSession } from "@/lib/auth";
 import { allowed, tooMany } from "@/lib/ratelimit";
+import { gateOf } from "@/lib/accountGate";
 export const dynamic = "force-dynamic"; // never cache API responses
 const db = (globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } }));
 export async function GET() {
@@ -15,12 +16,17 @@ export async function GET() {
       return tooMany();
     const u = await db.user.findUnique({
       where: { id: s.userId },
-      select: { id: true, character: { select: { name: true } } },
+      select: { id: true, status: true, statusUntil: true, statusReason: true, character: { select: { name: true } } },
     });
     if (!u) {
       await endSession();
       return Response.json({ authenticated: false });
     } // cookie for a deleted account
+    const gate = gateOf(u);
+    if (!gate.ok) {
+      await endSession(); // suspended or closed by an administrator: the browser is signed out and told why
+      return Response.json({ authenticated: false, blocked: gate.code, message: gate.message });
+    }
     if (s.stale) await startSession(u.id, s.remember);
     return Response.json({
       authenticated: true,

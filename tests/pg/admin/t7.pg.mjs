@@ -1,0 +1,42 @@
+import { makeDb } from "./db.mjs";
+import { dashboard } from "../../../lib/adminOverview.js";
+import * as AU from "../../../lib/adminAudit.js";
+import * as N from "../../../lib/adminNotify.js";
+const db = makeDb(); let pass = 0, fail = 0;
+const ok = (c, m) => { c ? pass++ : (fail++, console.log("  FAIL:", m)); };
+const err = async (fn, re, m) => { try { await fn(); ok(false, m + " (no error)"); } catch (e) { ok(re.test(e.message), m + " -> " + e.message); } };
+const A = "u0001";
+const d = await dashboard(db, {});
+console.log("  players:", JSON.stringify(d.players)); console.log("  online:", JSON.stringify(d.online), "| health:", JSON.stringify({ db: d.health.database, ledger: d.health.ledger.ok }));
+ok(d.players.accounts === 40 && d.players.withCharacter === 36 && d.players.archived === 1 && d.players.suspended === 1, "account counts");
+ok(d.registrations.length === 30 && d.registrations.reduce((s, x) => s + x.n, 0) === d.registrations.reduce((s, x) => s + x.n, 0) && d.activeByDay.length === 30, "30-day series are zero-filled");
+ok(d.players.dau >= 1 && d.players.wau >= d.players.dau && d.players.mau >= d.players.wau, "DAU <= WAU <= MAU: " + [d.players.dau, d.players.wau, d.players.mau]);
+ok(d.health.ledger.ok === true && d.health.database.ok, "ledger integrity ok");
+ok(d.economy.distribution.length === 9 && d.forbes.length === 5, "economy + forbes present");
+ok(d.recentAdmin.length >= 1 && d.recentTransactions.length >= 1, "recent activity present");
+// make the ledger lie and check it is detected
+await db.$executeRawUnsafe(`UPDATE "Account" SET balance = balance + 1 WHERE id = 'ac0010'`);
+const bad = await dashboard(db, {}); ok(bad.health.ledger.ok === false && bad.health.ledger.mismatches[0].id === "ac0010", "a corrupted balance is detected");
+await db.$executeRawUnsafe(`UPDATE "Account" SET balance = balance - 1 WHERE id = 'ac0010'`);
+// audit
+await db.auditLog.createMany({ data: [{ actorId: A, action: "MONEY:credit", target: "c0002", detail: { reason: "needle-in-haystack" }, status: "OK", requestId: "au-test-0001" }, { actorId: A, action: "MONEY:debit", target: "c0003", detail: {}, status: "FAILED", error: "Player only has ₦5", requestId: "au-test-0002" }] });
+let r = await AU.auditLog(db, {}); ok(r.total >= 4 && r.rows[0].actor, "audit list: " + r.total);
+r = await AU.auditLog(db, { status: "FAILED" }); ok(r.rows.every((x) => x.status === "FAILED") && r.rows.some((x) => /only has/.test(x.error)), "failed filter");
+r = await AU.auditLog(db, { q: "needle" }); ok(r.total === 1, "text search inside details");
+r = await AU.auditLog(db, { target: "Player2" }); ok(r.total >= 1 && r.rows[0].targetName === "Player2", "search by target name");
+r = await AU.auditLog(db, { actor: "Player1", action: "MONEY" }); ok(r.total >= 2, "actor + action prefix: " + r.total);
+r = await AU.auditLog(db, { from: "2999-01-01" }); ok(r.total === 0, "date filter");
+const ent = await AU.auditEntry(db, r.rows[0]?.id ?? (await AU.auditLog(db, {})).rows[0].id); ok(ent.entry.action, "entry detail");
+const csvText = await AU.auditExport(db, A, { status: "FAILED" }); ok(csvText.split("\r\n")[0].startsWith("Id,Time") && /only has/.test(csvText), "audit CSV");
+ok((await db.auditLog.count({ where: { action: "EXPORT_AUDIT" } })) === 1, "the export itself is logged");
+// notices
+const pv = await N.noticePreview(db, { audience: { type: "class", class: "NEPO" } }); ok(pv.count > 5 && pv.confirmText === `SEND ${pv.count}`, "preview: " + pv.count);
+await err(() => N.sendNotice(db, A, { audience: { type: "class", class: "NEPO" }, message: "Hello NEPOs", requestId: "nt-000001", expectedCount: pv.count }), /Type SEND/, "confirmation required above 5");
+let s = await N.sendNotice(db, A, { audience: { type: "class", class: "NEPO" }, message: "Hello NEPOs", kind: "ANNOUNCEMENT", requestId: "nt-000001", confirm: `SEND ${pv.count}`, expectedCount: pv.count });
+ok(s.done && (await db.notification.count({ where: { kind: "ANNOUNCEMENT" } })) === pv.count, "delivered to " + pv.count);
+s = await N.sendNotice(db, A, { audience: { type: "class", class: "NEPO" }, message: "Hello NEPOs", kind: "ANNOUNCEMENT", requestId: "nt-000001", confirm: `SEND ${pv.count}`, expectedCount: pv.count });
+ok(s.repeated && (await db.notification.count({ where: { kind: "ANNOUNCEMENT" } })) === pv.count, "resending the same request adds nothing");
+s = await N.sendNotice(db, A, { audience: { type: "names", names: "Player2" }, message: "Just you", requestId: "nt-000002", expectedCount: 1 }); ok(s.done, "targeted notice needs no typed confirmation for one player");
+const noted = await db.notification.findFirst({ where: { characterId: "c0002", body: "Just you" } }); ok(noted?.kind === "ADMIN", "targeted notice stored");
+const h = await N.noticeHistory(db, {}); ok(h.total === 2 && h.rows[0].message, "notice history: " + h.total);
+console.log(`\n${pass} passed, ${fail} failed`); await db.end(); process.exit(fail ? 1 : 0);

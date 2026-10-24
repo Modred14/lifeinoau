@@ -10,7 +10,7 @@
 //   timing:     a driven ride lasts a set time for its vehicle that grows with the road distance (RIDE_SECONDS in lib/travel.js: car with a driver 6-9 s, bus 8-10 s,
 //               keke 10-15 s); rideProfile() plays the same speed-up / slow-for-bends / brake-to-stop motion over exactly that time.
 //   walking to the vehicle: never more than APPROACH_MAX_SECONDS (a longer walk is played at a faster pace); the vehicle is sent so that it arrives when you do.
-// The only fixed times left are the animations at each end (INTRO_SECONDS, BOARD_SECONDS, ALIGHT_SECONDS, DOOR_SECONDS).
+// The displayed door estimate includes its animation (DOOR_SECONDS), not the player's unbounded time to choose Open Door.
 import { destinationOf } from "./roadnet.js";
 import { KINDS, rideTime, rideProfile, doorPoint } from "./trafficsim.js";
 import { WALK_SPEED, VEHICLE, OWN_CAR, BOARD_SECONDS, ALIGHT_SECONDS, INTRO_SECONDS, DOOR_SECONDS, APPROACH_MAX_SECONDS, APPROACH_GLIDE_ABOVE, approachSeconds, rideSecondsFor, rideKind } from "../lib/travel.js";

@@ -50,7 +50,8 @@ export default function Shell({ children }) {
     failing = useRef(false);
 
   // The landing page has no bars at all.
-  const bare = path === "/";
+  const admin = path === "/admin" || path.startsWith("/admin/"); // the administrator console has its own frame: no game bars, no game state polling
+  const bare = path === "/" || admin;
   // Screens that fill the window instead of sitting inside the padded page wrapper.
   const full = path === "/map" || path === "/home";
   // On /home the bars are hidden only while the game loads or the player is creating a character.
@@ -178,6 +179,7 @@ export default function Shell({ children }) {
     toast.info("You're logged out. See you soon.", { id: "session" });
     router.push("/");
   }
+  if (admin) return <>{children}</>;
   if (bare)
     return (
       <>

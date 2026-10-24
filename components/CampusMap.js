@@ -20,7 +20,7 @@ const labelWidth = (name, tier) => Math.min(190, name.length * (tier === 1 ? 7.4
  * panning. autoRotate is off unless asked for. Every named building carries a label above its roof;
  * labels are real buttons. They thin out with distance and never overlap, and the "Labels" button hides them all.
  */
-export default function CampusMap({ youId = null, trip = null, tripInput = null, getMini = null, getPreview = null, onTripState, onTripArrive, onTripEnter, onTripEnd, onTripNotice, interactive = true, zoomOnly = false, pins = true, autoRotate = false, selectedId = null, onSelect, billboards = null, className = "", style, view = HOME_VIEW }) {
+export default function CampusMap({ youId = null, trip = null, tripInput = null, getMini = null, getPreview = null, onTripState, onTripArrive, onTripEnter, onTripEnd, onTripNotice, onNavigate, interactive = true, zoomOnly = false, pins = true, autoRotate = false, selectedId = null, onSelect, billboards = null, className = "", style, view = HOME_VIEW }) {
   const box = useRef(null), api = useRef(null), noFly = useRef(false), sel = useRef(selectedId), cb = useRef(onSelect), [mounts, setMounts] = useState([]), [failed, setFailed] = useState(false), [labels, setLabels] = useState(true), [look, setLook] = useState(false), [hint, setHint] = useState(interactive);
   sel.current = selectedId; cb.current = onSelect;
   const tripCb = useRef({}); tripCb.current = { onTripState, onTripArrive, onTripEnter, onTripEnd, onTripNotice, getMini, getPreview, tripInput }; const tripRef = useRef(null);
@@ -36,7 +36,7 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
         stage = createStage(host, { fov: 42, far: 1800, controls: { maxPolarAngle: 1.38, minPolarAngle: interactive ? 0.08 : 0.35, minDistance: interactive ? 6 : 50, maxDistance: interactive ? 520 : 360, enablePan: interactive, enableRotate: interactive, enableZoom: canZoom, autoRotate: autoRotate && !reduce, autoRotateSpeed: 0.45, screenSpacePanning: false, zoomToCursor: interactive } });
         const light = addRealLighting(stage.scene); campus = buildRealCampus(data, placeMeta(data)); stage.scene.add(campus.root);
         // the roads get their proper shape (lanes, pavements, markings) as soon as the road graph has loaded; the map is usable before then
-        import("../lib3d/worldsvc.js").then((m) => m.loadServices(data)).then((svc) => { if (alive && campus) campus.setRoadGraph(svc.graph); }).catch((e) => console.warn("road graph unavailable, drawing the plain roads", e));
+        import("../lib3d/worldsvc.js").then((m) => m.loadServices(data)).then((svc) => { if (alive && campus) { campus.setRoadGraph(svc.graph); campus.setDoors(svc.net); } }).catch((e) => console.warn("road graph unavailable, drawing the plain roads", e));
         stage.onFrame((t, dt) => { campus.update(t, dt); light.follow(stage.controls.target); });
         const { x, z, dist, az, pol } = view; stage.controls.target.set(x, 0, z); stage.camera.position.set(x + Math.sin(az) * Math.sin(pol) * dist, Math.cos(pol) * dist, z + Math.cos(az) * Math.sin(pol) * dist); stage.controls.update();
         if (interactive) { // drag = slide the map under your hand (like any map app); right-drag or two fingers twisting still turn it. The map can't be dragged off the campus.
@@ -90,7 +90,7 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
         const { startTrip } = await import("../lib3d/travel.js"); if (dead) return;
         box.current.dataset.trip = "1";
         handle = await startTrip({ stage: a.stage, campus: a.campus, light: a.light, data: a.data }, { ...trip, input: tripCb.current.tripInput ?? {}, miniCanvas: () => tripCb.current.getMini?.() ?? null, previewCanvas: () => tripCb.current.getPreview?.() ?? null,
-          onState: (st) => tripCb.current.onTripState?.(st), onNotice: (m) => tripCb.current.onTripNotice?.(m), onArrive: () => tripCb.current.onTripArrive?.() ?? true, onEnter: () => { entered = true; tripCb.current.onTripEnter?.(); }, onEnd: end });
+          onState: (st) => tripCb.current.onTripState?.(st), onNotice: (m) => tripCb.current.onTripNotice?.(m), onArrive: () => tripCb.current.onTripArrive?.(trip.id) ?? true, onEnter: () => { entered = true; tripCb.current.onTripEnter?.(); }, onEnd: end });
         if (dead) { handle?.dispose(); return; } tripRef.current = handle;
         if (!handle) return end("error");
         // real players on the road, in the BACKGROUND: where we are goes to the server and who else is out there comes back without ever touching how the player moves (that is local and
@@ -151,7 +151,7 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
         {/* <p className="stage-credit">Map data © OpenStreetMap contributors</p> */}
       </>)}
       {mounts.map(({ id, el, L }) => createPortal(
-        <button type="button" className="bl" data-kind={L.kind} data-tier={L.tier} data-approx={L.approx ? "true" : "false"} aria-pressed={selectedId === id} aria-label={L.name + (L.approx ? " (approximate position)" : "")} onClick={() => { hold(); onSelect?.(id); }}>
+        <button type="button" className="bl" data-kind={L.kind} data-tier={L.tier} data-approx={L.approx ? "true" : "false"} aria-pressed={selectedId === id} aria-label={L.name + (L.approx ? " (approximate position)" : "") + (onNavigate ? ", walk to destination" : "")} onClick={() => { hold(); (onNavigate ?? onSelect)?.(id); }}>
           <Icon name={ICON_OF[L.kind] ?? "town"} size={L.tier === 1 ? 16 : 13} /><span>{L.name}</span></button>, el, id))}
     </div>
   );

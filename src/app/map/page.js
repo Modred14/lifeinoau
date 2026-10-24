@@ -116,18 +116,26 @@ export default function MapPage() {
   // ---- travelling ----
   // The trip starts the moment the player taps Go. The real players standing at the door are fetched alongside (handed over as a promise)
   // and drawn when the list arrives; if that request is slow or fails, the trip is not held up and the door is simply empty.
-  function begin(mode, withDriver, act = null) {
-    const dest = L; if (!dest) return; setSheet(false);
+  function begin(mode, withDriver, act = null, destination = L) {
+    const dest = destination; if (!dest) return; setSheet(false);
     if (held) return toast.error(`You are held in ${CUSTODY_NAME}. You cannot travel until your sentence ends.`);
     if (isClub(dest.id) && !clubStatus(serverTime()).open) return toast.error(closedMessage(clubOf(dest.id)), { duration: 7000 }); // the server refuses too: the clubs open 8 PM to 5 AM
     const fetchPeople = () => call("/api/travel?at=" + encodeURIComponent(dest.id)).then((r) => (r.failed ? [] : r.people ?? []));
     const people = fetchPeople();
-    setTripSt(null); input.jx = input.jy = input.steer = input.gas = input.brake = 0; input.run = false;
+    setTripSt(null); input.jx = input.jy = input.steer = input.gas = input.brake = 0; input.run = false; input.interact = false;
     setTrip({ id: crypto.randomUUID(), from: here, to: dest.id, mode, driver: withDriver, act, look: ch?.look ?? null, gender: ch?.gender ?? "M", car: ch?.activeCar || "", carColor: ch?.activeCarColor || "", people, pollPeople: fetchPeople, selfName: ch?.name ?? "", name: dest.name });
     setSel(null);
   }
-  async function pay() { // the vehicle has stopped: the fare leaves the wallet now, and you are at the new place
-    const t = tripRef.current; if (!t) return false; const fare = fareKobo(t.mode);
+  function navigateFromTag(id) {
+    const destination = find(id);
+    if (!destination || !ch || destination.id === here) { setSel(id); return; }
+    if (!destination.located) { setSel(id); return; }
+    if (held) return toast.error(`You are held in ${CUSTODY_NAME}. You cannot travel until your sentence ends.`);
+    if (isClub(destination.id) && !clubStatus(serverTime()).open) return toast.error(closedMessage(clubOf(destination.id)), { duration: 7000 });
+    begin("trek", false, null, destination);
+  }
+  async function pay(tripId) { // the vehicle has stopped: the fare leaves the wallet now, and the player is at the new place
+    const t = tripRef.current; if (!t || t.id !== tripId) return false; const fare = fareKobo(t.mode);
     const res = await run({ key: "trip:" + t.id, sensitive: fare > 0n, pending: "Paying the fare…", ok: fare > 0n ? `Paid ${naira(fare.toString())} · ${MODE_INFO[t.mode].name}` : undefined, sound: "coin", request: () => call("/api/travel", { to: t.to, mode: t.mode, requestId: crypto.randomUUID() }),
       effects: [{ store: game, patch: (x) => ({ ...cash(-fare)(x), character: { ...x.character, placeId: t.to } }) }] });
     return !res.failed;
@@ -143,6 +151,7 @@ export default function MapPage() {
         <CampusMap
           selectedId={sel}
           onSelect={(id) => { if (!trip) setSel(id); }}
+          onNavigate={navigateFromTag}
           billboards={bb?.boards ?? null}
           youId={here}
           trip={trip}
