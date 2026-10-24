@@ -21,7 +21,7 @@ const needsCourse = (k) => k === "course_attend" || k === "course_study" || k ==
 /** `api` is a ref to the 3D scene, `rings` the activity rings drawn in it, `open` the ring whose panel is showing, `onClose` closes it, `onLeave` leaves the building. */
 export default function ActivityLayer({ api, rings, open, onClose, onLeave, ready, onState, onRun, controlRef }) {
   const [st, setSt] = useState(null), [run, setRun] = useState(null), [busy, setBusy] = useState(false), [course, setCourse] = useState(""), [tick, setTick] = useState(() => serverTime()), [done, setDone] = useState(null), [fold, setFold] = useState(false); // the panel opens expanded; the person can fold it with the arrow. (was: opens folded; the person unfolds it
-  const runRef = useRef(null), finishing = useRef(false), e0 = useRef(0); // e0: energy when the run began (for the rising bar while sleeping)
+  const runRef = useRef(null), finishing = useRef(false), starting = useRef(false), e0 = useRef(0); // e0: energy when the run began (for the rising bar while sleeping)
   const pos = () => { const s = api.current?.state; return s ? { x: s.x, z: s.z, floor: s.floor } : null; };
   const ring = (id) => rings.find((r) => r.activity === id);
 
@@ -49,7 +49,8 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
       const p = pos(), r = await call("/api/activity", { op: "finish", requestId: crypto.randomUUID(), ...p });
       if (r.failed) { if (r.status === 409 && /not finished yet/i.test(r.error ?? "")) { finishing.current = false; return; } notifyError(r); stop(); refresh(); return; }
       stop();
-      if (r.cancelled) toast.info(r.message ?? "It was cancelled.");
+      if (r.duplicate) { toast.info("That one was already counted."); game.refresh(); }
+      else if (r.cancelled) toast.info(r.message ?? "It was cancelled.");
       else if (r.caught) { toast.error(`N-QRS HAS CAUGHT YOU. They seized ${naira(r.seizedKobo)} and you are in Floor O (N-QRS Custody). Bail starts at ${naira(r.billKobo)}.${r.expelled ? " You have been expelled." : r.suspended ? " You have been suspended." : ""}`, { duration: 9000 }); game.refresh(); onLeave?.(); return; }
       else {
         const bits = [...(r.earnedKobo && r.earnedKobo !== "0" ? [`+${naira(r.earnedKobo)}`] : []), ...chips(r.applied), ...(r.score != null ? [r.outOf ? `${r.score}/${r.outOf}` : `score ${r.score}, grade point ${r.gradePoint}`] : [])];
@@ -76,18 +77,23 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
   useEffect(() => { setFold(false); }, [open?.activity]); // each ring's panel starts expanded
   const info = open ? st?.hubs?.find((h) => h.id === open.activity) : null;
   const begin = async (param) => {
-    if (!info || busy || run) return; const p = pos(); if (!p) return;
-    if (info.kind === "hustle_risky" && !open?.confirmed && !(await confirmAction({ title: "Back-Room Deal: VERY RISKY", message: `You either make ₦${HUSTLE.risky.min.toLocaleString("en-NG")} to ₦${HUSTLE.risky.max.toLocaleString("en-NG")}, or N-QRS catches you and you serve ${HUSTLE.risky.jailMin} to ${HUSTLE.risky.jailMax} minutes inside Floor O (N-QRS Custody). You can only try once a day.`, confirmLabel: "Take the risk", tone: "danger" }))) return;
-    if (param === "cheat" && !(await confirmAction({ title: "Cheat in the exam?", message: "If you are caught you score very low, get a strike and may be suspended. If not, you gain marks.", confirmLabel: "Cheat anyway", tone: "danger" }))) return;
-    setBusy(true); setDone(null);
-    const startE = st?.energy ?? null, h0 = rings.find((q) => q.activity === info.id);
-    if (h0 && Math.hypot(p.x - h0.x, p.z - h0.z) > 0.2) { const ok = await api.current?.walkTo(h0.x, h0.z); if (!ok) { setBusy(false); return; } } // it walks to the ring first, so it looks real
-    const p2 = pos() ?? p;
-    const r = await call("/api/activity", { op: "start", hubId: info.id, requestId: crypto.randomUUID(), ...p2, param: param ?? (needsCourse(info.kind) ? course : undefined) });
-    setBusy(false); if (r.failed) { notifyError(r); refresh(); return; }
-    if (r.duplicate) { refresh(); return; }
-    e0.current = startE ?? st?.energy ?? 0; const cur = { id: "", activityId: r.activityId, hubId: info.id, endsAt: r.endsAt, startedAt: r.endsAt - (r.sec ?? ACTIVITY_SECONDS) * 1000 }; runRef.current = cur; setRun(cur); setTick(serverTime()); api.current?.setPose(r.anim, r.activityId);
-    if (r.paid) game.refresh();
+    if (!info || busy || run || starting.current) return; const p = pos(); if (!p) { toast.error("Your position is not known yet. Walk a step and try again."); return; }
+    starting.current = true; // one start at a time, even for a double tap (the state below only updates on the next render)
+    try {
+      if (info.kind === "hustle_risky" && !open?.confirmed && !(await confirmAction({ title: "Back-Room Deal: VERY RISKY", message: `You either make ₦${HUSTLE.risky.min.toLocaleString("en-NG")} to ₦${HUSTLE.risky.max.toLocaleString("en-NG")}, or N-QRS catches you and you serve ${HUSTLE.risky.jailMin} to ${HUSTLE.risky.jailMax} minutes inside Floor O (N-QRS Custody). You can only try once a day.`, confirmLabel: "Take the risk", tone: "danger" }))) return;
+      if (param === "cheat" && !(await confirmAction({ title: "Cheat in the exam?", message: "If you are caught you score very low, get a strike and may be suspended. If not, you gain marks.", confirmLabel: "Cheat anyway", tone: "danger" }))) return;
+      setBusy(true); setDone(null);
+      const startE = st?.energy ?? null, h0 = rings.find((q) => q.activity === info.id);
+      try {
+        if (h0 && Math.hypot(p.x - h0.x, p.z - h0.z) > 0.2) { const ok = await api.current?.walkTo(h0.x, h0.z, h0.floor ?? 0); if (!ok) { toast.error("You could not get onto the ring. Walk onto it and press Start again."); return; } } // it walks to the ring first, so it looks real
+        const p2 = pos() ?? p;
+        const r = await call("/api/activity", { op: "start", hubId: info.id, requestId: crypto.randomUUID(), ...p2, param: param ?? (needsCourse(info.kind) ? course : undefined) });
+        if (r.failed) { notifyError(r); refresh(); return; }
+        if (r.duplicate) { refresh(); return; }
+        e0.current = startE ?? st?.energy ?? 0; const cur = { id: "", activityId: r.activityId, hubId: info.id, endsAt: r.endsAt, startedAt: r.endsAt - (r.sec ?? ACTIVITY_SECONDS) * 1000 }; runRef.current = cur; setRun(cur); setTick(serverTime()); api.current?.setPose(r.anim, r.activityId);
+        if (r.paid) { game.refresh(); toast.info(`Paid ${naira(BigInt(r.paid) * 100n)}.`); }
+      } finally { setBusy(false); }
+    } finally { starting.current = false; }
   };
   // The activities panel walked the character here: start the plain activities at once (the person already pressed "walk there" knowing the price).
   // Anything that needs a choice (a course, the exam) or a confirmation (risky) waits for the person at the ring.

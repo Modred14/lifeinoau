@@ -19,6 +19,7 @@ import ActivityLayer from "./ActivityLayer";
 import BuildingPanel from "./BuildingPanel";
 import ClubLayer from "./ClubLayer";
 import { isClub, clubStatus, HOURS_LABEL } from "@/lib/clubs.js";
+import { resolveHub } from "@/lib/hubActions.js";
 import { ICON_OF } from "@/lib3d/landmarks.js";
 import { cellsOf } from "@/lib/custodyCells.js";
 import { CUSTODY_PLACE, CUSTODY_NAME, isJailed } from "@/lib/discipline";
@@ -35,7 +36,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
   const [people, setPeople] = useState(null), [status, setStatus] = useState("loading"), [info, setInfo] = useState(false), [room, setRoom] = useState(""), [near, setNear] = useState(null), [view, setView] = useState(cell ? "overhead" : getPrefs().gameplay.interiorView), [note, setNote] = useState(""), [rings, setRings] = useState([]), [open, setOpen] = useState(null);
   // the lecturers who teach in this building, the confrontation in progress, and the N-QRS response being acted out (all decided by the server: /api/lecture)
   const [fight, setFight] = useState(null), [incident, setIncident] = useState(null), [after, setAfter] = useState(null), [fade, setFade] = useState(0), lec = useRef({ courses: [] }), played = useRef(null);
-  const [sceneReady, setSceneReady] = useState(false), confrontRef = useRef(null);
+  const [sceneReady, setSceneReady] = useState(false), confrontRef = useRef(null), yellowRef = useRef(null), panelCtl = useRef(null);
   const box = useRef(null), api = useRef(null), [input] = useState(() => ({ jx: 0, jy: 0, run: false, hold(v) { this.run = v; } })), router = useRouter(), leave = useRef(onLeave);
   useEffect(() => { leave.current = onLeave; });
   // While this room is on screen <body data-inside="1">: anything outside it (the phone's Shop tile) can tell that leaving this screen would take you out of the building.
@@ -76,7 +77,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
         const lecturers = (lec.current.courses ?? []).map((x) => ({ code: x.code, name: x.lecturer.name, difficulty: x.lecturer.difficulty, npcIndex: x.venue.npcIndex }));
         // the activity rings: placed by the same code the server uses to check where you stand (lib3d/interiors/activityHubs.js), drawn teal
         const list = activityHubs(c, classify(place.id, place.kind).spec).hubs.map((h) => ({ ...h, activity: h.id, tint: "#5fe3c0" })); c.hubs = [...c.hubs, ...list]; setRings(list); if (dead || !box.current) return;
-        scene = await createInteriorScene(box.current, c, { look, gender, selfName: selfRef.current, club: isClub(place.id), barSpot: (() => { const b = list.find((h) => h.act === "club_drink"); return b ? { x: b.x, z: b.z } : null; })(), input, view: cell ? "overhead" : getPrefs().gameplay.interiorView, lecturers, cell, lockedCells: lockedOf(c, place), onFade: setFade, onIncidentEnd: (e) => setAfter(e), onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onChat: (m) => { toast.info(`${m.name}: ${m.line}`); setTimeout(() => { if (!dead) toast.info(`${m.name}: ${m.reply}`); }, 2600); }, onHub: (h) => { if (h.action === "lecture") { confrontRef.current?.(h.lecturer.code); return; } if (h.activity) { setOpen(h); return; } if (place.id === CUSTODY_PLACE) { deskRef.current?.(); return; } const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true); } });
+        scene = await createInteriorScene(box.current, c, { look, gender, selfName: selfRef.current, club: isClub(place.id), barSpot: (() => { const b = list.find((h) => h.act === "club_drink"); return b ? { x: b.x, z: b.z } : null; })(), input, view: cell ? "overhead" : getPrefs().gameplay.interiorView, lecturers, cell, lockedCells: lockedOf(c, place), onFade: setFade, onIncidentEnd: (e) => setAfter(e), onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onChat: (m) => { toast.info(`${m.name}: ${m.line}`); setTimeout(() => { if (!dead) toast.info(`${m.name}: ${m.reply}`); }, 2600); }, onHub: (h) => { if (h.action === "lecture") { confrontRef.current?.(h.lecturer.code); return; } if (h.activity) { setOpen(h); return; } yellowRef.current?.(h); } });
         if (dead) { scene.dispose(); return; } api.current = scene; if (peopleRef.current) scene.setRemotePlayers(peopleRef.current); setStatus("ready"); setSceneReady(true);
       } catch (e) { console.warn("interior unavailable", e); if (!dead) setStatus("fallback"); }
     })();
@@ -116,7 +117,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
   useEffect(() => {
     if (!focus || !sceneReady || !api.current || goal.current === focus) return;
     const ring = rings.find((r) => r.act === focus); goal.current = focus; if (!ring) return; // the building has no such ring: just stay at the door
-    api.current.walkTo(ring.x, ring.z).then((ok) => { if (ok === false) toast.info("Walk to the glowing ring to start it."); });
+    api.current.walkTo(ring.x, ring.z, ring.floor ?? 0).then((ok) => { if (ok === false) toast.info("Walk to the glowing ring to start it."); });
     pendingOpen.current = ring;
   }, [focus, sceneReady, rings]);
   useEffect(() => { if (pendingOpen.current && near && near.activity === pendingOpen.current.activity) { setOpen(pendingOpen.current); pendingOpen.current = null; } }, [near]);
@@ -134,6 +135,15 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
   // A prisoner is held INSIDE Floor O. Settling the bill is done here, in the custody panel; it never sends them to /home (that is the player's own room).
   const gs = useGame(), [desk, setDesk] = useState(false), [paying, setPaying] = useState(false), [, setTick] = useState(0), deskRef = useRef(null);
   deskRef.current = () => { if (place.id === CUSTODY_PLACE && isJailed(game.get()?.character ?? {}, serverTime())) setDesk(true); else toast.info("The charge desk is for people being held here. Nobody is booked in under your name."); };
+  // The yellow rings (reception, notice board, stewards' desk, back stairwell...): lib/hubActions.js says what each leads to. An activity: the character walks to its
+  // teal ring and the panel opens there (the same flow as choosing it in the activities panel). An app: the phone opens on it. The charge desk: its own panel.
+  yellowRef.current = (h) => {
+    const t = resolveHub(h);
+    if (t.kind === "desk") { deskRef.current?.(); return; }
+    if (t.kind === "app") { window.dispatchEvent(new CustomEvent("oau:phone-app", { detail: { app: t.app } })); return; }
+    if (t.kind === "activity") { if (!panelCtl.current) toast.info("The room is still getting ready. Try again in a moment."); else panelCtl.current.goAct(t.acts, h.label); return; }
+    const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true);
+  };
   useEffect(() => { if (!desk) return; const t = setInterval(() => setTick((n) => n + 1), 1000); return () => clearInterval(t); }, [desk]);
   const heldUntil = gs?.floorZero?.releaseAt ?? gs?.character?.jailedUntil ?? null, stillHeld = !!heldUntil && +new Date(heldUntil) > serverTime();
   useEffect(() => { if (desk && gs && !stillHeld) { setDesk(false); game.refresh(); } }, [desk, gs, stillHeld]); // the sentence ended while the panel was open
@@ -195,7 +205,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
           </div>
           {near && !open && <button type="button" className={`bi3-use${near.activity ? " act" : ""}`} onClick={() => api.current?.use()} data-sound="none"><Icon name={near.activity ? "timer" : "sparkle"} size={18} weight="fill" /> {near.label} <kbd>F</kbd></button>}
           <ActivityLayer api={api} rings={rings} open={open} ready onClose={() => setOpen(null)} onLeave={onLeave} onState={setActState} onRun={setRunHub} controlRef={actCtl} />
-          <BuildingPanel place={place} rings={rings} state={actState} api={api} ready={sceneReady} runHubId={runHub} ringOpen={open} character={gs?.character} jailed={isJailed(gs?.character ?? {}, serverTime())} balanceKobo={gs?.balanceKobo ?? null} onArrive={onArrive} onReload={() => { setActState(null); actCtl.current?.refresh(); }} />
+          <BuildingPanel place={place} rings={rings} state={actState} api={api} ready={sceneReady} runHubId={runHub} ringOpen={open} character={gs?.character} jailed={isJailed(gs?.character ?? {}, serverTime())} balanceKobo={gs?.balanceKobo ?? null} onArrive={onArrive} controlRef={panelCtl} onReload={() => { setActState(null); actCtl.current?.refresh(); }} />
           {isClub(place.id) && <ClubLayer place={place} api={api} ready={sceneReady} selfName={selfName} people={people ?? []} onLeave={onLeave} />}
           {banner}
           <p className="bi3-help">{cell ? "Walk around your cell with WASD or the stick · drag to look · V changes view · open the phone for messages, bank and games" : "Walk with WASD or the stick · Shift to run · drag to look · V changes view · walk out of the door to leave"}</p>

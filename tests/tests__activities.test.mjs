@@ -236,12 +236,13 @@ try {
     assert.ok(f.ok && f.score >= 0 && f.gradePoint >= 0, "the exam is sat in a lecture theatre"); assert.equal(w.T.examResult.length, 1);
     clock += ACTIVITIES.sit_exam.cd * 1000 + 100 + DAY; const e = await err(S.startActivity(w.db, "u1", { hubId: he.id, requestId: req(), ...at(he) })); assert.ok(e && /already sat|no exam/.test(e.message), "one exam a week: " + e?.message); }
 
-  // ---- nightlife needs the week's ticket for that club
+  // ---- nightlife: the clubs are free to enter at night, so the rings need no ticket (the weekly ticket is a separate night out)
   { const day = clock; clock = Date.UTC(2026, 9, 6, 21, 30); // the clubs only open from 8 PM to 5 AM (game time, UTC+1): 22:30 on the same game day
     const w = world({ placeId: "club_quantum", energy: 100 }); const h = ringOf("club_quantum", "dance"); await go(w, "club_quantum", h);
-    let e = await err(S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) })); assert.ok(e && /ticket/.test(e.message), "no ticket, no dancing: " + e?.message);
-    const wk = (await S.status(w.db, "u1")).now ? 1 : 1; w.T.partyTicket.push({ id: 1n, characterId: "c1", venue: "Quantum", gameWeek: Math.floor((clock - START) / (7 * DAY)) + 1, pricePaid: N(20_000) });
-    const s = await err(S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) })); assert.ok(s === null || !/ticket/.test(s.message), "with this week's ticket the ring works: " + s?.message); clock = day; }
+    const s = await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); assert.ok(s.started, "dancing needs no ticket");
+    assert.equal(w.T.partyTicket.length, 0, "and none was bought");
+    clock = Date.UTC(2026, 9, 6, 12, 0); const w2 = world({ placeId: "club_quantum", energy: 100 }); const bar = ringOf("club_quantum", "club_drink");
+    const e = await err(go(w2, "club_quantum", bar)); assert.ok(e && /closed|shut|open/i.test(e.message), "a shut club lets nobody in: " + e?.message); clock = day; }
 
   // ---- the cells are for people in custody, and only their own cell
   { const cells = cellsOf(built.get("floor0").comp), mine = cellFor(cells, "c1"), inMine = (h) => inCell(mine, h.x, h.z);

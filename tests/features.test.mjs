@@ -40,7 +40,7 @@ chk("Oduduwa Hall offers the safe Event Gig, marked safe and not guaranteed in a
 chk("every activity shows a name, an explanation and a button's worth of info", [...placeIds].every((id) => activitiesAt(id, "").every((a) => a.label && a.explain.length > 10 && a.summary)));
 chk("no building lists the same activity under the same name twice", [...placeIds].every((id) => { const l = activitiesAt(id, "").map((a) => a.act + a.label); return new Set(l).size === l.length; }));
 chk("hostel beds say they are only for your own hall", activitiesAt("h_awo", "hostel").some((a) => a.act === "sleep_bed" && a.requires.some((r) => /own hall/.test(r))));
-chk("club activities say they need this week's ticket", activitiesAt("club_quantum", "club").filter((a) => a.act === "dance").every((a) => a.requires.some((r) => /ticket/.test(r))));
+chk("club activities need no ticket (the clubs are free to enter)", activitiesAt("club_quantum", "club").filter((a) => a.act === "dance").every((a) => !a.requires.some((r) => /ticket/.test(r))));
 
 // ---- requirements are shown honestly for the player's state ----
 const act = (id, label) => activitiesAt(id, "").find((a) => a.act === label);

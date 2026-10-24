@@ -77,7 +77,7 @@ chk("nearestRing reports 0 seconds when already standing at it", nearestRing(rs,
 // ---- source promises
 const panel = read("components/BuildingPanel.js"), inside = read("components/BuildingInside.js"), scene = read("lib3d/interiors/scene.js"), layer = read("components/ActivityLayer.js");
 const css = read("components/building-panel.css"), navCss = read("components/bottom-nav.css"), phoneCss = read("components/phone.css"), travelCss = read("components/travel.css");
-chk("choosing an activity walks with the scene's own walkTo", /api\.current\.walkTo\(/.test(panel) && /walkTo\(x, z\)/.test(scene));
+chk("choosing an activity walks with the scene's own walkTo", /api\.current\.walkTo\(/.test(panel) && /walkTo\(x, z(, floor)?\)/.test(scene));
 chk("the panel never teleports the character", !/teleport\(/.test(panel) && !/setPosition|P\.x\s*=/.test(panel));
 chk("the panel starts nothing itself (the server-checked ActivityLayer does, after arrival)", !/op: "start"|\bcall\(/.test(panel) && /onArrive\(ring/.test(panel));
 chk("a risky activity is confirmed before the character sets off", /c\.risky && !\(await confirmAction/.test(panel));

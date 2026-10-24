@@ -135,10 +135,21 @@ export default function Shell({ children }) {
       setPhoneWith(name);
       setPhone(true);
     };
+    // A desk in a building (the timetable, the notice board, the parties desk) opens one phone app on top of the room: detail { app: "courses" }.
+    // The phone itself ignores an app id it does not have, so a wrong id just opens the home screen.
+    const openApp = (e) => {
+      const app = typeof e.detail?.app === "string" ? e.detail.app : "";
+      void game.refresh();
+      setPhoneApp(app || null);
+      setPhoneWith(null);
+      setPhone(true);
+    };
     window.addEventListener("oau:phone", open);
+    window.addEventListener("oau:phone-app", openApp);
     window.addEventListener("oau:message", message);
     return () => {
       window.removeEventListener("oau:phone", open);
+      window.removeEventListener("oau:phone-app", openApp);
       window.removeEventListener("oau:message", message);
     };
   }, []);

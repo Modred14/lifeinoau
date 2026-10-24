@@ -11,8 +11,11 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { Icon } from "./Icon";
 import { confirmAction } from "@/lib/confirm";
 import { toast } from "@/lib/toast";
-import { buildCards, chipsFor, nearestRing, walkLabel, waitLabel, walkSeconds, NEAR_METRES } from "@/lib/buildingPanel.js";
+import { buildCards, chipsFor, nearestRing, walkLabel, waitLabel, walkSeconds } from "@/lib/buildingPanel.js";
+import { pickCard } from "@/lib/hubActions.js";
 import "./building-panel.css";
+
+const ON_RING = 0.3; // metres: closer than this to the centre of a ring counts as standing on it
 
 function Card({ c, state, selected, eta, onSelect, onGo, goLabel }) {
   const bodyId = useId();
@@ -69,9 +72,10 @@ function Card({ c, state, selected, eta, onSelect, onGo, goLabel }) {
  * character, jailed, balanceKobo   what the screen knows (only used to lock plainly impossible activities)
  * onArrive(ring, { auto })   the character stands at the ring: open its panel (and, if `auto`, start it)
  * onReload         ask the server again (used by the error state's button)
+ * controlRef        ref the panel fills with { goAct(acts, label) }: the yellow desks in the room use it to walk to the matching activity (components/BuildingInside.js)
  */
-export default function BuildingPanel({ place, rings, state, api, ready, runHubId = null, ringOpen = null, character, jailed, balanceKobo, onArrive, onReload }) {
-  const root = useRef(null), seq = useRef(0), sheetId = useId();
+export default function BuildingPanel({ place, rings, state, api, ready, runHubId = null, ringOpen = null, character, jailed, balanceKobo, onArrive, onReload, controlRef = null }) {
+  const root = useRef(null), seq = useRef(0), going = useRef(false), sheetId = useId();
   const [userOpen, setUserOpen] = useState(null); // null: automatic (open when there is something to choose), true/false: the person's choice
   const [chip, setChip] = useState("all"), [sel, setSel] = useState(null), [walk, setWalk] = useState(null), [etas, setEtas] = useState({}), [problem, setProblem] = useState(null), [, tick] = useState(0);
   const hubs = state && !state.failed ? state.hubs ?? [] : null, failed = !!state?.failed;
@@ -107,7 +111,7 @@ export default function BuildingPanel({ place, rings, state, api, ready, runHubI
     if (!ready || !open || !cards?.length) return;
     const calc = () => {
       const s = api.current?.state; if (!s) return; const next = {};
-      for (const c of cards) { const t = nearestRing(c.rings, (r) => api.current.routeInfo(r.x, r.z), s); next[c.key] = t ? t.seconds : null; }
+      for (const c of cards) { const t = nearestRing(c.rings, (r) => api.current.routeInfo(r.x, r.z, r.floor ?? 0), s); next[c.key] = t ? t.seconds : null; }
       setEtas(next);
     };
     calc(); const t = setInterval(calc, 1500); return () => clearInterval(t);
@@ -116,27 +120,47 @@ export default function BuildingPanel({ place, rings, state, api, ready, runHubI
   // ---- the walk itself
   const stop = useCallback((silent = true) => { seq.current++; api.current?.cancelWalk?.(); setWalk(null); if (!silent) toast.info("You stopped walking."); }, [api]);
   useEffect(() => () => { seq.current++; }, []);
-  async function go(c) {
-    if (walk || !ready || !api.current) return;
+  /** Walk to the activity's ring and open its panel there. opts.auto: start a plain activity as soon as the character arrives (the "Walk there" button says the price first). */
+  async function go(c, opts = {}) {
+    if (going.current || walk) { toast.info(walk ? "You are already walking. Cancel that first if you want to go somewhere else." : "One moment, that is already being set up."); return; }
+    if (!ready || !api.current) { toast.info("The room is still loading. Try again in a moment."); return; }
     setProblem(null);
-    if (c.hard) return;
-    if (c.risky && !(await confirmAction({ tone: "danger", ...c.risky.confirm }))) return; // a risky activity is always confirmed before the character sets off
-    const s = api.current.state, target = nearestRing(c.rings, (r) => api.current.routeInfo(r.x, r.z), s);
-    if (!target) { setProblem({ key: c.key, text: "There is no way to walk there from where you stand. Move to another part of the building and try again." }); return; }
-    const ring = target.ring, token = ++seq.current;
-    if (target.metres <= NEAR_METRES) { onArrive(ring, { auto: true, confirmed: !!c.risky }); setSel(null); return; } // already beside it: no walking needed
-    setWalk({ card: c, ring, seconds: target.seconds });
-    const ok = await api.current.walkTo(ring.x, ring.z);
-    if (token !== seq.current) return; // cancelled, or another activity was chosen meanwhile
-    setWalk(null);
-    if (!ok) { setProblem({ key: c.key, text: "The way was blocked, or you took the controls. Choose it again to resume." }); toast.info("You stopped before you got there."); return; }
-    setSel(null); onArrive(ring, { auto: true, confirmed: !!c.risky });
+    if (c.hard) { toast.info(c.blocked || "You cannot do that right now."); return; }
+    going.current = true;
+    try {
+      if (c.risky && !(await confirmAction({ tone: "danger", ...c.risky.confirm }))) return; // a risky activity is always confirmed before the character sets off
+      if (!api.current) return; // the room was closed while the question was open
+      const s = api.current.state, target = nearestRing(c.rings, (r) => api.current.routeInfo(r.x, r.z, r.floor ?? 0), s);
+      if (!target) { setProblem({ key: c.key, text: "There is no way to walk there from where you stand. Move to another part of the building and try again." }); toast.error(`No way to walk to ${c.label} from here.`); return; }
+      const ring = target.ring, token = ++seq.current, auto = opts.auto ?? true;
+      if (target.metres <= ON_RING && (s.floor ?? 0) === (ring.floor ?? 0)) { onArrive(ring, { auto, confirmed: !!c.risky }); setSel(null); return; } // already standing on it: no walking needed (anything farther is walked, so the ring is the nearest thing to the character when the panel opens)
+      setWalk({ card: c, ring, seconds: target.seconds });
+      const ok = await api.current.walkTo(ring.x, ring.z, ring.floor ?? 0);
+      if (token !== seq.current) return; // cancelled, or another activity was chosen meanwhile
+      setWalk(null);
+      if (!ok) { setProblem({ key: c.key, text: "The way was blocked, or you took the controls. Choose it again to resume." }); toast.info("You stopped before you got there."); return; }
+      setSel(null); onArrive(ring, { auto, confirmed: !!c.risky });
+    } finally { going.current = false; }
   }
+  // The yellow desks in the room (reception, stewards' desk, back stairwell...) lead to an activity here: walk to it exactly as if its card had been chosen.
+  useEffect(() => {
+    if (!controlRef) return;
+    controlRef.current = {
+      goAct(acts, label = "that") {
+        if (!cards) { toast.info(failed ? "Could not load what you can do here. Open the activities panel and press Try again." : "Still looking up what you can do here. Try again in a moment."); return false; }
+        const c = pickCard(cards, acts);
+        if (!c) { toast.info(`${label} is not available here right now.`); return false; }
+        if (c.blocked) { toast.info(`${c.blocked}${c.until ? ` Ready in ${waitLabel(c.until - Date.now())}.` : ""}`); return false; }
+        go(c, { auto: false }); return true; // the person presses Start at the ring: a desk never spends money by itself
+      },
+    };
+    return () => { if (controlRef.current) controlRef.current = null; };
+  });
   // live remaining time while walking (from the real route, not a fixed timer)
   useEffect(() => {
     if (!walk) return;
     const t = setInterval(() => {
-      const r = api.current?.routeInfo(walk.ring.x, walk.ring.z); setWalk((w) => (w ? { ...w, seconds: r ? walkSeconds(r.length, r.speed) : 0 } : w)); tick((n) => n + 1);
+      const r = api.current?.routeInfo(walk.ring.x, walk.ring.z, walk.ring.floor ?? 0); setWalk((w) => (w ? { ...w, seconds: r ? walkSeconds(r.length, r.speed) : 0 } : w)); tick((n) => n + 1);
     }, 400);
     return () => clearInterval(t);
   }, [walk?.ring.id]); // eslint-disable-line react-hooks/exhaustive-deps
