@@ -34,7 +34,7 @@ for (let i = 0; i < 40 && trips < 24; i++) {
     let end = null; const flow = createTripFlow({ svc, sim }, { plan, onArrive: () => true, onEnter() {}, onEnd: (w) => { end = w; }, onNotice() {} });
     const revs = new Set(), kinds = new Set(); let t = 0, shown = 0;
     while (t < 300 && !end && flow.state.phase !== "inside") {
-      flow.update(1 / 30, { interact: flow.state.phase === "door" }); sim.update(1 / 30); t += 1 / 30;
+      flow.update(1 / 30, {}); sim.update(1 / 30); t += 1 / 30;
       const c = ctxFor(flow, plan), g = guide.update(1 / 30, c);
       assert.ok(Math.hypot(g.pts[0][0] - c.x, g.pts[0][1] - c.z) < 1e-6, `${mode} ${a.id}->${b.id} ${c.phase}: the route starts exactly at the traveller`);
       assert.ok(g.pts.length >= 2 && g.pts.every((p) => Number.isFinite(p[0]) && Number.isFinite(p[1])), "a usable route");
@@ -77,49 +77,21 @@ assert.ok(trips >= 18, "enough trips: " + trips);
   const d = plan.drop, last = g1.pts.at(-1); assert.ok(Math.hypot(last[0] - d.x, last[1] - d.z) < 12, "still to the drop-off");
 }
 
-{ // driving remains manual: reaching the destination only offers an explicit park-and-walk action
-  let plan = null, origin = null;
-  for (let i = 0; i < places.length && !plan; i++) {
-    for (let j = i + 1; j < places.length && !plan; j++) {
-      const candidate = planTrip(svc, { from: places[i], to: places[j], mode: "car", driver: false });
-      if (candidate.ok) { plan = candidate; origin = places[i]; }
-    }
-  }
-  assert.ok(plan, "an own-car plan");
-  const sim = createTrafficSim({ graph: svc.graph, world: svc.world, focus: () => origin, rnd });
-  const flow = createTripFlow({ svc, sim }, { plan, onArrive: () => true, onEnter() {}, onEnd() {}, onNotice() {} });
-  for (let i = 0; i < 1800 && flow.state.phase !== "drive"; i++) { flow.update(1 / 30, {}); sim.update(1 / 30); }
-  assert.equal(flow.state.phase, "drive", "the player reaches the own-car driving phase");
-  flow.own.x = plan.drop.x; flow.own.z = plan.drop.z; flow.own.v = 0;
-  flow.update(1 / 30, {});
-  assert.equal(flow.state.phase, "drive", "stopping at the destination does not end the drive automatically");
-  assert.equal(flow.state.canArrive, true, "the park-and-walk action is offered when safely stopped nearby");
-  flow.update(1 / 30, { interact: true });
-  assert.equal(flow.state.phase, "alight", "explicit interaction confirms parking and continues the trip");
-  flow.dispose();
-}
-
 // 5. the fare: settled in the background
 function runToDoor(onArrive) {
   const a = places[3], b = places[40], plan = planTrip(svc, { from: a, to: b, mode: "keke", driver: true }), sim = createTrafficSim({ graph: svc.graph, world: svc.world, focus: () => a, rnd });
   const ev = { end: null, entered: false, t: 0, doorAt: null, arrivedAt: null }; const flow = createTripFlow({ svc, sim }, { plan, onArrive: () => { ev.arrivedAt = ev.t; return onArrive(ev); }, onEnter() { ev.entered = true; }, onEnd: (w) => { ev.end = w; }, onNotice() {} });
-  const step = (interact = false) => { flow.update(1 / 30, { interact }); sim.update(1 / 30); ev.t += 1 / 30; if (flow.state.phase === "door" && ev.doorAt == null) ev.doorAt = ev.t; };
+  const step = () => { flow.update(1 / 30, {}); sim.update(1 / 30); ev.t += 1 / 30; if (flow.state.phase === "door" && ev.doorAt == null) ev.doorAt = ev.t; };
   return { flow, ev, step };
 }
-{ // a building remains closed until the player explicitly opens it
-  const { flow, ev, step } = runToDoor(() => true); while (ev.t < 300 && !ev.end && flow.state.phase !== "door") step();
-  assert.equal(flow.state.phase, "door", "arrived at a closed door"); assert.equal(flow.state.doorK, 0);
-  for (let i = 0; i < 30 * 3; i++) step();
-  assert.equal(flow.state.phase, "door", "waiting at the door does not open it"); assert.equal(flow.state.doorK, 0); assert.equal(ev.entered, false);
-  step(true);
-  while (ev.t < 300 && !ev.end && !ev.entered) step(flow.state.phase === "door");
-  assert.ok(ev.entered && !ev.end, "a paid trip enters after explicit interaction"); var baseDoor = ev.doorAt;
+{ // instant answer: the baseline
+  const { flow, ev, step } = runToDoor(() => true); while (ev.t < 300 && !ev.end && !ev.entered) step(); assert.ok(ev.entered && !ev.end, "a paid trip goes in"); var baseDoor = ev.doorAt;
 }
 { // a server that has not answered: the traveller still steps out and walks to the door at the same moment; only entering waits
   let settle; const { flow, ev, step } = runToDoor(() => new Promise((r) => { settle = r; }));
   while (ev.t < 300 && !ev.end && flow.state.phase !== "door") step(); assert.equal(flow.state.phase, "door", "reached the door with the fare still unanswered"); assert.ok(Math.abs(ev.doorAt - baseDoor) < 0.25, `a slow server did not hold the walk up (${ev.doorAt.toFixed(2)} s vs ${baseDoor.toFixed(2)} s)`);
   for (let i = 0; i < 30 * 12; i++) step(); assert.equal(ev.entered, false, "does not go in before the server has answered"); assert.equal(flow.state.pay, "pending"); assert.equal(ev.end, null);
-  settle(true); await Promise.resolve(); for (let i = 0; i < 30 * 8 && !ev.entered; i++) step(flow.state.phase === "door"); assert.ok(ev.entered && !ev.end, "goes in once the fare is confirmed and the door is opened"); assert.equal(flow.state.pay, "paid");
+  settle(true); await Promise.resolve(); for (let i = 0; i < 30 * 8 && !ev.entered; i++) step(); assert.ok(ev.entered && !ev.end, "goes in once the fare is confirmed"); assert.equal(flow.state.pay, "paid");
 }
 await refused();
 async function refused() {

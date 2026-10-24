@@ -4,7 +4,7 @@
 //   keke / bus / car with a driver:  intro -> approach (you walk to the vehicle while it drives up) -> board (step in through the right-hand door)
 //                                    -> ride (it drives the road route) -> paying -> alight (step out at the kerb) -> walk (to the door) -> door -> enter
 //   your own car:                    the same, but the car is already parked and "ride" is "drive": you steer
-//   trek:                            intro -> trek (you walk) -> paying -> walk -> door (player interaction) -> doorstep -> opening -> enter
+//   trek:                            intro -> trek (you walk) -> paying -> walk -> door -> enter
 //
 // Everything that moves does so by elapsed time (dt), through the shared collision world, so frame rate changes nothing and nobody passes through anything.
 // The person is a Walker (one controller for the stick, the keys and the automatic route, so they never fight). Vehicles are sim vehicles on the road graph.
@@ -73,9 +73,11 @@ export function createTripFlow(env, o) {
     const n = Math.max(1, Math.ceil(dt / (1 / 60))), h = dt / n;
     for (let i = 0; i < n; i++) {
       const sp = Math.abs(own.v), want = (inp.steer ?? 0) * OWN.steerMax * (1 - Math.min(0.7, sp / 40)); own.steer += (want - own.steer) * (1 - Math.exp(-7 * h));
+      const near = Math.hypot(own.x - plan.drop.x, own.z - plan.drop.z) < ARRIVE_RADIUS;
       let acc;
-      const gas = inp.gas ?? 0, br = inp.brake ?? 0; acc = gas * OWN.accel; if (!gas && !br) acc = own.v > 0 ? -1.6 : own.v < 0 ? 1.6 : 0; if (br) acc = own.v > 0.3 ? -OWN.brake : -OWN.accel;
-      own.v = Math.max(-4, Math.min(OWN.vmax, own.v + acc * h)); if (!inp.gas && !inp.brake && Math.abs(own.v) < 0.25) own.v = 0;
+      if (near) acc = own.v > 0 ? -Math.max(1.5, Math.min(OWN.brake, own.v * 2, 5)) : own.v < 0 ? 2 : 0;                  // near the kerb the car brakes itself to a stop
+      else { const gas = inp.gas ?? 0, br = inp.brake ?? 0; acc = gas * OWN.accel; if (!gas && !br) acc = own.v > 0 ? -1.6 : own.v < 0 ? 1.6 : 0; if (br) acc = own.v > 0.3 ? -OWN.brake : -OWN.accel; }
+      own.v = Math.max(-4, Math.min(OWN.vmax, own.v + acc * h)); if (!inp.gas && !inp.brake && Math.abs(own.v) < 0.25) own.v = 0; if (near && Math.abs(own.v) < 0.05) own.v = 0;
       const ang = own.ang + (own.v / OWN.wheelbase) * Math.tan(own.steer) * h, hx = Math.sin(ang), hz = Math.cos(ang), nx = own.x + hx * own.v * h, nz = own.z + hz * own.v * h;
       const why = ownBlock(nx, nz, hx, hz); own.blockedBy = why;
       if (!why) { own.x = nx; own.z = nz; own.ang = ang; own.hx = hx; own.hz = hz; } else own.v = own.v > 0 ? Math.max(0, own.v - 9 * h) : Math.min(0, own.v + 9 * h);   // a kerb, a wall or another car: the car does not go through it, it scrubs off its speed (hard braking) and stops
@@ -151,9 +153,7 @@ export function createTripFlow(env, o) {
         { const sp = toWorld(hero, seatLocal()); walker.x = sp.x; walker.z = sp.z; }
         if (heroT >= plan.rideProf.dur) { sim.placeAlong(hero, hero.route.len, 0); hero.hold = true; arrive(); } break; }
       case "drive": driveOwn(dt, inp); { const sp = toWorld(own, seatLocal()); walker.x = sp.x; walker.z = sp.z; }
-        S.canArrive = Math.hypot(own.x - plan.drop.x, own.z - plan.drop.z) < ARRIVE_RADIUS && Math.abs(own.v) < 0.3;
-        if (S.canArrive && inp.interact) { inp.interact = false; arrive(); }
-        break;
+        if (Math.hypot(own.x - plan.drop.x, own.z - plan.drop.z) < ARRIVE_RADIUS && Math.abs(own.v) < 0.3) arrive(); break;
       case "paying": break;
       case "alight": {
         const k = Math.min(1, S.t / ALIGHT_SECONDS), seat = alightFrom, m = Math.min(1, S.t / (ALIGHT_SECONDS * 0.7)); S.alightK = k; person.seated = m < 1;
@@ -161,55 +161,9 @@ export function createTripFlow(env, o) {
         if (S.t >= ALIGHT_SECONDS) { person.seated = false; walker.place(alightTo.x, alightTo.z); startWalk(); } break; }
       case "walk": walker.step(dt, walkIn); if (!walker.following && Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z) < 1.2) { walker.vx = walker.vz = 0; go("door"); }
         else if (!walker.following && walker.failed) { notice("The way to the door is blocked."); end("unreachable"); } break;
-      case "door": {
-        walker.step(dt, null); walker.hx = -B.door.nx; walker.hz = -B.door.nz;
-        if (!B.building) { if (S.t > 0.6 && S.pay !== "pending") finishEnter(); }
-        else if (inp.interact) { inp.interact = false; startDoorStep(); }
-        break;
-      }
-      case "doorstep": {
-        walker.step(dt, walkIn);
-        if (!walker.following) {
-          if (walker.failed) { walker.failed = null; notice("There is not enough clear space to move safely away from this door."); go("door"); }
-          else if (!doorSwingClear()) { notice("There is not enough clear space to open this door safely."); go("door"); }
-          else go("opening");
-        }
-        break;
-      }
-      case "opening": {
-        walker.step(dt, null); S.doorK = Math.min(1, S.t / DOOR_OPEN);
-        if (S.t > DOOR_OPEN && S.pay !== "pending") go("enter");
-        break;
-      }
+      case "door": { const hx = -B.door.nx, hz = -B.door.nz; walker.step(dt, null); walker.hx = hx; walker.hz = hz; S.doorK = Math.min(1, S.t / DOOR_OPEN); if (!B.building) { if (S.t > 0.6 && S.pay !== "pending") finishEnter(); } else if (S.t > DOOR_OPEN && S.pay !== "pending") go("enter"); break; }
       case "enter": { const k = Math.min(1, S.t / ENTER_SECONDS), d = -B.door.nx, e = -B.door.nz; enterFrom ??= { x: walker.x, z: walker.z }; const ix = B.front.x + d * 3.2, iz = B.front.z + e * 3.2; walker.x = enterFrom.x + (ix - enterFrom.x) * k; walker.z = enterFrom.z + (iz - enterFrom.z) * k; walker.hx = d; walker.hz = e; walker.speed = 2.4; person.visible = k < 0.55; if (k >= 1 && S.pay !== "pending") finishEnter(); break; }
       default: break;
-    }
-    function startDoorStep() {
-      const d = B.door, nx = d.nx, nz = d.nz, width = d.width ?? 2;
-      const tx = d.x - (nz * width) / 2, tz = d.z + (nx * width) / 2;
-      const dx = walker.x - tx, dz = walker.z - tz, tangent = dx * nz - dz * nx, normal = dx * nx + dz * nz;
-      const safeRadius = width + WALK_R + 0.15;
-      const retreat = Math.max(0, Math.sqrt(Math.max(0, safeRadius * safeRadius - tangent * tangent)) - normal);
-      const goal = { x: walker.x + nx * retreat, z: walker.z + nz * retreat };
-      if (retreat < 0.05) {
-        if (!doorSwingClear()) { notice("There is not enough clear space to open this door safely."); return; }
-        go("opening"); return;
-      }
-      const route = nav.plan(walker.x, walker.z, goal.x, goal.z);
-      if (!route.ok || route.pts.length < 2) { notice("There is not enough clear space to move safely away from this door."); return; }
-      go("doorstep"); walker.follow(route, { goal, tolerance: 0.3 });
-    }
-    function doorSwingClear() {
-      const d = B.door, width = d.width ?? 2, nx = d.nx, nz = d.nz, tx = nz, tz = -nx;
-      const hx = d.x - tx * width / 2, hz = d.z - tz * width / 2;
-      for (let i = 1; i <= 12; i++) {
-        const a = (1.7 * i) / 12;
-        for (const r of [width / 2, width]) {
-          const x = hx + tx * r * Math.cos(a) + nx * r * Math.sin(a), z = hz + tz * r * Math.cos(a) + nz * r * Math.sin(a);
-          if (world.blockedAt(x, z, 0.08)) return false;
-        }
-      }
-      return true;
     }
     // the person
     person.x = walker.x; person.z = walker.z; person.hx = walker.hx; person.hz = walker.hz; S.speed = S.phase === "drive" ? own.v : S.phase === "ride" && hero ? hero.v : walker.speed;
