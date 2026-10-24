@@ -32,6 +32,15 @@ import PlayerAvatar from "../PlayerAvatar";
 import "./messages-app.css";
 
 const lc = (n = "") => String(n).toLowerCase();
+const samePushKey = (subscription, expected) => {
+  const key = subscription?.options?.applicationServerKey;
+  if (!key) return false;
+  const actual = btoa(String.fromCharCode(...new Uint8Array(key)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  return actual === expected;
+};
 const hm = (d) =>
   new Date(d)
     .toLocaleTimeString("en-NG", {
@@ -184,7 +193,11 @@ function Inbox({ onHome, onOpen }) {
       const path = "/api/messages/push" + (subscription ? "?endpoint=" + encodeURIComponent(subscription.endpoint) : "");
       const r = await call(path);
       if (r.failed) setPush((p) => ({ ...p, error: r.error || "Notification settings could not be loaded." }));
-      else setPush((p) => ({ ...p, configured: !!r.configured, enabled: !!r.enabled }));
+      else setPush((p) => ({
+        ...p,
+        configured: !!r.configured,
+        enabled: !!subscription && !!r.enabled && samePushKey(subscription, r.publicKey),
+      }));
     })().catch((error) => setPush((p) => ({ ...p, error: error.message || "Notification settings could not be loaded." })));
   }, []);
 
@@ -192,9 +205,13 @@ function Inbox({ onHome, onOpen }) {
     if (push.busy) return;
     setPush((p) => ({ ...p, busy: true, error: "" }));
     try {
+      if (!push.enabled && Notification.permission !== "granted") {
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") throw new Error("Allow notifications in your browser settings to enable message alerts.");
+      }
       const registration = await navigator.serviceWorker.register("/sw.js");
       const ready = await navigator.serviceWorker.ready;
-      const current = await (ready ?? registration).pushManager.getSubscription();
+      let current = await (ready ?? registration).pushManager.getSubscription();
       if (push.enabled) {
         if (current) {
           const r = await call("/api/messages/push", { action: "remove", subscription: current.toJSON() });
@@ -204,14 +221,16 @@ function Inbox({ onHome, onOpen }) {
         setPush((p) => ({ ...p, enabled: false, busy: false }));
         return;
       }
-      if (Notification.permission !== "granted") {
-        const permission = await Notification.requestPermission();
-        if (permission !== "granted") throw new Error("Allow notifications in your browser settings to enable message alerts.");
-      }
       const config = await call("/api/messages/push");
       if (config.failed) throw new Error(config.error || "Notification settings could not be loaded.");
       if (!config.configured || !config.publicKey) throw new Error("Browser push notifications are not configured on this server.");
       const key = Uint8Array.from(atob(config.publicKey.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+      if (current && !samePushKey(current, config.publicKey)) {
+        const removed = await call("/api/messages/push", { action: "remove", subscription: current.toJSON() });
+        if (removed.failed) throw new Error(removed.error || "The old notification subscription could not be replaced.");
+        await current.unsubscribe();
+        current = null;
+      }
       const subscription = current ?? await (ready ?? registration).pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
       const saved = await call("/api/messages/push", { subscription: subscription.toJSON() });
       if (saved.failed) {
