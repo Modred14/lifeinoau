@@ -1,6 +1,6 @@
 // components/Phone.js
 "use client";
-import { GAME_TIME_ZONE } from "@/lib/campus-clock.js"; // the clubs open by game time (West Africa Time), so the clock shows that time too
+import { GAME_TIME_ZONE, gameZoneLabel, isGameNight } from "@/lib/campus-clock.js"; // the clubs open by game time (West Africa Time), so every clock here shows that time too
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import { naira, call } from "@/lib/client";
@@ -25,6 +25,7 @@ import HireApp from "./apps/HireApp";
 import RideApp from "./apps/RideApp";
 import VouchersApp from "./apps/VouchersApp";
 import OffishallApp from "./apps/OffishallApp";
+import LuxuryApp from "./apps/LuxuryApp";
 import GuideApp from "./apps/GuideApp";
 import DeveloperApp from "./apps/DeveloperApp";
 import SugApp from "./apps/SugApp";
@@ -48,6 +49,7 @@ const APPS = {
   ride: { name: "Ride", icon: "ride", tone: "orange", C: RideApp },
   vouchers: { name: "Vouchers", icon: "gift", tone: "green", C: VouchersApp },
   offishall: { name: "Clothing", icon: "shirt", tone: "fashion", C: OffishallApp }, // clothes shop + wardrobe
+  luxury: { name: "Luxury", icon: "sparkle", tone: "gold", C: LuxuryApp }, // every expensive thing in one place: Elite clothing, YK Autos cars and the clubs' bottles, packages and buyouts
   bet: { name: "Bet", icon: "ticket", tone: "bet", own: true, C: BetApp }, // draws its own header and tab bar, like Messages
   games: { name: "Games", icon: "game", tone: "games", own: true, C: GamesApp }, // draws its own header, like Bet and Messages
   sug: { name: "SUG", icon: "hall", tone: "navy", C: SugApp }, // the Students' Union Government: elections, government, Assembly
@@ -56,22 +58,22 @@ const APPS = {
   developer: { name: "Developer", icon: "code", tone: "dev", C: DeveloperApp }, // who made Life in OAU; its Message button opens the real Messages app on the developer's player
 };
 export const PHONE_APPS = Object.keys(APPS);
-const GRID = ["messages", "jobs", "courses", "invest", "vouchers", "love", "parties", "spending", "forbes", "awards", "housing", "ride", "offishall", "hire", "bet", "games", "sug", "guide", "developer", "settings"];
+const GRID = ["messages", "jobs", "courses", "invest", "vouchers", "love", "parties", "spending", "forbes", "awards", "housing", "ride", "offishall", "luxury", "hire", "bet", "games", "sug", "guide", "developer", "settings"];
 /** In Floor O (N-QRS Custody) the PHONE keeps working: custody stops you leaving, not using your phone. Only the apps that are about getting somewhere (rides, drivers, moving house) are
  *  tucked away. Every app that stays follows its own rules: the server still refuses anything custody forbids (working a shift, going out...) with a clear message. */
 const CUSTODY_HIDDEN = ["ride", "hire", "housing"];
 
 /** "Friday 16 October · Ile-Ife" */
 const dateLine = (d) => {
-  const p = Object.fromEntries(new Intl.DateTimeFormat("en-NG", { weekday: "long", day: "numeric", month: "long" }).formatToParts(d).map((x) => [x.type, x.value]));
-  return `${p.weekday} ${p.day} ${p.month} · Ile-Ife`;
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-NG", { weekday: "long", day: "numeric", month: "long", timeZone: GAME_TIME_ZONE }).formatToParts(d).map((x) => [x.type, x.value]));
+  return `${p.weekday} ${p.day} ${p.month} · Ile-Ife (${gameZoneLabel(+d)})`;
 };
 /** "10:10" for the big clock, "10:10PM" (ampm = true) for the status bar. */
 const clock = (d, ampm = false) => {
   const t = d.toLocaleTimeString("en-NG", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: GAME_TIME_ZONE }).replace(/\s?(am|pm)/i, (m) => m.trim().toUpperCase());
   return ampm ? t : t.replace(/(AM|PM)$/, "");
 };
-const isNight = (d) => d.getHours() >= 19 || d.getHours() < 6;
+const isNight = (d) => isGameNight(+d); // game time, never the device's own zone
 
 function Tile({ name, icon, tone, onClick, badge, first, sound }) {
   return (

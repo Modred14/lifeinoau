@@ -1,0 +1,40 @@
+/* components/club-music.css: the club DJ screen (ClubMusicPlayer.js). Flat colours from the game's tokens (globals.css), no gradients.
+   It lives on the 3D HUD (.th): bottom right, above the Run button, clear of the joystick (left), the VIP button (left) and the building drawer (centre).
+   Layers: the HUD is 25, the building 75, the phone 85, the club menu 95. On a phone the pill shrinks to a round button so it never covers the "use" prompt. */
+
+.th .cm-glow { position: absolute; inset: 0; pointer-events: none; opacity: calc(var(--lv, 0) * 0.5); box-shadow: inset 0 0 calc(40px + var(--bt, 0) * 70px) calc(var(--bt, 0) * 8px) var(--neon, #38e8ff); transition: opacity 120ms linear; }
+.th .cm { position: absolute; right: 12px; bottom: calc(var(--safe-b) + 138px); display: grid; justify-items: end; gap: 8px; pointer-events: none; max-width: calc(100vw - 24px); }
+.cm-pill { pointer-events: auto; display: inline-flex; align-items: center; gap: 10px; min-height: 48px; max-width: min(300px, 70vw); padding: 0 14px 0 12px; border-radius: var(--r-pill); background: rgba(13, 19, 33, 0.92); color: var(--text); border: 2px solid var(--neon, #38e8ff); box-shadow: 0 8px 22px -8px rgba(0, 0, 0, 0.6); cursor: pointer; font: inherit; }
+.cm-pill:hover { background: rgba(24, 32, 52, 0.96); }
+.cm-pill:focus-visible, .cm-ctl button:focus-visible, .cm-ctl input:focus-visible { outline: 3px solid #ffd24a; outline-offset: 2px; }
+.cm[data-open="1"] .cm-pill { background: var(--neon, #38e8ff); color: #05080f; }
+.cm-now { display: grid; min-width: 0; line-height: 1.2; text-align: left; }
+.cm-now b { font: 700 0.85rem var(--font-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-now small { font-size: 0.72rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm[data-open="1"] .cm-now small { color: inherit; opacity: 0.8; }
+.cm-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 18px; flex: none; }
+.cm-eq i { width: 3px; height: 4px; border-radius: 2px; background: var(--neon, #38e8ff); }
+.cm[data-open="1"] .cm-eq i { background: #05080f; }
+.cm-eq[data-on="1"] i { animation: cm-bar 900ms ease-in-out infinite; }
+.cm-eq[data-on="1"] i:nth-child(2) { animation-delay: 140ms; } .cm-eq[data-on="1"] i:nth-child(3) { animation-delay: 280ms; } .cm-eq[data-on="1"] i:nth-child(4) { animation-delay: 420ms; }
+@keyframes cm-bar { 0%, 100% { height: 4px; } 50% { height: 17px; } }
+.cm-panel { pointer-events: auto; width: min(320px, calc(100vw - 24px)); display: grid; gap: 10px; padding: 14px; border-radius: var(--r-md); background: rgba(13, 19, 33, 0.97); color: var(--text); border: 1px solid var(--neon, #38e8ff); box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.7); max-height: min(60vh, 420px); overflow-y: auto; overscroll-behavior: contain; }
+.cm-panel p { margin: 0; }
+.cm-set { font: 700 0.85rem var(--font-head); }
+.cm-tag, .cm-next, .cm-fine { font-size: 0.76rem; color: var(--muted); }
+.cm-fine { font-size: 0.7rem; }
+.cm-ctl { display: flex; align-items: center; gap: 8px; }
+.cm-ctl button { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); background: var(--raised); color: var(--text); cursor: pointer; padding: 0; }
+.cm-ctl button:hover:not(:disabled) { background: var(--neon, #38e8ff); color: #05080f; }
+.cm-ctl button:disabled { opacity: 0.4; cursor: default; }
+.cm-ctl input[type="range"] { flex: 1; min-width: 0; height: 44px; accent-color: var(--neon, #38e8ff); touch-action: pan-y; }
+.cm-err { margin: 0; pointer-events: none; max-width: 280px; padding: 6px 10px; border-radius: var(--r-md); background: rgba(13, 19, 33, 0.94); color: #ffb3b3; border: 1px solid #ff8080; font-size: 0.75rem; }
+.cm-pill[data-tap="1"] { animation: cm-nudge 1.6s ease-in-out infinite; }
+@keyframes cm-nudge { 50% { transform: scale(1.06); } }
+@media (max-width: 640px) {
+  .th .cm { right: 10px; bottom: calc(var(--safe-b) + 132px); }
+  .cm-pill { width: 52px; height: 52px; min-height: 52px; padding: 0; justify-content: center; }
+  .cm-pill .cm-now, .cm-pill > svg { display: none; }
+  .cm-panel { width: min(320px, calc(100vw - 20px)); }
+}
+@media (prefers-reduced-motion: reduce) { .cm-eq[data-on="1"] i, .cm-pill[data-tap="1"] { animation: none; } .cm-eq[data-on="1"] i { height: 12px; } .th .cm-glow { transition: none; } }

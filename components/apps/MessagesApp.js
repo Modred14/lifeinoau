@@ -2,6 +2,7 @@
 // Everything here reads one live copy of the chat (lib/chat.js). A message you send is on screen before anything is sent;
 // its ticks then move on their own: clock, one grey tick (sent), two grey (delivered), two blue (read).
 "use client";
+import { GAME_TIME_ZONE } from "@/lib/campus-clock.js";
 import {
   useCallback,
   useEffect,
@@ -47,11 +48,12 @@ const hm = (d) =>
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
+      timeZone: GAME_TIME_ZONE,
     })
     .replace(/\s/g, "")
     .toLowerCase();
-const sameDay = (a, b) =>
-  new Date(a).toDateString() === new Date(b).toDateString();
+const dayKey = (d) => new Date(d).toLocaleDateString("en-CA", { timeZone: GAME_TIME_ZONE }); // the calendar day in GAME time, not the device's zone
+const sameDay = (a, b) => dayKey(a) === dayKey(b);
 const dayLabel = (d) => {
   const x = new Date(d),
     n = new Date(),
@@ -61,11 +63,12 @@ const dayLabel = (d) => {
   return x.toLocaleDateString(
     "en-NG",
     n - x < 6 * 86_400_000
-      ? { weekday: "long" }
+      ? { weekday: "long", timeZone: GAME_TIME_ZONE }
       : {
           day: "numeric",
           month: "short",
-          year: n.getFullYear() === x.getFullYear() ? undefined : "numeric",
+          timeZone: GAME_TIME_ZONE,
+          year: dayKey(n).slice(0, 4) === dayKey(x).slice(0, 4) ? undefined : "numeric",
         },
   );
 };

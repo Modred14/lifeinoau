@@ -1,7 +1,8 @@
 // components/ClubLayer.js
 // Everything on screen that belongs to a nightclub while you are inside it (mounted by BuildingInside only for 0203, Royal Divas and Quantum):
 //   - the OPEN / CLOSED chip with the hours, the VIP badge and the buyout countdown;
-//   - the VIP button that opens the club menu (ClubPanel.js);
+//   - the VIP button that opens the club menu (ClubPanel.js), and the DJ screen (ClubMusicPlayer.js): music plays while the club is open and you are inside;
+//   - the DJ booth and bottle-service rings in the room ("oau:club-ui", sent by BuildingInside for lib/hubActions.js) open the DJ screen and the menu too;
 //   - asking the server every few seconds what is happening on the floor, and handing each server-confirmed show to the 3D scene (the same for you and for everyone
 //     else in the room: an effect appears only because a purchase really went through), with the announcement banner and the sound;
 //   - a club that is shut (you are stepped back outside before it draws), one that is about to close, and one that has just closed (nobody is moved).
@@ -9,11 +10,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import ClubPanel from "./ClubPanel";
+import ClubMusicPlayer from "./ClubMusicPlayer";
 import { call } from "@/lib/client";
 import { serverTime } from "@/lib/serverClock";
 import { toast } from "@/lib/toast";
 import { playSound } from "@/lib/sound";
 import { closedMessage, clubOf, drinkById } from "@/lib/clubs.js";
+import { gameZoneLabel } from "@/lib/campus-clock.js";
 import "./club.css";
 
 const POLL_MS = 2500, BANNER_MS = 6500;
@@ -57,17 +60,23 @@ export default function ClubLayer({ place, api, ready, selfName = "", people = [
     document.addEventListener("visibilitychange", v); return () => { clearInterval(t); document.removeEventListener("visibilitychange", v); };
   }, [ready, load]);
 
+  const isOpen = !!st?.status?.open;
+  useEffect(() => { // the yellow DJ-booth and bottle-service rings in the room
+    const h = (e) => { if (e.detail?.panel === "menu") (isOpen ? setMenu(true) : toast.error(closedMessage(club))); };
+    window.addEventListener("oau:club-ui", h); return () => window.removeEventListener("oau:club-ui", h);
+  }, [isOpen, club]);
   if (!club) return null;
   const now = serverTime(), open = st?.status?.open, buyout = st?.buyout, vipLeft = st?.vip ? st.vip.until - now : 0, guests = st?.vips ?? [];
   return (
     <>
       <div className="cl-chip" data-open={open ? "1" : st ? "0" : undefined} role="status" style={{ "--neon": club.neon }}>
-        <b>{st ? (open ? "OPEN" : "CLOSED") : "…"}</b><span>{st ? `${st.status.hours} · ${st.status.note}` : "Checking the doors"}</span>
+        <b>{st ? (open ? "OPEN" : "CLOSED") : "…"}</b><span>{st ? `${st.status.hours} ${gameZoneLabel()} · ${st.status.note}` : "Checking the doors"}</span>
         {vipLeft > 0 && <em><Icon name="sparkle" size={12} weight="fill" /> VIP {mmss(vipLeft)}</em>}
         {buyout && <em><Icon name="timer" size={12} /> {buyout.host}: {buyout.name} {mmss(buyout.endsAt - now)}</em>}
         {guests.length > 0 && <small title="Gold VIP badge in the guest list">VIP here: {guests.slice(0, 3).map((v) => v.name).join(", ")}{guests.length > 3 ? ` +${guests.length - 3}` : ""}</small>}
       </div>
       <button type="button" className="cl-open" onClick={() => (open ? setMenu(true) : toast.error(closedMessage(club)))} data-sound="none" aria-label="Open the club menu"><Icon name="sparkle" size={18} weight="fill" /> VIP menu</button>
+      <ClubMusicPlayer club={club} live={isOpen} />
       <div className="cl-banners" aria-live="polite">{banners.map((b) => <div key={b.id} className="cl-banner" data-lv={b.level}>{b.text}</div>)}</div>
       {menu && st && <ClubPanel club={{ ...club, ...(st.club ?? {}) }} state={st} people={people} selfName={selfName} onClose={() => setMenu(false)} onBought={() => load()} />}
     </>

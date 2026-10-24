@@ -26,6 +26,8 @@ export function clinic(spec, place) {
 
 // ------------------------------------------------------------------------------------------------ nightlife
 
+/** The labels of the two club rings (lib/hubActions.js maps them to the DJ screen and the club menu). One spelling, used by every club. */
+export const DJ_RING = "DJ booth: the music", MENU_RING = "Bottle service: VIP menu";
 const clubStyle = (wall, glow) => ({ dark: true, noWindows: true, wall, facade: "#2c3340", ceil: "#0c0a12", glow });
 
 export function club(spec, place) {
@@ -43,6 +45,7 @@ function quantum(spec, place) {
   const E = frame(p, hall, "e"); E.wall("bar", 8.5, { w: 8, glow: g }); E.person("bartender", 8.5, 1.5, { face: "front" }); E.person("bartender", 10.5, 1.5, { face: "front" }); for (let i = 0; i < 4; i++) E.add("stool", 5.2 + i * 1.3, 2.2, { color: "#2a2f3a" });
   const Wf = frame(p, hall, "w"); [3.2, 6.2, 9.2, 12.2].forEach((u, i) => Wf.wall("booth", u, { color: ["#27408b", "#2d6f9a", "#27408b", "#2d6f9a"][i], glow: g }));
   for (let k = 0; k < 6; k++) F.person("dancer", W / 2 - 4 + (k % 3) * 3.4, 7.2 + (k >> 1) * 2.4, { mode: "dance", face: k % 2 ? "back" : "front" }); F.person("dj", W / 2, 1.5, { face: "front" });
+  F.hub(W / 2, 4.3, DJ_RING, 0); F.hub(W - 4.5, 8.5, MENU_RING, 0); // the DJ booth (music) and the bottle-service spot (the VIP menu): same rings in every club, placed to suit this one
   const L = frame(p, ves, "n"); L.add("counter", 6.4, 1.2, { w: 2.2, sign: "Tickets", color: "#262338", top: "#38e8ff" }); L.hub(6.4, 2.4, "This week's parties", 0); L.person("clerk", 6.4, 0.55, { face: "front" }); L.person("bouncer", 1.2, 3.8, { face: "front" }); L.person("bouncer", 2.8, 3.8, { face: "front" });
   fillWc("F")(frame(p, p.byId.get("wcf"), "s"), p.byId.get("wcf"), p); fillWc("M")(frame(p, p.byId.get("wcm"), "s"), p.byId.get("wcm"), p);
   crowd(p, "patron", 5, ["hall", "lobby"], 0); return p;
@@ -59,6 +62,7 @@ function club0203(spec, place) {
   F.add("dancefloor", 14.0, 8.2, { w: 8, d: 5, glow: g }); F.add("discoball", 14.0, 8.2, { y: 4.0 }); F.add("spotlight", 6, 7, { glow: g, y: 4.3 }); F.add("spotlight", 20, 7, { glow: "#ff6a3d", y: 4.3 });
   F.add("roundtable", 2.4, 8.4, { w: 2.2, chairs: 4, color: "#4a2f1e", chairColor: "#b8793f" }); F.add("roundtable", 2.4, 5.6 + 0.4, { w: 2.2, chairs: 4, color: "#4a2f1e", chairColor: "#b8793f" }); F.add("roundtable", 23.4, 8.0, { w: 2.2, chairs: 4, color: "#4a2f1e", chairColor: "#b8793f" }); F.add("roundtable", 19.6, 6.4, { w: 2.2, chairs: 4, color: "#4a2f1e", chairColor: "#b8793f" });
   for (let k = 0; k < 4; k++) F.person("dancer", 12 + (k % 2) * 3, 7.2 + (k >> 1) * 1.8, { mode: "dance", face: "front" }); F.person("dj", 5.0, 2.4, { face: "front" });
+  F.hub(5.0, 5.4, DJ_RING, 0); F.hub(21.5, 10.5, MENU_RING, 0);
   const P = frame(p, patio, "n"); P.add("roundtable", 2.2, 3.0, { w: 2.2, chairs: 4, color: "#6b4226" }); P.add("roundtable", 6.0, 6.4, { w: 2.2, chairs: 4, color: "#6b4226" }); P.add("roundtable", 2.4, 8.8, { w: 2.2, chairs: 4, color: "#6b4226" }); P.add("tree", 7.6, 1.4, {}); P.add("tree", 0.9, 11.4 === 0 ? 0 : 11.6, {}); P.add("spotlight", 4.5, 5, { glow: "#ffd59a", y: 3.2 }); P.person("patron", 2.2, 3.0, { face: "back", mode: "sit" });
   const L = frame(p, ves, "n"); L.add("counter", 2.2, 1.4, { w: 2.2, sign: "Entry", color: "#3a281c", top: g }); L.hub(2.2, 2.4, "This week's parties", 0); L.person("clerk", 2.2, 0.7, { face: "front" }); L.person("bouncer", 7.4, 4.2, { face: "back" });
   frame(p, p.byId.get("cloak"), "s").add("counter", 4.0, 1.6, { w: 3.0, sign: "Cloakroom" }); frame(p, p.byId.get("cloak"), "s").wall("locker", 4.0, { w: 3.2 }); fillWc("M")(frame(p, p.byId.get("wc"), "s"), p.byId.get("wc"), p);
@@ -75,6 +79,7 @@ function divas(spec, place) {
   F.wall("bar", 4.6, { w: 6, glow: pk, top: "#3a1a33" }); F.person("bartender", 4.6, 1.5, { face: "front" }); for (let i = 0; i < 3; i++) F.add("stool", 2.4 + i * 1.5, 2.2, { color: pk }); F.add("dj", 24.0, 1.4, { w: 3.0, glow: pk }); F.add("speaker", 20.8, 1.2, { glow: pk }); F.add("speaker", 27.2, 1.2, { glow: pk }); F.person("dj", 24.0, 0.9, { face: "front" });
   const Wf = frame(p, hall, "w"), Ef = frame(p, hall, "e"); [4.0, 7.0, 10.0].forEach((u, i) => { Wf.wall("booth", u, { color: "#8a1f6e", glow: g }); Ef.wall("booth", u, { color: "#8a1f6e", glow: g }); });
   F.add("dancefloor", 14, 10.2, { w: 8, d: 3, glow: pk }); for (let k = 0; k < 4; k++) F.person("dancer", 11 + k * 2, 9.8, { mode: "dance", face: k % 2 ? "front" : "back" }); F.person("patron", 14, 5.0, { face: "front", mode: "stand" });
+  F.hub(24.0, 3.6, DJ_RING, 0); F.hub(4.5, 7.8, MENU_RING, 0);
   const L = frame(p, ves, "n"); L.add("counter", 2.4, 1.4, { w: 2.4, sign: "Guest list", color: "#34172e", top: g }); L.hub(2.4, 2.4, "This week's parties", 0); L.person("clerk", 2.4, 0.7, { face: "front" }); L.add("photobooth", 8.2, 1.0, { glow: pk }); L.add("counter", 7.6, 5.8 + 0.2, { w: 2.0, sign: "Coats", color: "#34172e" }); L.person("bouncer", 5.0, 5.2, { face: "back" });
   for (const id of ["vip1", "vip2"]) { const F2 = frame(p, p.byId.get(id), "s"); F2.add("sofa", F2.W / 2, 1.0 + 0.4, { w: 2.6, color: "#8a1f6e" }); F2.add("loungeTable", F2.W / 2, 2.9, { glow: g }); F2.add("armchair", 1.3, 3.2, { turn: PI / 2, color: pk }); F2.add("armchair", F2.W - 1.3, 3.2, { turn: -PI / 2, color: pk }); F2.add("speaker", F2.W - 0.6, 0.6, { glow: pk }); F2.person("patron", F2.W / 2, 1.4, { face: "front", mode: "sit" }); }
   crowd(p, "patron", 5, ["hall", "lobby"], 0); return p;

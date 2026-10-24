@@ -140,6 +140,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
   yellowRef.current = (h) => {
     const t = resolveHub(h);
     if (t.kind === "desk") { deskRef.current?.(); return; }
+    if (t.kind === "club") { window.dispatchEvent(new CustomEvent("oau:club-ui", { detail: { panel: t.panel } })); return; } // the DJ booth / the bottle-service spot: ClubLayer opens the screen
     if (t.kind === "app") { window.dispatchEvent(new CustomEvent("oau:phone-app", { detail: { app: t.app } })); return; }
     if (t.kind === "activity") { if (!panelCtl.current) toast.info("The room is still getting ready. Try again in a moment."); else panelCtl.current.goAct(t.acts, h.label); return; }
     const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true);

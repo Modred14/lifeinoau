@@ -73,6 +73,7 @@ export default function ClubPanel({ club, state, people = [], selfName = "", onC
         </header>
         {!open && <p className="cl-closed" role="status"><Icon name="lock" size={16} /> {club.name} is closed. It opens {state?.status?.hours ?? "8 PM – 5 AM"} (game time). Purchases are switched off.</p>}
         {open && (vip || buyout) && <p className="cl-vipbar" role="status"><Icon name="sparkle" size={16} weight="fill" /> {buyout ? `${buyout.host} has the club: the bar is on them.` : "You have VIP: no ticket, free bar."}</p>}
+        <button type="button" className="cl-lux" disabled={busy} onClick={() => { onClose(); window.dispatchEvent(new CustomEvent("oau:phone-app", { detail: { app: "luxury" } })); }}><Icon name="forbes" size={16} /> Luxury app: designer clothes and cars too</button>
         <nav className="cl-tabs" aria-label="Sections">{TABS.map(([id, name, icon]) => <button key={id} type="button" className="cl-tab" aria-pressed={tab === id} onClick={() => setTab(id)}><Icon name={icon} size={16} /> {name}</button>)}</nav>
 
         <div className="cl-body">

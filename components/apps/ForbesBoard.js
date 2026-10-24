@@ -4,6 +4,7 @@
 // Profile pictures are the players' real 3D snapshots (components/PlayerAvatar.js).
 "use client";
 import { useId, useState } from "react";
+import { GAME_TIME_ZONE } from "@/lib/campus-clock.js";
 import { naira } from "@/lib/client";
 import { Icon } from "@/components/Icon";
 import PlayerAvatar from "@/components/PlayerAvatar";
@@ -122,7 +123,7 @@ export default function ForbesBoard({ board, me }) {
   const [open, setOpen] = useState(null);
   const rows = Array.isArray(board?.rows) ? board.rows : [];
   const at = board?.updatedAt ? new Date(board.updatedAt) : null;
-  const time = at && !isNaN(at) ? at.toLocaleTimeString("en-NG", { hour: "numeric", minute: "2-digit" }) : null;
+  const time = at && !isNaN(at) ? at.toLocaleTimeString("en-NG", { hour: "numeric", minute: "2-digit", timeZone: GAME_TIME_ZONE }) : null;
   return (
     <div className="fb">
       <Hero count={rows.length} />

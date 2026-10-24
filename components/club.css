@@ -115,3 +115,7 @@
 .sp-ok { color: var(--green-text); font-weight: 700; }
 .sp-empty { text-align: center; padding: 28px 12px; border-radius: var(--r-md); background: var(--raised); border: 1px dashed var(--line); color: var(--muted); }
 .sp-empty b { display: block; color: var(--text); font: 800 1.1rem var(--font-head); margin-bottom: 4px; }
+
+/* the way into the Luxury phone app from inside the menu (clothes and cars are bought there; the bottles, packages and buyouts are right here) */
+.cl-lux { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; margin: 0 14px 8px; padding: 0 14px; border-radius: var(--r-pill); border: 1px solid #ffd24a; background: transparent; color: #ffe27a; font-weight: 700; cursor: pointer; align-self: flex-start; }
+.cl-lux:hover:not(:disabled) { background: rgba(255, 210, 74, 0.14); }

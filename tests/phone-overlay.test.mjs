@@ -12,7 +12,7 @@ chk("confirm dialogs stay above the phone layer", phoneZ < z(cdCss, ".cd-scrim")
 chk("the phone has no other z-index override", !/\.ph-scrim\[data-over/.test(phoneCss));
 chk("the phone scrim keeps touches off the room behind it", /\.ph-scrim \{[^}]*touch-action: none/.test(phoneCss));
 const scene = read("lib3d/interiors/scene.js");
-chk("the interior scene can be suspended (keys, stick, drag, wheel, use)", /setSuspended\(v\)/.test(scene) && /if \(suspended \|\| \/\^\(INPUT/.test(scene) && /const pd = \(e\) => \{ if \(suspended\) return;/.test(scene) && /function activate\(\) \{ if \(suspended/.test(scene));
+chk("the interior scene can be suspended (keys, stick, drag, wheel, use)", /setSuspended\(v\)/.test(scene) && /if \(suspended \|\|\s*\/\^\(INPUT/.test(scene) && /const pd = \(e\) => \{\s*if \(suspended\) return;/.test(scene) && /const wh = \(e\) => \{\s*if \(suspended\) return;/.test(scene) && /function activate\(\) \{\s*if \(suspended/.test(scene)); // (whitespace tolerant: the scene is formatted over several lines)
 const bi = read("components/BuildingInside.js"), shell = read("components/Shell.js");
 chk("BuildingInside suspends the room while the phone is open and never unmounts it", /oau:phone-state/.test(bi) && /setSuspended/.test(bi) && /dataset\.phone === "open"/.test(bi));
 chk("Shell announces the phone state without navigating", /data-phone/.test(shell) && /oau:phone-state/.test(shell));

@@ -14,6 +14,10 @@ const NOTES = { "needs-tap": "Tap to start the club music", off: "Music is off i
 
 export default function ClubMusicPlayer({ club, live = true }) {
   const dj = useClubDj(), { music } = useSoundSettings(), [open, setOpen] = useState(false), glow = useRef(null);
+  useEffect(() => { // the DJ-booth ring in the room opens this screen (and counts as the tap browsers want before any sound)
+    const h = (e) => { if (e.detail?.panel === "dj") { setOpen(true); tapToStart(); } };
+    window.addEventListener("oau:club-ui", h); return () => window.removeEventListener("oau:club-ui", h);
+  }, []);
   useEffect(() => { // the mix plays while you are inside and the club is open, and only if the game's music is on
     if (!live) { stopClubMusic(); return; }
     if (!music) { stopClubMusic("off"); return; }
@@ -47,7 +51,7 @@ export default function ClubMusicPlayer({ club, live = true }) {
             {dj.next && <p className="cm-next">Next: {dj.next.title}</p>}
           </div>
         )}
-        <button type="button" className="cm-pill" data-sound="none" aria-expanded={open} onClick={() => (dj.status === "needs-tap" ? tapToStart() : setOpen(!open))}>
+        <button type="button" className="cm-pill" data-sound="none" data-tap={dj.status === "needs-tap" ? "1" : undefined} aria-expanded={open} onClick={() => (dj.status === "needs-tap" ? tapToStart() : setOpen(!open))}>
           <span className="cm-eq" data-on={playing && !dj.muted ? "1" : undefined} aria-hidden="true"><i /><i /><i /><i /></span>
           <span className="cm-now"><b>{now && playing ? now.title : note ?? (dj.status === "paused" ? "Music paused" : "Club music")}</b>{now && playing && <small>{now.artist}</small>}</span>
           <Icon name={open ? "down" : "up"} size={16} weight="bold" />
