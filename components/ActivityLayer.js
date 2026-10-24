@@ -38,7 +38,10 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
   // where you stand: reported on arrival and every few seconds, only while the tab is showing
   useEffect(() => {
     if (!ready) return; let on = true;
-    const send = async () => { const p = pos(); if (!p || !on || document.hidden) return; const r = await call("/api/activity", { op: "report", ...p }); if (r.cancelled) { stop("You moved away, so it stopped."); refresh(); } };
+    // One report at a time, always carrying the spot at the moment it is sent: a slow answer is never queued behind by another report, and an old answer is ignored once the room has been left.
+    // Where you stand is local and never waits for this; a failed report is simply replaced by the next one.
+    let busy = false;
+    const send = async () => { if (busy) return; const p = pos(); if (!p || !on || document.hidden) return; busy = true; try { const r = await call("/api/activity", { op: "report", ...p }); if (on && r.cancelled) { stop("You moved away, so it stopped."); refresh(); } } finally { busy = false; } };
     refresh(); send(); const a = setInterval(send, PRESENCE.pingEveryMs), b = setInterval(() => !document.hidden && !runRef.current && refresh(), 20000);
     return () => { on = false; clearInterval(a); clearInterval(b); };
   }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -80,6 +80,7 @@ model Character {
   tripH              Float? // heading, radians
   tripMode           String         @default("")
   tripAt             DateTime? // last position ping; the player counts as on the road for a few seconds after
+  tripSeq            Float? // the sender's counter of the newest road report stored (or trip end): an older report never overwrites a newer one
   // 0-100 stats, clamped in the engine
   health             Int            @default(80)
   energy             Int            @default(90)

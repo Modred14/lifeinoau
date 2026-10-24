@@ -77,4 +77,39 @@ const flush = tick;
   assert.equal(clearBack({ raycast: () => null }, 0, 0, 0, 1, 8), 8, "nothing in the way: full distance");
   let cb = 8; for (let i = 0; i < 20; i++) cb = followBack(cb, 2, 1 / 60); assert.ok(cb < 5 && cb > 2, "pulls in quickly but not in one jump"); let out = 2; for (let i = 0; i < 20; i++) out = followBack(out, 8, 1 / 60); assert.ok(out < 6 && out > 2 && (8 - out) / 6 > (cb - 2) / 6 * 0.9, "eases out gradually, slower than it pulls in: " + out.toFixed(2));
 }
+
+// 5. ordering, stale answers, corrections and a refusal: reports carry a rising number; the player's own movement is never involved
+{
+  const c = clock(); let pose = { x: 0, z: 0, h: 0, mode: "trek" }, reply = () => ({ ok: true }); const got = [], corrections = []; let halted = null;
+  const sync = createTripSync({ ...c, getPose: () => pose, rnd: () => 0.5, send: async (p) => { got.push({ ...p }); return reply(p); }, fetchRoad: async () => ({ travellers: [] }), onTravellers() {},
+    onCorrection: (q) => corrections.push(q), onHalted: (r) => { halted = r; } });
+  sync.start(); await c.advance(100);
+  for (let i = 1; i <= 5; i++) { pose = { x: i * 10, z: 0, h: 0, mode: "trek" }; await c.advance(2100); }
+  assert.ok(got.length >= 4 && got.every((g) => Number.isFinite(g.seq)), "every report is numbered");
+  assert.ok(got.every((g, i) => i === 0 || g.seq > got[i - 1].seq), "...and the numbers only rise");
+  // stale: the server already holds a far higher number (another tab, a clock that was ahead): the next report goes above it and carries the CURRENT pose
+  reply = () => (reply.n++ === 0 ? { ok: true, stale: true, seq: 9e12 } : { ok: true }); reply.n = 0;
+  pose = { x: 77, z: 0, h: 0, mode: "trek" }; await c.advance(2100); await c.advance(2100);
+  assert.ok(sync.stats.stale === 1, "the stale answer was counted, not treated as a failure"); assert.equal(sync.stats.failed, 0);
+  const after = got.at(-1); assert.ok(after.seq > 9e12 && after.x === 77, "carried on above the server's number, with the newest pose: " + JSON.stringify(after));
+  // corrected: the server moved the spot part of the way; the caller is told, the very next tick sends again (until the server has caught up)
+  reply = () => (reply.n++ < 2 ? { ok: true, corrected: true, pose: { x: 50, z: 0, h: 0 } } : { ok: true }); reply.n = 0; const n0 = got.length;
+  pose = { x: 400, z: 0, h: 0, mode: "trek" }; await c.advance(8000);
+  assert.equal(corrections.length, 2, "told twice"); assert.ok(got.length - n0 >= 3, "kept reporting until the server accepted it: " + (got.length - n0)); assert.equal(sync.stats.corrected, 2); assert.equal(sync.stats.failed, 0);
+  // refused outright (custody, suspension): told once, and no more reports
+  reply = () => ({ failed: true, status: 403, error: "You are held in Floor O." }); await c.advance(10000);
+  assert.equal(halted?.status, 403, "the caller hears about the refusal once"); const n1 = got.length; await c.advance(60000); assert.equal(got.length, n1, "and the reports stop");
+  sync.stop();
+  // a 401 (signed out) stops the reports too, but it is the login flow's job to speak, not the trip's
+  let h2 = 0; const s2 = createTripSync({ ...c, getPose: () => ({ x: Math.random() * 99, z: 0, h: 0, mode: "keke" }), send: async () => ({ failed: true, status: 401 }), fetchRoad: async () => ({ travellers: [] }), onTravellers() {}, onHalted: () => { h2++; } });
+  s2.start(); await c.advance(20000); assert.equal(h2, 0); s2.stop();
+}
+
+// 6. the end of the trip is numbered above every report of the trip, so a late report cannot bring the player back onto the road
+{
+  const c = clock(); const seqs = []; let ended = null;
+  const sync = createTripSync({ ...c, getPose: () => ({ x: Math.random() * 50, z: 0, h: 0, mode: "bus" }), send: async (p) => { seqs.push(p.seq); return { ok: true }; }, fetchRoad: async () => ({ travellers: [] }), onTravellers() {}, clear: (seq) => { ended = seq; } });
+  sync.start(); await c.advance(100); for (let i = 0; i < 4; i++) await c.advance(2100); sync.stop({ clear: true });
+  assert.ok(seqs.length >= 2 && ended > Math.max(...seqs), "the clear carries a number above all reports: " + ended + " vs " + Math.max(...seqs));
+}
 console.log("trip sync + camera passed");
