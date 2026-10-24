@@ -5,6 +5,8 @@ OAU Life now includes the Campuslife world, focused on Obafemi Awolowo Universit
 
 `/play` opens the live campus. `/home` keeps the original room and daily actions, `/map` keeps the original OAU map, and the **OAU apps** button opens the existing phone apps. The campus phone adds its timetable, registration, handouts, shops, events, union, errands and travel tools. `/rider` is the restricted errands board.
 
+On `/map`, tap a floating destination label to start a collision-aware walking route. Building entrances are resolved from their footprints and road access; the avatar stops outside a closed door until **Open Door** is pressed. Driving remains manual; when you stop near the planned destination, choose **Park & walk** to continue on foot.
+
 ## Run locally
 
 Use Node.js 22.9 or newer and PostgreSQL. From a normal clone:

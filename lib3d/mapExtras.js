@@ -57,6 +57,18 @@ const BUILDINGS = [
   { id: "club_quantum", name: "Quantum", kind: "club", tier: 1, x: -276.8, z: 873.8, w: 30, d: 20, h: 9, wall: "#5b4a8a", roof: "#2a1d45", neon: "#38e8ff" },
   { id: "club_0203", name: "0203", kind: "club", tier: 1, x: -200, z: 880, w: 30, d: 20, h: 9, wall: "#7a3f6e", roof: "#2a1d45", neon: "#ff4fd8" },
   { id: "club_divas", name: "Royal Divas", kind: "club", tier: 1, x: -100, z: 880, w: 30, d: 20, h: 9, wall: "#8a6a2f", roof: "#2a1d45", neon: "#ffd24a" },
+  { id: "hsltc_n", name: "HS&LTC", kind: "lecture", tier: 2, x: 364.7, z: 181.2, w: 18, d: 14, h: 8 },
+  { id: "ecobank", name: "Ecobank", kind: "bank", tier: 2, x: -249.8, z: 108.9, w: 16, d: 12, h: 7 },
+  { id: "blk_2a", name: "Block 2A", kind: "block", tier: 2, x: -959.1, z: -197.7, w: 24, d: 16, h: 8 },
+  { id: "cooperative_hall", name: "Cooperative Hall", kind: "hall", tier: 2, x: 181.8, z: 578.4, w: 22, d: 16, h: 8 },
+  { id: "awovarsity_hall", name: "Awovarsity Hall", kind: "hall", tier: 2, x: 269.3, z: 651.3, w: 22, d: 16, h: 8 },
+  { id: "oau_ict", name: "OAU ICT", kind: "admin", tier: 2, x: 874.6, z: 112.3, w: 20, d: 14, h: 8 },
+  { id: "spider_building", name: "Spider Building", kind: "hall", tier: 2, x: 825, z: -446.8, w: 20, d: 16, h: 8 },
+  { id: "school_bookshop", name: "School Bookshop", kind: "shop", tier: 3, x: 148.5, z: 89.7, w: 12, d: 10, h: 5 },
+  { id: "as_e_dey", name: "As E Dey", kind: "shop", tier: 3, x: -538.1, z: -153.4, w: 12, d: 10, h: 5 },
+  { id: "new_bukateria", name: "New Bukateria", kind: "shop", tier: 2, x: -955.5, z: 320.8, w: 18, d: 14, h: 6 },
+  { id: "afkit", name: "AFKIT", kind: "shop", tier: 3, x: -1108.5, z: 251.6, w: 14, d: 10, h: 5 },
+  { id: "buks_empire", name: "Buk's Empire", kind: "shop", tier: 3, x: -944.9, z: 537, w: 14, d: 10, h: 5 },
 ];
 
 /** What a player is told about the places added by this file (the real-map places keep their blurbs in landmarks.js). */
@@ -81,10 +93,12 @@ export function withExtras(data) {
   const buildings = [...data.buildings], places = [...data.places];
   let next = buildings.reduce((m, q) => Math.max(m, q.id), -1) + 1;
   for (const e of BUILDINGS) {
-    if (places.some((p) => p.id === e.id)) continue;
+    const placeIndex = places.findIndex((p) => p.id === e.id), existing = placeIndex >= 0 ? places[placeIndex] : null;
+    if (existing?.bid != null && buildings.some((b) => b.id === existing.bid)) continue;
     const pts = (e.shape === "L" ? lShape : rect)(e.x, e.z, e.w, e.d).map(([x, z]) => [+x.toFixed(1), +z.toFixed(1)]);
     buildings.push({ id: next, pts, area: Math.round(e.w * e.d * (e.shape === "L" ? 0.75 : 1)), h: e.h, hSrc: "game-placement", wall: e.wall, roof: e.roof, neon: e.neon });
-    places.push({ id: e.id, name: e.name, kind: e.kind, tier: e.tier, src: "game-placement", conf: "game", x: e.x, z: e.z, bid: next, snapPx: 0 });
+    if (existing) places[placeIndex] = { ...existing, src: "game-placement", conf: "game", x: e.x, z: e.z, bid: next };
+    else places.push({ id: e.id, name: e.name, kind: e.kind, tier: e.tier, src: "game-placement", conf: "game", x: e.x, z: e.z, bid: next, snapPx: 0 });
     next++;
   }
   for (const g of Object.values(GROUNDS)) if (!places.some((p) => p.id === g.id)) places.push({ id: g.id, name: g.name, kind: g.id === "motion_ground" ? "sports" : "worship", tier: 2, src: "game-placement", conf: "game", x: +((g.x0 + g.x1) / 2).toFixed(1), z: +((g.z0 + g.z1) / 2).toFixed(1), bid: null, snapPx: 0 });

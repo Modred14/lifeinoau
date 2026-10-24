@@ -9,6 +9,8 @@ import { buildGround } from "./ground.js";
 import { buildEdges } from "./edges.js";
 import { buildBillboards } from "./billboards3d.js";
 import { buildGrounds } from "./grounds.js";
+import { destinationOf } from "./roadnet.js";
+import { hasInterior } from "./interiors/registry.js";
 
 export const S = 0.1;   // metres -> scene units
 export const EX = 2;    // visual height exaggeration (buildings only)
@@ -39,6 +41,7 @@ function flat(areas, color, y, o = {}) { // flat polygons (roads, parking, pitch
 /** data: parsed oau-campus.json. meta: optional { [placeId]: {blurb, actions, ...} } merged onto the places. */
 export function buildRealCampus(data, meta = {}) {
   const root = new THREE.Group(), b = data.bounds, disposables = [];
+  const mapDoors = [], doorFrame = new THREE.MeshStandardMaterial({ color: "#eee5d2", roughness: 0.85 }), doorPanel = new THREE.MeshStandardMaterial({ color: "#68432e", roughness: 0.78 }), doorDark = new THREE.MeshBasicMaterial({ color: "#161a20" }), doorMat = new THREE.MeshStandardMaterial({ color: "#8f342f", roughness: 0.9 });
   const x0 = b.x0 * S, x1 = b.x1 * S, z0 = b.z0 * S, z1 = b.z1 * S;
   // ---- ground: patchy grass and sand that fades into the sky-blue at its rim, so the map ends softly (ground.js). Water stays blue. ----
   const ground = buildGround(data, S); root.add(ground);
@@ -106,13 +109,29 @@ export function buildRealCampus(data, meta = {}) {
   let hereId = null; const setYou = (id) => { hereId = id; const L = resolve(id); if (!L) { here.visible = false; return; } here.visible = true; here.position.set(L.x, 0, L.z); hring.position.y = 0.22; hring.scale.setScalar(L.radius * 1.1); harrow.position.y = (L.pos?.y ?? 3) + 0.6; };
   const update = (t, dt = 0.016) => { bb.update(dt); const k = 0.35 + 0.65 * Math.max(0, Math.sin(t * 5)); glow.forEach((m) => m.color.setRGB(k, k * 0.23, k * 0.19)); if (sel.visible) { sel.material.opacity = 0.65 + Math.sin(t * 3) * 0.25; sel.rotation.z = t * 0.4; } if (here.visible) { harrow.position.y += Math.sin(t * 4) * 0.004; hring.rotation.z = t * 0.3; } };
   /** While a trip runs, the flat ground layers sit almost on the ground so cars and people do not look like they stand on slabs, and the map's labels get out of the way. */
-  const tripMode = (on) => { tripOn = on; root.traverse((o) => { if (o.userData?.layerY != null) o.position.y = on ? o.userData.layerY * 0.12 : o.userData.layerY; }); edges.group.traverse((o) => { if (o.name === "road-stubs") { o.userData.layerY ??= o.position.y; o.position.y = on ? o.userData.layerY * 0.12 : o.userData.layerY; } }); };
+  const tripMode = (on) => { tripOn = on; for (const door of mapDoors) door.visible = !on; root.traverse((o) => { if (o.userData?.layerY != null) o.position.y = on ? o.userData.layerY * 0.12 : o.userData.layerY; }); edges.group.traverse((o) => { if (o.name === "road-stubs") { o.userData.layerY ??= o.position.y; o.position.y = on ? o.userData.layerY * 0.12 : o.userData.layerY; } }); };
 
   /** Which place is under a raycaster? Returns a place id, "bld_<n>" for a building with no name, or null. */
   const pick = (ray) => { const bh = ray.intersectObjects(bb.meshes, false)[0], h0 = ray.intersectObjects([wallMesh, capMesh].filter(Boolean), false)[0]; if (bh && (!h0 || bh.distance <= h0.distance)) return bh.object.userData.placeId; const hit = ray.intersectObjects([wallMesh, capMesh].filter(Boolean), false)[0]; if (!hit) return null; const isW = hit.object === wallMesh, v = hit.face.a;
     const r = ranges.find((q) => (isW ? v >= q.s0 && v < q.s1 : v >= q.c0 && v < q.c1)); return r ? placeAt.get(r.bid)?.id ?? "bld_" + r.bid : null; };
-  const extent = Math.max(x1 - x0, z1 - z0) / 2, dispose = () => { bb.dispose(); edges.dispose(); root.traverse((o) => { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : m ? [m] : []).forEach((q) => q.dispose()); }); win.map.dispose(); win.emis.dispose(); };
+  const extent = Math.max(x1 - x0, z1 - z0) / 2, dispose = () => { bb.dispose(); edges.dispose(); root.traverse((o) => { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : m ? [m] : []).forEach((q) => q.dispose()); }); doorFrame.dispose(); doorPanel.dispose(); doorDark.dispose(); doorMat.dispose(); win.map.dispose(); win.emis.dispose(); };
   const setBillboards = (list) => bb.setBoards(list);
+  const setDoors = (net) => {
+    for (const door of mapDoors.splice(0)) { root.remove(door); door.traverse((o) => o.geometry?.dispose?.()); }
+    for (const p of data.places) {
+      if (!hasInterior(p.id, p.kind) || p.bid == null || !bById.has(p.bid)) continue;
+      const d = destinationOf(net, p).door, w = d.width ?? 2, h = 2.5 * EX, group = new THREE.Group();
+      const add = (geometry, material, x, y, z) => { const mesh = new THREE.Mesh(geometry, material); mesh.position.set(x, y, z); mesh.castShadow = true; group.add(mesh); };
+      add(new THREE.BoxGeometry(w + 0.28, h, 0.08), doorDark, 0, h / 2, 0.04);
+      add(new THREE.BoxGeometry(0.14, h + 0.14, 0.16), doorFrame, -w / 2 - 0.08, h / 2, 0.08);
+      add(new THREE.BoxGeometry(0.14, h + 0.14, 0.16), doorFrame, w / 2 + 0.08, h / 2, 0.08);
+      add(new THREE.BoxGeometry(w + 0.36, 0.14, 0.16), doorFrame, 0, h + 0.07, 0.08);
+      add(new THREE.BoxGeometry(w * 0.86, h * 0.9, 0.07), doorPanel, 0, h * 0.45, 0.14);
+      add(new THREE.BoxGeometry(w * 0.72, 0.045, 0.5), doorMat, 0, 0.035, 0.38);
+      group.position.set((d.x + d.nx * 0.18) * S, 0, (d.z + d.nz * 0.18) * S); group.rotation.y = Math.atan2(d.nx, d.nz); group.scale.setScalar(S); group.visible = !tripOn;
+      group.userData.mapDoor = true; root.add(group); mapDoors.push(group);
+    }
+  };
   /**
    * Gives the roads their proper shape: carriageways of the real width with a pavement each side, kerbs, centre dashes, stop lines and crossings, all drawn
    * from the road graph (the very geometry vehicles drive on and people collide with). The old flat road polygons stay underneath as paved apron.
@@ -125,7 +144,7 @@ export function buildRealCampus(data, meta = {}) {
     if (roadFlat) { roadFlat.material.color.set(ROAD_COLORS.apron); roadFlat.userData.layerY = 0.0754; }
     tripMode(tripOn);
   };
-  return { root, anchors, places, pick, resolve, update, setSelected, setYou, tripMode, setTripMode: tripMode, setRoadGraph, setBillboards, dispose, bounds: { x0, x1, z0, z1 }, extent, attribution: data.meta.attribution,
+  return { root, anchors, places, pick, resolve, update, setSelected, setYou, tripMode, setTripMode: tripMode, setRoadGraph, setBillboards, setDoors, dispose, bounds: { x0, x1, z0, z1 }, extent, attribution: data.meta.attribution,
     camera: { home: { x: 0, z: 8, dist: 210, az: 0.7, pol: 0.95 }, min: 10, max: 520 } };
 }
 

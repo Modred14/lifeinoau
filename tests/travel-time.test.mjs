@@ -41,7 +41,7 @@ for (let i = 0; i < 60 && trips < 90; i++) {
     let end = null; const flow = createTripFlow({ svc, sim }, { plan, onArrive: () => true, onEnter() {}, onEnd: (w) => { end = w; }, onNotice() {} });
     const secs = {}; let t = 0, last = "intro", since = 0;
     while (t < 300 && !end && flow.state.phase !== "inside") {
-      flow.update(1 / 30, {}); sim.update(1 / 30); t += 1 / 30;
+      flow.update(1 / 30, { interact: flow.state.phase === "door" }); sim.update(1 / 30); t += 1 / 30;
       if (flow.state.phase !== last) { secs[last] = (secs[last] ?? 0) + (t - since); last = flow.state.phase; since = t; }
     }
     secs[last] = (secs[last] ?? 0) + (t - since);

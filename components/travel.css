@@ -51,6 +51,9 @@ body[data-trip] .map-chrome { display: none !important; } /* the bottom bar is n
 .th-chip b { overflow: hidden; text-overflow: ellipsis; }
 .th-chip span { color: #7be3ad; font-weight: 700; }
 .th-cancel { position: absolute; left: 12px; top: calc(var(--safe-t) + var(--hud-h, 70px) + 10px); background: rgba(13, 19, 33, 0.82); border-color: rgba(255, 255, 255, 0.18); gap: 6px; }
+.th-open-door { position: absolute; left: 50%; bottom: calc(var(--safe-b) + 86px); transform: translateX(-50%); min-width: 156px; min-height: 52px; padding: 0 20px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 15px; background: var(--green); color: #07140d; font: 700 1rem var(--font-ui); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.38); }
+.th-open-door:hover:not(:disabled) { background: var(--green-text); }
+.th-open-door:active { transform: translateX(-50%) scale(0.97); }
 .th-stick { position: absolute; left: 22px; bottom: calc(var(--safe-b) + 28px); width: 132px; height: 132px; border-radius: 50%; background: rgba(255, 255, 255, 0.22); border: 2px solid rgba(255, 255, 255, 0.55); backdrop-filter: blur(4px); touch-action: none; display: grid; place-items: center; }
 .th-stick i { width: 58px; height: 58px; border-radius: 50%; background: rgba(255, 255, 255, 0.92); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35); }
 .th .th-btn { background: rgba(255, 255, 255, 0.9); color: #161b26; border: 0; border-radius: 18px; font-weight: 800; letter-spacing: 0.03em; touch-action: none; user-select: none; display: grid; place-items: center; box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.5); }
