@@ -97,7 +97,7 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
         // immediate). lib/tripSync.js sends the latest pose only, never two requests at once, backs off when the connection is slow or down, and sends at once when it comes back.
         const quick = { timeout: 6000, retries: 0 };
         sync = createTripSync({
-          getPose: () => { const p = handle.pos(); return { x: p.x, z: p.z, h: p.h, mode: trip.mode }; },
+          getPose: () => { const p = handle.pos(); return { x: p.x, z: p.z, h: p.h, mode: p.mode ?? trip.mode }; },   // what is moving: the vehicle while you are in it, otherwise just you on foot
           send: (p, { signal }) => call("/api/travel", { action: "trip", x: p.x, z: p.z, h: p.h, mode: p.mode }, { ...quick, signal }),
           fetchRoad: ({ signal }) => call("/api/travel?road=1", undefined, { ...quick, signal }),
           // the trip's end, with a report number above every report of this trip: a report that was still on its way can never put the player back on the road

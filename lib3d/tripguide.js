@@ -11,8 +11,8 @@
 import { Path } from "./roadnet.js";
 
 const OFF_WALK = 3.5, OFF_DRIVE = 7, REPLAN_GAP = 0.6, DRIVE_GAP = 1.0;
-const WALK_PHASES = new Set(["intro", "approach", "trek", "walk"]);
-const SHORT_PHASES = new Set(["alight", "paying", "door", "enter", "inside"]);
+const WALK_PHASES = new Set(["intro", "approach", "trek", "walk", "afoot", "reenter"]);
+const SHORT_PHASES = new Set(["alight", "exit", "paying", "door", "enter", "inside"]);
 
 /** The part of `path` from distance `s` onwards, as points, starting at the live position (x, z). */
 export function remainingPts(path, s, x, z) {

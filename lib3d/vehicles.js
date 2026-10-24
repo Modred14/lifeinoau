@@ -22,6 +22,28 @@ const tyreMat = mat("#16181c", { roughness: 0.9, metalness: 0 }), glassOf = "#27
 /** Wheels that can spin: returns the meshes so the caller can turn them (rotation.x). */
 function wheels(root, list, r, w) { const g = wheelGeo(r, w), out = []; for (const [x, z] of list) { const m = new THREE.Mesh(g, tyreMat); m.position.set(x, r, z); m.castShadow = true; root.add(m); out.push(m); } return out; }
 
+
+/**
+ * Two doors that really open: a flush panel (and its window) hinged at its front edge, with a dark opening behind it that only shows when the door is ajar.
+ * `dim` = [h0, bh, ch]: where the lower body starts, how tall it is, how tall the cabin is (metres). Door z is the middle of the door along the car (nose is +).
+ * The left door (side +1, the driver's: the vehicle's own +x is its LEFT) and the right one (side -1). Returns { left, right, set(side, k 0..1) }.
+ */
+export const DOOR_OPEN_ANGLE = 1.2, DOOR_LEN = 1.0, DOOR_Z = { left: 0.3, right: -0.5 };
+function makeDoors(root, W, dim, paint) {
+  const [h0, bh, ch] = dim, out = {}, len = DOOR_LEN;
+  for (const [name, side] of [["left", 1], ["right", -1]]) {
+    const z = DOOR_Z[name], pivot = new THREE.Group(), hole = new THREE.Group();
+    pivot.position.set(side * (W / 2), 0, z + len / 2);
+    const lower = new THREE.Mesh(merged([box(0.05, bh - 0.04, len - 0.04, side * 0.012, h0 + bh / 2, -len / 2, paint), box(0.05, ch * 0.78, len - 0.2, -side * 0.088, h0 + bh + ch * 0.4, -len / 2, paint), box(0.054, ch * 0.62, len - 0.3, -side * 0.088, h0 + bh + ch * 0.42, -len / 2, glassOf)]), bodyMat());
+    lower.castShadow = true; pivot.add(lower); root.add(pivot);
+    const dark = new THREE.Mesh(merged([box(0.02, bh - 0.06, len - 0.06, side * (W / 2 + 0.004), h0 + bh / 2, z, "#0f1216"), box(0.02, ch * 0.7, len - 0.3, side * ((W - 0.2) / 2 + 0.004), h0 + bh + ch * 0.4, z, "#0f1216")]), bodyMat());
+    hole.add(dark); hole.visible = false; root.add(hole);
+    out[name] = { side, z, len, pivot, hole, k: 0 };
+  }
+  out.set = (side, k) => { const d = side > 0 ? out.left : out.right, c = Math.max(0, Math.min(1, k)); d.k = c; d.pivot.rotation.y = -d.side * c * DOOR_OPEN_ANGLE; d.hole.visible = c > 0.015; };
+  return out;
+}
+
 /** A sedan or SUV body (paint colour + dark glass + lights) as one merged geometry. Also used, instanced, for the traffic. */
 export function carBodyGeometry(paint = "#c0392b", suv = false) {
   const L = suv ? 4.7 : 4.5, W = 1.85, h0 = suv ? 0.5 : 0.42, bh = suv ? 0.78 : 0.62, ch = suv ? 0.72 : 0.55, cl = suv ? 2.9 : 2.3;
@@ -44,8 +66,8 @@ export const CAR_COLORS = ["#c0392b", "#2c5aa0", "#e8e8e8", "#1f1f23", "#4a4f57"
 /** The player's own car: dark, a little grander than the traffic. Returns { root, wheels (spinnable), front (steerable pair), length, width }. */
 export function makeCar(paint = "#1c1d21") {
   const root = new THREE.Group(), body = new THREE.Mesh(carBodyGeometry(paint, false), bodyMat()); body.castShadow = true; body.receiveShadow = true; root.add(body);
-  const ws = wheels(root, CAR_WHEELS, CAR_WHEEL_R, 0.26);
-  return { root, wheels: ws, front: [ws[0], ws[1]], length: 4.5, width: 1.85, height: 1.5, door: { side: -1, z: -0.5 }, seatZ: 0 };
+  const ws = wheels(root, CAR_WHEELS, CAR_WHEEL_R, 0.26), doors = makeDoors(root, 1.85, [0.42, 0.62, 0.55], paint);
+  return { root, wheels: ws, front: [ws[0], ws[1]], length: 4.5, width: 1.85, height: 1.5, door: { side: -1, z: -0.5 }, seatZ: 0, doors, setDoor: doors.set };
 }
 
 // ---- the YK Autos cars (lib/cars.js ids -> a body shape) ----
@@ -89,14 +111,14 @@ function cybertruckBody(paint) { // flat steel panels: a low nose, a steep winds
   return merged(p);
 }
 const SHAPES = {
-  compact: { body: (c) => boxyBody({ L: 4.5, W: 1.78, h0: 0.42, bh: 0.6, ch: 0.55, cl: 2.3, cz: -0.3 }, c), L: 4.5, W: 1.78, H: 1.45, wr: 0.33, wx: 0.84, wz: [1.4, -1.4] },
-  sedan: { body: (c) => boxyBody({ L: 4.85, W: 1.85, h0: 0.42, bh: 0.62, ch: 0.55, cl: 2.45, cz: -0.35 }, c), L: 4.85, W: 1.85, H: 1.48, wr: 0.34, wx: 0.88, wz: [1.5, -1.5] },
-  sport: { body: (c) => boxyBody({ L: 4.65, W: 1.84, h0: 0.38, bh: 0.58, ch: 0.46, cl: 2.1, cz: -0.3 }, c), L: 4.65, W: 1.84, H: 1.4, wr: 0.35, wx: 0.88, wz: [1.45, -1.45] },
-  suv: { body: (c) => boxyBody({ L: 4.9, W: 1.95, h0: 0.55, bh: 0.8, ch: 0.7, cl: 3.0, cz: -0.3 }, c), L: 4.9, W: 1.95, H: 1.75, wr: 0.39, wx: 0.93, wz: [1.5, -1.5] },
-  "suv-large": { body: (c) => boxyBody({ L: 4.95, W: 2.0, h0: 0.6, bh: 0.85, ch: 0.62, cl: 3.0, cz: -0.3 }, c), L: 4.95, W: 2.0, H: 1.8, wr: 0.41, wx: 0.96, wz: [1.5, -1.5] },
-  "super-suv": { body: (c) => boxyBody({ L: 5.1, W: 2.02, h0: 0.5, bh: 0.82, ch: 0.5, cl: 2.6, cz: -0.35, rear: 1.0 }, c), L: 5.1, W: 2.02, H: 1.64, wr: 0.43, wx: 0.98, wz: [1.6, -1.6] },
-  supercar: { body: supercarBody, L: 4.52, W: 1.93, H: 1.18, wr: 0.36, wx: 0.9, wz: [1.35, -1.35] },
-  cybertruck: { body: cybertruckBody, L: 5.68, W: 2.03, H: 1.8, wr: 0.45, wx: 0.98, wz: [1.85, -1.85] },
+  compact: { body: (c) => boxyBody({ L: 4.5, W: 1.78, h0: 0.42, bh: 0.6, ch: 0.55, cl: 2.3, cz: -0.3 }, c), L: 4.5, W: 1.78, H: 1.45, wr: 0.33, wx: 0.84, wz: [1.4, -1.4], d: [0.42, 0.6, 0.55] },
+  sedan: { body: (c) => boxyBody({ L: 4.85, W: 1.85, h0: 0.42, bh: 0.62, ch: 0.55, cl: 2.45, cz: -0.35 }, c), L: 4.85, W: 1.85, H: 1.48, wr: 0.34, wx: 0.88, wz: [1.5, -1.5], d: [0.42, 0.62, 0.55] },
+  sport: { body: (c) => boxyBody({ L: 4.65, W: 1.84, h0: 0.38, bh: 0.58, ch: 0.46, cl: 2.1, cz: -0.3 }, c), L: 4.65, W: 1.84, H: 1.4, wr: 0.35, wx: 0.88, wz: [1.45, -1.45], d: [0.38, 0.58, 0.46] },
+  suv: { body: (c) => boxyBody({ L: 4.9, W: 1.95, h0: 0.55, bh: 0.8, ch: 0.7, cl: 3.0, cz: -0.3 }, c), L: 4.9, W: 1.95, H: 1.75, wr: 0.39, wx: 0.93, wz: [1.5, -1.5], d: [0.55, 0.8, 0.7] },
+  "suv-large": { body: (c) => boxyBody({ L: 4.95, W: 2.0, h0: 0.6, bh: 0.85, ch: 0.62, cl: 3.0, cz: -0.3 }, c), L: 4.95, W: 2.0, H: 1.8, wr: 0.41, wx: 0.96, wz: [1.5, -1.5], d: [0.6, 0.85, 0.62] },
+  "super-suv": { body: (c) => boxyBody({ L: 5.1, W: 2.02, h0: 0.5, bh: 0.82, ch: 0.5, cl: 2.6, cz: -0.35, rear: 1.0 }, c), L: 5.1, W: 2.02, H: 1.64, wr: 0.43, wx: 0.98, wz: [1.6, -1.6], d: [0.5, 0.82, 0.5] },
+  supercar: { body: supercarBody, L: 4.52, W: 1.93, H: 1.18, wr: 0.36, wx: 0.9, wz: [1.35, -1.35], d: [0.26, 0.5, 0.3] },
+  cybertruck: { body: cybertruckBody, L: 5.68, W: 2.03, H: 1.8, wr: 0.45, wx: 0.98, wz: [1.85, -1.85], d: [0.45, 0.7, 0.6] },
 };
 /** The car a player bought, by its lib/cars.js id, in the paint they chose (a Cybertruck is bare steel). No id (the family car) or an unknown id: the plain sedan, as before.
  *  Returns the same as makeCar: { root, wheels, front, length, width, height, door, seatZ }. */
@@ -105,8 +127,8 @@ export function makeVehicle(modelId, paint) {
   if (!car) return makeCar(paint || undefined);
   const sh = SHAPES[car.shape] ?? SHAPES.sedan, colour = car.fixedPaint ?? (paint || "#1c1d21");
   const root = new THREE.Group(), body = new THREE.Mesh(sh.body(colour), bodyMat()); body.castShadow = true; body.receiveShadow = true; root.add(body);
-  const ws = wheels(root, [[-sh.wx, sh.wz[0]], [sh.wx, sh.wz[0]], [-sh.wx, sh.wz[1]], [sh.wx, sh.wz[1]]], sh.wr, 0.28);
-  return { root, wheels: ws, front: [ws[0], ws[1]], length: sh.L, width: sh.W, height: sh.H, door: { side: -1, z: -0.5 }, seatZ: car.shape === "supercar" ? -0.1 : 0 };
+  const ws = wheels(root, [[-sh.wx, sh.wz[0]], [sh.wx, sh.wz[0]], [-sh.wx, sh.wz[1]], [sh.wx, sh.wz[1]]], sh.wr, 0.28), doors = makeDoors(root, sh.W, sh.d, colour);
+  return { root, wheels: ws, front: [ws[0], ws[1]], length: sh.L, width: sh.W, height: sh.H, door: { side: -1, z: -0.5 }, seatZ: car.shape === "supercar" ? -0.1 : 0, doors, setDoor: doors.set };
 }
 
 /** A keke napep: yellow three-wheeler with a black canopy, open at the sides. */
@@ -126,7 +148,7 @@ export function makeKeke() {
     box(0.16, 0.16, 0.16, 0, 1.35, 0.3, "#6b4a35"),              // and head
   ], body = new THREE.Mesh(merged(p), bodyMat()); body.castShadow = true; body.receiveShadow = true; root.add(body);
   const ws = wheels(root, [[-0.62, -0.7], [0.62, -0.7], [0, 1.15]], 0.27, 0.16);
-  return { root, wheels: ws, front: [ws[2]], length: 2.8, width: 1.4, height: 2, door: { side: -1, z: -0.45 }, seatZ: -0.4, open: true };
+  return { root, wheels: ws, front: [ws[2]], length: 2.8, width: 1.4, height: 2, door: { side: -1, z: -0.45 }, seatZ: -0.4, open: true, doors: null, setDoor() {} };
 }
 
 /** A danfo-style minibus: yellow with a black stripe, a row of windows, and a door on the right (a vehicle's own +x is its LEFT, so the right is -x). */
@@ -143,7 +165,7 @@ export function makeBus() {
     box(0.04, 1.5, 1.0, -(W / 2 + 0.01), 1.35, 1.3, "#222a33"),                         // the door, on the right (the kerb side: traffic keeps right)
   ], body = new THREE.Mesh(merged(p), bodyMat()); body.castShadow = true; body.receiveShadow = true; root.add(body);
   const ws = wheels(root, [[-0.95, 2.0], [0.95, 2.0], [-0.95, -1.9], [0.95, -1.9]], 0.5, 0.32);
-  return { root, wheels: ws, front: [ws[0], ws[1]], length: L, width: W, height: 2.6, door: { side: -1, z: 1.3 }, seatZ: 0 };
+  return { root, wheels: ws, front: [ws[0], ws[1]], length: L, width: W, height: 2.6, door: { side: -1, z: 1.3 }, seatZ: 0, doors: null, setDoor() {} };
 }
 
 /**

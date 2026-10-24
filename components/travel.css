@@ -57,8 +57,16 @@ body[data-trip] .map-chrome { display: none !important; } /* the bottom bar is n
 .th .th-btn:hover:not(:disabled) { background: #fff; border: 0; }
 .th .th-btn:active { transform: scale(0.95); }
 .th-run { position: absolute; right: 22px; bottom: calc(var(--safe-b) + 40px); width: 84px; height: 84px; border-radius: 50% !important; }
-.th-steer { position: absolute; left: 18px; bottom: calc(var(--safe-b) + 28px); display: flex; gap: 12px; }
-.th-steer .th-btn { width: 78px; height: 78px; }
+/* the steering wheel: bottom left, clear of the bottom bar (--safe-b already includes it) and of the pedals on the right; it takes its own finger and never scrolls the page */
+.th-wheel { position: absolute; left: max(14px, env(safe-area-inset-left)); bottom: calc(var(--safe-b) + 22px); width: clamp(128px, 36vw, 176px); aspect-ratio: 1; border-radius: 50%; touch-action: none; overscroll-behavior: contain; cursor: grab; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.4)); }
+.th-wheel:active { cursor: grabbing; }
+.th-wheel svg { width: 100%; height: 100%; display: block; will-change: transform; pointer-events: none; }
+.th .th-exit { position: absolute; right: max(18px, env(safe-area-inset-right)); bottom: calc(var(--safe-b) + 164px); display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 18px; border-radius: 999px; background: #ffd24a; color: #1a1500; font-size: 0.95rem; letter-spacing: 0.01em; }
+.th .th-exit:hover:not(:disabled) { background: #ffe07a; }
+.th .th-exit:disabled { opacity: 0.8; background: #e8dfb0; }
+.th-act { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-b) + 176px); display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; max-width: calc(100% - 24px); }
+.th .th-act-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 18px; border-radius: 999px; background: #ffd24a; color: #1a1500; font-size: 0.95rem; }
+.th .th-brake small { display: block; font-size: 0.56rem; font-weight: 700; letter-spacing: 0; opacity: 0.85; text-transform: none; margin-top: 2px; }
 .th-pedals { position: absolute; right: 18px; bottom: calc(var(--safe-b) + 28px); display: flex; align-items: flex-end; gap: 12px; }
 .th .th-gas { width: 78px; height: 110px; background: #17a34a; color: #fff; }
 .th .th-gas:hover:not(:disabled) { background: #17a34a; }

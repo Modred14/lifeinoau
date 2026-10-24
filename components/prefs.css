@@ -8,7 +8,8 @@ html[data-hide-name-tags] .pt-tag { display: none !important; }
 /* Gameplay > Left-handed controls: the on-screen stick and the buttons trade sides (walking, and driving: steering and pedals). Gameplay > Control hints: the how-to-move line in buildings. */
 html[data-left-handed] .th-stick { left: auto; right: 22px; }
 html[data-left-handed] .th-run { right: auto; left: 22px; }
-html[data-left-handed] .th-steer { left: auto; right: 18px; }
+html[data-left-handed] .th-wheel { left: auto; right: max(14px, env(safe-area-inset-right)); }
+html[data-left-handed] .th .th-exit { right: auto; left: max(18px, env(safe-area-inset-left)); }
 html[data-left-handed] .th-pedals { right: auto; left: 18px; flex-direction: row-reverse; }
 html[data-hide-hints] .bi3-help { display: none; }
 /* The phone's apps are a light page with their own colours (components/phone.css), so high contrast gets its own light version there: darker text, stronger borders. */

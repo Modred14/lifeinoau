@@ -14,6 +14,8 @@ const read = (f) => JSON.parse(fs.readFileSync(new URL("../public/data/" + f, im
 const svc = buildServices(withExtras(read("oau-campus.json")), read("oau-roadgraph.json"));
 const places = svc.data.places.filter((p) => p.x != null);
 let seed = 5; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+// the traffic has its own random stream, so which places get picked never depends on how long a trip took (door animations, say)
+let tseed = 91; const trnd = () => (tseed = (tseed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
 const WINDOW = { keke: RIDE_SECONDS.keke, bus: RIDE_SECONDS.bus, car: RIDE_SECONDS.driver };
 const TOL = 0.2; // the ride is played in 1/30 s steps
 
@@ -37,7 +39,7 @@ for (let i = 0; i < 60 && trips < 90; i++) {
     assert.ok(Math.abs(plan.parts.ride - rideSecondsFor(mode === "car" ? "driver" : mode, plan.len)) < 1e-9, "the ride time comes from the road distance");
     assert.ok(plan.parts.walkIn + plan.parts.wait <= 5, `${mode} ${a.id}->${b.id}: approach ${plan.parts.walkIn + plan.parts.wait} is at most 5 s`);
     // the trip itself, played out
-    const sim = createTrafficSim({ graph: svc.graph, world: svc.world, focus: () => a, rnd });
+    const sim = createTrafficSim({ graph: svc.graph, world: svc.world, focus: () => a, rnd: trnd });
     let end = null; const flow = createTripFlow({ svc, sim }, { plan, onArrive: () => true, onEnter() {}, onEnd: (w) => { end = w; }, onNotice() {} });
     const secs = {}; let t = 0, last = "intro", since = 0;
     while (t < 300 && !end && flow.state.phase !== "inside") {
