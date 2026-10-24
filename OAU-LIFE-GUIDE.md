@@ -159,7 +159,8 @@ oau-life-backend/
 | `/api/career` | GET | `app/api/career/route.js` | Jobs and businesses overview |
 | `/api/career/job` | POST | `app/api/career/job/route.js` | Pick, quit, work a shift |
 | `/api/career/business` | POST | `app/api/career/business/route.js` | Start, hire, upgrade, withdraw, close |
-| `/api/invest` | GET, POST | `app/api/invest/route.js` | Market, buy, sell |
+| `/api/invest` | GET, POST | `app/api/invest/route.js` | Portfolio, buy, sell |
+| `/api/invest/live` | GET | `app/api/invest/live/route.js` | Live prices and charts (HTTP fallback for the WebSocket) |
 | `/api/courses` | GET, POST | `app/api/courses/route.js` | Your courses and progress; attend a lecture or study a course |
 | `/api/admin/overview` | GET | `app/api/admin/overview/route.js` | Integrity check and economy numbers |
 | `/api/admin/reports` | GET, POST | `app/api/admin/reports/route.js` | Report queue, resolve |
@@ -291,9 +292,14 @@ job level. Some need 200L or 300L, and some need a specific faculty.
 Hire up to 8 staff, upgrade to level 5, add or withdraw capital (a safety reserve stays inside). Each week brings
 revenue, expenses and random events. A business with no capital left goes bankrupt. Businesses keep trading after graduation.
 
-**Investments.** Six fictional products from low risk to high risk. Prices come from a secret, deterministic series, so
-all players see the same market and nobody can influence it. 1% fee each way, 5% penalty for selling inside a lock period,
-and a total cap of ₦5M times your level number (100L = ₦5M, 200L = ₦10M and so on).
+**Investments.** Six fictional products from low risk to high risk, traded in a LIVE market that is always open. Prices move every second
+(`lib/marketEngine.js`): each product has its own volatility, with calm spells, trends, reversals, bursts, and rare sharp rises and crashes
+(a price can double and then halve again within minutes). A price is a pure function of a secret key (`MARKET_SEED`) and the server clock, so every
+server computes the same number, the market keeps moving while nobody is online, a restart cannot reset it, and nobody can predict or change it.
+Orders are filled at the server's price at that instant, under the player's row lock and inside one database transaction (`lib/investService.js`).
+The Invest app shows live prices, 5 min / 1 h / 24 h changes and charts, and the portfolio with realised and unrealised profit or loss
+(over the WebSocket in `realtime/server.js`, or `/api/invest/live` over HTTP if it is down). 1% fee each way, 5% penalty for selling inside a
+lock period, and a total cap of ₦5M times your level number (100L = ₦5M, 200L = ₦10M and so on).
 
 **Player money.** Transfers between players: ₦100 to ₦5,000,000 each, ₦10M a day, plus a 2% fee that leaves the economy.
 

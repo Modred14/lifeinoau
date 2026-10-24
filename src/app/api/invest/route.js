@@ -25,13 +25,13 @@ export async function GET(req) {
 export async function POST(req) {
   const uid = await getUserId();
   if (!uid) return Response.json({ error: "Please log in." }, { status: 401 });
-  if (!(await allowed(db, "invest:" + uid, 40, 60_000))) return tooMany();
+  if (!(await allowed(db, "invest:" + uid, 60, 60_000))) return tooMany();
   try {
     const b = await req.json().catch(() => ({}));
     return Response.json(await invest(db, uid, b));
   } catch (e) {
     if (e instanceof GameError)
-      return Response.json({ error: e.message }, { status: e.status });
+      return Response.json({ error: e.message, ...(e.priceKobo ? { priceKobo: e.priceKobo } : {}) }, { status: e.status });
     console.error(e);
     return Response.json(
       { error: "Something went wrong. Try again." },

@@ -643,9 +643,44 @@ model Holding {
   costKobo    BigInt // what you paid for the units you still hold
   valueKobo   BigInt @default(0)
   lastBuyWeek Int
+  realisedKobo BigInt @default(0) // sale value minus the principal sold, summed over every sale of this product (before fees). Survives a fully sold position.
+  feesKobo    BigInt @default(0) // brokerage fees and early-sale penalties paid on this product, ever
 
   @@unique([characterId, product])
   @@index([characterId])
+}
+
+// The live market (lib/marketEngine.js). Prices are never stored second by second: they are a pure function of a secret key and the time,
+// so the database only keeps the market's FIRST moment (one row) and an hourly checkpoint of the chain's state (so a restart replays at most an hour).
+model MarketGenesis {
+  id        Int      @id // always 1
+  data      Json // { start, a0, s0, check }: the first block, each product's starting level, the state there, and a fingerprint of the secret key
+  createdAt DateTime @default(now())
+}
+
+model MarketCheckpoint {
+  block     BigInt   @id // the minute (unix ms / 60000) this state is the START of
+  state     Json
+  createdAt DateTime @default(now())
+}
+
+// One row per executed order: the price it executed at is the server's price at that instant, never anything the browser sent.
+model MarketTrade {
+  id           BigInt   @id @default(autoincrement())
+  characterId  String
+  product      String
+  side         String // BUY | SELL
+  unitsMicro   BigInt
+  priceKobo    BigInt
+  grossKobo    BigInt // BUY: the amount invested. SELL: the value of the units sold.
+  feeKobo      BigInt
+  penaltyKobo  BigInt   @default(0)
+  realisedKobo BigInt   @default(0) // SELL only: gross minus the principal sold
+  requestId    String
+  createdAt    DateTime @default(now())
+
+  @@unique([characterId, requestId])
+  @@index([characterId, createdAt])
 }
 
 // Effort in one course during one session: lectures attended and preparation done. A new session starts fresh.

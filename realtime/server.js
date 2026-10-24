@@ -14,12 +14,16 @@ import { verifyChatPass, bodyIsSigned } from "../lib/chatAuth.js";
 import * as core from "../lib/chatCore.js";
 import { gateOf } from "../lib/accountGate.js";
 import { sendChatPush } from "../lib/chatPush.js";
+import { marketFor, snapshot as marketSnapshot, refreshHoldingValues } from "../lib/marketLive.js";
 
 const GRACE_MS = 4000; // a reload or a network blip reconnects within this time, so nobody flickers to "offline"
 const SEEN_WRITE_MS = 60_000; // "last seen" is written to the database at most once a minute per player
+const MARKET_ROOM = "market"; // sockets that have the Invest app open: they get one small price message a second
+const MARKET_VALUE_EVERY_MS = 300_000; // stored holding values (net worth, Forbes) are re-priced every 5 minutes, in one statement
 
-export function createRealtime({ db, secret, origins = [], log = console, graceMs = GRACE_MS }) {
+export function createRealtime({ db, secret, origins = [], log = console, graceMs = GRACE_MS, market = null }) {
   if (!secret) throw new Error("SESSION_SECRET is required");
+  const getMarket = () => (market ??= marketFor(db)); // created on first use: a chat-only deployment never touches the market tables
   const allow = (origin) => !origins.length || !origin || origins.includes(origin);
 
   // ---------- who is online (memory only) ----------
@@ -171,6 +175,16 @@ export function createRealtime({ db, secret, origins = [], log = console, graceM
       } catch (e) { fail(ack, e); }
     });
 
+    // ---- live prices: the browser asks once (and again after every reconnect); the server then pushes. Prices are public and identical for everyone. ----
+    socket.on("market:sub", async (_msg, ack) => {
+      try {
+        const m = await getMarket().ready();
+        socket.join(MARKET_ROOM); startTicker();
+        ack?.({ ok: true, serverNow: Date.now(), ...marketSnapshot(m) });
+      } catch (e) { fail(ack, e); }
+    });
+    socket.on("market:unsub", (_msg, ack) => { socket.leave(MARKET_ROOM); ack?.({ ok: true }); });
+
     socket.on("disconnect", () => {
       const n = (live.get(me.id) ?? 1) - 1;
       if (n > 0) return live.set(me.id, n);
@@ -201,6 +215,28 @@ export function createRealtime({ db, secret, origins = [], log = console, graceM
       } catch (e) { log.error?.("[realtime] hello", e); socket.emit("hello", { unread: null, at: Date.now() }); }
     })();
   });
+
+  // ---------- the market clock: one message a second to whoever is watching, nothing at all when nobody is ----------
+  let ticker = null;
+  const watching = () => io.sockets.adapter.rooms.get(MARKET_ROOM)?.size ?? 0;
+  function startTicker() {
+    if (ticker) return;
+    const loop = () => {
+      ticker = null;
+      if (!watching()) return; // the last viewer left: stop until someone subscribes again
+      try {
+        const m = getMarket();
+        io.to(MARKET_ROOM).emit("market:tick", { ...m.tick(), mood: m.mood() });
+        m.ready().catch((e) => log.error?.("[realtime] market", e)); // moves the chain on and saves the hourly checkpoint
+      } catch (e) { log.error?.("[realtime] market tick", e); }
+      ticker = setTimeout(loop, 1000 - (Date.now() % 1000) + 5); // land just after each second, so every client shows the same tick
+      ticker.unref?.();
+    };
+    ticker = setTimeout(loop, 1000 - (Date.now() % 1000) + 5); ticker.unref?.();
+  }
+  const revalue = () => refreshHoldingValues(db, { minGapMs: 0, market: getMarket() }).catch((e) => log.error?.("[realtime] revalue", e));
+  const revalueFirst = setTimeout(revalue, 60_000), revalueEvery = setInterval(revalue, MARKET_VALUE_EVERY_MS);
+  revalueFirst.unref(); revalueEvery.unref();
 
   // ---------- told by the website (money notes, plain-HTTP messages, blocks) ----------
   async function internal(req, res) {
@@ -265,7 +301,7 @@ export function createRealtime({ db, secret, origins = [], log = console, graceM
     server, io,
     listen: (port, host = "0.0.0.0") => new Promise((ok) => server.listen(port, host, () => ok(server.address().port))),
     close: async () => {
-      clearInterval(sweep); clearInterval(every); clearTimeout(first);
+      clearInterval(sweep); clearInterval(every); clearTimeout(first); clearTimeout(ticker); clearTimeout(revalueFirst); clearInterval(revalueEvery);
       for (const t of offlineTimers.values()) clearTimeout(t);
       await io.close();
     },

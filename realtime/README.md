@@ -1,6 +1,6 @@
 realtime/README.md
 
-# Realtime chat server
+# Realtime server (chat and live market prices)
 
 The website runs on Vercel, which cannot keep a connection open. Real-time chat (messages that arrive instantly, ticks, online
 status, typing) therefore runs as one small extra Node program from this same repository: `realtime/server.js` (Socket.IO).
@@ -52,3 +52,15 @@ DATABASE_URL=... npm run test:chat                      # server, database, tick
 DATABASE_URL=... node tests/e2e/chatstore.e2e.mjs       # the browser-side store against the real server
 ```
 Both need a database with the migrations applied. They create players named `e2e_*` / `es_*` and delete them afterwards.
+
+## Live market prices
+
+The same server also pushes the Invest app's prices (one small message a second, only while someone has the Invest app open).
+Prices are NOT stored second by second and are not "owned" by this server: they are a pure function of a secret key and the clock
+(`lib/marketEngine.js`), so the website computes exactly the same numbers, a restart changes nothing, and the market keeps moving
+while nobody is online. The database holds the market's first moment (`MarketGenesis`) and one checkpoint an hour (`MarketCheckpoint`).
+
+* Set the **same** `MARKET_SEED` (or leave it unset and the shared `SESSION_SECRET` is used) on the website and on this server. A process whose
+  key differs refuses to compute prices instead of quietly disagreeing.
+* Without this server the Invest app polls `/api/invest/live` over plain HTTP every two seconds. Trading works either way.
+* Every 5 minutes this server re-values stored holdings in a single SQL statement (net worth and the Forbes list read that value).
