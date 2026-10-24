@@ -458,7 +458,8 @@ function ChatView({ who, onBack }) {
       alsoBlock: true,
     });
   const [blockQ] = useState(createSerial),
-    confirmedBlock = useRef(null);
+    confirmedBlock = useRef(null),
+    ignoreActionScrimUntil = useRef(0);
   const [payDraft, setPayDraft] = useState({ amt: "", note: "" });
   const scroller = useRef(null),
     stick = useRef(true),
@@ -874,7 +875,11 @@ function ChatView({ who, onBack }) {
                   last={x.last}
                   onRetry={() => chat.retry(name, x.m.cid)}
                   onDiscard={() => chat.discard(name, x.m.cid)}
-                  onActions={() => x.m.id != null && setActionMessage(x.m)}
+                  onActions={(longPress = false) => {
+                    if (x.m.id == null) return;
+                    if (longPress) ignoreActionScrimUntil.current = Date.now() + 700;
+                    setActionMessage(x.m);
+                  }}
                   onLocate={locateMessage}
                 />
               ),
@@ -953,7 +958,13 @@ function ChatView({ who, onBack }) {
       )}
 
       {actionMessage && (
-        <div className="ms-action-scrim" onClick={() => setActionMessage(null)}>
+        <div className="ms-action-scrim" onClick={() => {
+          if (Date.now() < ignoreActionScrimUntil.current) {
+            ignoreActionScrimUntil.current = 0;
+            return;
+          }
+          setActionMessage(null);
+        }}>
           <section className="ms-action-menu" role="dialog" aria-modal="true" aria-label="Message actions" onClick={(e) => e.stopPropagation()}>
             <div className="ms-action-preview">
               <b>{actionMessage.mine ? "You" : name}</b>
@@ -1061,8 +1072,73 @@ function QuotePreview({ reply, onLocate }) {
 }
 
 function Bubble({ m, t, who, first, last, onRetry, onDiscard, onActions, onLocate }) {
+  const pressTimer = useRef(null),
+    suppressClick = useRef(false),
+    pressOrigin = useRef(null),
+    clearSuppressTimer = useRef(null);
   const state = m.mine ? chat.tickOf(m, t) : null;
   const money = !m.deleted && m.kind === KIND.MONEY ? parseMoney(m.body) : null;
+  const clearPress = () => {
+    clearTimeout(pressTimer.current);
+    pressTimer.current = null;
+  };
+  useEffect(() => () => {
+    clearPress();
+    clearTimeout(clearSuppressTimer.current);
+  }, []);
+  const onPointerDown = (event) => {
+    if (m.id == null || event.pointerType === "mouse" || event.target.closest("button, a, input")) return;
+    clearPress();
+    suppressClick.current = false;
+    pressOrigin.current = { x: event.clientX, y: event.clientY };
+    pressTimer.current = setTimeout(() => {
+      suppressClick.current = true;
+      clearSuppressTimer.current = setTimeout(() => { suppressClick.current = false; }, 700);
+      onActions(true);
+    }, 500);
+  };
+  const onPointerMove = (event) => {
+    if (pressTimer.current && pressOrigin.current && (Math.abs(event.clientX - pressOrigin.current.x) > 10 || Math.abs(event.clientY - pressOrigin.current.y) > 10)) clearPress();
+  };
+  const onPointerUp = () => {
+    clearPress();
+    if (suppressClick.current) {
+      clearTimeout(clearSuppressTimer.current);
+      clearSuppressTimer.current = setTimeout(() => { suppressClick.current = false; }, 500);
+    }
+  };
+  const onMessageClick = (event) => {
+    if (event.target.closest("button, a, input")) return;
+    if (suppressClick.current) {
+      suppressClick.current = false;
+      clearTimeout(clearSuppressTimer.current);
+      return;
+    }
+    onActions();
+  };
+  const onMessageKeyDown = (event) => {
+    if (event.target.closest("button, a, input")) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onActions();
+    }
+  };
+  const actionProps = m.id == null ? {} : {
+    tabIndex: 0,
+    role: "group",
+    "aria-label": `Message from ${m.mine ? "you" : who}. Tap or press and hold for actions.`,
+    onClick: onMessageClick,
+    onKeyDown: onMessageKeyDown,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onPointerCancel: clearPress,
+    onContextMenu: (event) => {
+      if (event.target.closest("button, a, input")) return;
+      event.preventDefault();
+      onActions(true);
+    },
+  };
   const cls =
     "ms-row" +
     (m.mine ? " mine" : "") +
@@ -1074,6 +1150,7 @@ function Bubble({ m, t, who, first, last, onRetry, onDiscard, onActions, onLocat
         <article
           className="ms-money"
           aria-label={`${m.mine ? "You sent" : who + " sent you"} ${fmt(money.naira)}`}
+          {...actionProps}
         >
           <QuotePreview reply={m.reply} onLocate={onLocate} />
           <span className="ms-coin" aria-hidden="true">
@@ -1089,11 +1166,6 @@ function Bubble({ m, t, who, first, last, onRetry, onDiscard, onActions, onLocat
             {state && <Ticks state={state} />}
           </span>
         </article>
-        {m.id != null && (
-          <button type="button" className="ms-message-action" aria-label={`Actions for message from ${m.mine ? "you" : who}`} onClick={onActions}>
-            <Icon name="more" size={18} weight="bold" />
-          </button>
-        )}
         {state === "failed" && (
           <FailedBar onRetry={onRetry} onDiscard={onDiscard} err={m.err} />
         )}
@@ -1102,7 +1174,7 @@ function Bubble({ m, t, who, first, last, onRetry, onDiscard, onActions, onLocat
   }
   return (
     <div className={cls} id={m.id != null ? `ms-message-${m.id}` : undefined}>
-      <p className={"ms-bub" + (m.st === "sending" ? " pending" : "") + (m.deleted ? " deleted" : "")}>
+      <p className={"ms-bub" + (m.st === "sending" ? " pending" : "") + (m.deleted ? " deleted" : "")} {...actionProps}>
         <QuotePreview reply={m.reply} onLocate={onLocate} />
         <span className="ms-text">{m.body}</span>
         <span className="ms-meta">
@@ -1110,11 +1182,6 @@ function Bubble({ m, t, who, first, last, onRetry, onDiscard, onActions, onLocat
           {state && <Ticks state={state} />}
         </span>
       </p>
-      {m.id != null && (
-        <button type="button" className="ms-message-action" aria-label={`Actions for message from ${m.mine ? "you" : who}`} onClick={onActions}>
-          <Icon name="more" size={18} weight="bold" />
-        </button>
-      )}
       {state === "failed" && (
         <FailedBar onRetry={onRetry} onDiscard={onDiscard} err={m.err} />
       )}
