@@ -14,7 +14,7 @@ export default {
   poweredByHeader: false,
   agentRules: false,
   compress: true,
-  experimental: { cpus: 2, optimizePackageImports: ["@phosphor-icons/react"] }, // load only the icons that are used, not the whole icon pack
+  experimental: { cpus: 2, optimizePackageImports: ["@phosphor-icons/react"], agentUpgrade: "security" }, // load only the icons that are used, not the whole icon pack
   async headers() {
     return [
       { source: "/models/:path*", headers: keep },
