@@ -12,6 +12,7 @@ import { pathToFileURL } from "node:url";
 import { Server } from "socket.io";
 import { verifyChatPass, bodyIsSigned } from "../lib/chatAuth.js";
 import * as core from "../lib/chatCore.js";
+import { sendChatPush } from "../lib/chatPush.js";
 
 const GRACE_MS = 4000; // a reload or a network blip reconnects within this time, so nobody flickers to "offline"
 const SEEN_WRITE_MS = 60_000; // "last seen" is written to the database at most once a minute per player
@@ -89,16 +90,17 @@ export function createRealtime({ db, secret, origins = [], log = console, graceM
 
     socket.on("send", (msg, ack) => serial(me.id, async () => {
       try {
-        const { to, body, cid } = msg ?? {}, key = typeof cid === "string" && cid.length <= 64 ? me.id + ":" + cid : null;
+        const { to, body, cid, replyToId } = msg ?? {}, key = typeof cid === "string" && cid.length <= 64 ? me.id + ":" + cid : null;
         if (key && recent.has(key)) return ack?.(await recent.get(key).p);
         const task = (async () => {
           const peer = await core.needPeer(db, me, to);
-          const r = await core.sendText(db, me, peer, body, { recipientOnline: isOnline(peer.id) });
+          const r = await core.sendText(db, me, peer, body, { recipientOnline: isOnline(peer.id), replyToId });
           if (!r.dropped) {
-            const m = { chat: r.chatId, id: r.id, from: me.name, to: peer.name, body: r.body, kind: 0, at: r.at };
-            io.to(room(peer.id)).emit("msg", { ...m, mine: false });
-            socket.to(room(me.id)).emit("msg", { ...m, mine: true, cid }); // my other devices
+            const m = { chat: r.chatId, id: r.id, from: me.name, to: peer.name, body: r.body, kind: 0, at: r.at, replyToId: r.replyToId };
+            io.to(room(peer.id)).emit("msg", { ...m, mine: false, reply: r.reply && { ...r.reply, mine: r.reply.from === peer.name } });
+            socket.to(room(me.id)).emit("msg", { ...m, mine: true, cid, reply: r.reply && { ...r.reply, mine: r.reply.from === me.name } }); // my other devices
             if (r.delivered) io.to(room(me.id)).emit("delivered", { by: peer.name, upTo: r.id });
+            sendChatPush(db, r.chatId, r.id).catch((error) => log.error?.("[chat push]", error));
           }
           return { ok: true, id: r.dropped ? null : r.id, at: r.at, chat: r.chatId, delivered: !!r.delivered };
         })();
@@ -207,11 +209,17 @@ export function createRealtime({ db, secret, origins = [], log = console, graceM
           const { m, c } = f, fromId = m.fromA ? c.aId : c.bId, toId = m.fromA ? c.bId : c.aId, nm = await core.namesOf(db, [fromId, toId]);
           const delivered = isOnline(toId);
           if (delivered) await core.markDelivered(db, c.id, toId === c.aId, m.id);
-          const p = { chat: c.id, id: Number(m.id), from: nm.get(fromId), to: nm.get(toId), body: m.body, kind: m.kind, at: m.createdAt };
-          io.to(room(toId)).emit("msg", { ...p, mine: false });
-          io.to(room(fromId)).emit("msg", { ...p, mine: true });
+          const p = { chat: c.id, id: Number(m.id), from: nm.get(fromId), to: nm.get(toId), body: m.deletedAt ? "This message was deleted" : m.body, kind: m.deletedAt ? 0 : m.kind, at: m.createdAt, deleted: !!m.deletedAt, replyToId: m.replyToId == null ? null : Number(m.replyToId) };
+          io.to(room(toId)).emit("msg", { ...p, mine: false, reply: f.reply && { ...f.reply, mine: f.reply.from === nm.get(toId) } });
+          io.to(room(fromId)).emit("msg", { ...p, mine: true, reply: f.reply && { ...f.reply, mine: f.reply.from === nm.get(fromId) } });
           if (delivered) io.to(room(fromId)).emit("delivered", { by: nm.get(toId), upTo: Number(m.id) });
+          sendChatPush(db, c.id, Number(m.id)).catch((error) => log.error?.("[chat push]", error));
         }
+      } else if (e?.type === "delete") {
+        if (!num(e.chat) || !num(e.id) || !["me", "everyone"].includes(e.mode) || typeof e.actorId !== "string" || typeof e.peerId !== "string") return done(400, { error: "bad event" });
+        const event = { chat: e.chat, id: e.id, mode: e.mode };
+        io.to(room(e.actorId)).emit("deleted", { ...event, mine: !!e.actorMine, with: e.peerName });
+        if (e.mode === "everyone") io.to(room(e.peerId)).emit("deleted", { ...event, mine: false, with: e.actorName });
       } else if (e?.type === "read") {
         if (typeof e.peerId !== "string" || typeof e.byId !== "string") return done(400, { error: "bad event" });
         io.to(room(e.peerId)).emit("read", { by: e.by, upTo: e.upTo });

@@ -22,6 +22,8 @@ instant delivery, online status or typing.
 | `SESSION_SECRET` | the **same** value as the website |
 | `APP_ORIGIN` | your website address, e.g. `https://lifeinoau.vercel.app` (comma separated for more than one) |
 | `PORT` | set by most hosts automatically |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | the same Web Push VAPID values as the website |
+| `PUSH_SUBSCRIPTION_SECRET` | the same random 32+ character encryption key as the website |
 
 3. On the website (Vercel) add one variable: `REALTIME_URL` = the address of the server, e.g. `https://oau-realtime.onrender.com`.
 4. Apply the new migration to the database: `npx prisma migrate deploy`.
@@ -41,6 +43,7 @@ Add `REALTIME_URL="http://localhost:4000"` and `APP_ORIGIN="http://localhost:300
 * "Read" and "delivered" are one number per side on a tiny `Chat` row, not a flag on every message.
 * "Online" lives in this server's memory and is never written to the database. "Last seen" is written once when a player goes offline.
 * A report copies the last 20 messages into itself, so evidence survives the clean-up.
+* Push subscriptions are encrypted in the database and delivered with Web Push/VAPID. Configure the same VAPID values and `PUSH_SUBSCRIPTION_SECRET` on both the website and realtime service. Browser/device support, HTTPS and the player's notification permission are required. Expired endpoints are removed.
 
 ## Tests
 

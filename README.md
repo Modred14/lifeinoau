@@ -26,6 +26,8 @@ npm run dev
 
 The web app runs on port 3000 and the campus service on port 2567. The campus service applies its own additive Drizzle migrations on startup, after the OAU Prisma migrations. Existing OAU installations should back up their database before applying migrations. The optional original Socket.IO chat service runs with `npm run realtime` on `REALTIME_PORT` (4000); messages keep their existing HTTP fallback when it is stopped.
 
+Browser message alerts can arrive while the game is closed when the browser/device supports Web Push and the player grants notification permission. For production, configure `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` and a separate random `PUSH_SUBSCRIPTION_SECRET` (at least 32 characters) on both the website and realtime service, then run `npx prisma migrate deploy`. Generate VAPID keys with `npx web-push generate-vapid-keys`; generate the storage secret with `openssl rand -hex 32`. Push subscriptions are encrypted in the database. Without HTTPS, browser/device support, permission, or these server keys, only in-game alerts and chat polling are available.
+
 For a production build:
 
 ```sh

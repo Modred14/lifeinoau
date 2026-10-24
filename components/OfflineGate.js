@@ -21,7 +21,10 @@ export default function OfflineGate() {
       if (process.env.NODE_ENV === "production") navigator.serviceWorker.register("/sw.js").then(watchPwaUpdates).catch(() => {});
       else navigator.serviceWorker.getRegistrations().then(async (registrations) => {
         for (const registration of registrations) {
-          if (registration.active && new URL(registration.active.scriptURL).pathname === "/sw.js") await registration.unregister();
+          if (registration.active && new URL(registration.active.scriptURL).pathname === "/sw.js") {
+            if (await registration.pushManager?.getSubscription()) continue;
+            await registration.unregister();
+          }
         }
         if ("caches" in window) for (const key of await caches.keys()) if (key === "offline-v1" || key.startsWith("oau-campus-")) await caches.delete(key);
       }).catch(() => {});

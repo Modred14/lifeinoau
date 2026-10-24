@@ -42,7 +42,7 @@ const hook = (payload) => { const body = JSON.stringify(payload); return fetch(u
 async function client(p) {
   const token = await signChatPass(SECRET, { id: p.id, name: p.name });
   const s = connect(url, { auth: { token }, transports: ["websocket"], reconnection: false });
-  s.log = {}; for (const ev of ["msg", "delivered", "read", "typing", "presence", "hello", "read:me", "block"]) { s.log[ev] = []; s.on(ev, (d) => s.log[ev].push(d)); }
+  s.log = {}; for (const ev of ["msg", "delivered", "read", "typing", "presence", "hello", "read:me", "block", "deleted"]) { s.log[ev] = []; s.on(ev, (d) => s.log[ev].push(d)); }
   await new Promise((res, rej) => { s.on("connect", res); s.on("connect_error", rej); });
   s.rpc = (ev, data) => new Promise((res) => s.emit(ev, data, res));
   return s;
@@ -84,6 +84,27 @@ try {
   ok(tickOf(r1.id, th.peerDel, th.peerRead) === "read", "thread: now read (blue)");
   const chatRow = await db.chat.findFirst({ where: { id: r1.chat } });
   ok(chatRow.aUnread === 0 && chatRow.bUnread === 0, "unread counters are zero after reading");
+
+  // --- replies, per-player deletion and delete-for-everyone authorization
+  const replyText = await B.rpc("send", { to: alice.name, body: "I saw this", replyToId: r1.id, cid: "reply-text" });
+  const gotReply = await until(() => A.log.msg.find((x) => x.id === replyText.id));
+  ok(replyText.ok && gotReply?.reply?.id === r1.id && gotReply.reply.from === alice.name && gotReply.reply.mine === true, "a text reply carries a quote preview for the recipient");
+  const notOwner = await core.deleteMessage(db, { id: bob.id, name: bob.name }, r1.id, "everyone").catch((e) => e);
+  ok(notOwner.status === 403, "a participant cannot delete someone else's message for everyone");
+  const hiddenReply = await core.deleteMessage(db, { id: bob.id, name: bob.name }, replyText.id, "me");
+  await hook(hiddenReply.notify);
+  ok(await until(() => B.log.deleted.some((x) => x.id === replyText.id && x.mode === "me")) &&
+    !A.log.deleted.some((x) => x.id === replyText.id), "delete-for-me updates the requesting player's other devices only");
+  const bobView = await getMessages(db, bob.userId, alice.name);
+  const aliceView = await getMessages(db, alice.userId, bob.name);
+  ok(hiddenReply.mode === "me" && !bobView.messages.some((x) => x.id === replyText.id) && aliceView.messages.some((x) => x.id === replyText.id), "delete for me hides the message only for the requesting player");
+  const bothMsg = await A.rpc("send", { to: bob.name, body: "remove this for both", cid: "delete-everyone" });
+  const deleted = await core.deleteMessage(db, { id: alice.id, name: alice.name }, bothMsg.id, "everyone");
+  await hook(deleted.notify);
+  ok(await until(() => B.log.deleted.some((x) => x.id === bothMsg.id && x.mode === "everyone")), "delete-for-everyone is pushed to the other participant");
+  const deletedA = await getMessages(db, alice.userId, bob.name), deletedB = await getMessages(db, bob.userId, alice.name);
+  ok(deletedA.messages.some((x) => x.id === bothMsg.id && x.deleted && x.body === "This message was deleted") &&
+    deletedB.messages.some((x) => x.id === bothMsg.id && x.deleted && x.body === "This message was deleted"), "both participants see the deleted-message placeholder");
 
   // --- typing
   await B.rpc("watch", { names: [alice.name] });
@@ -130,6 +151,9 @@ try {
   ok(before.balance - after.balance === 510_000n, "alice paid 5,000 plus the 2% fee");
   th = await getMessages(db, alice.userId, bob.name);
   ok(th.messages.at(-1).kind === 1 && th.messages.at(-1).mine === true, "the money card is in the thread history");
+  const moneyReply = await B3.rpc("send", { to: alice.name, body: "Thank you", replyToId: m.msg.id, cid: "reply-money" });
+  const receivedMoneyReply = await until(() => A.log.msg.find((x) => x.id === moneyReply.id));
+  ok(receivedMoneyReply?.reply?.id === m.msg.id && receivedMoneyReply.reply.kind === 1 && receivedMoneyReply.reply.from === alice.name, "a money message can be replied to with a quoted preview");
   const replay = await sendMoney(db, alice.userId, { to: bob.name, amountNaira: 5000, memo: "for jollof", requestId: "req-" + tag });
   ok(replay.duplicate === true && (await db.message.count({ where: { chatId: m.msg.chat, kind: 1 } })) === 1, "replaying a transfer adds no second card");
   let capErr = null; try { await sendMoney(db, alice.userId, { to: bob.name, amountNaira: 5_000_001, memo: "", requestId: "cap-" + tag }); } catch (e) { capErr = e; }
@@ -216,6 +240,9 @@ try {
 await rt.close();
 const ids = Object.values(people).map((p) => p.id);
 const chats = await db.chat.findMany({ where: { OR: [{ aId: { in: ids } }, { bId: { in: ids } }] }, select: { id: true } });
+await db.messageHide.deleteMany({ where: { chatId: { in: chats.map((c) => c.id) } } });
+await db.chatPushDelivery.deleteMany({ where: { chatId: { in: chats.map((c) => c.id) } } });
+await db.chatPushSubscription.deleteMany({ where: { characterId: { in: ids } } });
 await db.message.deleteMany({ where: { chatId: { in: chats.map((c) => c.id) } } });
 await db.chat.deleteMany({ where: { id: { in: chats.map((c) => c.id) } } });
 await db.block.deleteMany({ where: { OR: [{ blockerId: { in: ids } }, { blockedId: { in: ids } }] } });

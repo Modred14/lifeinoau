@@ -102,9 +102,11 @@ export default function Shell({ children }) {
   useEffect(() => {
     // old links (/career, /people ...) arrive as /home?app=x (or /play?app=x, which redirects here):
     // open the phone on that app, then tidy the address bar
-    const app = new URLSearchParams(window.location.search).get("app");
+    const params = new URLSearchParams(window.location.search);
+    const app = params.get("app");
     if (path === "/home" && app) {
       setPhoneApp(app);
+      setPhoneWith(app === "messages" ? params.get("with") : null);
       setPhone(true);
       window.history.replaceState(null, "", "/home");
     } else setPhone(false);

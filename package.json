@@ -1,4 +1,5 @@
-{ "//": "package.json",
+{
+  "//": "package.json",
   "name": "lifeinoau",
   "private": true,
   "type": "module",
@@ -22,7 +23,8 @@
     "react-dom": "^19.3.0",
     "socket.io": "^4.8.4",
     "socket.io-client": "^4.8.4",
-    "three": "^0.186.1"
+    "three": "^0.186.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

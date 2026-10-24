@@ -375,14 +375,47 @@ model Chat {
 // Only the newest messages of each chat are kept (CHAT_KEEP_PER_CHAT, default 150, and CHAT_KEEP_DAYS, default 30), so the table
 // stops growing. kind 1 is a money note: body is "<naira>\n<note>". The primary key doubles as the chat+time index.
 model Message {
-  id        BigInt   @default(autoincrement())
+  id        BigInt    @default(autoincrement())
   chatId    Int
   fromA     Boolean
-  kind      Int      @default(0) @db.SmallInt
+  kind      Int       @default(0) @db.SmallInt
   body      String
-  createdAt DateTime @default(now())
+  replyToId BigInt?
+  deletedAt DateTime?
+  deletedBy String?
+  createdAt DateTime  @default(now())
 
   @@id([chatId, id])
+}
+
+model MessageHide {
+  chatId       Int
+  messageId    BigInt
+  characterId  String
+  createdAt    DateTime @default(now())
+
+  @@id([chatId, messageId, characterId])
+  @@index([characterId, chatId])
+}
+
+model ChatPushSubscription {
+  id           String   @id @default(cuid())
+  characterId  String
+  endpointHash String   @unique
+  encrypted    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([characterId])
+}
+
+model ChatPushDelivery {
+  chatId      Int
+  messageId   BigInt
+  recipientId String
+  createdAt   DateTime @default(now())
+
+  @@id([chatId, messageId, recipientId])
 }
 
 // When a player last had the game open. Written once when they go offline, never on a timer. "Online" itself lives in the

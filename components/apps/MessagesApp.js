@@ -166,13 +166,63 @@ function Inbox({ onHome, onOpen }) {
   const st = useChat();
   const [q, setQ] = useState(""),
     [found, setFound] = useState(null),
-    [filter, setFilter] = useState("all");
+    [filter, setFilter] = useState("all"),
+    [push, setPush] = useState({ supported: false, configured: false, enabled: false, busy: false, error: "" });
   const box = useRef(null),
     late = useLate(st);
   useEffect(() => {
     chat.watchInbox(true);
     return () => chat.watchInbox(false);
   }, []);
+  useEffect(() => {
+    const supported = window.isSecureContext && "serviceWorker" in navigator &&
+      "PushManager" in window && "Notification" in window;
+    setPush((p) => ({ ...p, supported }));
+    (async () => {
+      const registration = await navigator.serviceWorker?.getRegistration();
+      const subscription = await registration?.pushManager?.getSubscription();
+      const path = "/api/messages/push" + (subscription ? "?endpoint=" + encodeURIComponent(subscription.endpoint) : "");
+      const r = await call(path);
+      if (r.failed) setPush((p) => ({ ...p, error: r.error || "Notification settings could not be loaded." }));
+      else setPush((p) => ({ ...p, configured: !!r.configured, enabled: !!r.enabled }));
+    })().catch((error) => setPush((p) => ({ ...p, error: error.message || "Notification settings could not be loaded." })));
+  }, []);
+
+  async function togglePush() {
+    if (push.busy) return;
+    setPush((p) => ({ ...p, busy: true, error: "" }));
+    try {
+      const registration = await navigator.serviceWorker.register("/sw.js");
+      const ready = await navigator.serviceWorker.ready;
+      const current = await (ready ?? registration).pushManager.getSubscription();
+      if (push.enabled) {
+        if (current) {
+          const r = await call("/api/messages/push", { action: "remove", subscription: current.toJSON() });
+          if (r.failed) throw new Error(r.error || "Notifications could not be turned off.");
+          await current.unsubscribe();
+        }
+        setPush((p) => ({ ...p, enabled: false, busy: false }));
+        return;
+      }
+      if (Notification.permission !== "granted") {
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") throw new Error("Allow notifications in your browser settings to enable message alerts.");
+      }
+      const config = await call("/api/messages/push");
+      if (config.failed) throw new Error(config.error || "Notification settings could not be loaded.");
+      if (!config.configured || !config.publicKey) throw new Error("Browser push notifications are not configured on this server.");
+      const key = Uint8Array.from(atob(config.publicKey.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+      const subscription = current ?? await (ready ?? registration).pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      const saved = await call("/api/messages/push", { subscription: subscription.toJSON() });
+      if (saved.failed) {
+        if (!current) await subscription.unsubscribe();
+        throw new Error(saved.error || "This device could not be registered for message notifications.");
+      }
+      setPush((p) => ({ ...p, enabled: true, busy: false }));
+    } catch (error) {
+      setPush((p) => ({ ...p, busy: false, error: error.message || "Notifications could not be updated." }));
+    }
+  }
 
   useEffect(() => {
     if (q.trim().length < 2) return setFound(null);
@@ -234,6 +284,20 @@ function Inbox({ onHome, onOpen }) {
         </button>
       </header>
       {late && <Banner kind={late} />}
+      <section className="ms-push" aria-label="Browser message notifications">
+        <div>
+          <b>Browser notifications</b>
+          <p>With browser/device support and permission, message alerts can arrive while Life in OAU is closed.</p>
+          {push.error && <small role="alert">{push.error}</small>}
+          {!push.configured && !push.error && <small>Push delivery is not configured on this server.</small>}
+          {!push.supported && <small>This browser or device does not support push notifications in this context.</small>}
+        </div>
+        {push.supported && push.configured && (
+          <button type="button" className="ms-push-toggle" disabled={push.busy} onClick={togglePush}>
+            {push.busy ? "Please wait…" : push.enabled ? "Turn off" : "Enable"}
+          </button>
+        )}
+      </section>
       <div className="ms-search">
         <Icon name="search" size={18} />
         <input
@@ -381,6 +445,9 @@ function ChatView({ who, onBack }) {
     ),
     prof = useStore(profStore),
     [text, setText] = useState(""),
+    [replying, setReplying] = useState(null),
+    [actionMessage, setActionMessage] = useState(null),
+    [deletingId, setDeletingId] = useState(null),
     [sheet, setSheet] = useState(null),
     [menu, setMenu] = useState(false),
     [below, setBelow] = useState(0),
@@ -468,17 +535,51 @@ function ChatView({ who, onBack }) {
   // Escape closes the menu or sheet first, not the whole phone. The phone listens on `document` in the capture phase,
   // so this listens one step earlier (on `window`) and marks the key as handled, which the phone respects.
   useEffect(() => {
-    if (!sheet && !menu) return;
+    if (!sheet && !menu && !actionMessage) return;
     const esc = (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
-        sheet ? setSheet(null) : setMenu(false);
+        if (sheet) setSheet(null);
+        else if (actionMessage) setActionMessage(null);
+        else setMenu(false);
       }
     };
     window.addEventListener("keydown", esc, true);
     return () => window.removeEventListener("keydown", esc, true);
-  }, [sheet, menu]);
+  }, [sheet, menu, actionMessage]);
+
+  const locateMessage = async (id) => {
+    let current = chat.getState().threads[k];
+    while (!current?.msgs.some((m) => m.id === id) && current?.hasMore) {
+      const firstId = current.msgs.find((m) => m.id != null)?.id;
+      const result = await chat.loadOlder(name);
+      current = chat.getState().threads[k];
+      if (!result || result.failed || result.ok === false || current.msgs.find((m) => m.id != null)?.id === firstId) break;
+    }
+    requestAnimationFrame(() => {
+      const node = document.getElementById(`ms-message-${id}`);
+      if (node) node.scrollIntoView({ behavior: "smooth", block: "center" });
+      else toast.info("The original message is no longer in this conversation.");
+    });
+  };
+
+  async function deleteSelected(mode) {
+    const message = actionMessage;
+    setActionMessage(null);
+    if (!message?.id) return;
+    if (mode === "everyone" && !(await confirmAction({
+      title: "Delete for everyone?",
+      message: "This message will be replaced with a deleted-message notice for both players.",
+      confirmLabel: "Delete for everyone",
+      tone: "danger",
+    }))) return;
+    setDeletingId(message.id);
+    const r = await call("/api/messages/delete", { id: message.id, mode });
+    setDeletingId(null);
+    if (r.failed) return fail(r);
+    chat.onDeleted({ id: message.id, mode, mine: r.mine, with: r.peerName });
+  }
 
   // composer
   const grow = () => {
@@ -501,7 +602,8 @@ function ChatView({ who, onBack }) {
     setText("");
     requestAnimationFrame(grow);
     stick.current = true;
-    chat.send(name, body);
+    chat.send(name, body, replying ? { replyToId: replying.id, reply: replying } : undefined);
+    setReplying(null);
     field.current?.focus();
   };
   const onKey = (e) => {
@@ -585,13 +687,13 @@ function ChatView({ who, onBack }) {
     ? ""
     : typing
       ? "typing…"
-      : presence?.online
-        ? "online"
-        : presence?.lastSeen
-          ? seenText(presence.lastSeen)
-          : prof
-            ? `${prof.faculty}, ${prof.level}L`
-            : "";
+      : st.link !== "live"
+        ? "Status unavailable"
+        : presence?.online
+          ? "online"
+          : presence?.lastSeen
+            ? seenText(presence.lastSeen)
+            : "Checking status…";
   // the list on screen: day labels, the unread line, and which bubbles are the first / last of a run (they get the rounded corners)
   const items = useMemo(() => {
     const out = [];
@@ -772,6 +874,8 @@ function ChatView({ who, onBack }) {
                   last={x.last}
                   onRetry={() => chat.retry(name, x.m.cid)}
                   onDiscard={() => chat.discard(name, x.m.cid)}
+                  onActions={() => x.m.id != null && setActionMessage(x.m)}
+                  onLocate={locateMessage}
                 />
               ),
             )}
@@ -798,6 +902,18 @@ function ChatView({ who, onBack }) {
           </button>
         </div>
       ) : (
+        <>
+        {replying && (
+          <div className="ms-replying">
+            <button type="button" className="ms-reply-preview" onClick={() => locateMessage(replying.id)}>
+              <b>Replying to {replying.mine ? "yourself" : replying.from || name}</b>
+              <span>{messagePreview(replying)}</span>
+            </button>
+            <button type="button" className="ms-icon ms-close" aria-label="Cancel reply" onClick={() => setReplying(null)}>
+              <Icon name="close" size={18} weight="bold" />
+            </button>
+          </div>
+        )}
         <div className="ms-compose">
           <textarea
             ref={field}
@@ -832,6 +948,34 @@ function ChatView({ who, onBack }) {
               <Icon name="coins" size={21} weight="fill" />
             </button>
           )}
+        </div>
+        </>
+      )}
+
+      {actionMessage && (
+        <div className="ms-action-scrim" onClick={() => setActionMessage(null)}>
+          <section className="ms-action-menu" role="dialog" aria-modal="true" aria-label="Message actions" onClick={(e) => e.stopPropagation()}>
+            <div className="ms-action-preview">
+              <b>{actionMessage.mine ? "You" : name}</b>
+              <span>{messagePreview(actionMessage)}</span>
+            </div>
+            {!actionMessage.deleted && (
+              <button type="button" onClick={() => { setReplying({ ...actionMessage, from: actionMessage.mine ? "You" : name }); setActionMessage(null); field.current?.focus(); }}>
+                <Icon name="undo" size={19} /> Reply
+              </button>
+            )}
+            {actionMessage.id != null && (
+              <button type="button" disabled={deletingId === actionMessage.id} onClick={() => deleteSelected("me")}>
+                <Icon name="trash" size={19} /> Delete for me
+              </button>
+            )}
+            {actionMessage.mine && !actionMessage.deleted && (
+              <button type="button" className="bad" disabled={deletingId === actionMessage.id} onClick={() => deleteSelected("everyone")}>
+                <Icon name="trash" size={19} /> Delete for everyone
+              </button>
+            )}
+            <button type="button" className="ms-action-cancel" onClick={() => setActionMessage(null)}>Cancel</button>
+          </section>
         </div>
       )}
 
@@ -890,9 +1034,35 @@ function ChatView({ who, onBack }) {
 }
 
 /* ---------- one message ---------- */
-function Bubble({ m, t, who, first, last, onRetry, onDiscard }) {
+function messagePreview(message) {
+  if (!message || message.unavailable) return "Original message unavailable";
+  if (message.deleted) return "This message was deleted";
+  if (message.kind === KIND.MONEY) {
+    const money = parseMoney(message.body);
+    return `Sent ${fmt(money.naira)}${money.note ? ` · ${money.note}` : ""}`;
+  }
+  return message.body || "Message";
+}
+
+function QuotePreview({ reply, onLocate }) {
+  if (!reply) return null;
+  return (
+    <button
+      type="button"
+      className={"ms-quote" + (reply.unavailable ? " unavailable" : "")}
+      disabled={reply.unavailable}
+      onClick={() => onLocate(reply.id)}
+      aria-label={reply.unavailable ? "Original message unavailable" : `Find message from ${reply.mine ? "you" : reply.from}`}
+    >
+      <b>{reply.mine ? "You" : reply.from || "Message"}</b>
+      <span>{messagePreview(reply)}</span>
+    </button>
+  );
+}
+
+function Bubble({ m, t, who, first, last, onRetry, onDiscard, onActions, onLocate }) {
   const state = m.mine ? chat.tickOf(m, t) : null;
-  const money = m.kind === KIND.MONEY ? parseMoney(m.body) : null;
+  const money = !m.deleted && m.kind === KIND.MONEY ? parseMoney(m.body) : null;
   const cls =
     "ms-row" +
     (m.mine ? " mine" : "") +
@@ -900,11 +1070,12 @@ function Bubble({ m, t, who, first, last, onRetry, onDiscard }) {
     (last ? " last" : "");
   if (money) {
     return (
-      <div className={cls}>
+      <div className={cls} id={m.id != null ? `ms-message-${m.id}` : undefined}>
         <article
           className="ms-money"
           aria-label={`${m.mine ? "You sent" : who + " sent you"} ${fmt(money.naira)}`}
         >
+          <QuotePreview reply={m.reply} onLocate={onLocate} />
           <span className="ms-coin" aria-hidden="true">
             <Icon name="coins" size={18} weight="fill" />
           </span>
@@ -918,6 +1089,11 @@ function Bubble({ m, t, who, first, last, onRetry, onDiscard }) {
             {state && <Ticks state={state} />}
           </span>
         </article>
+        {m.id != null && (
+          <button type="button" className="ms-message-action" aria-label={`Actions for message from ${m.mine ? "you" : who}`} onClick={onActions}>
+            <Icon name="more" size={18} weight="bold" />
+          </button>
+        )}
         {state === "failed" && (
           <FailedBar onRetry={onRetry} onDiscard={onDiscard} err={m.err} />
         )}
@@ -925,14 +1101,20 @@ function Bubble({ m, t, who, first, last, onRetry, onDiscard }) {
     );
   }
   return (
-    <div className={cls}>
-      <p className={"ms-bub" + (m.st === "sending" ? " pending" : "")}>
+    <div className={cls} id={m.id != null ? `ms-message-${m.id}` : undefined}>
+      <p className={"ms-bub" + (m.st === "sending" ? " pending" : "") + (m.deleted ? " deleted" : "")}>
+        <QuotePreview reply={m.reply} onLocate={onLocate} />
         <span className="ms-text">{m.body}</span>
         <span className="ms-meta">
           <time>{hm(m.at)}</time>
           {state && <Ticks state={state} />}
         </span>
       </p>
+      {m.id != null && (
+        <button type="button" className="ms-message-action" aria-label={`Actions for message from ${m.mine ? "you" : who}`} onClick={onActions}>
+          <Icon name="more" size={18} weight="bold" />
+        </button>
+      )}
       {state === "failed" && (
         <FailedBar onRetry={onRetry} onDiscard={onDiscard} err={m.err} />
       )}

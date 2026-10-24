@@ -29,3 +29,38 @@ self.addEventListener("fetch", (event) => {
     return response;
   }));
 });
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  event.waitUntil((async () => {
+    let data;
+    try { data = event.data.json(); } catch { return; }
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const client of windows) client.postMessage({ type: "CHAT_PUSH", message: data });
+    if (windows.some((client) => client.focused && client.visibilityState === "visible")) return;
+    await self.registration.showNotification(data.title || "New message", {
+      body: data.body || "You received a new message.",
+      tag: data.tag || "lifeinoau-message",
+      renotify: false,
+      icon: "/icon.png",
+      badge: "/icon.png",
+      data: { url: data.url || "/home?app=messages" },
+    });
+  })());
+});
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const path = event.notification.data?.url || "/home?app=messages";
+  event.waitUntil((async () => {
+    const targetUrl = new URL(path, self.location.origin);
+    if (targetUrl.origin !== self.location.origin) targetUrl.href = new URL("/home?app=messages", self.location.origin).href;
+    const target = targetUrl.href;
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const client of windows) {
+      if (client.url.startsWith(self.location.origin) && "navigate" in client) {
+        await client.navigate(target);
+        return client.focus();
+      }
+    }
+    return self.clients.openWindow(target);
+  })());
+});
