@@ -1,4 +1,6 @@
 // tests/trip-live.test.mjs
+// a player at an open door who is not lined up with it walks to the doorway (the leaf is never crossed); everything else waits for them
+const doorWalk = (flow) => { const S = flow.state, D = flow.plan.B.door; if (S.phase !== "door" || S.door !== "open" || S.canGoIn) return {}; const x = D.x + D.nx * 0.9 - flow.walker.x, z = D.z + D.nz * 0.9 - flow.walker.z, l = Math.hypot(x, z) || 1; return { dx: x / l, dz: z / l, mag: 0.6 }; };
 // Over the real campus map, through the same planner, guide and trip state machine the map page uses (headless):
 //   1. the route shown during a trip ALWAYS starts at the traveller's current position (the vehicle while riding, the person otherwise) and ends where they are heading,
 //      for every vehicle, through every leg, and it is worked out again when the leg changes;
@@ -34,7 +36,8 @@ for (let i = 0; i < 40 && trips < 24; i++) {
     let end = null; const flow = createTripFlow({ svc, sim }, { plan, onArrive: () => true, onEnter() {}, onEnd: (w) => { end = w; }, onNotice() {} });
     const revs = new Set(), kinds = new Set(); let t = 0, shown = 0;
     while (t < 300 && !end && flow.state.phase !== "inside") {
-      flow.update(1 / 30, {}); sim.update(1 / 30); t += 1 / 30;
+      flow.update(1 / 30, doorWalk(flow)); sim.update(1 / 30); t += 1 / 30;
+      if (flow.state.canOpen) flow.pressDoor(); else if (flow.state.canGoIn) flow.enterNow();   // doors never open by themselves: the player presses Open Door, then goes in
       const c = ctxFor(flow, plan), g = guide.update(1 / 30, c);
       assert.ok(Math.hypot(g.pts[0][0] - c.x, g.pts[0][1] - c.z) < 1e-6, `${mode} ${a.id}->${b.id} ${c.phase}: the route starts exactly at the traveller`);
       assert.ok(g.pts.length >= 2 && g.pts.every((p) => Number.isFinite(p[0]) && Number.isFinite(p[1])), "a usable route");
@@ -81,7 +84,7 @@ assert.ok(trips >= 18, "enough trips: " + trips);
 function runToDoor(onArrive) {
   const a = places[3], b = places[40], plan = planTrip(svc, { from: a, to: b, mode: "keke", driver: true }), sim = createTrafficSim({ graph: svc.graph, world: svc.world, focus: () => a, rnd });
   const ev = { end: null, entered: false, t: 0, doorAt: null, arrivedAt: null }; const flow = createTripFlow({ svc, sim }, { plan, onArrive: () => { ev.arrivedAt = ev.t; return onArrive(ev); }, onEnter() { ev.entered = true; }, onEnd: (w) => { ev.end = w; }, onNotice() {} });
-  const step = () => { flow.update(1 / 30, {}); sim.update(1 / 30); ev.t += 1 / 30; if (flow.state.phase === "door" && ev.doorAt == null) ev.doorAt = ev.t; };
+  const step = () => { if (flow.state.canOpen) flow.pressDoor(); else if (flow.state.canGoIn) flow.enterNow(); flow.update(1 / 30, doorWalk(flow)); sim.update(1 / 30); ev.t += 1 / 30; if (flow.state.phase === "door" && ev.doorAt == null) ev.doorAt = ev.t; };
   return { flow, ev, step };
 }
 { // instant answer: the baseline

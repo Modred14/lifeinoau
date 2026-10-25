@@ -34,13 +34,14 @@ export function Hold({ className, label, onDown, onUp, children }) {
 }
 
 export default function TripHud({ trip, placeName, st, input, miniRef, previewRef, onCancel }) {
-  const [preview, setPreview] = useState(false), phase = st?.phase ?? "intro", drive = trip.mode === "car" && !trip.driver, steering = phase === "drive", walking = ["trek", "approach", "walk", "afoot"].includes(phase);
+  const [preview, setPreview] = useState(false), phase = st?.phase ?? "intro", drive = trip.mode === "car" && !trip.driver, steering = phase === "drive", walking = ["trek", "approach", "walk", "afoot", "door"].includes(phase), doorOn = phase === "door" && st?.hasDoor;
   useEffect(() => { if (!preview) return; const k = (e) => e.key === "Escape" && setPreview(false); document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [preview]);
   const m = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + " km" : n + " m");
   const vname = trip.mode === "bus" ? "bus" : trip.mode === "keke" ? "keke" : "car";
-  const line = st?.settling ? "Confirming your fare…" : steering ? (st?.exiting ? "Stopping the car…" : `Drive to ${placeName}`) : phase === "afoot" ? `Walk to ${placeName}` : phase === "trek" ? `Walk to ${placeName}` : phase === "approach" ? `${st?.autoWalk ? "Walking" : "Walk"} to the ${vname}` : phase === "ride" ? `${vname[0].toUpperCase() + vname.slice(1)} to ${placeName}` : TEXT[phase] ?? "";
+  const doorLine = !doorOn ? "" : st.door === "closed" ? (st.canOpen ? "At the door" : "Walk up to the door") : st.door === "back" ? "Stepping back…" : st.door === "opening" ? "Opening the door…" : st.door === "closing" ? "Closing the door…" : "Door open: go in";
+  const line = doorLine ? `${doorLine}${placeName ? " · " + placeName : ""}` : st?.settling ? "Confirming your fare…" : steering ? (st?.exiting ? "Stopping the car…" : `Drive to ${placeName}`) : phase === "afoot" ? `Walk to ${placeName}` : phase === "trek" ? `Walk to ${placeName}` : phase === "approach" ? `${st?.autoWalk ? "Walking" : "Walk"} to the ${vname}` : phase === "ride" ? `${vname[0].toUpperCase() + vname.slice(1)} to ${placeName}` : TEXT[phase] ?? "";
   // how long is left: the same arithmetic as the estimate on the travel sheet, from where everything is right now
-  const eta = st?.eta != null && phase !== "inside" ? fmtDuration(st.eta) : "";
+  const eta = st?.eta != null && phase !== "inside" && phase !== "door" ? fmtDuration(st.eta) : "";
   return (
     <div className="th" data-phase={phase} style={{ WebkitTouchCallout: "none", userSelect: "none", WebkitUserSelect: "none" }}>
       <button type="button" className="th-cancel ghost" onClick={onCancel} data-sound="none"><Icon name="close" size={16} /> Cancel</button>
@@ -52,6 +53,15 @@ export default function TripHud({ trip, placeName, st, input, miniRef, previewRe
         <b>{line}</b>
         <span className="num">{eta ? `${eta} left` : ""}{st && ["trek", "drive", "ride", "walk", "afoot"].includes(phase) ? ` · ${m(st.remain)}` : ""}{st && ["drive", "ride"].includes(phase) ? ` · ${st.speed} km/h` : ""}</span>
       </div>
+      {steering && st?.turn != null && (
+        <div className="th-way" role="status" aria-label={`${placeName}: ${m(st.remain)} ahead`}>
+          <i style={{ transform: `rotate(${Math.round((st.turn * 180) / Math.PI) + 180}deg)` }}><Icon name="arrowDown" size={22} weight="bold" /></i>
+          <span>{st.remain > 45 ? `${placeName} · ${m(st.remain)}` : `Pull over at the green bay · ${m(st.remain)}`}</span>
+        </div>
+      )}
+      {st?.auto && (<button type="button" className="th-btn th-stop" data-sound="none" onClick={() => { input.stop = true; playSound("tap"); }}><Icon name="close" size={18} weight="bold" /> Stop walking</button>)}
+      {doorOn && st.door === "closed" && st.canOpen && (<button type="button" className="th-btn th-act-btn th-opendoor" data-sound="none" onClick={() => { input.door = true; playSound("tap"); }}><Icon name="door" size={20} weight="bold" /> Open Door</button>)}
+      {doorOn && st.door === "open" && st.canGoIn && (<button type="button" className="th-btn th-act-btn th-opendoor" data-sound="none" onClick={() => { input.goin = true; playSound("tap"); }}><Icon name="door" size={20} weight="bold" /> Go in</button>)}
       {walking && (<><Stick input={input} /><Hold className="th-btn th-run" label="Run" onDown={() => (input.run = true)} onUp={() => (input.run = false)}>RUN</Hold></>)}
       {steering && (
         <>

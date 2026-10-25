@@ -1,4 +1,6 @@
 // tests/travel-time.test.mjs
+// a player at an open door who is not lined up with it walks to the doorway (the leaf is never crossed); everything else waits for them
+const doorWalk = (flow) => { const S = flow.state, D = flow.plan.B.door; if (S.phase !== "door" || S.door !== "open" || S.canGoIn) return {}; const x = D.x + D.nx * 0.9 - flow.walker.x, z = D.z + D.nz * 0.9 - flow.walker.z, l = Math.hypot(x, z) || 1; return { dx: x / l, dz: z / l, mag: 0.6 }; };
 // Trip timing over the real campus map, run through the same planner and trip state machine the map page uses (headless, no drawing):
 //   car with a driver 6-9 s, bus 8-10 s, keke 10-15 s (the ride), growing with the road distance; the walk to the vehicle never longer than 5 s.
 import assert from "node:assert/strict";
@@ -43,7 +45,8 @@ for (let i = 0; i < 60 && trips < 90; i++) {
     let end = null; const flow = createTripFlow({ svc, sim }, { plan, onArrive: () => true, onEnter() {}, onEnd: (w) => { end = w; }, onNotice() {} });
     const secs = {}; let t = 0, last = "intro", since = 0;
     while (t < 300 && !end && flow.state.phase !== "inside") {
-      flow.update(1 / 30, {}); sim.update(1 / 30); t += 1 / 30;
+      flow.update(1 / 30, doorWalk(flow)); sim.update(1 / 30); t += 1 / 30;
+      if (flow.state.canOpen) flow.pressDoor(); else if (flow.state.canGoIn) flow.enterNow();   // doors never open by themselves: the player presses Open Door, then goes in
       if (flow.state.phase !== last) { secs[last] = (secs[last] ?? 0) + (t - since); last = flow.state.phase; since = t; }
     }
     secs[last] = (secs[last] ?? 0) + (t - since);

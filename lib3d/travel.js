@@ -8,12 +8,15 @@
 // The fare is settled with the server in the background the moment the ride stops (o.onArrive); you do not wait for it to step out and walk. Everything you do is local and immediate;
 // what is sent to the server (lib/tripSync.js) never moves you. Metres everywhere inside; the world group scales them to scene units.
 import * as THREE from "three";
-import { S } from "./campusReal.js";
+import { S, EX } from "./campusReal.js";
 import { buildRoadNet, isRoad, walkable, Path } from "./roadnet.js";
 import { makeKeke, makeBus, makeVehicle, rollWheels, addDriver } from "./vehicles.js";
 import { KINDS } from "./trafficsim.js";
 import { loadServices } from "./worldsvc.js";
 import { planTrip } from "./tripplan.js";
+import { planRetarget, RETARGET_WHY } from "./tripretarget.js";
+import { sightBlocked } from "./destinations.js";
+import { SWING } from "./doorway.js";
 import { createTripFlow } from "./tripflow.js";
 import { createTraffic, makeWalker } from "./traffic.js";
 import { createPlayerTags, isTaggable } from "./playerTags.js";
@@ -57,16 +60,23 @@ function makeRibbon() {
   return { mesh, tex, set, dispose() { mesh.geometry.dispose(); mesh.material.dispose(); tex.dispose(); } };
 }
 
-/** The door of a building: a frame, a panel that swings open, and a dark doorway behind it. Returns { group, open(k), dispose }. */
+/**
+ * The door of a building: a frame, a leaf that swings open, and a dark doorway behind it. The leaf is hinged on the left or the right (as seen from outside) and swings out into the
+ * street, or (only when the street has no room for it) in. Returns { group, open(k, hinge), dispose }. k is how far it is open: 0 shut, 1 fully open.
+ */
 function buildDoor(door) {
   const w = door.width, group = new THREE.Group(), wood = new THREE.MeshStandardMaterial({ color: "#6b3f26", roughness: 0.7 }), dark = new THREE.MeshBasicMaterial({ color: "#0b0d12" }), frame = new THREE.MeshStandardMaterial({ color: "#efe9d8", roughness: 0.8 }), glow = new THREE.MeshBasicMaterial({ color: "#ffe29a" });
   const add = (geo, m, x, y, z, parent = group) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); parent.add(o); return o; };
   add(new THREE.PlaneGeometry(w, 2.5), dark, 0, 1.25, 0.06);
   add(new THREE.BoxGeometry(0.18, 2.7, 0.3), frame, -w / 2 - 0.09, 1.35, 0.1); add(new THREE.BoxGeometry(0.18, 2.7, 0.3), frame, w / 2 + 0.09, 1.35, 0.1); add(new THREE.BoxGeometry(w + 0.5, 0.22, 0.34), frame, 0, 2.62, 0.1);
   add(new THREE.BoxGeometry(w + 0.6, 0.06, 0.06), glow, 0, 2.8, 0.2); add(new THREE.BoxGeometry(w * 0.9, 0.04, 1.4), new THREE.MeshStandardMaterial({ color: "#9b2f2f" }), 0, 0.04, 0.8); // a light above the door and a red mat
-  const hinge = new THREE.Group(); hinge.position.set(-w / 2, 0, 0.1); group.add(hinge); add(new THREE.BoxGeometry(w, 2.45, 0.08), wood, w / 2, 1.225, 0, hinge); add(new THREE.BoxGeometry(0.08, 0.08, 0.14), glow, w - 0.2, 1.1, 0.07, hinge);
+  const hinge = new THREE.Group(), leaf = new THREE.Group(); hinge.position.set(-w / 2, 0, 0.1); hinge.add(leaf); group.add(hinge);
+  add(new THREE.BoxGeometry(w, 2.45, 0.08), wood, 0, 1.225, 0, leaf); const knob = add(new THREE.BoxGeometry(0.08, 0.08, 0.14), glow, w / 2 - 0.2, 1.1, 0.07, leaf);
   group.position.set(door.x + door.nx * 0.04, 0.1, door.z + door.nz * 0.04); group.rotation.y = yawOf(door.nx, door.nz);
-  return { group, open: (k) => { hinge.rotation.y = -k * 1.7; }, dispose() { group.traverse((o) => { o.geometry?.dispose?.(); }); } };
+  let cur = "left", sign = -1;
+  // left: hinge on the left post, swings out (turning the wrong way would swing it into the wall); right: the mirror image; in: the left hinge, the other way round
+  const side = (h) => { cur = h; const L = h === "right" ? -1 : 1; hinge.position.x = -L * w / 2; leaf.position.x = L * w / 2; knob.position.x = L * (w / 2 - 0.2); sign = h === "right" ? 1 : h === "in" ? 1 : -1; };
+  return { group, open: (k, h = "left") => { if (h !== cur) side(h); hinge.rotation.y = sign * k * SWING; }, dispose() { group.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.(); }); group.removeFromParent(); } };
 }
 
 /** Why a trip could not be planned, in words for the player (the page shows it). */
@@ -85,9 +95,9 @@ export async function startTrip(env, o) {
   const fromP = resolvePlace(data, o.from) ?? resolvePlace(data, "senate"), toP = resolvePlace(data, o.to);
   if (!toP) throw Object.assign(new Error("That place has no position on the map yet."), { reason: "error" });
   const svc = await loadServices(data), net = svc.net, base = paintBase(data, net), input = o.input ?? {}, mode = o.mode;
-  const plan = planTrip(svc, { from: fromP, to: toP, mode, driver: !!o.driver });
+  let plan = planTrip(svc, { from: fromP, to: toP, mode, driver: !!o.driver }), curTo = toP.id, enterable = o.isEnterable ? !!o.isEnterable(toP.id) : true;
   if (!plan.ok) { const e = Object.assign(new Error(WHY[plan.reason] ?? "That trip cannot be planned."), { reason: plan.reason === "unreachable" ? "unreachable" : "noroad", text: WHY[plan.reason] }); throw e; }
-  const A = plan.A, B = plan.B, driven = !!plan.driven, auto = driven;
+  let B = plan.B; const driven = !!plan.driven, auto = driven;
   const world = new THREE.Group(); world.scale.setScalar(S); stage.scene.add(world);
   const saved = { near: cam.near, fov: cam.fov, shadow: { l: light.sun.shadow.camera.left, r: light.sun.shadow.camera.right, t: light.sun.shadow.camera.top, b: light.sun.shadow.camera.bottom } };
   stage.setManual(true); campus.setTripMode(true); campus.setSelected(null); cam.near = 0.03; cam.updateProjectionMatrix();
@@ -97,12 +107,17 @@ export async function startTrip(env, o) {
   // ---- the guide: a ribbon of chevrons on the way to go, and the beam over the destination ----
   // The route is NEVER the one planned when the trip began: lib3d/tripguide.js works it out from where the traveller is now to where they are going, again whenever the leg changes
   // (on foot -> in the vehicle -> on foot) or they leave the route, and shows only the part still ahead. This block only draws it.
-  const guide = createGuide({ nav: svc.nav, graph: svc.graph, plan }), rb = makeRibbon(); world.add(rb.mesh); disposers.push(() => rb.dispose());
+  let guide = createGuide({ nav: svc.nav, graph: svc.graph, plan }); const rb = makeRibbon(); world.add(rb.mesh); disposers.push(() => rb.dispose());
   let gd = guide.update(0, { phase: "intro", x: plan.start.x, z: plan.start.z }), rbRev = -1, rbAt = -9;
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 70, 16, 1, true), new THREE.MeshBasicMaterial({ color: "#3fd08a", transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); beam.position.set(B.front.x, 35, B.front.z); world.add(beam);
   const ring = new THREE.Mesh(new THREE.RingGeometry(2.2, 2.8, 40), new THREE.MeshBasicMaterial({ color: "#3fd08a", transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.set(B.front.x, 0.25, B.front.z); world.add(ring);
   disposers.push(() => { beam.geometry.dispose(); beam.material.dispose(); ring.geometry.dispose(); ring.material.dispose(); });
-  let door = null; if (B.building) { door = buildDoor(B.door); world.add(door.group); disposers.push(door.dispose); }
+  // the door is drawn only for a place with a door to open (an enterable building): never for an open-air place, a statue or a gate
+  let door = null; const setDoor = () => { door?.dispose(); door = B.building && enterable ? buildDoor(B.door) : null; if (door) world.add(door.group); }; setDoor(); disposers.push(() => door?.dispose());
+  // where to stop your own car: a green bay on the kerb at the drop-off (drawn only while you drive)
+  const bay = new THREE.Group(), bayMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 5.2).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#3fd08a", transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 }));
+  bay.add(bayMesh); bay.position.y = 0.2; bay.visible = false; world.add(bay); disposers.push(() => { bayMesh.geometry.dispose(); bayMesh.material.dispose(); });
+  const setBay = () => { if (plan.drop) { bay.position.set(plan.drop.x, 0.2, plan.drop.z); bay.rotation.y = Math.atan2(plan.drop.hx, plan.drop.hz); } };
 
   // ---- the person and the vehicle ----
   let avatar = null; const mkAvatar = async () => { try { return await createAvatar(o.look, o.gender); } catch { const w = makeWalker("#7f5236", "#1f2f55", "#a8946a"); return { root: w.root, play: () => false, has: () => false, setSpeed() {}, update: () => {}, dispose() {}, walker: w }; } };
@@ -127,16 +142,18 @@ export async function startTrip(env, o) {
       there.set(p.id, { av, anchor, key: lookKey(p.look, p.gender) }); tags.set(p.id, { name: p.name, anchor, meta: { level: p.level, faculty: p.faculty } });
     } catch { there.delete(p.id); /* a player whose model fails to load is simply not drawn */ } };
   const syncThere = (list) => { const ids = new Set((list ?? []).map((p) => p?.id)); for (const id of [...there.keys()]) if (!ids.has(id)) dropThere(id); for (const p of (list ?? []).slice(0, 8)) { const t = there.get(p?.id); if (t && t.key !== lookKey(p.look, p.gender)) dropThere(p.id); /* changed their look: rebuilt below */ addThere(p); } };
-  (async () => { syncThere(await (o.people ?? [])); /* an array, or a promise of one: the trip never waits for it */ })();
-  const pollThere = o.pollPeople ? setInterval(async () => { try { const l = await o.pollPeople(); if (alive) syncThere(l); } catch { /* try again next time */ } }, 5000) : null;
+  // `epoch` rises whenever the destination changes: an answer that was asked about an EARLIER destination (it arrives late) is dropped, never drawn over the new one
+  let epoch = 0;
+  (async () => { const e = epoch, l = await (o.people ?? []); if (alive && e === epoch) syncThere(l); /* an array, or a promise of one: the trip never waits for it */ })();
+  const pollThere = o.pollPeople ? setInterval(async () => { const e = epoch; try { const l = await o.pollPeople(); if (alive && e === epoch && Array.isArray(l)) syncThere(l); } catch { /* try again next time */ } }, 5000) : null;
   disposers.push(() => { clearInterval(pollThere); for (const id of [...there.keys()]) dropThere(id); });
 
   const camPt = { x: plan.start.x, z: plan.start.z };
   const traffic = createTraffic({ parent: world, svc, focus: () => camPt, tags }); disposers.push(() => traffic.dispose());
 
   // ---- the journey ----
-  const flow = createTripFlow({ svc, sim: traffic.sim }, { plan, dims: vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width } : null, rnd: Math.random, onArrive: () => o.onArrive?.() ?? true, onEnter: () => o.onEnter?.(), onEnd: (why) => { if (alive) o.onEnd?.(why); }, onNotice: (m) => o.onNotice?.(m) });
-  disposers.push(() => flow.dispose());
+  const flow = createTripFlow({ svc, sim: traffic.sim }, { plan, enterable, dims: vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width } : null, rnd: Math.random, onArrive: () => o.onArrive?.() ?? true, onEnter: () => o.onEnter?.(), onEnd: (why) => { if (alive) o.onEnd?.(why); }, onNotice: (m) => o.onNotice?.(m) });
+  disposers.push(() => flow.dispose()); setBay();
   const P = flow.person, F = flow.state, WK = flow.walker;
   let camYaw = Math.atan2(-(plan.start.x - (plan.doorIn?.x ?? plan.goal.x)), -(plan.start.z - (plan.doorIn?.z ?? plan.goal.z))), userYaw = 0, userPitch = 0, userAt = -9, time = 0, hornT = 0, lastState = 0, camBack = CAM.walk.back, zoomW = 1, zoomV = 1, leadX = 0, leadZ = 0;
   camPt.x = P.x; camPt.z = P.z; WK.hx = Math.sin(camYaw + Math.PI); WK.hz = Math.cos(camYaw + Math.PI);
@@ -162,11 +179,12 @@ export async function startTrip(env, o) {
   const keyHit = new Set(), kh = (e) => { if (e.repeat || e.target?.closest?.("input,textarea")) return; const k = e.key.toLowerCase(); if (k === "e" || k === "f") keyHit.add("act"); };
   window.addEventListener("keydown", kh); disposers.push(() => window.removeEventListener("keydown", kh));
   const read = () => {
-    const drive = driving(), afoot = F.phase === "afoot", act = keyHit.delete("act"), exitBtn = taken("exit"), enterBtn = taken("enter"), closeBtn = taken("close");
+    const drive = driving(), afoot = F.phase === "afoot", act = keyHit.delete("act"), exitBtn = taken("exit"), enterBtn = taken("enter"), closeBtn = taken("close"), doorBtn = taken("door"), goInBtn = taken("goin"), stopBtn = taken("stop"), atDoor = F.phase === "door";
     const wheel = Math.max(-1, Math.min(1, (input.steer ?? 0) + K("d", "arrowright") - K("a", "arrowleft")));
     return { fwd: Math.max(K("w", "arrowup"), input.jy > 0 ? input.jy : 0), back: Math.max(K("s", "arrowdown"), input.jy < 0 ? -input.jy : 0), right: Math.max(K("d", "arrowright"), input.jx > 0 ? input.jx : 0) - Math.max(K("a", "arrowleft"), input.jx < 0 ? -input.jx : 0), run: keys.has("shift") || !!input.run,
       gas: drive ? Math.max(K("w", "arrowup"), input.gas ?? 0) : 0, brake: drive ? Math.max(K("s", "arrowdown") || K(" ", " "), input.brake ?? 0) : 0, steer: drive ? wheel : 0,
-      exit: drive && (exitBtn || act), enter: afoot && (enterBtn || (act && F.canEnter)), close: afoot && (closeBtn || (act && !F.canEnter && F.canClose)) };
+      exit: drive && (exitBtn || act), enter: afoot && (enterBtn || (act && F.canEnter)), close: afoot && (closeBtn || (act && !F.canEnter && F.canClose)),
+      door: atDoor && (doorBtn || (act && F.door === "closed")), goIn: atDoor && (goInBtn || (act && F.door === "open")), stop: stopBtn };   // Open Door / Go in / stop the automatic walk: the buttons, and E or F for the door
   };
 
   // ---- drawing what the journey says ----
@@ -229,15 +247,38 @@ export async function startTrip(env, o) {
     if (Math.abs(cam.fov - fr.fov) > 0.05) { cam.fov += (fr.fov - cam.fov) * (1 - Math.exp(-dt * 4)); cam.updateProjectionMatrix(); }
   }
 
+  /** For the driver: which way the road to the destination goes, as an angle from straight ahead (positive = to the right), about 22 m along the guide. */
+  function turnTo() {
+    const v = flow.own; if (!v || !gd?.pts?.length) return null; let acc = 0, tx = gd.pts.at(-1)[0], tz = gd.pts.at(-1)[1];
+    for (let i = 1; i < gd.pts.length; i++) { acc += Math.hypot(gd.pts[i][0] - gd.pts[i - 1][0], gd.pts[i][1] - gd.pts[i - 1][1]); if (acc >= 22) { tx = gd.pts[i][0]; tz = gd.pts[i][1]; break; } }
+    const dx = tx - v.x, dz = tz - v.z, l = Math.hypot(dx, dz) || 1; return Math.atan2((dx * -v.hz + dz * v.hx) / l, (dx * v.hx + dz * v.hz) / l);
+  }
+  // what the destination tags need to know: where the traveller is, where the camera is, and whether a building hides a tag
+  const heights = new Map(data.buildings.map((b) => [b.id, b.h * EX])), camM = { x: 0, y: 0, z: 0 };
+  /** Sends the trip to another place (a tapped name tag). Nothing changes unless it works: { ok: true } or { ok: false, reason, text }. */
+  function retarget(toId) {
+    if (!alive) return { ok: false, reason: "phase", text: RETARGET_WHY.phase };
+    if (toId === curTo) return { ok: false, reason: "same", text: RETARGET_WHY.same };
+    const toP2 = resolvePlace(data, toId); if (!toP2) return { ok: false, reason: "nopos", text: RETARGET_WHY.nopos };
+    const at = F.phase === "drive" && flow.vehicle ? flow.vehicle : P, r = planRetarget(svc, flow.plan, { at: { x: at.x, z: at.z }, to: toP2 }); if (!r.ok) return { ok: false, reason: r.reason, text: RETARGET_WHY[r.reason] };
+    const en = o.isEnterable ? !!o.isEnterable(toId) : true, res = flow.retarget(r.plan, en); if (!res.ok) return res;
+    plan = flow.plan; B = plan.B; curTo = toId; enterable = en; epoch++;
+    guide = createGuide({ nav: svc.nav, graph: svc.graph, plan }); rbRev = -1; gd = guide.update(0, { phase: F.phase, x: at.x, z: at.z, goal: flow.approachDoor });   // a new trip's guide: nothing of the old route is kept
+    beam.position.set(B.front.x, 35, B.front.z); ring.position.set(B.front.x, 0.25, B.front.z); setDoor(); setBay(); syncThere([]);
+    if (o.pollPeople) { const e = epoch; Promise.resolve(o.pollPeople()).then((l) => { if (alive && e === epoch && Array.isArray(l)) syncThere(l); }).catch(() => {}); }   // who is at the new door, in the background
+    return { ok: true };
+  }
+
   const off = stage.onFrame((tm, dt0) => {
     if (!alive) return; const dt = Math.min(dt0, 0.1); time += dt;
     // what the person is asking for: a direction in the world from the stick / keys and where the camera looks (the same for walking and for steering the car)
     const inp = read(), viewYaw = camYaw + (inVehNow() ? userYaw : 0), f = { x: Math.sin(viewYaw + Math.PI), z: Math.cos(viewYaw + Math.PI) }, // the stick is relative to the view the player SEES
        r = { x: -f.z, z: f.x }, ax = (inp.fwd - inp.back) * f.x + inp.right * r.x, az = (inp.fwd - inp.back) * f.z + inp.right * r.z, m = Math.min(1, Math.hypot(ax, az));
     traffic.update(dt);
+    if (inp.stop) flow.stopAuto(); if (inp.door) flow.pressDoor(); if (inp.goIn) flow.enterNow();
     flow.update(dt, { dx: ax, dz: az, mag: m, run: inp.run, gas: inp.gas, brake: inp.brake, steer: inp.steer, exit: inp.exit, enter: inp.enter, close: inp.close });
     lastPhase = F.phase;
-    drawPerson(dt); drawVehicle(dt); if (door) door.open(F.doorK);
+    drawPerson(dt); drawVehicle(dt); door?.open(F.doorK, F.hinge); bay.visible = driving() && !!plan.drop; if (bay.visible) bay.scale.set(1, 1, 1 + Math.sin(time * 3) * 0.02);
     beam.material.opacity = 0.2 + Math.sin(time * 3) * 0.08; ring.scale.setScalar(1 + Math.sin(time * 3) * 0.08); hornT = Math.max(0, hornT - dt);
     avatar.update?.(time, dt); follow(dt); tags.update();
     // the route, from where the traveller is NOW (the vehicle while riding in it, the person otherwise) to where they are going
@@ -246,11 +287,13 @@ export async function startTrip(env, o) {
     if (gd.show) { rb.mesh.visible = true; if (gd.rev !== rbRev || time - rbAt > (gd.kind === "drive" ? 0.12 : 0.2)) { rbRev = gd.rev; rbAt = time; rb.set(gd.pts, gd.s, gd.kind === "walk" ? 1.3 : 2.4, gd.kind === "walk" ? "#4aa8ff" : "#2fe38a"); } rb.tex.offset.y -= dt * 1.6; } else rb.mesh.visible = false;
     const live = { x: pos.x, z: pos.z, hx: pos.hx, hz: pos.hz, route: { pts: gd.pts, len: gd.len }, mode: gd.kind === "walk" ? "trek" : "drive", dest: { x: B.front.x, z: B.front.z } }, mini = o.miniCanvas?.(), prev = o.previewCanvas?.();
     if (mini) drawMini(mini, base, live); if (prev) drawPreview(prev, base, live);
-    if (time - lastState > 0.1) { lastState = time; o.onState?.({ phase: F.phase, mode, auto, eta: F.eta, left: F.eta, remain: Math.round(flow.remainMetres()), speed: Math.round(Math.abs(F.speed ?? 0) * 3.6), canHorn: mode === "car" && F.phase === "drive", ownCar: mode === "car" && !plan.driven, canExit: !!F.canExit, exiting: !!F.exiting, canEnter: !!F.canEnter, canClose: !!F.canClose, steerAngle: flow.own ? flow.own.steer : 0, estimate: plan.secs, notice: F.notice, routeKind: gd.kind, routeLen: Math.round(gd.len), settling: F.pay === "pending" && ["door", "enter"].includes(F.phase), walking: F.phase === "approach" && WK.mode, autoWalk: WK.mode === "auto", parts: plan.parts }); }
+    if (time - lastState > 0.1) { lastState = time; o.onState?.({ phase: F.phase, mode, auto, eta: F.eta, left: F.eta, remain: Math.round(flow.remainMetres()), speed: Math.round(Math.abs(F.speed ?? 0) * 3.6), canHorn: mode === "car" && F.phase === "drive", ownCar: mode === "car" && !plan.driven, canExit: !!F.canExit, exiting: !!F.exiting, canEnter: !!F.canEnter, canClose: !!F.canClose, steerAngle: flow.own ? flow.own.steer : 0, estimate: plan.secs, notice: F.notice, routeKind: gd.kind, routeLen: Math.round(gd.len), settling: F.pay === "pending" && ["door", "enter"].includes(F.phase), walking: F.phase === "approach" && WK.mode, autoWalk: WK.mode === "auto", parts: plan.parts,
+        door: F.door, hasDoor: !!(B.building && enterable), canOpen: !!F.canOpen, canGoIn: !!F.canGoIn, auto: !!F.auto, to: curTo, turn: F.phase === "drive" ? turnTo() : null }); }
   });
 
   const api = {
-    traffic, plan, setLook, setTravellers: (l) => traffic.setTravellers(l), pos: () => { const inV = !!flow.vehicle && ["ride", "drive", "paying"].includes(F.phase), p = inV ? flow.vehicle : P; return { x: p.x, z: p.z, h: Math.atan2(p.hx, p.hz), mode: inV ? mode : "trek" }; }, route: () => gd, cancel: () => flow.cancel(),
+    traffic, get plan() { return plan; }, get to() { return curTo; }, retarget, setLook,
+    tagView: () => { camM.x = cam.position.x / S; camM.y = cam.position.y / S; camM.z = cam.position.z / S; return { me: { x: P.x, z: P.z }, cam: camM, occluded: (it) => sightBlocked(svc.world, heights, camM, it, it.bid) }; }, setTravellers: (l) => traffic.setTravellers(l), pos: () => { const inV = !!flow.vehicle && ["ride", "drive", "paying"].includes(F.phase), p = inV ? flow.vehicle : P; return { x: p.x, z: p.z, h: Math.atan2(p.hx, p.hz), mode: inV ? mode : "trek" }; }, route: () => gd, cancel: () => flow.cancel(),
     horn() { if (hornT > 0) return; hornT = 0.4; o.onHorn?.(); },
     dispose() { if (!alive) return; alive = false; off?.(); for (const d of disposers.reverse()) { try { d(); } catch { /* clean up as much as possible */ } } stage.scene.remove(world); stage.setManual(false); campus.setTripMode(false);
       cam.near = saved.near; cam.fov = saved.fov; cam.updateProjectionMatrix(); Object.assign(light.sun.shadow.camera, { left: saved.shadow.l, right: saved.shadow.r, top: saved.shadow.t, bottom: saved.shadow.b }); light.sun.shadow.camera.updateProjectionMatrix(); },

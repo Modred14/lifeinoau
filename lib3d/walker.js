@@ -97,14 +97,14 @@ function pointAt(p, s, out) { s = clamp(s, 0, p.len); let i = 1; while (i < p.pt
  */
 export class Walker {
   constructor(world, nav, { x = 0, z = 0, hx = 0, hz = 1, resumeAfter = 1.2 } = {}) {
-    Object.assign(this, { world, nav, x, z, hx, hz, vx: 0, vz: 0, speed: 0, blocked: false, ignore: null, resumeAfter, manualAt: -99, time: 0, off: 0, path: null, ps: 0, goal: null, onDone: null, replans: 0, lastProg: 0, lastProgAt: 0, mode: "idle", failed: null });
+    Object.assign(this, { world, nav, x, z, hx, hz, vx: 0, vz: 0, speed: 0, blocked: false, ignore: null, resumeAfter, manualAt: -99, time: 0, off: 0, path: null, ps: 0, goal: null, onDone: null, replans: 0, lastProg: 0, lastProgAt: 0, mode: "idle", failed: null, yieldToPlayer: false });
   }
   /** Starts following a route (see createNav().plan). `goal` {x, z} is where it ends; if the route is blocked the walker plans again from where it stands. */
-  follow(route, { goal = null, tolerance = 0.35, ignore = null, onDone = null } = {}) {
-    this.path = route?.pts?.length > 1 ? pathOf(route.pts) : null; this.ps = 0; this.goal = goal ?? (route?.pts ? { x: route.pts.at(-1)[0], z: route.pts.at(-1)[1] } : null); this.tol = tolerance; this.ignore = ignore; this.onDone = onDone; this.replans = 0; this.lastProg = 0; this.lastProgAt = this.time; this.failed = null; this.mode = this.path ? "auto" : "idle";
+  follow(route, { goal = null, tolerance = 0.35, ignore = null, onDone = null, yieldToPlayer = false } = {}) {
+    this.path = route?.pts?.length > 1 ? pathOf(route.pts) : null; this.ps = 0; this.goal = goal ?? (route?.pts ? { x: route.pts.at(-1)[0], z: route.pts.at(-1)[1] } : null); this.tol = tolerance; this.ignore = ignore; this.onDone = onDone; this.yieldToPlayer = yieldToPlayer; this.replans = 0; this.lastProg = 0; this.lastProgAt = this.time; this.failed = null; this.mode = this.path ? "auto" : "idle";
     if (!this.path) { const cb = this.onDone; this.onDone = null; cb?.("arrived"); }
   }
-  cancelRoute() { this.path = null; this.onDone = null; this.mode = "idle"; }
+  cancelRoute() { this.path = null; this.onDone = null; this.mode = "idle"; this.yieldToPlayer = false; }
   get following() { return !!this.path; }
   /** Puts the person somewhere (never into a wall), and stops them. */
   place(x, z) { const p = this.world.pushOut(x, z, WALK_R, { ignore: this.ignore }); this.x = p.x; this.z = p.z; this.vx = this.vz = 0; this.speed = 0; }
@@ -133,6 +133,8 @@ export class Walker {
   }
   _sub(dt, input) {
     this.time += dt; const manual = input && input.mag > 0.06; let dx = 0, dz = 0, mag = 0, run = !!input?.run;
+    // a walk the player asked for (they tapped a place) belongs to them: touching the stick or the keys ends it, and it does not start again by itself
+    if (manual && this.path && this.yieldToPlayer) { const cb = this.onDone; this.cancelRoute(); cb?.("cancelled"); }
     if (manual) { const l = Math.hypot(input.dx, input.dz) || 1; dx = input.dx / l; dz = input.dz / l; mag = Math.min(1, input.mag); this.manualAt = this.time; this.mode = "manual"; }
     else if (this.path && this.time - this.manualAt > this.resumeAfter) { const t = this._carrot(); if (t) { dx = t.dx; dz = t.dz; mag = t.mag; this.mode = "auto"; run = false; } }
     else if (!this.path) this.mode = "idle";

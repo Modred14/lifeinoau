@@ -13,6 +13,7 @@ import PlaceActivities from "@/components/PlaceActivities";
 import { featuresAt } from "@/lib/features.js";
 import BuildingInside from "@/components/BuildingInside";
 import CustodyCell from "@/components/CustodyCell";
+import { createTargetTracker } from "@/lib/tripTarget.js";
 import { hasInterior } from "@/lib3d/interiors/registry.js";
 import { isOpenSpace } from "@/lib3d/interiors/openSpaces.js";
 import { call, naira } from "@/lib/client";
@@ -35,7 +36,7 @@ export default function MapPage() {
     [q, setQ] = useState("");
   const [bb, setBb] = useState(null);
   const [data, setData] = useState(null), [sheet, setSheet] = useState(false), [trip, setTrip] = useState(null), [tripSt, setTripSt] = useState(null), [inside, setInside] = useState(null), [fade, setFade] = useState(false), [counts, setCounts] = useState({}), [focus, setFocus] = useState(null), [want, setWant] = useState(null);
-  const g = useGame(), ch = g?.character, here = ch ? placeOf(ch) : null, miniRef = useRef(null), previewRef = useRef(null), input = useRef({}).current, tripRef = useRef(null);
+  const g = useGame(), ch = g?.character, here = ch ? placeOf(ch) : null, miniRef = useRef(null), previewRef = useRef(null), input = useRef({}).current, tripRef = useRef(null), targetRef = useRef(null);
   tripRef.current = trip;
   // Serving a sentence: held at Floor O (N-QRS Custody) and not allowed to travel. The server refuses every trip too; this only stops offering it.
   const held = !!g?.floorZero && +new Date(g.floorZero.releaseAt) > serverTime();
@@ -120,15 +121,24 @@ export default function MapPage() {
     const dest = L; if (!dest) return; setSheet(false);
     if (held) return toast.error(`You are held in ${CUSTODY_NAME}. You cannot travel until your sentence ends.`);
     if (isClub(dest.id) && !clubStatus(serverTime()).open) return toast.error(closedMessage(clubOf(dest.id)), { duration: 7000 }); // the server refuses too: the clubs open 8 PM to 5 AM
-    const fetchPeople = () => call("/api/travel?at=" + encodeURIComponent(dest.id)).then((r) => (r.failed ? [] : r.people ?? []));
+    // who is standing at the door: always asked about the place being gone to NOW. An answer about an earlier choice (a slow one, after the player tapped another name tag) comes back null and is dropped.
+    const target = (targetRef.current = createTargetTracker(dest.id));
+    const fetchPeople = () => target.answer(call("/api/travel?at=" + encodeURIComponent(target.id)).then((r) => (r.failed ? [] : r.people ?? [])), null);
     const people = fetchPeople();
     setTripSt(null); input.jx = input.jy = input.steer = input.gas = input.brake = 0; input.run = false;
-    setTrip({ id: crypto.randomUUID(), from: here, to: dest.id, mode, driver: withDriver, act, look: ch?.look ?? null, gender: ch?.gender ?? "M", car: ch?.activeCar || "", carColor: ch?.activeCarColor || "", people, pollPeople: fetchPeople, selfName: ch?.name ?? "", name: dest.name });
+    setTrip({ id: crypto.randomUUID(), from: here, to: dest.id, mode, driver: withDriver, act, look: ch?.look ?? null, gender: ch?.gender ?? "M", car: ch?.activeCar || "", carColor: ch?.activeCarColor || "", people, pollPeople: fetchPeople, isEnterable: (id) => { const p = find(id); return !!p && (hasInterior(p.id, p.kind) || isOpenSpace(p.id)); }, selfName: ch?.name ?? "", name: dest.name });
     setSel(null);
   }
+  /** A tapped name tag has already sent the trip there (locally, at once). This keeps the page in step: the destination, its name, the people at its door. Nothing here waits for the server. */
+  function retargeted(id) {
+    const t = tripRef.current, p = find(id); if (!t || !p) return;
+    targetRef.current?.choose(id); const next = { ...t, to: id, name: p.name, act: null }; tripRef.current = next; setTrip(next);   // same trip id: the engine keeps going, it is not restarted
+  }
+  /** Why a tapped place cannot be gone to right now (the server would refuse it too), or null. */
+  const tripGuard = (id) => (isClub(id) && !clubStatus(serverTime()).open ? closedMessage(clubOf(id)) : null);
   async function pay() { // the vehicle has stopped: the fare leaves the wallet now, and you are at the new place
     const t = tripRef.current; if (!t) return false; const fare = fareKobo(t.mode);
-    const res = await run({ key: "trip:" + t.id, sensitive: fare > 0n, pending: "Paying the fare…", ok: fare > 0n ? `Paid ${naira(fare.toString())} · ${MODE_INFO[t.mode].name}` : undefined, sound: "coin", request: () => call("/api/travel", { to: t.to, mode: t.mode, requestId: crypto.randomUUID() }),
+    const res = await run({ key: "trip:" + t.id + ":" + t.to, sensitive: fare > 0n, pending: "Paying the fare…", ok: fare > 0n ? `Paid ${naira(fare.toString())} · ${MODE_INFO[t.mode].name}` : undefined, sound: "coin", request: () => call("/api/travel", { to: t.to, mode: t.mode, requestId: crypto.randomUUID() }),
       effects: [{ store: game, patch: (x) => ({ ...cash(-fare)(x), character: { ...x.character, placeId: t.to } }) }] });
     return !res.failed;
   }
@@ -154,6 +164,8 @@ export default function MapPage() {
           onTripEnter={entered}
           onTripEnd={tripEnded}
           onTripNotice={tripNotice}
+          onTripRetarget={retargeted}
+          tripGuard={tripGuard}
         />
       </div>
       {trip && <TripHud trip={trip} placeName={trip.name} st={tripSt} input={input} miniRef={miniRef} previewRef={previewRef} onCancel={() => setTrip(null)} />}

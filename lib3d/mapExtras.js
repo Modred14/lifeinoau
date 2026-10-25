@@ -59,6 +59,18 @@ const BUILDINGS = [
   { id: "club_divas", name: "Royal Divas", kind: "club", tier: 1, x: -100, z: 880, w: 30, d: 20, h: 9, wall: "#8a6a2f", roof: "#2a1d45", neon: "#ffd24a" },
 ];
 
+// Places with an inside (lib3d/interiors/registry.js) that the real-map render has no building for. A door needs a wall to be in, so each one gets a building:
+//  - when an unclaimed building stands right against the marked spot (within ATTACH_M), the place IS that building (a shop or a hall the render drew without a name);
+//  - otherwise a small game-placed building is made at (x, z): the marked spot, or the nearest spot clear of every road, building and lake (tests/destination-doors.test.mjs checks it).
+// The place keeps its id, name and kind; only its position moves, by a few metres at most, onto its new building.
+const ATTACH_M = 8;
+const ENTRANCES = {
+  hsltc_n: { x: 367, z: 187, w: 26, d: 14, h: 10 }, ecobank: { x: -251, z: 111, w: 14, d: 10, h: 6 }, blk_2a: { x: -959, z: -198, w: 24, d: 12, h: 12 },
+  awovarsity_hall: { x: 269, z: 649, w: 22, d: 14, h: 9 }, school_bookshop: { x: 161, z: 82, w: 12, d: 9, h: 4.5 }, as_e_dey: { x: -538, z: -153, w: 10, d: 8, h: 4 }, buks_empire: { x: -945, z: 537, w: 12, d: 9, h: 4.5 },
+};
+const ATTACH_ONLY = ["cooperative_hall", "oau_ict", "spider_building", "new_bukateria", "afkit"];
+const ringDist = (x, z, pts) => { let best = Infinity; for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length], dx = b[0] - a[0], dz = b[1] - a[1], l2 = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / l2)); best = Math.min(best, Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t)); } return best; };
+
 /** What a player is told about the places added by this file (the real-map places keep their blurbs in landmarks.js). */
 export const EXTRA_META = {
   motion_ground: { blurb: "The open field between the Amphitheatre and the Senate Building. Concerts, rallies, big evenings and the odd football match all end up here.", actions: [{ label: "This week's parties", href: "/parties" }], verified: false },
@@ -89,6 +101,16 @@ export function withExtras(data) {
   }
   for (const g of Object.values(GROUNDS)) if (!places.some((p) => p.id === g.id)) places.push({ id: g.id, name: g.name, kind: g.id === "motion_ground" ? "sports" : "worship", tier: 2, src: "game-placement", conf: "game", x: +((g.x0 + g.x1) / 2).toFixed(1), z: +((g.z0 + g.z1) / 2).toFixed(1), bid: null, snapPx: 0 });
   for (const b of BILLBOARDS) if (!places.some((p) => p.id === b.id)) places.push({ id: b.id, name: b.name, kind: "billboard", tier: 2, src: "game-placement", conf: "game", x: b.x, z: b.z, bid: null, snapPx: 0, board: b.n, yaw: b.yaw });
+  // enterable places with no building on the map: they take the unclaimed building beside them, or get a small one (see ENTRANCES)
+  const claimed = new Set(places.filter((p) => p.bid != null).map((p) => p.bid));
+  for (const id of [...ATTACH_ONLY, ...Object.keys(ENTRANCES)]) {
+    const i = places.findIndex((p) => p.id === id); if (i < 0 || places[i].bid != null) continue;
+    let near = null; for (const b of buildings) { if (claimed.has(b.id)) continue; const d = ringDist(places[i].x, places[i].z, b.pts); if (d <= ATTACH_M && (!near || d < near.d)) near = { d, id: b.id }; }
+    if (near) { places[i] = { ...places[i], bid: near.id }; claimed.add(near.id); continue; }
+    const e = ENTRANCES[id]; if (!e) continue;
+    buildings.push({ id: next, pts: rect(e.x, e.z, e.w, e.d).map(([x, z]) => [+x.toFixed(1), +z.toFixed(1)]), area: e.w * e.d, h: e.h, hSrc: "game-placement" });
+    places[i] = { ...places[i], x: e.x, z: e.z, bid: next, conf: "game" }; claimed.add(next); next++;
+  }
   // The map shows one unnamed medical building exactly where the game puts the Health Centre (between Alumni Hall and Awolowo Hall), so it takes that name.
   const mi = places.findIndex((p) => p.id === "medical_unnamed"); if (mi >= 0 && !places.some((p) => p.id === "health_centre")) places[mi] = { ...places[mi], id: "health_centre", name: "Health Centre", unnamed: false, conf: "game" };
   const have = new Set(places.map((p) => p.id));

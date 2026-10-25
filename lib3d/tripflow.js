@@ -7,6 +7,10 @@
 //                                    you step in and sit, it closes; only then do the controls work), and so is getting out (Exit Car: the car stops, the door opens, you climb out onto a
 //                                    clear spot beside it) -> "afoot" (you walk; close the door, or get back in) -> the same walk to the building
 //   trek:                            intro -> trek (you walk) -> paying -> walk -> door -> enter
+//   the door:                        in "door" you stand in front of a CLOSED door and are offered Open Door. Nothing opens by itself: when you press it you step back just far enough to
+//                                    clear the leaf (and no further than there is room for), the leaf swings out, and you go in (walk into the doorway, or press Go in).
+//   a new destination:               while on foot (trek, or out of your own car) or at the wheel of your own car, retarget() sends the same trip to another place: the plan is made again from
+//                                    where you are, and on foot you are walked there until you take the stick or keys yourself.
 //
 // Everything that moves does so by elapsed time (dt), through the shared collision world, so frame rate changes nothing and nobody passes through anything.
 // The person is a Walker (one controller for the stick, the keys and the automatic route, so they never fight). Vehicles are sim vehicles on the road graph.
@@ -18,8 +22,10 @@ import { INTRO_SECONDS, BOARD_SECONDS, ALIGHT_SECONDS, CAR_BOARD_SECONDS, CAR_AL
 import { boxesOverlap } from "./collide.js";
 import { createCar, stepCar, gentleStop } from "./carphysics.js";
 import { exitSpots, pickDoorSide } from "./carexit.js";
+import { SWING, BACK_SPEED, LEAF_ID, canOpenAt, atThreshold, doorLocal, planDoorOpening, inSwing, swingBlocked, leafBody } from "./doorway.js";
+import { RETARGET_WHY } from "./tripretarget.js";
 
-const ARRIVE_RADIUS = 14, DOOR_OPEN = 0.9, ENTER_SECONDS = 1.4, MANUAL_EXIT_SECONDS = 2.6, PARK_ASSIST_BELOW = 7, CLOSE_AUTO_M = 4.5, ENTER_REACH_M = 3.2;
+const ARRIVE_RADIUS = 14, DOOR_OPEN = 0.9, ENTER_SECONDS = 1.4, BACK_TIMEOUT = 2.6, OPEN_HOLD_MAX = 1.6, MANUAL_EXIT_SECONDS = 2.6, PARK_ASSIST_BELOW = 7, CLOSE_AUTO_M = 4.5, ENTER_REACH_M = 3.2;
 const clamp01 = (x) => Math.max(0, Math.min(1, x)), smooth = (x) => { x = clamp01(x); return x * x * (3 - 2 * x); }, lerp = (a, b, k) => a + (b - a) * k;
 
 /**
@@ -28,11 +34,14 @@ const clamp01 = (x) => Math.max(0, Math.min(1, x)), smooth = (x) => { x = clamp0
  * plus the one-shot buttons { exit } (Exit Car), { enter } (get back in) and { close } (close the door).
  */
 export function createTripFlow(env, o) {
-  const { svc, sim } = env, { world, nav, graph } = svc, plan = o.plan, mode = plan.mode, B = plan.B, dims = o.dims ?? null;   // dims: { len, wid } of the model, when it is not the standard size (a purchased car)
+  const { svc, sim } = env, { world, nav, graph } = svc, mode = o.plan.mode, dims = o.dims ?? null;
+  let plan = o.plan, B = plan.B, enterable = o.enterable !== false;   // enterable: the place has a door to open (an open-air place, a statue or a gate has none: you simply stop there)   // dims: { len, wid } of the model, when it is not the standard size (a purchased car)
   const driven = !!plan.driven, ownCar = mode === "car" && !plan.driven, vehicleTrip = mode !== "trek", kind = plan.kind;
   const walker = new Walker(world, nav, { x: plan.start.x, z: plan.start.z, hx: 0, hz: 1 });
-  const S = { phase: "intro", t: 0, time: 0, eta: plan.secs, notice: null, ended: false, entered: false, pay: "none", doorK: 0, boardK: 0, alightK: 0, speed: 0, vehDoorK: 0, vehDoorSide: -1, seatK: 0, exiting: false, canExit: false, canEnter: false, canClose: false };
-  let hero = null, own = null, inProf = null, heroT = 0, spawnAt = 0, spawnTries = 0, waitedForVehicle = 0, boardFrom = null, alightTo = null, lastEta = -1, retargeted = false, approachDoor = null, departed = false, enterFrom = null, alightFrom = null;
+  const S = { phase: "intro", t: 0, time: 0, eta: plan.secs, notice: null, ended: false, entered: false, pay: "none", doorK: 0, boardK: 0, alightK: 0, speed: 0, vehDoorK: 0, vehDoorSide: -1, seatK: 0, exiting: false, canExit: false, canEnter: false, canClose: false,
+    door: "closed", hinge: "left", canOpen: false, canGoIn: false, auto: false, target: 0 };   // door: "closed" | "back" | "opening" | "open" | "closing"
+  let hero = null, own = null, inProf = null, heroT = 0, spawnAt = 0, spawnTries = 0, waitedForVehicle = 0, boardFrom = null, alightTo = null, lastEta = -1, retargeted = false, approachDoor = null, departed = false, alightFrom = null;
+  let dframe = null, dBack = null, dHeld = 0, dStall = 0, dT = 0, arrivals = 0, enterSecs = ENTER_SECONDS, enterPts = null;
   let doorSide = -1, doorStart = 0, doorTarget = 0, closeAsk = false, exitAsk = false, exitTo = null, exitArrival = false, exitSeat = null, reTo = null;
   const person = { visible: true, seated: false, seat: null, x: plan.start.x, z: plan.start.z, hx: 0, hz: 1 };
 
@@ -134,8 +143,8 @@ export function createTripFlow(env, o) {
   // (movement is local). The server stays the authority: if it refuses (or the request finally fails) the trip ends as "failed" and the page rolls the player back to where
   // the server says they are; and the one thing that does wait for the answer is going INTO the building, because what a place lets you do depends on the server's record.
   function payFare() {
-    S.pay = "pending";
-    const settle = (ok) => { if (S.ended) return; if (ok === false) { S.pay = "failed"; end("failed"); } else S.pay = "paid"; };
+    S.pay = "pending"; const ticket = ++arrivals;   // an answer about an EARLIER arrival (you changed your mind and went elsewhere) must not decide this one
+    const settle = (ok) => { if (S.ended || ticket !== arrivals) return; if (ok === false) { S.pay = "failed"; end("failed"); } else S.pay = "paid"; };
     let r; try { r = o.onArrive?.() ?? true; } catch { r = false; }
     if (r && typeof r.then === "function") { r.then(settle, () => settle(false)); return true; }
     settle(r); return false;
@@ -196,6 +205,83 @@ export function createTripFlow(env, o) {
     walker.ignore = new Set(["own"]); walker.follow(r, { goal: reTo, tolerance: 0.4 }); closeAsk = false; go("reenter");
   }
 
+  // ---- the door: it stays shut until the player asks, and never swings into them ----
+  const turnToward = (dt, hx, hz, rate = 6) => { const k = 1 - Math.exp(-dt * rate); let x = walker.hx + (hx - walker.hx) * k, z = walker.hz + (hz - walker.hz) * k; const l = Math.hypot(x, z) || 1; walker.hx = x / l; walker.hz = z / l; };
+  const hasDoor = () => !!B.building && enterable;
+  const setLeaf = () => { const b = dframe ? leafBody(dframe, S.doorK * SWING) : null; if (b) world.setBody(LEAF_ID, b); else world.removeBody(LEAF_ID); };
+  const shutDoor = () => { S.door = "closed"; S.doorK = 0; S.canOpen = S.canGoIn = false; dframe = null; world.removeBody(LEAF_ID); };
+  /** Open Door was pressed. One press at a time: a second press while the door is moving, or open, does nothing. */
+  function pressDoor() {
+    if (S.ended || S.phase !== "door" || !hasDoor() || S.door !== "closed" || S.pay === "failed") return false;
+    if (!canOpenAt(B.door, walker.x, walker.z).ok) { notice("Step up to the door first."); return false; }
+    const pl = planDoorOpening(world, B.door, { x: walker.x, z: walker.z }, { isRoad: onRoad });
+    if (!pl.ok) { notice(pl.text); return false; }
+    dframe = pl.frame; S.hinge = pl.hinge; dBack = pl.back; walker.cancelRoute(); walker.vx = walker.vz = 0; dT = dHeld = dStall = 0; S.canOpen = false;
+    S.door = pl.dist > 0.02 ? "back" : "opening"; return true;
+  }
+  /** Go in through the open door (the button; walking into the doorway does the same). You must be lined up with the opening, so the walk in never crosses the leaf. */
+  function enterNow() {
+    if (S.ended || S.phase !== "door" || S.door !== "open") return false;
+    const l = doorLocal(B.door, walker.x, walker.z); if (l.v > 4 || Math.abs(l.u) > B.door.width / 2 - 0.15) { notice("Walk up to the open doorway to go in."); return false; }
+    beginEnter(); return true;
+  }
+  function beginEnter() {
+    const D = B.door, p1 = { x: D.x + D.nx * 0.5, z: D.z + D.nz * 0.5 }, p2 = { x: D.x - D.nx * 1.6, z: D.z - D.nz * 1.6 }, l1 = Math.hypot(p1.x - walker.x, p1.z - walker.z), l2 = Math.hypot(p2.x - p1.x, p2.z - p1.z);
+    S.canOpen = S.canGoIn = false; enterPts = { p0: { x: walker.x, z: walker.z }, p1, p2, l1, l2 }; enterSecs = Math.max(ENTER_SECONDS, (l1 + l2) / 2.4); go("enter");
+  }
+  function stepBack(dt) {
+    const D = B.door, dx = dBack.x - walker.x, dz = dBack.z - walker.z, dl = Math.hypot(dx, dz); dT += dt; walker.vx = walker.vz = 0; turnToward(dt, -D.nx, -D.nz, 9);   // the person keeps looking at the door
+    const giveUp = (m) => { walker.speed = 0; shutDoor(); notice(m); };
+    if (dl > 0.04 && dT < BACK_TIMEOUT) {
+      const sp = Math.min(dl, BACK_SPEED * dt), r = world.moveCircle(walker.x, walker.z, (dx / dl) * sp, (dz / dl) * sp, WALK_R); dStall = r.moved < sp * 0.25 ? dStall + dt : 0;
+      walker.x = r.x; walker.z = r.z; walker.speed = BACK_SPEED * 0.9; if (dStall > 0.6) giveUp("There is no room to step back. Move to a clearer spot and try again.");
+    } else if (inSwing(dframe, walker.x, walker.z, WALK_R + 0.08)) giveUp("There is no room to open the door from here. Move to a clearer spot and try again.");
+    else { walker.speed = 0; S.door = "opening"; dHeld = 0; }
+  }
+  function swingDoor(dt, dir) {
+    walker.step(dt, null);   // the person stands still while the leaf moves
+    if (dir > 0) {
+      const k = Math.min(1, S.doorK + dt / DOOR_OPEN);
+      // never through the person, and never through something that has moved into the way (a vehicle pulling up): the leaf waits, and gives up after a moment
+      if (inSwing(dframe, walker.x, walker.z, WALK_R + 0.06, k * SWING) || swingBlocked(world, dframe, k * SWING)) { dHeld += dt; if (dHeld > OPEN_HOLD_MAX) { notice("Something is in the way of the door."); dHeld = 0; S.door = "closing"; } return; }
+      dHeld = 0; S.doorK = k; setLeaf(); if (k >= 1) S.door = "open";
+    } else { S.doorK = Math.max(0, S.doorK - (dt / DOOR_OPEN) * 1.4); setLeaf(); if (S.doorK <= 0) shutDoor(); }
+  }
+  function doorPhase(dt, walkIn) {
+    S.canOpen = S.canGoIn = false;
+    if (!hasDoor()) { walker.step(dt, null); if (S.t > 0.6 && S.pay !== "pending") finishEnter(); return; }   // an open-air place, a statue or a gate: you stop there, and that is that
+    const D = B.door;
+    if (S.door === "closed" || S.door === "open") {
+      walker.step(dt, walkIn);
+      if (S.door === "closed") { const n = canOpenAt(D, walker.x, walker.z); S.canOpen = n.ok && S.pay !== "failed"; if (n.ok && walker.speed < 0.2 && !(walkIn.mag > 0.06)) turnToward(dt, -D.nx, -D.nz); }   // standing at the door, you face it
+      else { const l = doorLocal(D, walker.x, walker.z); S.canGoIn = l.v <= 4 && Math.abs(l.u) <= D.width / 2 - 0.15; if (atThreshold(D, walker.x, walker.z) && S.pay !== "pending") beginEnter(); }
+    } else if (S.door === "back") stepBack(dt);
+    else swingDoor(dt, S.door === "opening" ? 1 : -1);
+  }
+
+  // ---- a new destination, in the middle of the trip ----
+  const stopAuto = () => { if (walker.path && ["trek", "afoot", "walk"].includes(S.phase)) { walker.cancelRoute(); return true; } return false; };
+  function startAuto(route) {
+    walker.follow(route, { goal: plan.goal, tolerance: 0.45, yieldToPlayer: true, onDone: (why) => { if (why === "blocked") notice("The way is blocked. Walk round it yourself."); } });   // the stick or the keys end it
+  }
+  /**
+   * Sends the trip somewhere else. np: the new plan (lib3d/tripretarget.js), made from where the traveller is now; enter: whether the new place has a door to open.
+   * Returns { ok: true } or { ok: false, reason, text }. Nothing about the trip changes unless it returns ok.
+   */
+  function retargetTrip(np, en = true) {
+    const bad = (reason) => ({ ok: false, reason, text: RETARGET_WHY[reason] }), ph = S.phase;
+    if (S.ended || S.entered) return bad("phase");
+    const okPhase = mode === "trek" ? ["trek", "walk", "door"].includes(ph) : ownCar ? ["drive", "afoot"].includes(ph) : false; if (!okPhase) return bad("phase");
+    if (mode !== "trek" && S.pay !== "none") return bad("paid");       // a fare has been paid for the place you are at: it cannot be taken somewhere else for free
+    if (S.door === "back" || S.door === "opening" || S.door === "closing" || exitAsk) return bad("busy");
+    let route = null;
+    if (mode === "trek" || ph === "afoot") { route = mode === "trek" ? np.walk : nav.plan(walker.x, walker.z, np.goal.x, np.goal.z); if (!route?.ok || route.pts.length < 2) return bad("unreachable"); }
+    plan = np; B = np.B; enterable = en; shutDoor(); enterPts = null; S.target++;
+    if (mode === "trek") { arrivals++; S.pay = "none"; go("trek"); }       // an answer about the place you were going to no longer counts
+    if (route) startAuto(route);
+    return { ok: true };
+  }
+
   function update(dt, inp = {}) {
     if (S.ended) return S; dt = Math.min(dt, 0.25); S.time += dt; S.t += dt;
     const walkIn = { dx: inp.dx ?? 0, dz: inp.dz ?? 0, mag: inp.mag ?? 0, run: !!inp.run };
@@ -251,11 +337,15 @@ export function createTripFlow(env, o) {
         break; }
       case "walk": walker.step(dt, walkIn); if (!walker.following && Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z) < 1.2) { walker.vx = walker.vz = 0; go("door"); }
         else if (!walker.following && walker.failed) { notice("The way to the door is blocked."); end("unreachable"); } break;
-      case "door": { const hx = -B.door.nx, hz = -B.door.nz; walker.step(dt, null); walker.hx = hx; walker.hz = hz; S.doorK = Math.min(1, S.t / DOOR_OPEN); if (!B.building) { if (S.t > 0.6 && S.pay !== "pending") finishEnter(); } else if (S.t > DOOR_OPEN && S.pay !== "pending") go("enter"); break; }
-      case "enter": { const k = Math.min(1, S.t / ENTER_SECONDS), d = -B.door.nx, e = -B.door.nz; enterFrom ??= { x: walker.x, z: walker.z }; const ix = B.front.x + d * 3.2, iz = B.front.z + e * 3.2; walker.x = enterFrom.x + (ix - enterFrom.x) * k; walker.z = enterFrom.z + (iz - enterFrom.z) * k; walker.hx = d; walker.hz = e; walker.speed = 2.4; person.visible = k < 0.55; if (k >= 1 && S.pay !== "pending") finishEnter(); break; }
+      case "door": doorPhase(dt, walkIn); break;
+      case "enter": { // from where they stand, through the doorway, and in (the leaf stays open behind them)
+        const k = Math.min(1, S.t / enterSecs), E = enterPts ?? (beginEnter(), enterPts), tot = E.l1 + E.l2 || 1, s = k * tot, d = -B.door.nx, e = -B.door.nz;
+        if (s <= E.l1) { const q = E.l1 ? s / E.l1 : 1; walker.x = E.p0.x + (E.p1.x - E.p0.x) * q; walker.z = E.p0.z + (E.p1.z - E.p0.z) * q; } else { const q = E.l2 ? (s - E.l1) / E.l2 : 1; walker.x = E.p1.x + (E.p2.x - E.p1.x) * q; walker.z = E.p1.z + (E.p2.z - E.p1.z) * q; }
+        walker.vx = walker.vz = 0; turnToward(dt, d, e, 10); walker.speed = 2.4; person.visible = s < E.l1 + E.l2 * 0.55; if (k >= 1 && S.pay !== "pending") finishEnter(); break; }
       default: break;
     }
     if (S.phase === "door" || S.phase === "enter") { doorTarget = 0; stepDoor(dt, 0); }
+    S.auto = !!walker.path && walker.mode === "auto" && ["trek", "afoot", "walk"].includes(S.phase);
     S.canExit = S.phase === "drive" && !exitAsk; S.canEnter = S.phase === "afoot" && distToCar(walker.x, walker.z) < ENTER_REACH_M; S.canClose = S.phase === "afoot" && S.vehDoorK > 0.02 && doorTarget === 1;
     // the person
     person.x = walker.x; person.z = walker.z; person.hx = walker.hx; person.hz = walker.hz; S.speed = S.phase === "drive" ? own.v : S.phase === "ride" && hero ? hero.v : walker.speed;
@@ -263,7 +353,7 @@ export function createTripFlow(env, o) {
     if (S.time - lastEta > 0.2) { lastEta = S.time; S.eta = etaNow(); }
     return S;
   }
-  function finishEnter() { if (S.entered) return; S.entered = true; go("inside"); o.onEnter?.(); }
+  function finishEnter() { if (S.entered) return; S.entered = true; world.removeBody(LEAF_ID); go("inside"); o.onEnter?.(); }
 
   /** Seconds to go, by the planner's own arithmetic from where everything is now. */
   function etaNow() {
@@ -287,8 +377,8 @@ export function createTripFlow(env, o) {
   function remainMetres() { const ph = S.phase; if (ph === "ride" && hero) return Math.max(0, hero.route.len - hero.s); if (ph === "drive") return Math.max(0, Math.hypot(own.x - plan.drop.x, own.z - plan.drop.z)); if (ph === "approach") return walker.path ? Math.max(0, walker.path.len - walker.ps) : 0; return Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z); }
 
   function dispose() {
-    S.ended = true; sim.removeExternal("player"); sim.removeExternal("own"); world.removeBody("own");
+    S.ended = true; sim.removeExternal("player"); sim.removeExternal("own"); world.removeBody("own"); world.removeBody(LEAF_ID);
     if (hero) { if (departed) hero.role = "npc"; else sim.remove(hero); }
   }
-  return { update, dispose, state: S, walker, person, plan, kind, get hero() { return hero; }, get approachDoor() { return approachDoor ?? plan.doorIn; }, get own() { return own; }, get vehicle() { return own ?? hero; }, eta: () => S.eta, remainMetres, cancel: () => end("cancelled"), get driving() { return S.phase === "drive"; } };
+  return { update, dispose, state: S, walker, person, get plan() { return plan; }, kind, pressDoor, enterNow, retarget: retargetTrip, stopAuto, get doorFrame() { return dframe; }, get hero() { return hero; }, get approachDoor() { return approachDoor ?? plan.doorIn; }, get own() { return own; }, get vehicle() { return own ?? hero; }, eta: () => S.eta, remainMetres, cancel: () => end("cancelled"), get driving() { return S.phase === "drive"; } };
 }

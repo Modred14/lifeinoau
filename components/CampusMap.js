@@ -7,6 +7,7 @@ import { loadCampusData, placeMeta } from "../lib3d/campusData.js";
 import { Icon } from "./Icon";
 import { playSound } from "@/lib/sound";
 import { call } from "@/lib/client";
+import { selectTags } from "../lib3d/destinations.js";
 import { createTripSync } from "@/lib/tripSync";
 import { useGame } from "@/lib/gameStore";
 import { lookKey } from "@/lib/look.js";
@@ -20,17 +21,17 @@ const labelWidth = (name, tier) => Math.min(190, name.length * (tier === 1 ? 7.4
  * panning. autoRotate is off unless asked for. Every named building carries a label above its roof;
  * labels are real buttons. They thin out with distance and never overlap, and the "Labels" button hides them all.
  */
-export default function CampusMap({ youId = null, trip = null, tripInput = null, getMini = null, getPreview = null, onTripState, onTripArrive, onTripEnter, onTripEnd, onTripNotice, interactive = true, zoomOnly = false, pins = true, autoRotate = false, selectedId = null, onSelect, billboards = null, className = "", style, view = HOME_VIEW }) {
+export default function CampusMap({ youId = null, trip = null, tripInput = null, getMini = null, getPreview = null, onTripState, onTripArrive, onTripEnter, onTripEnd, onTripNotice, onTripRetarget, tripGuard, interactive = true, zoomOnly = false, pins = true, autoRotate = false, selectedId = null, onSelect, billboards = null, className = "", style, view = HOME_VIEW }) {
   const box = useRef(null), api = useRef(null), noFly = useRef(false), sel = useRef(selectedId), cb = useRef(onSelect), [mounts, setMounts] = useState([]), [failed, setFailed] = useState(false), [labels, setLabels] = useState(true), [look, setLook] = useState(false), [hint, setHint] = useState(interactive);
   sel.current = selectedId; cb.current = onSelect;
-  const tripCb = useRef({}); tripCb.current = { onTripState, onTripArrive, onTripEnter, onTripEnd, onTripNotice, getMini, getPreview, tripInput }; const tripRef = useRef(null);
+  const tripCb = useRef({}); tripCb.current = { onTripState, onTripArrive, onTripEnter, onTripEnd, onTripNotice, onTripRetarget, tripGuard, getMini, getPreview, tripInput }; const tripRef = useRef(null);
   const canZoom = interactive || zoomOnly, hold = () => { noFly.current = true; setTimeout(() => { noFly.current = false; }, 400); }; // a tap on the map shouldn't re-centre it
 
   useEffect(() => {
     let alive = true, stage = null, campus = null, lab = null, ro = null, off = [];
     (async () => {
       try {
-        const [{ createStage }, { buildRealCampus, addRealLighting }, { CSS2DRenderer, CSS2DObject }, data] = await Promise.all([import("../lib3d/stage.js"), import("../lib3d/campusReal.js"), import("three/addons/renderers/CSS2DRenderer.js"), loadCampusData()]);
+        const [{ createStage }, { buildRealCampus, addRealLighting, S: SC }, { CSS2DRenderer, CSS2DObject }, data] = await Promise.all([import("../lib3d/stage.js"), import("../lib3d/campusReal.js"), import("three/addons/renderers/CSS2DRenderer.js"), loadCampusData()]);
         if (!alive) return;
         const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches, host = box.current.querySelector("[data-canvas]");
         stage = createStage(host, { fov: 42, far: 1800, controls: { maxPolarAngle: 1.38, minPolarAngle: interactive ? 0.08 : 0.35, minDistance: interactive ? 6 : 50, maxDistance: interactive ? 520 : 360, enablePan: interactive, enableRotate: interactive, enableZoom: canZoom, autoRotate: autoRotate && !reduce, autoRotateSpeed: 0.45, screenSpacePanning: false, zoomToCursor: interactive } });
@@ -58,8 +59,18 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
           const list = campus.places.map((L) => { const el = document.createElement("div"); el.style.pointerEvents = "auto"; const o = new CSS2DObject(el); o.position.copy(L.pos); stage.scene.add(o); return { id: L.id, el, L, w: labelWidth(L.name, L.tier) }; });
           list.sort((a, b) => a.L.tier - b.L.tier); setMounts(list.map(({ id, el }) => ({ id, el, L: campus.places.find((p) => p.id === id) })));
           const size = () => lab.setSize(box.current.clientWidth, box.current.clientHeight); size(); ro = new ResizeObserver(size); ro.observe(box.current);
-          const v = new stage.THREE.Vector3(); let frame = 0;
-          const declutter = () => { // nearest-first by tier: show a label only if it is on screen, near enough for its tier, and clear of the ones already shown
+          const v = new stage.THREE.Vector3(); let frame = 0; const tagState = new Map(), items = list.map((it) => ({ id: it.id, tier: it.L.tier, x: it.L.x / SC, z: it.L.z / SC, y: (it.L.pos?.y ?? 3) / SC, bid: it.L.bid, w: it.w }));
+          // on a trip: name tags of the places near the traveller (lib3d/destinations.js decides which), a click on one sends the trip there
+          const tripTags = () => {
+            const w = box.current.clientWidth, h = box.current.clientHeight, tv = tripRef.current.tagView(), to = tripRef.current.to, byId = new Map(list.map((it) => [it.id, it]));
+            for (const i of items) i.pinned = i.id === to;
+            const shown = selectTags(items, { me: tv.me, now: performance.now(), w, h, occluded: tv.occluded, widthOf: (i) => i.w,
+              project: (i) => { const it = byId.get(i.id); v.copy(it.L.pos).project(stage.camera); return { x: (v.x * 0.5 + 0.5) * w, y: (-v.y * 0.5 + 0.5) * h, on: v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05 }; } }, tagState);
+            for (const it of list) { const op = shown.get(it.id); it.el.style.visibility = op ? "visible" : "hidden"; it.el.style.opacity = op ? String(op) : "0"; it.el.style.zIndex = it.id === to ? 9 : 4 - it.L.tier; }
+          };
+          const declutter = () => {
+            if (box.current.dataset.trip) { if (box.current.dataset.tags === "1" && tripRef.current?.tagView) tripTags(); else for (const it of list) it.el.style.visibility = "hidden"; return; }
+            for (const it of list) it.el.style.opacity = ""; // nearest-first by tier: show a label only if it is on screen, near enough for its tier, and clear of the ones already shown
             const w = box.current.clientWidth, h = box.current.clientHeight, dist = stage.camera.position.distanceTo(stage.controls.target), maxTier = box.current.dataset.labels === "off" ? 0 : dist > 300 ? 1 : dist > 120 ? 2 : 3, taken = [];
             for (const it of list) { const isSel = it.id === sel.current; let show = isSel || it.L.tier <= maxTier;
               v.copy(it.L.pos).project(stage.camera); if (v.z > 1 || Math.abs(v.x) > 1.08 || Math.abs(v.y) > 1.08) show = false;
@@ -90,7 +101,7 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
         const { startTrip } = await import("../lib3d/travel.js"); if (dead) return;
         box.current.dataset.trip = "1";
         handle = await startTrip({ stage: a.stage, campus: a.campus, light: a.light, data: a.data }, { ...trip, input: tripCb.current.tripInput ?? {}, miniCanvas: () => tripCb.current.getMini?.() ?? null, previewCanvas: () => tripCb.current.getPreview?.() ?? null,
-          onState: (st) => tripCb.current.onTripState?.(st), onNotice: (m) => tripCb.current.onTripNotice?.(m), onArrive: () => tripCb.current.onTripArrive?.() ?? true, onEnter: () => { entered = true; tripCb.current.onTripEnter?.(); }, onEnd: end });
+          onState: (st) => { const on = st.mode === "trek" ? ["trek", "walk", "door"].includes(st.phase) : !!st.ownCar && ["drive", "afoot"].includes(st.phase); if (box.current) { if (on) box.current.dataset.tags = "1"; else delete box.current.dataset.tags; } tripCb.current.onTripState?.(st); }, onNotice: (m) => tripCb.current.onTripNotice?.(m), onArrive: () => tripCb.current.onTripArrive?.() ?? true, onEnter: () => { entered = true; tripCb.current.onTripEnter?.(); }, onEnd: end });
         if (dead) { handle?.dispose(); return; } tripRef.current = handle;
         if (!handle) return end("error");
         // real players on the road, in the BACKGROUND: where we are goes to the server and who else is out there comes back without ever touching how the player moves (that is local and
@@ -113,7 +124,7 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
         sync.start();
       } catch (e) { if (e?.reason && e.reason !== "error") { tripCb.current.onTripNotice?.(e.text ?? e.message); end(e.reason); } else { console.error("trip failed", e); end("error"); } }
     })();
-    return () => { dead = true; if (sync) sync.stop({ clear: true }); else call("/api/travel", { action: "trip" }); unhook?.(); handle?.dispose(); tripRef.current = null; if (box.current) delete box.current.dataset.trip; const b = api.current; if (b) { const L = (entered ? b.campus.resolve(trip.to) : b.campus.resolve(trip.from)) ?? b.campus.resolve(trip.to); /* a trip that did not arrive (cancelled, refused, the fare failed) leaves the camera, like the player, where the server still has them */ if (L) b.stage.flyTo(L.x, 0, L.z, 70, 1.0); } };
+    return () => { dead = true; if (sync) sync.stop({ clear: true }); else call("/api/travel", { action: "trip" }); unhook?.(); handle?.dispose(); tripRef.current = null; if (box.current) delete box.current.dataset.trip; delete box.current.dataset.tags; const b = api.current; if (b) { const L = (entered ? b.campus.resolve(trip.to) : b.campus.resolve(trip.from)) ?? b.campus.resolve(trip.to); /* a trip that did not arrive (cancelled, refused, the fare failed) leaves the camera, like the player, where the server still has them */ if (L) b.stage.flyTo(L.x, 0, L.z, 70, 1.0); } };
   }, [trip?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { const a = api.current; if (a && billboards) a.campus.setBillboards(billboards); }, [billboards, mounts]);
@@ -121,6 +132,8 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
   // "Look around" turns one-finger / left-button drag into orbit + tilt (to inspect a building in 3D); off, it slides the map. Two fingers or right-drag always turn and tilt.
   useEffect(() => { const c = api.current?.stage.controls; if (!c || !interactive) return; const T = api.current.THREE; c.mouseButtons = { LEFT: look ? T.MOUSE.ROTATE : T.MOUSE.PAN, MIDDLE: T.MOUSE.DOLLY, RIGHT: look ? T.MOUSE.PAN : T.MOUSE.ROTATE }; c.touches = { ONE: look ? T.TOUCH.ROTATE : T.TOUCH.PAN, TWO: T.TOUCH.DOLLY_ROTATE }; }, [look, mounts]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!hint) return; const t = setTimeout(() => setHint(false), 7000); return () => clearTimeout(t); }, [hint]);
+  /** A tap on a destination tag during a trip: the trip goes there at once (nothing waits for the server), or says why it cannot. */
+  const tagGo = (id) => { const h = tripRef.current; if (!h?.retarget) return; const no = tripCb.current.tripGuard?.(id); if (no) return void tripCb.current.onTripNotice?.(no); const r = h.retarget(id); if (r.ok) { playSound("tap"); tripCb.current.onTripRetarget?.(id); } else if (r.reason !== "same") tripCb.current.onTripNotice?.(r.text ?? "You cannot go there right now."); };
   const nudge = (o) => api.current?.stage.nudge(o);
   const reset = () => { const v = view; api.current?.stage.flyTo(v.x, 0, v.z, v.dist, v.pol); onSelect?.(null); };
   const onKey = (e) => { const k = e.key; if (k === "ArrowLeft") nudge(e.shiftKey ? { az: -0.25 } : { panX: -0.12 }); else if (k === "ArrowRight") nudge(e.shiftKey ? { az: 0.25 } : { panX: 0.12 }); else if (k === "ArrowUp") nudge(e.shiftKey ? { pol: -0.12 } : { panZ: 0.12 }); else if (k === "ArrowDown") nudge(e.shiftKey ? { pol: 0.12 } : { panZ: -0.12 }); else if (k === "+" || k === "=") nudge({ zoom: 0.85 }); else if (k === "-") nudge({ zoom: 1.18 }); else if (k === "Home") reset(); else return; e.preventDefault(); };
@@ -151,7 +164,7 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
         {/* <p className="stage-credit">Map data © OpenStreetMap contributors</p> */}
       </>)}
       {mounts.map(({ id, el, L }) => createPortal(
-        <button type="button" className="bl" data-kind={L.kind} data-tier={L.tier} data-approx={L.approx ? "true" : "false"} aria-pressed={selectedId === id} aria-label={L.name + (L.approx ? " (approximate position)" : "")} onClick={() => { hold(); onSelect?.(id); }}>
+        <button type="button" className="bl" data-kind={L.kind} data-tier={L.tier} data-approx={L.approx ? "true" : "false"} aria-pressed={selectedId === id} aria-label={L.name + (L.approx ? " (approximate position)" : "")} onClick={() => { hold(); if (box.current?.dataset.trip) tagGo(id); else onSelect?.(id); }}>
           <Icon name={ICON_OF[L.kind] ?? "town"} size={L.tier === 1 ? 16 : 13} /><span>{L.name}</span></button>, el, id))}
     </div>
   );
