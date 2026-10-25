@@ -86,7 +86,7 @@ export default function MatchScreen({ id, onExit, onOpen, balanceKobo }) {
             <div className="gm-offer" role="alert"><span>{m.opponent.name} offers a draw{m.stakeNaira ? ": both wagers go back" : ""}.</span>
               <button type="button" className="gm-btn gm-btn-sm gm-btn-go" onClick={() => post("draw", { op: "accept" })}>Accept</button><button type="button" className="gm-btn gm-btn-sm" onClick={() => post("draw", { op: "decline" })}>Decline</button></div>
           ) : (
-            <button type="button" className="gm-btn gm-btn-sm" disabled={m.drawOffer === "mine"} onClick={() => post("draw", { op: "offer" }, "Draw offered. Any move you make takes it back.")}>{m.drawOffer === "mine" ? "Draw offered…" : "Offer a draw"}</button>
+            <button type="button" className="gm-btn gm-btn-sm" disabled={m.drawOffer === "mine"} onClick={async () => { const r = await post("draw", { op: "offer" }); if (r?.aiAnswer === "declined") toast.info(`${r.aiName ?? "Your opponent"} declined the draw.`); else if (r?.aiAnswer === "accepted") toast.info(`${r.aiName ?? "Your opponent"} accepted the draw.`); else if (r && !r.error && !r.failed) toast.info("Draw offered. Any move you make takes it back."); }}>{m.drawOffer === "mine" ? "Draw offered…" : "Offer a draw"}</button>
           )}
           <button type="button" className="gm-btn gm-btn-sm gm-btn-bad" onClick={() => { if (!confirm) { setConfirm(true); setTimeout(() => setConfirm(false), 3500); } else { setConfirm(false); post("resign", {}); } }}>{confirm ? (m.stakeNaira ? `Tap again: lose ${nairaOf(m.stakeNaira)}` : "Tap again to resign") : "Resign"}</button>
         </div>

@@ -7,7 +7,7 @@ import { makeDb } from "./fakedb.mjs";
 register(new URL("./fixtures/games-loader.mjs", import.meta.url));
 const svc = await import("../lib/games/matchService.js");
 const { GameError } = await import("./fixtures/games-gameService-stub.mjs");
-const { ENGINES } = await import("../lib/games/index.js");
+const { ENGINES, AI_SETTINGS } = await import("../lib/games/index.js");
 
 const db = makeDb(["character", "account", "ledgerEntry", "gameMatch", "gameQueue", "gameSeat", "notification", "actionLog", "block"], {
   unique: { gameSeat: ["characterId"], gameQueue: ["characterId"], ledgerEntry: ["idempotencyKey"], actionLog: ["characterId", "requestId"] },
@@ -140,7 +140,8 @@ const f6 = (await ch(A, "Bola", "CHESS", 1_000)).id; await svc.respond(db, B.uid
 const b6 = await bal(A); const r6 = db.T().gameMatch.find((x) => String(x.id) === f6); r6.startedAt = new Date(Date.now() - 13 * 3_600_000);
 const v6 = (await svc.getMatch(db, A.uid, f6)).match; assert.equal(v6.status, "VOID"); assert.equal(await bal(A), b6 + N(1_000)); assert.equal(await house(), 0n); ok("a match past the 12-hour cap is voided and both wagers come back");
 
-// ---------- random opponents
+// ---------- random opponents (real players only: the AI fallback is switched off here and has its own test, tests/games-ai-match.test.mjs)
+AI_SETTINGS.enabled = false;
 const q = (p, game, stake) => svc.joinQueue(db, p.uid, { game, stakeNaira: stake, requestId: rq() });
 let r = await q(A, "POOL", 500); assert.equal(r.searching, true); r = await q(A, "POOL", 500); assert.equal(r.duplicate, true); assert.equal(db.T().gameQueue.length, 1); ok("searching twice is one search; you are never matched with yourself");
 r = await q(B, "POOL", 1_000); assert.equal(r.searching, true); assert.equal(db.T().gameQueue.length, 2); ok("a different wager does not match");
@@ -154,6 +155,7 @@ const preTotal = await total();
 r = await q(A, "POOL", 500); assert.equal(r.matched, true); const rid = r.id; const rm = (await svc.getMatch(db, D.uid, rid)).match; assert.equal(rm.mode, "RANDOM"); assert.equal(rm.opponent.name, "Ada"); assert.equal(db.T().gameQueue.length, 1);
 assert.equal(await house(), N(1_000)); ok("a compatible opponent was found: the match started, both ₦500 wagers are in escrow, both left the queue");
 await svc.resign(db, D.uid, { matchId: rid }); assert.equal(await total(), preTotal); await svc.leaveQueue(db, B.uid);
+AI_SETTINGS.enabled = true;
 
 // ---------- custody and eligibility
 await db.character.update({ where: { id: D.id }, data: { jailedUntil: new Date(Date.now() + 3_600_000) } });

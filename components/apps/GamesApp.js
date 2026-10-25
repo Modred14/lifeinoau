@@ -143,7 +143,7 @@ function Setup({ game, lobby, busy, run, openMatch, onPractice }) {
   const poor = BigInt(stake) * 100n > BigInt(lobby.balanceKobo);
   const go = () => {
     if (mode === "friend") { if (!name.trim()) { toast.error("Type your friend's character name."); return; } run("challenge", { to: name.trim(), game: game.id, stakeNaira: stake }, (r) => { toast.success(`Challenge sent to ${r.to ?? name.trim()}. They have 10 minutes to answer.`); }); }
-    else run("queue", { game: game.id, stakeNaira: stake }, (r) => { if (r.matched) openMatch(r.id); else toast.info("Searching for an opponent…"); });
+    else run("queue", { game: game.id, stakeNaira: stake }, (r) => { if (r.matched) { if (r.ai) toast.info(`No other player was free, so you are playing ${r.opponent ?? "an AI opponent"}.`); openMatch(r.id); } else toast.info("Searching for an opponent…"); });
   };
   return (
     <div className="gm-scroll gm-setup">
@@ -160,7 +160,7 @@ function Setup({ game, lobby, busy, run, openMatch, onPractice }) {
           {sugg.length > 0 && <ul className="gm-sugg">{sugg.map((p) => <li key={p.name}><button type="button" onClick={() => { setName(p.name); setChosen(true); setSugg([]); }}><b>{p.name}</b><small>{p.level}L · {p.faculty}</small></button></li>)}</ul>}
           {recent.length > 0 && !name && <div className="gm-recent"><small>Recent opponents</small>{recent.map((r) => <button key={r} type="button" className="gm-chip" onClick={() => { setName(r); setChosen(true); }}>{r}</button>)}</div>}
         </div>
-      ) : <p className="gm-note">We will pair you with another player who picked the same game and the same wager. You wait here while we look; you can cancel any time.</p>}
+      ) : <p className="gm-note">We will pair you with another player who picked the same game and the same wager. If nobody is free right now, you start straight away against an AI opponent (clearly marked "AI"), with the same rules and the same wager.</p>}
       <div className="gm-field"><label>Wager (each player)</label><StakePicker value={stake} onChange={setStake} balanceKobo={lobby.balanceKobo} disabled={busy} /></div>
       <button type="button" className="gm-btn gm-btn-go gm-btn-wide" disabled={busy || poor || !!lobby.active || !!lobby.queue} onClick={go}>{mode === "friend" ? "Send challenge" : "Find a player"}{stake ? ` · ${nairaOf(stake)}` : ""}</button>
       {lobby.queue && <p className="gm-note">You are already searching. Cancel that search first.</p>}
