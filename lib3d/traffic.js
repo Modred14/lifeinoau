@@ -7,7 +7,7 @@ import { createTrafficSim } from "./trafficsim.js";
 import { createNpc, npcSpec } from "./avatar/npc.js";
 import { createAvatar } from "./avatar/loadAvatar.js";
 import { lookKey } from "../lib/look.js";
-import { carBodyGeometry, CAR_WHEELS, CAR_WHEEL_R, CAR_COLORS, makeKeke, makeBus, makeCar, rollWheels } from "./vehicles.js";
+import { carBodyGeometry, CAR_WHEELS, CAR_WHEEL_R, CAR_COLORS, makeKeke, makeBus, makeVehicle, rollWheels, trafficWheelGeometry } from "./vehicles.js";
 
 export const DENSITY = { cars: 6, kekes: 2, buses: 1, peds: 10 }; // within about 250 m of the camera
 
@@ -35,8 +35,8 @@ export function createTraffic({ parent, svc, focus, density = DENSITY, seed = 7,
   // ---- cars: one instanced mesh for the paint, glass and lights, one for the wheels ----
   const nCars = density.cars, bodyGeo = carBodyGeometry("#ffffff", false), suvGeo = carBodyGeometry("#ffffff", true);
   const bodies = new THREE.InstancedMesh(bodyGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.2 }), Math.max(1, nCars));
-  const wheelGeo = new THREE.CylinderGeometry(CAR_WHEEL_R, CAR_WHEEL_R, 0.26, 10); wheelGeo.rotateZ(Math.PI / 2);
-  const wheelsM = new THREE.InstancedMesh(wheelGeo, new THREE.MeshStandardMaterial({ color: "#16181c", roughness: 0.9 }), Math.max(1, nCars * 4));
+  const wheelGeo = trafficWheelGeometry();
+  const wheelsM = new THREE.InstancedMesh(wheelGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }), Math.max(1, nCars * 4));
   bodies.castShadow = true; bodies.frustumCulled = false; wheelsM.frustumCulled = false; group.add(bodies, wheelsM); disposables.push(bodyGeo, suvGeo, wheelGeo);
   // ---- people: real rigged characters, built by the same pipeline as the player (see avatar/npc.js). Each walker keeps a character while it is near the camera;
   //      one that has wandered off is given a new face, clothes and build before it comes back, so the road never fills with the same few people. ----
@@ -63,8 +63,8 @@ export function createTraffic({ parent, svc, focus, density = DENSITY, seed = 7,
       const key = lookKey(t.look, t.gender);
       const kind = t.mode === "keke" || t.mode === "bus" || t.mode === "car" ? t.mode : "walk";
       // they changed their look, or got into / out of a vehicle: draw the right body, not the old one
-      if (e && ((e.walker && e.key !== key) || e.kind !== kind)) { group.remove(e.root); tags?.remove(t.id); if (e.av) e.av.dispose(); e.root.traverse((o) => { if (!e.av || !e.av.root.getObjectById(o.id)) o.geometry?.dispose?.(); }); live.delete(t.id); e = undefined; }
-      if (!e) { const model = t.mode === "keke" ? makeKeke() : t.mode === "bus" ? makeBus() : t.mode === "car" ? makeCar() : null, walker = model ? null : makeWalker("#8d5a3b", "#2f62c4", "#1f2f55"), root = model ? model.root : new THREE.Group(), tag = new THREE.Object3D();
+      if (e && ((e.walker && e.key !== key) || e.kind !== kind || (kind === "car" && (e.car !== (t.car ?? "") || e.carColor !== (t.carColor ?? ""))))) { group.remove(e.root); tags?.remove(t.id); if (e.av) e.av.dispose(); e.root.traverse((o) => { if (!e.av || !e.av.root.getObjectById(o.id)) o.geometry?.dispose?.(); }); live.delete(t.id); e = undefined; }
+      if (!e) { const model = t.mode === "keke" ? makeKeke() : t.mode === "bus" ? makeBus() : t.mode === "car" ? makeVehicle(t.car || "", t.carColor || undefined) : null, walker = model ? null : makeWalker("#8d5a3b", "#2f62c4", "#1f2f55"), root = model ? model.root : new THREE.Group(), tag = new THREE.Object3D();
         if (walker) { // on foot: the player's own look, drawn like everyone else, replaces the stand-in as soon as it has loaded
           e = { root, model, walker, tag, key, kind, x: t.x, z: t.z, h: t.h, tx: t.x, tz: t.z, th: t.h, vx: 0, vz: 0, phase: 0, at: now };
           // A real player is built by createAvatar from exactly their saved look: the same body, skin tone, hair, clothes and size they have in their room and in every building.
@@ -73,7 +73,7 @@ export function createTraffic({ parent, svc, focus, density = DENSITY, seed = 7,
           createAvatar(t.look, t.gender === "F" ? "F" : "M", { lod: false }).then((av) => { if (!live.has(t.id) || live.get(t.id) !== e || gone) { av.dispose(); return; } av.root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.userData.npcMesh = true; } }); /* the avatar owns its meshes: dispose() below must not free the shared model geometry */ e.av = av; e.cur = null; root.add(av.root); }).catch(() => root.add(walker.root));
         }
         tag.position.set(0, model ? model.height + 0.9 : 2.2, 0); root.add(tag); group.add(root); tags?.set(t.id, { name: t.name, anchor: tag }); root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-        e = e ?? { root, model, walker, tag, kind, x: t.x, z: t.z, h: t.h, tx: t.x, tz: t.z, th: t.h, vx: 0, vz: 0, phase: 0, at: now }; live.set(t.id, e); }
+        e = e ?? { root, model, walker, tag, kind, car: t.car ?? "", carColor: t.carColor ?? "", x: t.x, z: t.z, h: t.h, tx: t.x, tz: t.z, th: t.h, vx: 0, vz: 0, phase: 0, at: now }; live.set(t.id, e); }
       // how fast they are going, from the last two reports: between reports they are drawn carrying on at that velocity (never further than the next report is due), so a car glides
       // instead of lurching every two seconds, and an old report never leaves a ghost driving on for ever
       { const moved = Math.hypot(t.x - e.tx, t.z - e.tz) > 0.05, dtS = (now - (e.chAt ?? now)) / 1000;   // the server may hand back the same report twice: only a NEW position says how fast they go
@@ -102,7 +102,8 @@ export function createTraffic({ parent, svc, focus, density = DENSITY, seed = 7,
     bodies.instanceMatrix.needsUpdate = true; wheelsM.instanceMatrix.needsUpdate = true; if (bodies.instanceColor) bodies.instanceColor.needsUpdate = true;
     // kekes and buses
     for (const kind of ["keke", "bus"]) { assign(pools[kind], npcs.filter((v) => v.kind === kind).map((v) => v.id));
-      for (const s of pools[kind]) { const a = s.id == null ? null : byId.get(s.id); s.model.root.visible = !!a; if (!a) continue; s.model.root.position.set(a.x, 0.05, a.z); s.model.root.rotation.y = a.yaw; rollWheels(s.model, a.v * dt); } }
+      for (const s of pools[kind]) { const a = s.id == null ? null : byId.get(s.id); s.model.root.visible = !!a; if (!a) continue; s.model.root.position.set(a.x, 0.05, a.z); const dy = s.yaw == null || dt <= 0 ? 0 : ((a.yaw - s.yaw + Math.PI * 3) % (Math.PI * 2) - Math.PI) / dt, sp = Math.abs(a.v), want = sp > 0.4 ? Math.max(-0.6, Math.min(0.6, Math.atan((s.model.wheelbase ?? 2) * dy / sp))) : 0;
+        s.st = (s.st ?? 0) + (want - (s.st ?? 0)) * Math.min(1, dt * 8); s.model.root.rotation.y = a.yaw; rollWheels(s.model, a.v * dt, s.st); s.model.setBrake?.(s.sp != null && dt > 0 && (sp - s.sp) / dt < -0.9 || sp < 0.15); s.yaw = a.yaw; s.sp = sp; } }
     // people
     const peds = sim.peds, pById = new Map(peds.map((p) => [p.id, p]));
     for (const s of pedSlots) if (s.id != null && !pById.has(s.id)) s.id = null;
@@ -118,7 +119,7 @@ export function createTraffic({ parent, svc, focus, density = DENSITY, seed = 7,
       av.tick(clock, dt, dist); }
     // real players: slide towards the latest reported spot (they report about every two seconds)
     for (const e of live.values()) { const k = Math.min(1, dt * 4), px = e.x, pz = e.z, age = Math.min(2.2, (performance.now() - (e.chAt ?? e.at)) / 1000), ex = e.tx + e.vx * age, ez = e.tz + e.vz * age; e.x += (ex - e.x) * k; e.z += (ez - e.z) * k; let dh = ((e.th - e.h + Math.PI * 3) % (Math.PI * 2)) - Math.PI; e.h += dh * k; e.root.position.set(e.x, 0.05, e.z); e.root.rotation.y = e.h; const d = Math.hypot(e.x - px, e.z - pz);
-      if (e.model) rollWheels(e.model, d);
+      if (e.model) { const spd = d / Math.max(dt, 1e-3), want = spd > 0.4 ? Math.max(-0.6, Math.min(0.6, Math.atan((e.model.wheelbase ?? 2.7) * (dh * k / Math.max(dt, 1e-3)) / spd))) : 0; e.st = (e.st ?? 0) + (want - (e.st ?? 0)) * Math.min(1, dt * 8); rollWheels(e.model, d, e.st); e.model.setBrake?.(e.sp != null && (spd - e.sp) / Math.max(dt, 1e-3) < -1.5 || spd < 0.15); e.sp = spd; }
       else if (e.av) { const v = d / Math.max(dt, 1e-3), want = v > 0.25 ? "walk" : "idle"; if (want !== e.cur && e.av.play(want, { fade: 0.3 })) e.cur = want; if (want === "walk") e.av.setSpeed(Math.max(0.5, Math.min(1.9, v / WALK_V))); e.av.update(clock, dt); e.av.root.position.y = 0.05; }
       else e.walker.pose((e.phase += d * 2.4), Math.min(1, d / dt / 1.2)); }
   }

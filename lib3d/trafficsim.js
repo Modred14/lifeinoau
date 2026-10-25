@@ -16,8 +16,8 @@ export const KINDS = {
   // doorZ: where the passenger door is along the vehicle (metres from the middle, nose is +); seat: where a passenger sits, in the vehicle's own space
   // (x is +left, -right: traffic keeps right, so the kerb and the door are on the right). driver: the driver's seat (null: the keke model has its own).
   car: { len: 4.5, wid: 1.85, cruise: [8.5, 13], aMax: 2.2, brake: 3.2, weight: 0.72, doorZ: -0.5, doorZL: 0.3, seat: { x: -0.45, y: 0.5, z: -0.5 }, driver: { x: 0.45, y: 0.5, z: 0.35 } },
-  keke: { len: 2.8, wid: 1.4, cruise: [6.5, 9.5], aMax: 1.7, brake: 3.0, weight: 0.18, doorZ: -0.45, seat: { x: 0, y: 0.6, z: -0.5 }, driver: null },
-  bus: { len: 6.4, wid: 2.1, cruise: [7.5, 10.5], aMax: 1.3, brake: 2.8, weight: 0.10, doorZ: 1.3, seat: { x: -0.6, y: 0.65, z: 0.4 }, driver: { x: 0.55, y: 0.65, z: 2.1 } },
+  keke: { len: 2.78, wid: 1.3, cruise: [6.5, 9.5], aMax: 1.7, brake: 3.0, weight: 0.18, doorZ: -0.45, seat: { x: 0, y: 0.62, z: -0.72 }, driver: null },
+  bus: { len: 6.08, wid: 1.88, cruise: [7.5, 10.5], aMax: 1.3, brake: 2.8, weight: 0.10, doorZ: -0.6, doorZL: 0.97, seat: { x: -0.5, y: 0.71, z: -0.54 }, driver: { x: 0.45, y: 0.8, z: 1.35 } },
 };
 /** Where, in the world, a passenger stands to use a vehicle's door: just outside its right-hand side (side -1, the default) or its left, the driver's (side +1). `v` is { x, z, hx, hz, kind } (centre and heading). */
 export function doorPoint(v, kind = v.kind, side = -1) {

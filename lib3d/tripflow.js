@@ -20,7 +20,7 @@ import { KINDS, doorPoint, toWorld, rideProfile } from "./trafficsim.js";
 import { remainingSecs } from "./tripplan.js";
 import { INTRO_SECONDS, BOARD_SECONDS, ALIGHT_SECONDS, CAR_BOARD_SECONDS, CAR_ALIGHT_SECONDS, EXIT_STOP_SPEED, EXIT_REFUSE_SPEED } from "../lib/travel.js";
 import { boxesOverlap } from "./collide.js";
-import { createCar, stepCar, gentleStop } from "./carphysics.js";
+import { createCar, stepCar, gentleStop, carProfile } from "./carphysics.js";
 import { exitSpots, pickDoorSide } from "./carexit.js";
 import { SWING, BACK_SPEED, LEAF_ID, canOpenAt, atThreshold, doorLocal, planDoorOpening, inSwing, swingBlocked, leafBody } from "./doorway.js";
 import { RETARGET_WHY } from "./tripretarget.js";
@@ -35,7 +35,7 @@ const clamp01 = (x) => Math.max(0, Math.min(1, x)), smooth = (x) => { x = clamp0
  */
 export function createTripFlow(env, o) {
   const { svc, sim } = env, { world, nav, graph } = svc, mode = o.plan.mode, dims = o.dims ?? null;
-  let plan = o.plan, B = plan.B, enterable = o.enterable !== false;   // enterable: the place has a door to open (an open-air place, a statue or a gate has none: you simply stop there)   // dims: { len, wid } of the model, when it is not the standard size (a purchased car)
+  let plan = o.plan, B = plan.B, enterable = o.enterable !== false;   // enterable: the place has a door to open (an open-air place, a statue or a gate has none: you simply stop there)   // dims: { len, wid, id (the car model, for its handling), seat, driver } of the model, when it is not the standard size (a purchased car)
   const driven = !!plan.driven, ownCar = mode === "car" && !plan.driven, vehicleTrip = mode !== "trek", kind = plan.kind;
   const walker = new Walker(world, nav, { x: plan.start.x, z: plan.start.z, hx: 0, hz: 1 });
   const S = { phase: "intro", t: 0, time: 0, eta: plan.secs, notice: null, ended: false, entered: false, pay: "none", doorK: 0, boardK: 0, alightK: 0, speed: 0, vehDoorK: 0, vehDoorSide: -1, seatK: 0, exiting: false, canExit: false, canEnter: false, canClose: false,
@@ -68,7 +68,7 @@ export function createTripFlow(env, o) {
 
   // ---- own car controller ----
   function publishOwn() { world.setBody("own", { x: own.x, z: own.z, hx: own.hx, hz: own.hz, hl: own.len / 2, hw: own.wid / 2 }); sim.setExternal("own", { x: own.x, z: own.z, hx: own.hx, hz: own.hz, len: own.len, wid: own.wid, v: own.v }); }
-  function makeOwn() { const h = hero; own = Object.assign(createCar({ x: h.x, z: h.z, ang: Math.atan2(h.hx, h.hz) }), { len: h.len, wid: h.wid, kind }); sim.remove(h); hero = null; own.pen = ownProbe(own.x, own.z, own.hx, own.hz)?.pen ?? 0; publishOwn(); }
+  function makeOwn() { const h = hero; own = Object.assign(createCar({ x: h.x, z: h.z, ang: Math.atan2(h.hx, h.hz) }), { len: h.len, wid: h.wid, kind, P: carProfile(dims?.id) }); sim.remove(h); hero = null; own.pen = ownProbe(own.x, own.z, own.hx, own.hz)?.pen ?? 0; publishOwn(); }
   const onRoad = (x, z) => graph.surfaceAt(x, z, onRoad.s ??= {}).cls === 1;
   /**
    * Why a pose is not allowed for your own car: null when it is fine, otherwise { pen, why } with why = "road" (a part of it would be off the carriageway), "building" or "vehicle".
@@ -98,9 +98,9 @@ export function createTripFlow(env, o) {
     let drv = { gas: inp.gas ?? 0, brake: inp.brake ?? 0, steer: inp.steer ?? 0 };
     const dist = Math.hypot(own.x - plan.drop.x, own.z - plan.drop.z), near = dist < ARRIVE_RADIUS;
     if (exitAsk && drv.gas > 0.3) { exitAsk = false; S.exiting = false; }     // you changed your mind: you pressed the gas
-    if (exitAsk) drv = gentleStop(own, 4.5);
+    if (exitAsk) drv = gentleStop(own, Math.min(4.5, own.P.brake * 0.6), own.P);
     else if (near && own.v > 0.3 && own.v < PARK_ASSIST_BELOW && !drv.gas) drv.brake = Math.max(drv.brake, 0.4);   // by the drop-off the car helps you park: it eases to a stop if you let go of the gas
-    stepCar(own, drv, dt, ownProbe); publishOwn();
+    stepCar(own, drv, dt, ownProbe, own.P); publishOwn();
     return { near, drv };
   }
   /** Where a stopped car's door and the way out are, with the cars and the world as they are now. */
@@ -122,7 +122,7 @@ export function createTripFlow(env, o) {
     if (ownCar && spawnVehicle()) { doorSide = chooseDoorSide(); S.vehDoorSide = doorSide; }
     spawnAt = 0;   // the vehicle sets off as you do, and both get there together
   }
-  const seatLocal = () => (ownCar ? KINDS[kind].driver ?? KINDS[kind].seat : KINDS[kind].seat);   // you drive your own car; in everything else you are a passenger
+  const seatLocal = () => (ownCar ? dims?.driver ?? KINDS[kind].driver ?? dims?.seat ?? KINDS[kind].seat : dims?.seat ?? KINDS[kind].seat);   // you drive your own car; in everything else you are a passenger
   const kindName = () => (mode === "car" ? "car" : mode);
   function retarget() { // the vehicle stopped somewhere a little different from the plan: walk to its real door
     const d = doorStand(); if (Math.hypot(d.x - approachDoor.x, d.z - approachDoor.z) < 1.0) return; approachDoor = d;

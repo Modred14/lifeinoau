@@ -6,6 +6,7 @@
 // footprint is inside that area and the car overlaps no parked car or carport post. A move that would break that is simply not made (the car stops
 // against it, and can always reverse away), so there are no invisible walls beyond the real ones, no teleporting, and no way to get wedged into something.
 import { garageVehicleSize, G } from "./garageLayout.js";
+import { carProfile } from "./carphysics.js";
 
 const EPS = 1e-6;
 const inRect = (r, x, z) => x >= r.x0 - EPS && x <= r.x1 + EPS && z >= r.z0 - EPS && z <= r.z1 + EPS;
@@ -51,12 +52,12 @@ export function blockedPose(world, x, z, yaw, length, width) {
 /** Is the whole car on the carriageway? (This is "out of the garage and onto the road".) */
 export function onRoad(layout, x, z, yaw, length, width) { const r = layout.road; return footprint(x, z, yaw, length, width).every(([px, pz]) => px >= r.x0 && px <= r.x1 && pz >= r.z0 + 0.1 && pz <= r.z1 - 0.2); }
 
-const VMAX = 9, VREV = 3.4, ACC = 4.2, BRAKE = 9, DRAG = 2.4, REV_ACC = 3;
+const VMAX = 9, VREV = 3.4, DRAG = 2.4;   // the garage has its own speed limit; how hard a car pulls away, brakes and turns is its own (carProfile)
 
 /** A car at a pose. step(input, dt) moves it; input = { throttle: -1..1 (negative reverses), steer: -1..1 (right is positive) }. */
 export function createDriver(world, pose, size) {
-  const S = { x: pose.x, z: pose.z, yaw: pose.yaw, v: 0, steer: 0, hit: null, travelled: 0 }, wheelbase = size.length * 0.6;
-  const maxSteer = (v) => 0.62 - 0.3 * Math.min(1, Math.abs(v) / VMAX);
+  const S = { x: pose.x, z: pose.z, yaw: pose.yaw, v: 0, steer: 0, hit: null, travelled: 0 }, wheelbase = size.wheelbase ?? size.length * 0.6, P = carProfile(size.id), ACC = Math.min(8, P.accel * 0.8), BRAKE = Math.min(10, P.brake), REV_ACC = Math.min(3.4, P.reverseAccel * 1.3);
+  const maxSteer = (v) => (P.steerMax + 0.06) - 0.3 * Math.min(1, Math.abs(v) / VMAX);
   function sub(input, dt) {
     const th = Math.max(-1, Math.min(1, input.throttle ?? 0)), st = Math.max(-1, Math.min(1, input.steer ?? 0));
     if (th > 0) S.v += (S.v < 0 ? BRAKE : ACC * (1 - Math.max(0, S.v) / VMAX)) * th * dt;
@@ -87,7 +88,7 @@ export function routeOut(layout, slot) {
 
 /** An autopilot that follows a point list with pure pursuit. Returns input(state) -> { throttle, steer }, and done(state). */
 export function autopilot(route, size, { speed = 3.2, lookahead = 3.4 } = {}) {
-  const wheelbase = size.length * 0.6; let idx = 0;
+  const wheelbase = size.wheelbase ?? size.length * 0.6; let idx = 0;
   return (S) => {
     while (idx < route.length - 1 && Math.hypot(route[idx][0] - S.x, route[idx][1] - S.z) < 0.9) idx++;
     let j = idx; while (j < route.length - 1 && Math.hypot(route[j][0] - S.x, route[j][1] - S.z) < lookahead) j++;

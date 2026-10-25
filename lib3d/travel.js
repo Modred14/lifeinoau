@@ -123,7 +123,7 @@ export async function startTrip(env, o) {
   let avatar = null; const mkAvatar = async () => { try { return await createAvatar(o.look, o.gender); } catch { const w = makeWalker("#7f5236", "#1f2f55", "#a8946a"); return { root: w.root, play: () => false, has: () => false, setSpeed() {}, update: () => {}, dispose() {}, walker: w }; } };
   avatar = await mkAvatar(); if (!alive) { avatar.dispose(); return null; } world.add(avatar.root); disposers.push(() => { world.remove(avatar.root); avatar.dispose(); });
   let vehicle = null;
-  if (mode !== "trek") { const m = mode === "keke" ? makeKeke() : mode === "bus" ? makeBus() : makeVehicle(o.car, o.carColor); if (plan.driven && KINDS[plan.kind].driver) addDriver(m, KINDS[plan.kind].driver, mode === "bus" ? "#c0762b" : "#3b6ea5"); m.root.visible = false; vehicle = m; world.add(m.root); disposers.push(() => { world.remove(m.root); m.root.traverse((x) => x.geometry?.dispose?.()); }); }
+  if (mode !== "trek") { const m = mode === "keke" ? makeKeke() : mode === "bus" ? makeBus() : makeVehicle(o.car, o.carColor); if (plan.driven && (m.driver ?? KINDS[plan.kind].driver)) addDriver(m, m.driver ?? KINDS[plan.kind].driver, mode === "bus" ? "#c0762b" : "#3b6ea5"); m.root.visible = false; vehicle = m; world.add(m.root); disposers.push(() => { world.remove(m.root); if (m.dispose) m.dispose(); else m.root.traverse((x) => x.geometry?.dispose?.()); }); }
 
   // name tags for real players (the ones waiting at the destination and the ones on the road); never for you, never for NPCs
   const tags = createPlayerTags({ container: stage.renderer.domElement.parentElement, camera: stage.camera, selfName: o.selfName ?? "", unit: S, maxDist: 45, fadeFrom: 30 });
@@ -152,7 +152,7 @@ export async function startTrip(env, o) {
   const traffic = createTraffic({ parent: world, svc, focus: () => camPt, tags }); disposers.push(() => traffic.dispose());
 
   // ---- the journey ----
-  const flow = createTripFlow({ svc, sim: traffic.sim }, { plan, enterable, dims: vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width } : null, rnd: Math.random, onArrive: () => o.onArrive?.() ?? true, onEnter: () => o.onEnter?.(), onEnd: (why) => { if (alive) o.onEnd?.(why); }, onNotice: (m) => o.onNotice?.(m) });
+  const flow = createTripFlow({ svc, sim: traffic.sim }, { plan, enterable, dims: vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width, id: vehicle.id, seat: vehicle.seat, driver: vehicle.driver } : null, rnd: Math.random, onArrive: () => o.onArrive?.() ?? true, onEnter: () => o.onEnter?.(), onEnd: (why) => { if (alive) o.onEnd?.(why); }, onNotice: (m) => o.onNotice?.(m) });
   disposers.push(() => flow.dispose()); setBay();
   const P = flow.person, F = flow.state, WK = flow.walker;
   let camYaw = Math.atan2(-(plan.start.x - (plan.doorIn?.x ?? plan.goal.x)), -(plan.start.z - (plan.doorIn?.z ?? plan.goal.z))), userYaw = 0, userPitch = 0, userAt = -9, time = 0, hornT = 0, lastState = 0, camBack = CAM.walk.back, zoomW = 1, zoomV = 1, leadX = 0, leadZ = 0;
@@ -212,13 +212,18 @@ export async function startTrip(env, o) {
       if (avatar.walker) avatar.walker.pose((avatar.walker._p = (avatar.walker._p ?? 0) + sp * dt * 2.4), Math.min(1, sp / 1.2));
     }
   }
-  let lastVx = null, lastVz = null;
+  let lastVx = null, lastVz = null, lastYaw = null, lastSpeed = null, steerShown = 0;
   vehicle?.root && (vehicle.root.rotation.order = "YXZ");
   function drawVehicle(dt) {
     if (!vehicle) return; const v = flow.vehicle; vehicle.root.visible = !!v && !(flow.hero?.done);
     if (!v) return;
     const own = !!flow.own, yaw = own ? v.ang : v.yaw ?? yawOf2(v.hx, v.hz), moved = lastVx == null ? 0 : Math.hypot(v.x - lastVx, v.z - lastVz); lastVx = v.x; lastVz = v.z;
-    vehicle.root.position.set(v.x, 0.1, v.z); vehicle.root.rotation.set(own ? v.pitch ?? 0 : 0, yaw, own ? v.roll ?? 0 : 0); rollWheels(vehicle, (v.v >= 0 ? 1 : -1) * moved, own ? v.steer : 0);
+    vehicle.root.position.set(v.x, 0.1, v.z); vehicle.root.rotation.set(own ? v.pitch ?? 0 : 0, yaw, own ? v.roll ?? 0 : 0); // the front wheels: your own car shows its steering; every other vehicle steers by how fast it is turning (the bicycle model, from its heading change)
+    let steer = 0, braking = false;
+    if (own) { steer = v.steer; braking = (v.brk ?? 0) > 0.08 || (v.reversing && Math.abs(v.v) < 0.5); }
+    else { const dy = lastYaw == null || dt <= 0 ? 0 : angDiff(lastYaw, yaw) / dt, sp = Math.abs(v.v ?? 0); steer = sp > 0.4 ? Math.max(-0.6, Math.min(0.6, Math.atan((vehicle.wheelbase ?? 2.7) * dy / sp))) : 0; braking = lastSpeed != null && dt > 0 && (sp - lastSpeed) / dt < -0.9 || sp < 0.15; steerShown += (steer - steerShown) * Math.min(1, dt * 8); steer = steerShown; lastSpeed = sp; }
+    lastYaw = yaw; vehicle.setBrake?.(braking);
+    rollWheels(vehicle, (v.v >= 0 ? 1 : -1) * moved, steer);
     // the doors: the one in use swings by how open it is, the other stays shut
     if (vehicle.doors) { const side = F.vehDoorSide ?? -1; vehicle.setDoor(side, F.vehDoorK ?? 0); vehicle.setDoor(-side, 0); }
   }

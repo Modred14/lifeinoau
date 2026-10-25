@@ -31,6 +31,25 @@ export const CAR = {
   maxStep: 1 / 90,
 };
 
+// Every vehicle drives differently: its own wheelbase, power, brakes, steering lock and grip. A profile overrides the standard CAR; the top speed never goes above OWN_CAR_MAX
+// (the server's cap on what a driven car may report). Wheelbases are the real ones, the same as in lib3d/vehicleSpecs.js (a test checks they agree).
+export const PROFILES = {
+  "corolla-2011":    { wheelbase: 2.60, accel: 4.4, brake: 8.0, vmax: 20, steerMax: 0.58, latG: 6.4, yawLag: 0.10 },
+  "accord-2014":     { wheelbase: 2.776, accel: 5.4, brake: 8.4, vmax: 21, steerMax: 0.56, latG: 6.8, yawLag: 0.10 },
+  "camry-2014":      { wheelbase: 2.775, accel: 5.2, brake: 8.2, vmax: 21, steerMax: 0.56, latG: 6.6, yawLag: 0.10 },
+  "is350-2014":      { wheelbase: 2.80, accel: 6.4, brake: 9.0, vmax: 22, steerMax: 0.55, latG: 7.6, yawLag: 0.08 },
+  "cclass-2016":     { wheelbase: 2.865, accel: 5.6, brake: 8.8, vmax: 22, steerMax: 0.55, latG: 7.2, yawLag: 0.09 },
+  "gle-2018":        { wheelbase: 2.995, accel: 5.2, brake: 8.0, vmax: 22, steerMax: 0.52, latG: 6.0, yawLag: 0.12 },
+  "rrsport-2016":    { wheelbase: 2.923, accel: 5.4, brake: 8.0, vmax: 22, steerMax: 0.52, latG: 6.0, yawLag: 0.12 },
+  "urus-2025":       { wheelbase: 3.003, accel: 7.4, brake: 9.8, vmax: 22, steerMax: 0.52, latG: 8.0, yawLag: 0.09 },
+  "huracan-2025":    { wheelbase: 2.62, accel: 8.8, brake: 10.6, vmax: 22, steerMax: 0.52, latG: 9.4, yawLag: 0.07, reverseMax: 4 },
+  "cybertruck-2024": { wheelbase: 3.80, accel: 6.8, brake: 8.4, vmax: 22, steerMax: 0.50, latG: 6.0, yawLag: 0.13 },
+  keke:              { wheelbase: 1.95, accel: 2.2, brake: 4.8, vmax: 12, steerMax: 0.70, latG: 4.2, yawLag: 0.10, reverseMax: 2.5, reverseAccel: 1.2, steerSpeedRef: 7 },
+  bus:               { wheelbase: 4.12, accel: 1.9, brake: 5.6, vmax: 15, steerMax: 0.43, latG: 4.4, yawLag: 0.14, reverseMax: 3, reverseAccel: 1.2, steerSpeedRef: 9 },
+};
+/** The handling of a vehicle by its id (a car id, "keke" or "bus"); an unknown id drives like the standard car. */
+export function carProfile(id) { const o = PROFILES[id]; if (!o) return CAR; const P = { ...CAR, ...o }; P.vmax = Math.min(P.vmax, OWN_CAR_MAX); return P; }
+
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const approach = (cur, want, maxD) => (want > cur ? Math.min(want, cur + maxD) : Math.max(want, cur - maxD));
 
@@ -120,7 +139,7 @@ export function placeCar(c, { x, z, ang }, probe = null) {
 
 /** The pedals that stop the car smoothly from where it is, at a constant comfortable deceleration (what the car does by itself when you ask to get out). Rolling forwards it brakes;
  *  rolling backwards the throttle holds it back. Steering goes straight. */
-export function gentleStop(c, decel = 4) {
-  const k = clamp(decel / CAR.brake, 0, 1);
-  return { gas: c.v < -0.05 ? clamp(decel / CAR.brake, 0, 0.6) : 0, brake: c.v > 0.05 ? k : 0, steer: 0 };
+export function gentleStop(c, decel = 4, P = CAR) {
+  const k = clamp(decel / P.brake, 0, 1);
+  return { gas: c.v < -0.05 ? clamp(decel / P.brake, 0, 0.6) : 0, brake: c.v > 0.05 ? k : 0, steer: 0 };
 }

@@ -1,4 +1,4 @@
-// components/CarPreview.js
+// components/Carpreview.js
 // One slowly turning 3D car, drawn with the very same body the game drives (lib3d/vehicles.js makeVehicle). Used on the Ride app's car page,
 // one at a time, so there is only ever a single WebGL context. If WebGL is not available the page still works: it just shows no picture.
 "use client";
@@ -20,7 +20,7 @@ export default function CarPreview({ modelId, paint, label }) {
         const fit = () => { const w = canvas.clientWidth || 300, h = canvas.clientHeight || 170; renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); };
         fit(); const ro = new ResizeObserver(fit); ro.observe(canvas);
         const tick = () => { if (!still) v.root.rotation.y += 0.008; renderer.render(scene, cam); raf = requestAnimationFrame(tick); }; tick();
-        stop = () => { cancelAnimationFrame(raf); ro.disconnect(); v.root.traverse((m) => m.geometry?.dispose?.()); renderer.dispose(); };
+        stop = () => { cancelAnimationFrame(raf); ro.disconnect(); v.dispose(); renderer.dispose(); };
         if (dead) stop();
       } catch { if (!dead) setFailed(true); }
     })();
