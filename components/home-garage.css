@@ -1,6 +1,7 @@
+/* components/home-garage.css */
 .hg { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; background: #c2d1d2; }
 .hg-canvas { position: absolute; inset: 0; touch-action: none; }
-.hg-label,.hg-card,.hg-empty,.hg-error,.hg-loading { position: absolute; z-index: 2; color: #172321; background: rgba(250,252,249,.92); border: 1px solid rgba(30,55,43,.15); box-shadow: 0 12px 32px rgba(13,27,23,.18); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.hg-label,.hg-card,.hg-empty,.hg-error,.hg-loading,.hg-hud { position: absolute; z-index: 2; color: #172321; background: rgba(250,252,249,.92); border: 1px solid rgba(30,55,43,.15); box-shadow: 0 12px 32px rgba(13,27,23,.18); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 .hg-label { top: 16px; left: 16px; display: grid; gap: 3px; padding: 11px 15px; border-radius: 14px; }
 .hg-label b { font-size: .92rem; } .hg-label span,.hg-meta,.hg-empty span { color: #5d6c63; font-size: .78rem; }
 .hg-card { right: 16px; bottom: calc(var(--nav-h, 64px) + var(--safe-b, 0px) + 18px); width: min(300px, calc(100% - 32px)); display: grid; gap: 6px; padding: 16px; border-radius: 18px; }
@@ -14,3 +15,15 @@
 @keyframes hg-spin { to { transform: rotate(360deg); } }
 @media (max-width: 640px) { .hg-label { top: 8px; left: 8px; padding: 8px 11px; } .hg-card { right: 9px; bottom: calc(var(--nav-h, 58px) + var(--safe-b, 0px) + 8px); width: min(270px, calc(100% - 18px)); padding: 13px; } }
 @media (prefers-reduced-motion: reduce) { .hg-loading i { animation-duration: 2.4s; } }
+
+/* driving: a speed panel at the top and thumb-sized controls at the bottom (left thumb steers, right thumb accelerates or brakes) */
+.hg-hud { top: 16px; right: 16px; display: grid; gap: 6px; width: min(300px, calc(100% - 32px)); padding: 13px 15px; border-radius: 16px; }
+.hg-hud > b { font-size: 1.8rem; line-height: 1; font-variant-numeric: tabular-nums; } .hg-hud > b small { font-size: .8rem; color: #5d6c63; font-weight: 700; } .hg-hud > span { color: #3f4f46; font-size: .8rem; }
+.hg-hud-btns { display: flex; gap: 8px; margin-top: 4px; } .hg-hud-btns button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 12px; min-height: 44px; border: 0; border-radius: 12px; background: #e3ebe5; color: #24332b; font-weight: 750; }
+.hg-hud-btns .hg-go { flex: 2; background: #26754e; color: #fff; } .hg-hud-btns .hg-go:disabled { background: #aeb9b1; }
+.hg-pad { position: absolute; z-index: 2; left: 0; right: 0; bottom: calc(var(--nav-h, 64px) + var(--safe-b, 0px) + 14px); display: flex; justify-content: space-between; align-items: flex-end; padding: 0 max(16px, env(safe-area-inset-left, 0px)) 0 max(16px, env(safe-area-inset-right, 0px)); pointer-events: none; }
+.hg-steer, .hg-pedals { display: flex; gap: 12px; pointer-events: auto; }
+.hg-pad button { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; display: grid; place-items: center; align-content: center; min-width: 84px; min-height: 84px; border: 2px solid rgba(255,255,255,.7); border-radius: 22px; background: rgba(23,35,33,.62); color: #fff; font-weight: 800; font-size: 1rem; box-shadow: 0 8px 22px rgba(13,27,23,.3); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.hg-pad button:active { background: rgba(38,117,78,.88); } .hg-pad button small { font-size: .62rem; font-weight: 700; opacity: .8; } .hg-pad .hg-gas { background: rgba(38,117,78,.8); min-width: 104px; } .hg-pad .hg-brake { background: rgba(138,48,45,.78); }
+@media (max-width: 640px) { .hg-hud { top: 8px; right: 8px; width: min(250px, calc(100% - 16px)); padding: 10px 12px; } .hg-hud > b { font-size: 1.4rem; } .hg-pad button { min-width: 72px; min-height: 72px; border-radius: 18px; } .hg-pad .hg-gas { min-width: 88px; } .hg-pad { bottom: calc(var(--nav-h, 58px) + var(--safe-b, 0px) + 8px); } }
+@media (max-height: 460px) and (orientation: landscape) { .hg-hud { top: 6px; width: 230px; } .hg-hud > span { display: none; } .hg-pad button { min-width: 64px; min-height: 64px; } .hg-pad { bottom: calc(var(--safe-b, 0px) + 8px); } }

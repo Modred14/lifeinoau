@@ -91,7 +91,7 @@ for (const h of ["Awo", "Ojaja", "2-Bedroom Flat"]) {
 // ---- the lawn (generators) and the walking grid edges ----
 for (const h of ["Awo", "Angola", ...HOMES]) {
   const room = roomFor(h, "p"), placed = []; for (let i = 0; i < 9; i++) { const s = autoPlace(room, placed, "generator"); if (s) placed.push({ id: "g" + i, key: "generator", placed: true, ...s }); }
-  chk(`${h}: the eight generator spots are outside the east wall of the bigger room, and still all work`, placed.length === 8 && outdoorSlots(room).every(([x, z]) => isOutsideCell(room, x) && z >= 0 && z < room.d) && placed.every((p) => fits(room, placed, "generator", p.x, p.z, p.rot, p.id)));
+  chk(`${h}: the eight east-wall generator spots are outside the east wall of the bigger room, a ninth goes elsewhere on the lawn, and all still work`, placed.length === 9 && outdoorSlots(room).every(([x, z]) => isOutsideCell(room, x) && z >= 0 && z < room.d) && placed.every((p) => fits(room, placed, "generator", p.x, p.z, p.rot, p.id)));
   chk(`${h}: nothing can be put outside the floor`, !fits(room, [], "sofa", room.w - 1, 0, 0) && !fits(room, [], "plant", room.w, 0, 0) && !fits(room, [], "plant", -1, 0, 0) && !fits(room, [], "plant", 0, room.d, 0));
 }
 chk("the shop limit on owned things is unchanged", MAX_ITEMS === 60);

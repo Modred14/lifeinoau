@@ -22,6 +22,8 @@ import {
   cellsOf,
 } from "../lib/room.js";
 import { ITEMS, sizeOf, isOutdoor } from "../lib/furniture.js";
+import { plotFor, lawnBox } from "../lib/plot.js";
+import { buildPlot, GROUND } from "./plot3d.js";
 import { layoutOf, wallRuns, zoneAt } from "../lib/layouts.js";
 
 const WALL_H = 3.4, // rooms are about twice the floor area they were, so the walls (the ceiling line) rise a little with them
@@ -440,28 +442,11 @@ export function createRoomScene(container, cb = {}) {
     if (grime > 0.05) theme = { ...theme, wall: dirty(theme.wall, grime * 0.4, "#6e6552"), floorA: dirty(theme.floorA, grime * 0.3, "#4f483d"), floorB: dirty(theme.floorB, grime * 0.3, "#4f483d") }; // paint dulls and floors darken
     W = room.w;
     D = room.d;
-    const L = layoutOf(room), R = Math.hypot(W, D) / 2 + 1.6; // a wide lawn: the generator stands on it, outside the east wall
-    const lawn = new THREE.Mesh(
-      new THREE.CylinderGeometry(R, R + 0.12, 0.5, 72),
-      mat("#8fb592", { roughness: 1 }),
-    );
-    lawn.position.y = -0.62;
-    lawn.receiveShadow = true;
-    world.add(lawn);
-    const lawnTop = new THREE.Mesh(
-      new THREE.CylinderGeometry(R - 0.15, R - 0.15, 0.02, 72),
-      mat("#a3c9a3", { roughness: 1 }),
-    );
-    lawnTop.position.y = -0.36;
-    lawnTop.receiveShadow = true;
-    world.add(lawnTop);
-    const rim = new THREE.Mesh(
-      new THREE.TorusGeometry(R + 0.04, 0.05, 8, 96),
-      mat("#d9ecd5", { roughness: 0.8 }),
-    );
-    rim.rotation.x = Math.PI / 2;
-    rim.position.y = -0.37;
-    world.add(rim);
+    const L = layoutOf(room);
+    // the plot: a square lawn inside a boundary wall with the garage, driveway, road and neighbours (lib3d/plot3d.js)
+    const built = buildPlot(room, { mat, tree });
+    world.add(built.group);
+    trees.push(...built.trees);
     // floor
     const tex = floorTexture(W, D, theme, room.theme === "wood", L && ((i, j) => zoneAt(L, i, j)?.kind)),
       side = mat(theme.floorB, { roughness: 0.9 });
@@ -582,26 +567,15 @@ export function createRoomScene(container, cb = {}) {
     place("S", windowDecor(theme, 1.3, 1.2), -W * 0.36, 0.95);
     place("E", windowDecor(theme, 1.3, 1.25), -D * 0.35, 0.95);
     }
-    // the lawn around the room
-    for (let i = 0; i < 14; i++) {
-      const a = (i / 14) * Math.PI * 2 + 0.2,
-        rr = R - 0.32 - (i % 3) * 0.1,
-        kind = i % 5 === 0 ? "palm" : "bush",
-        t = tree(kind, i);
-      t.position.set(Math.cos(a) * rr, -0.35, Math.sin(a) * rr);
-      t.rotation.y = a * 3;
-      world.add(t);
-      trees.push({ g: t, a, kind, s: 1 });
-    }
     // light and camera framing for this size
-    const sc = Math.max(W, D) * 0.75 + 2;
+    const pc = plotFor(room), sc = Math.max(W, D) * 0.75 + 2 + Math.min(10, pc.plot.side * 0.3); // the shadows also reach across the yard
     Object.assign(sun.shadow.camera, {
       left: -sc,
       right: sc,
       top: sc,
       bottom: -sc,
       near: 1,
-      far: 40,
+      far: 60,
     });
     sun.shadow.camera.updateProjectionMatrix();
     const span = Math.hypot(W, D); // one lamp in the middle: its reach and strength grow with the room so the far corners are not left dim
@@ -619,19 +593,28 @@ export function createRoomScene(container, cb = {}) {
   }
 
   // ----- camera -----
-  function fit(reset) {
-    if (!room) return;
+  // Two framings: "house" (the room, with a strip of yard) and "yard" (the whole plot, for placing garden things). The camera eases between them.
+  let view = "house";
+  const yardCentre = () => { const p = plotFor(room).plot; return [(p.x0 + p.x1) / 2 - W / 2, (p.z0 + p.z1) / 2 - D / 2]; };
+  function framing() {
     const w = container.clientWidth || 1,
       h = container.clientHeight || 1,
       aspect = w / h,
       vf = THREE.MathUtils.degToRad(camera.fov),
-      hf = 2 * Math.atan(Math.tan(vf / 2) * aspect);
-    const r = Math.hypot(W, D) / 2 + 1.1;
-    fitDist = Math.max(r / Math.sin(vf / 2), r / Math.sin(hf / 2)) * 1.0;
+      hf = 2 * Math.atan(Math.tan(vf / 2) * aspect),
+      fitR = (r) => Math.max(r / Math.sin(vf / 2), r / Math.sin(hf / 2));
+    const yardR = plotFor(room).plot.side * 0.5 * Math.SQRT2 + 1.2, houseR = Math.hypot(W, D) / 2 + 1.1;
+    const [yx, yz] = yardCentre();
+    return view === "yard" ? { dist: fitR(yardR), target: [yx, 0.2, yz], max: fitR(yardR) * 1.15 } : { dist: fitR(houseR), target: [0, 0.6, 0], max: fitR(yardR) * 1.15 };
+  }
+  function fit(reset) {
+    if (!room) return;
+    const f = framing();
+    fitDist = f.dist;
     controls.minDistance = fitDist * 0.5;
-    controls.maxDistance = fitDist * 1.35;
-    controls.target.set(0, 0.6, 0);
+    controls.maxDistance = Math.max(fitDist * 1.35, f.max);
     if (reset || !userZoomed) {
+      controls.target.set(...f.target);
       const off = camera.position.clone().sub(controls.target);
       const sp = new THREE.Spherical();
       if (reset && off.length() < 0.01) off.set(1, 1, 1);
@@ -643,7 +626,18 @@ export function createRoomScene(container, cb = {}) {
       sp.radius = fitDist;
       camera.position.copy(controls.target).add(off.setFromSpherical(sp));
       controls.update();
-    }
+    } else controls.target.set(f.target[0], controls.target.y, f.target[2]);
+  }
+  /** Switch between the house and the whole yard. The camera glides there; the player's own zoom is not forgotten. */
+  function setView(v) {
+    if (v !== "house" && v !== "yard") return view;
+    if (v === view || !room) return view;
+    view = v;
+    const f = framing();
+    controls.minDistance = f.dist * 0.5;
+    controls.maxDistance = Math.max(f.dist * 1.35, f.max);
+    stage.flyTo(f.target[0], f.target[1], f.target[2], f.dist, view === "yard" ? 0.95 : undefined);
+    return view;
   }
   const ro = new ResizeObserver(() => fit(false));
   ro.observe(container);
@@ -666,7 +660,7 @@ export function createRoomScene(container, cb = {}) {
       y0 = isOutdoor(d.key) ? -0.3 : 0; // outdoor things stand on the lawn, below the floor, on a little concrete pad
     group.userData.itemId = String(d.id);
     if (y0) {
-      const pad = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.08, 0.9), mat("#bdb8ab", { roughness: 1 }));
+      const pad = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.6, ITEMS[d.key].w - 0.05), 0.08, Math.max(0.6, ITEMS[d.key].d - 0.1)), mat("#bdb8ab", { roughness: 1 }));
       pad.position.y = -0.04;
       pad.receiveShadow = true;
       group.add(pad);
@@ -738,6 +732,7 @@ export function createRoomScene(container, cb = {}) {
     selectedId = id;
     const it = items.get(id);
     if (it) setGlow(it.group, true);
+    if (it && mode === "buy") setView(isOutdoor(it.data.key) ? "yard" : "house"); // garden things are placed from above the whole plot
     updateMarker();
     if (!silent) cb.onSelect?.(id);
   }
@@ -753,7 +748,7 @@ export function createRoomScene(container, cb = {}) {
       col = ok ? "#3fd08a" : "#ff6b6b";
     marker.visible = true;
     marker.scale.set(w, 1, dd);
-    marker.position.set(d.x + w / 2 - W / 2, 0, d.z + dd / 2 - D / 2);
+    marker.position.set(d.x + w / 2 - W / 2, isOutdoor(d.key) ? GROUND : 0, d.z + dd / 2 - D / 2);
     markerFill.material.color.set(col);
     markerEdge.material.color.set(col);
     markerFill.scale.set(1, 1, 1);
@@ -1017,8 +1012,9 @@ export function createRoomScene(container, cb = {}) {
     }
     return null;
   };
-  const hitFloor = () =>
-    ray.ray.intersectPlane(floorPlane, tmp) ? tmp.clone() : null;
+  const yardPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -GROUND); // the lawn lies a little below the floor
+  const hitFloor = (plane = floorPlane) =>
+    ray.ray.intersectPlane(plane, tmp) ? tmp.clone() : null;
   let down = null,
     drag = null;
   container.addEventListener(
@@ -1027,13 +1023,13 @@ export function createRoomScene(container, cb = {}) {
       if (e.button !== 0 || !room) return;
       aim(e);
       const id = hitItem(),
-        f = hitFloor();
+        outdoorHit = id && isOutdoor(items.get(id)?.data.key),
+        f = hitFloor(outdoorHit ? yardPlane : floorPlane);
       down = { x: e.clientX, y: e.clientY, id, moved: false, f };
       if (mode === "buy" && id) {
         const it = items.get(id),
           t = it.t;
         select(id);
-        if (isOutdoor(it.data.key)) return; // the generator stays on its lawn spot: you can store or sell it, not drag it into the house
         drag = {
           id,
           offx: (f?.x ?? t.x) - t.x,
@@ -1065,17 +1061,19 @@ export function createRoomScene(container, cb = {}) {
     drag.active = true;
     el.style.cursor = "grabbing";
     aim(e);
-    const f = hitFloor();
-    if (!f) return;
     const it = items.get(drag.id),
-      [w, dd] = sizeOf(it.data.key, it.data.rot);
+      outdoor = isOutdoor(it.data.key),
+      f = hitFloor(outdoor ? yardPlane : floorPlane);
+    if (!f) return;
+    const [w, dd] = sizeOf(it.data.key, it.data.rot),
+      box = outdoor ? lawnBox(room) : { x0: 0, z0: 0, x1: W, z1: D }; // indoors the room's floor; outdoors the plot's lawn
     const x = Math.min(
-        W - w,
-        Math.max(0, Math.round(f.x - drag.offx + W / 2 - w / 2)),
+        box.x1 - w,
+        Math.max(box.x0, Math.round(f.x - drag.offx + W / 2 - w / 2)),
       ),
       z = Math.min(
-        D - dd,
-        Math.max(0, Math.round(f.z - drag.offz + D / 2 - dd / 2)),
+        box.z1 - dd,
+        Math.max(box.z0, Math.round(f.z - drag.offz + D / 2 - dd / 2)),
       );
     const ok = fits(
       room,
@@ -1160,7 +1158,7 @@ export function createRoomScene(container, cb = {}) {
           ? 0.001
           : 1;
       tr.s += (to - tr.s) * (1 - Math.exp(-dt * 8));
-      tr.g.scale.setScalar(Math.max(0.001, tr.s));
+      tr.g.scale.setScalar(Math.max(0.001, tr.s) * (tr.base ?? 1));
     }
     for (const f of fans) f.rotation.z += dt * 14;
     // furniture glides to its place, pops in when new, shrinks away when gone
@@ -1293,6 +1291,8 @@ export function createRoomScene(container, cb = {}) {
     select,
     rotateView,
     rotateSelected,
+    setView,
+    getView: () => view,
     pulse,
     walkTo,
     goToBed,

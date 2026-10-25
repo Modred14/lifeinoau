@@ -40,7 +40,7 @@ export default function RoomStage({ room, items, roomError, onRetry, look, gende
 
   return (
     <div className="rs" data-ready={ready && room && items ? "1" : "0"}>
-      <div ref={box} className="rs-canvas" role="img" aria-label="Your room in 3D. Drag to look around. In Buy mode, drag furniture to move it." />
+      <div ref={box} className="rs-canvas" role="img" aria-label="Your room and yard in 3D. Drag to look around. In Buy mode, drag furniture and garden things to move them." />
       {/* the room is only drawn when the 3D scene AND the room's data (size, look and furniture) are both here: never a half-furnished room */}
       {(!ready || !room || !items) && !failed && !roomError && <div className="rs-loading" aria-busy="true" role="status"><span className="rs-spin" />Setting up your room</div>}
       {roomError && !room && !failed && <div className="rs-loading rs-err" role="alert"><span>{roomError}</span><button type="button" className="go" onClick={() => onRetry?.()}>Try again</button></div>}

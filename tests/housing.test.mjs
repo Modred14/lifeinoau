@@ -54,7 +54,7 @@ for (const h of ["Awo", ...HOMES]) {
   chk(`${h}: a generator is put outside the east wall, on the lawn`, isOutdoor("generator") && g && g.x >= room.w && fits(room, [], "generator", g.x, g.z, g.rot) && !fits(room, [], "generator", 1, 1, 0));
 }
 { const room = roomFor("Ojaja", "p"), placed = []; for (let i = 0; i < 9; i++) { const s = autoPlace(room, placed, "generator"); if (s) placed.push({ id: "g" + i, key: "generator", placed: true, ...s }); }
-  chk("each generator takes its own spot outside, and there are eight spots", placed.length === outdoorSlots(room).length && new Set(placed.map((p) => p.x + "," + p.z)).size === placed.length);
+  chk("each generator takes its own spot outside: the first eight are the column beside the east wall, and more fit elsewhere on the lawn", placed.length === 9 && new Set(placed.map((p) => p.x + "," + p.z)).size === placed.length && outdoorSlots(room).every(([x, z]) => placed.some((q) => q.x === x && q.z === z)));
   const old = [{ id: "1", key: "generator", placed: true, x: 3, z: 3, rot: 0 }];
   chk("a generator left inside a room by an older version is flagged so the server moves it outside", !consistent(room, old));
   chk("a generator takes no room inside: it does not block the floor", blockedCells([{ key: "generator", placed: true, x: room.w, z: room.d - 2, rot: 3 }]).size === 0); }
