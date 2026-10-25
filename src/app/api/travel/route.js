@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { getUserId } from "@/lib/auth";
 import { allowed, tooMany } from "@/lib/ratelimit";
 import { GameError } from "@/lib/gameService";
-import { getTravel, placeCounts, ping, travel, tripPing, onTheRoad, leaveBuilding } from "@/lib/travelService";
+import { getTravel, placeCounts, busyPlaces, ping, travel, tripPing, onTheRoad, leaveBuilding } from "@/lib/travelService";
 export const dynamic = "force-dynamic"; // never cache API responses
 const db = (globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } }));
 const fail = (e) => {
@@ -16,6 +16,7 @@ const fail = (e) => {
 //   ?at=<placeId>  also lists the real players at that place right now
 //   ?road=1        real players on the road right now
 //   ?counts=1      how many players are at each place (the little numbers on the map)
+//   ?busy=1        which named places are busy right now (ids and names only, never a head count)
 export async function GET(req) {
   const uid = await getUserId();
   if (!uid) return Response.json({ error: "Please log in." }, { status: 401 });
@@ -24,6 +25,7 @@ export async function GET(req) {
     const u = new URL(req.url).searchParams;
     if (u.get("road")) return Response.json(await onTheRoad(db, uid));
     if (u.get("counts")) return Response.json(await placeCounts(db, uid));
+    if (u.get("busy")) return Response.json(await busyPlaces(db, uid));
     return Response.json(await getTravel(db, uid, { at: u.get("at") }));
   } catch (e) { return fail(e); }
 }

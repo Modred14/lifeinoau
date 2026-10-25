@@ -6,6 +6,7 @@ function cond(v, c) {
   if (!isObj(c)) return eq(v, c);
   return Object.entries(c).every(([k, x]) => {
     if (k === "in") return x.some((y) => eq(v, y));
+    if (k === "notIn") return !x.some((y) => eq(v, y));
     if (k === "not") return isObj(x) ? !cond(v, x) : !eq(v, x);
     if (k === "gt") return v != null && v > x; if (k === "gte") return v != null && v >= x;
     if (k === "lt") return v != null && v < x; if (k === "lte") return v != null && v <= x;

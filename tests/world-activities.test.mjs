@@ -22,8 +22,8 @@ for (const [key, j] of Object.entries(JOBS)) {
 const ctx = (o = {}) => ({ minute: 8 * 60, energy: 100, activeShift: false, lastShiftDay: null, day: 3, weekShifts: 0, busy: null, ...o });
 const v = JOBS.vendor;
 assert.equal(shiftBlock(v, "morning", ctx()), null);
-assert.match(shiftBlock(v, "morning", ctx({ minute: 5 * 60 })), /opens at 06:00/); assert.match(shiftBlock(v, "morning", ctx({ minute: 11 * 60 })), /closed for today/);
-assert.match(shiftBlock(v, "night", ctx({ minute: 8 * 60 })), /opens at 18:00/); assert.equal(shiftBlock(v, "night", ctx({ minute: 20 * 60 })), null);
+assert.match(shiftBlock(v, "morning", ctx({ minute: 5 * 60 })), /opens at 6:00 AM/); assert.match(shiftBlock(v, "morning", ctx({ minute: 11 * 60 })), /closed for today/);
+assert.match(shiftBlock(v, "night", ctx({ minute: 8 * 60 })), /opens at 6:00 PM/); assert.equal(shiftBlock(v, "night", ctx({ minute: 20 * 60 })), null);
 assert.match(shiftBlock(JOBS.dj, "morning", ctx()), /no morning shift/, "a night-only job has no morning shift");
 assert.match(shiftBlock(v, "morning", ctx({ activeShift: true })), /already on a shift/);
 assert.match(shiftBlock(v, "night", ctx({ minute: 20 * 60, lastShiftDay: 3 })), /already worked today/, "one shift a day, even if the other window is open");

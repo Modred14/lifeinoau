@@ -24,6 +24,7 @@
 .tt-icon { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: rgba(255, 255, 255, 0.2); }
 .tt[data-type="info"] .tt-icon { background: rgba(29, 78, 216, 0.1); color: #1d4ed8; }
 .tt-body { flex: 1; min-width: 0; padding-top: 6px; }
+.tt-body[data-click] { cursor: pointer; }
 .tt .tt-msg { margin: 0; max-width: none; overflow-wrap: anywhere; white-space: pre-line; }
 .tt-count { margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: rgba(255, 255, 255, 0.24); font-size: 0.78rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .tt[data-type="info"] .tt-count { background: rgba(13, 19, 33, 0.08); }

@@ -48,7 +48,7 @@ const H = 3_600_000, MIN = 60_000, DAY = 24 * H, N = (n) => BigInt(n) * 100n;
   assert.equal(s.riskyUsed, 1); assert.equal(s.riskyLeft, 0); }
 
 // ---------- the service, against the fake database ----------
-const START = Date.UTC(2026, 9, 1, 15, 30); // the game clock starts at 15:30 UTC, so each in-game day runs 15:30 to 15:30
+const START = Date.UTC(2026, 9, 1, 23, 0); // 23:00 UTC is 12:00 AM game time (WAT), so each in-game day runs from game midnight to game midnight
 const models = ["character", "account", "actionLog", "ledgerEntry", "floorZero", "gameClock", "notification", "achievement", "examResult", "achievementAward", "business", "holding", "partyTicket", "bond"];
 const mkPlayer = (db, over = {}) => { const T = db.T();
   const acc = { id: "acc1", kind: "PLAYER", systemName: null, characterId: "c1", balance: N(1_000_000) };

@@ -13,7 +13,7 @@ assert.equal(GAME_DAY_MS, DAY, "a game day is 24 real hours");
 assert.equal(GAME_WEEK_MS, 7 * DAY, "a game week is 7 real days");
 assert.equal(CAMPUS_WEEK_MINUTES * GAME_MINUTE_MS, GAME_WEEK_MS);
 
-const epoch = Date.UTC(2026, 9, 17);
+const epoch = Date.UTC(2026, 9, 16, 23); // 12:00 AM game time (WAT) on 17 October: game days and weeks start at game midnight
 const clock = { startedAt: new Date(epoch - 90 * DAY), campusEpoch: new Date(epoch), campusStartWeek: 13 };
 const weekMs = GAME_WEEK_MS;
 assert.equal(weekAt(clock, epoch), 13);

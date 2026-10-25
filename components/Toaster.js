@@ -76,7 +76,15 @@ function Item({ t }) {
           <span className="tt-icon" aria-hidden="true">
             {t.type === "pending" ? <span className="tt-spin" /> : <Glyph size={22} weight="fill" />}
           </span>
-          <div className="tt-body">
+          <div
+            className="tt-body"
+            data-click={t.action?.whole ? "1" : undefined}
+            // an action marked `whole` runs when the notice itself is tapped, not only its button (the button stays for keyboards and screen readers)
+            onClick={t.action?.whole ? (e) => {
+              if (e.target.closest("button")) return;
+              try { t.action.onClick?.(); } finally { toast.dismiss(t.id); }
+            } : undefined}
+          >
             <p className="tt-msg">
               {t.message}
               {t.count > 1 && (

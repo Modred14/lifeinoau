@@ -27,6 +27,10 @@ const C = {
   account: A.p,
   faculty: { name: "Law", difficulty: 1 },
 };
+// The shift windows are on the ONE game clock (West Africa Time, lib/campus-clock.js), so this test pins the wall clock to 08:00 WAT (07:00 UTC) instead of assuming
+// the day starts at some epoch: nothing about the player's own device or the clock row's start time may change what hour the game says it is.
+const T0 = Date.UTC(2026, 9, 20, 7, 0);
+Date.now = () => T0;
 const L = [],
   AL = [],
   BZ = [],
@@ -37,7 +41,7 @@ const tx = {
   $queryRaw: async () => [],
   gameClock: {
     findUnique: async () => ({
-      startedAt: new Date(Date.now() - 8 * 3600e3), // 08:00 on day 1 of the game clock: the morning shift window is open
+      startedAt: new Date(T0 - 8 * 3600e3), // the clock started at game midnight; it is 08:00 game time now, so the morning shift window is open
     }),
   },
   character: {

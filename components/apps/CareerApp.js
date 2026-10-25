@@ -1,17 +1,20 @@
 // components/apps/CareerApp.js: lives inside the phone (see components/Phone.js)
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { call, naira } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { game, run, cash, bump, canAfford, useResource } from "@/lib/gameStore";
 import { confirmAction } from "@/lib/confirm";
 import { serverTime } from "@/lib/serverClock";
+import { gameMinuteOfDay, gameClockText, gameClockWithZone } from "@/lib/campus-clock.js"; // the ONE game clock: the same one the phone, the status bar and the clubs read
+import { SHIFT_TYPES } from "@/lib/jobs.js";
 import { waitText } from "@/lib/engine";
 import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
 
 const k = (n) => "₦" + n.toLocaleString("en-NG");
-const hhmm = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+// the minutes of the game day at which a shift window opens or closes (and midnight, when the day's shift is available again)
+const EDGES = new Set([0, ...Object.values(SHIFT_TYPES).flatMap((t) => [t.from, t.to])]);
 const SHIFT_ICON = { morning: "☀", night: "☾" };
 
 export default function Career() {
@@ -21,6 +24,13 @@ export default function Career() {
   // A ticking clock for the shift desk. It is the SERVER's clock (lib/serverClock.js), so two devices agree; the server decides everything that matters.
   const [now, setNow] = useState(() => serverTime());
   useEffect(() => { const t = setInterval(() => setNow(serverTime()), 1000); return () => clearInterval(t); }, []);
+  // What the screen shows is always the game clock right now, worked out from the server-corrected time on every tick (never from a minute remembered from an earlier
+  // answer). The shift menu itself comes from the server, so when the clock crosses the moment a shift window opens or closes (or the day turns over) it is asked again.
+  const lastMinute = useRef(gameMinuteOfDay(now));
+  useEffect(() => {
+    const m = gameMinuteOfDay(now), was = lastMinute.current; lastMinute.current = m;
+    if (m !== was && EDGES.has(m)) load();
+  }, [now, load]);
   const [form, setForm] = useState({ type: "", name: "" }),
     [amt, setAmt] = useState({});
 
@@ -151,7 +161,7 @@ export default function Career() {
       {tab === "jobs" && (
         <>
           {j && (() => {
-            const act = j.active, gmin = (d.gameMinute + Math.floor((now - d.serverNow) / 60000)) % 1440;
+            const act = j.active;
             const left = act ? Math.max(0, act.endsAt - now) : 0, pct = act ? Math.min(100, Math.round(((now - act.startedAt) / (act.endsAt - act.startedAt)) * 100)) : 0;
             const nextIn = j.nextShiftAt ? Math.max(0, j.nextShiftAt - now) : 0;
             return (
@@ -161,14 +171,14 @@ export default function Career() {
                   <span className="mut">job level {j.level}</span>
                 </div>
                 <p className="mut">
-                  Game time <b className="num">{hhmm(gmin)}</b> · {j.shiftsThisWeek} of {j.maxShifts} shifts this week · {j.shiftsToNext} more for the next level
+                  Game time <b className="num">{gameClockWithZone(now)}</b> · {j.shiftsThisWeek} of {j.maxShifts} shifts this week · {j.shiftsToNext} more for the next level
                 </p>
                 {act ? (
                   <div className="shift-on" role="status" aria-live="polite">
                     <b>{SHIFT_ICON[act.shift]} {act.shift === "night" ? "Night" : "Morning"} shift in progress</b>
                     <div className="shift-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><i style={{ width: pct + "%" }} /></div>
                     <p className="mut">
-                      Clocked in {hhmm(Math.floor(((act.startedAt - d.serverNow) / 60000 + d.gameMinute + 1440 * 2) % 1440))} · ends {hhmm(Math.floor(((act.endsAt - d.serverNow) / 60000 + d.gameMinute + 1440 * 2) % 1440))} ·{" "}
+                      Clocked in {gameClockText(act.startedAt)} · ends {gameClockText(act.endsAt)} ·{" "}
                       {left > 0 ? `${waitText(left)} left` : "finished"} · pays {naira(act.payKobo)}
                     </p>
                     <div className="row">

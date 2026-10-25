@@ -10,6 +10,7 @@ import { setPlayMode, usePlayMode, useBare, resetBoot } from "@/lib/ui";
 import { Icon } from "./Icon";
 import Phone from "./Phone";
 import PlayerMenu from "./PlayerMenu";
+import BusyAlerts from "./BusyAlerts";
 import BottomNav from "./BottomNav";
 import { useChat } from "@/lib/chat";
 import SoundToggle from "./SoundToggle";
@@ -302,6 +303,7 @@ export default function Shell({ children }) {
         }}
       />
       {st && <PlayerMenu />}
+      {st && !held && <BusyAlerts characterId={String(st.character.id ?? "")} />}
     </>
   );
 }
