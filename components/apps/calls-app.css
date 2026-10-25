@@ -1,0 +1,34 @@
+/* components/apps/calls-app.css: the Calls app inside the phone. Uses the phone's own light tokens. The call screens themselves are in components/call-layer.css. */
+.ca { display: grid; gap: 10px; }
+.ca .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.ca-sub { margin: 6px 0 0; font-size: 0.82rem; line-height: 1.4; color: var(--muted); }
+.ca-sub.warn { color: var(--gold-text); }
+.ca-h { margin: 14px 0 2px; font-size: 0.86rem; color: var(--muted); font-weight: 600; }
+.ca-empty { margin: 18px 0; text-align: center; font-size: 0.88rem; color: var(--muted); }
+
+.ca-av { position: relative; display: grid; place-items: center; flex: none; width: 42px; height: 42px; border-radius: 50%; font: 700 1.05rem/1 var(--font-outfit, var(--font-ui)); color: #fff; background: linear-gradient(145deg, #7f8cff, #4350d8); }
+.ca-av i { position: absolute; right: -1px; bottom: -1px; width: 12px; height: 12px; border-radius: 50%; background: #98a2b3; border: 2px solid var(--bg); }
+.ca-av i.on { background: #16a34a; }
+.ca-t { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.ca-t b { font-size: 0.96rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ca-t small { font-size: 0.78rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ca-home { margin: 0; }
+.ca-home-top { display: flex; align-items: center; gap: 12px; }
+.ca-home .ca-av { background: linear-gradient(145deg, #58d98d, #16a05a); width: 48px; height: 48px; }
+.ca-last { display: flex; align-items: center; gap: 6px; margin: 12px 0 0; font-size: 0.84rem; }
+.ca-last svg { color: var(--gold-text); flex: none; }
+.pa-content .ca-big { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 50px; margin-top: 12px; font-size: 1rem; font-weight: 600; }
+
+.ca-search { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 14px; background: var(--surface); }
+.ca-search svg { color: var(--muted); flex: none; }
+.pa-content .ca-search input[type="search"] { flex: 1; min-width: 0; border: 0; background: transparent; min-height: 46px; padding: 0; outline-offset: 4px; }
+.ca-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.ca-list li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.ca-list li:first-child { border-top: 0; }
+.pa-content .ca-re { flex: none; width: 42px; padding: 0; display: grid; place-items: center; border-radius: 50%; }
+.ca-di { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 12px; background: var(--surface); color: var(--muted); }
+.ca-rec li.miss .ca-di { background: #fde8e8; color: var(--danger-text); }
+.ca-rec li.miss b { color: var(--danger-text); }
+.ca-away { display: grid; gap: 8px; margin-top: 14px; }
+.ca-away button { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }

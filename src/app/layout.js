@@ -6,6 +6,7 @@ import Toaster from "@/components/Toaster";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import SoundEngine from "@/components/SoundEngine";
 import OfflineGate from "@/components/OfflineGate";
+import CallLayer from "@/components/CallLayer";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -92,6 +93,7 @@ export default function RootLayout({ children }) {
     <html lang="en" className={`${outfit.variable} ${work.variable}`}>
       <body>
         <Shell>{children}</Shell>
+        <CallLayer />
         <Toaster />
         <OfflineGate />
         <ConfirmDialog />

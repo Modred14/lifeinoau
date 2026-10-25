@@ -1,0 +1,72 @@
+/* components/call-layer.css: the call screens (incoming, calling, connected, result, call home). One layer for the whole app.
+   Layering (see components/bottom-nav.css): the phone is 85, this layer is 88, dialogs are 90 and the bottom bar is 500. So a call sits above the phone and the
+   room but never covers the bar, and joins the bar's contract: while the bar is mounted this layer's bottom inset is "device inset + the bar". */
+.cx-scrim { --z-call: 88; --safe-b: env(safe-area-inset-bottom, 0px); position: fixed; inset: 0; z-index: var(--z-call); display: grid; place-items: center; overflow-y: auto; overscroll-behavior: contain;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(16px + var(--safe-b)) max(16px, env(safe-area-inset-left, 0px));
+  background: radial-gradient(120% 90% at 50% 0%, rgba(43, 63, 115, 0.55), rgba(8, 12, 22, 0.9)); backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2); animation: cx-in 220ms var(--ease, ease-out); touch-action: manipulation; }
+body[data-nav="on"] .cx-scrim { --safe-b: calc(env(safe-area-inset-bottom, 0px) + var(--nav-band)); }
+@keyframes cx-in { from { opacity: 0; } }
+
+.cx { position: relative; display: grid; justify-items: center; gap: 6px; width: min(380px, 100%); padding: 30px 22px 24px; text-align: center; color: #fff; border-radius: 30px;
+  background: linear-gradient(170deg, rgba(27, 38, 64, 0.96), rgba(13, 19, 33, 0.97)); border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 30px 70px -24px rgba(0, 0, 0, 0.85); animation: cx-up 320ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes cx-up { from { transform: translateY(24px) scale(0.97); opacity: 0; } }
+.cx h2 { margin: 2px 0 0; font: 700 1.6rem/1.15 var(--font-outfit, var(--font-ui)); letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.cx-sub { margin: 0; font-size: 0.92rem; line-height: 1.45; color: rgba(255, 255, 255, 0.72); max-width: 32ch; }
+.cx-kind { display: inline-flex; align-items: center; gap: 6px; margin: 10px 0 0; font-size: 0.82rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255, 255, 255, 0.7); }
+.cx-live { color: #3fd08a; }
+.cx-dot { width: 8px; height: 8px; border-radius: 50%; background: #3fd08a; animation: cx-blink 1.4s ease-in-out infinite; }
+@keyframes cx-blink { 50% { opacity: 0.25; } }
+.cx-with { margin: 0; font-size: 0.84rem; color: rgba(255, 255, 255, 0.55); }
+
+.cx-av { position: relative; display: grid; place-items: center; width: 92px; height: 92px; border-radius: 50%; font: 700 2.4rem/1 var(--font-outfit, var(--font-ui)); color: #fff; background: linear-gradient(145deg, #7f8cff, #4350d8); box-shadow: 0 10px 30px -10px rgba(67, 80, 216, 0.8); }
+.cx-av.cx-ring::before, .cx-av.cx-ring::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(127, 140, 255, 0.55); animation: cx-pulse 2s ease-out infinite; }
+.cx-av.cx-ring::after { animation-delay: 1s; }
+@keyframes cx-pulse { from { transform: scale(1); opacity: 0.9; } to { transform: scale(1.7); opacity: 0; } }
+
+.cx-bar { display: block; width: 100%; max-width: 260px; height: 5px; margin-top: 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+.cx-bar i { display: block; height: 100%; border-radius: inherit; background: #3fd08a; transition: width 300ms linear; }
+
+.cx-act { display: flex; justify-content: center; gap: 36px; margin-top: 22px; width: 100%; }
+.cx-act.cx-two { gap: 10px; margin-top: 14px; }
+.cx-act.cx-two .cx-btn { flex: 1; border-radius: 16px; flex-direction: row; min-height: 52px; width: auto; }
+.cx-btn { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-width: 72px; min-height: 72px; padding: 0 14px; border: 0; border-radius: 50%; font-size: 0.8rem; font-weight: 600; color: #fff; cursor: pointer; transition: transform 120ms, filter 120ms; }
+.cx-btn.cx-yes { background: #16a34a; box-shadow: 0 10px 24px -8px rgba(22, 163, 74, 0.8); }
+.cx-btn.cx-no { background: #dc2626; box-shadow: 0 10px 24px -8px rgba(220, 38, 38, 0.8); }
+.cx-btn:hover:not(:disabled) { filter: brightness(1.1); }
+.cx-btn:active:not(:disabled) { transform: scale(0.96); }
+.cx-btn:disabled { opacity: 0.5; cursor: default; }
+.cx-btn.cx-wide { width: 100%; max-width: 300px; min-height: 52px; margin-top: 16px; border-radius: 16px; flex-direction: row; font-size: 1rem; }
+.cx-hang { display: grid; place-items: center; width: 62px; height: 62px; margin-top: 22px; border: 0; border-radius: 50%; color: #fff; background: #dc2626; box-shadow: 0 10px 24px -8px rgba(220, 38, 38, 0.8); cursor: pointer; }
+.cx-hang:disabled { opacity: 0.5; }
+.cx-btn:focus-visible, .cx-hang:focus-visible, .cx-chip:focus-visible, .cx-money input:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+
+/* asking and approving */
+.cx-ask { display: grid; justify-items: center; gap: 8px; width: 100%; margin-top: 12px; }
+.cx-lab { font-size: 0.84rem; color: rgba(255, 255, 255, 0.72); }
+.cx-money { display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; padding: 4px 14px; border-radius: 16px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.16); }
+.cx-money span { font: 600 1.6rem/1 var(--font-outfit, var(--font-ui)); color: rgba(255, 255, 255, 0.7); }
+.cx-money input { flex: 1; min-width: 0; min-height: 54px; padding: 0; border: 0; background: transparent; color: #fff; font: 700 1.9rem/1 var(--font-outfit, var(--font-ui)); font-variant-numeric: tabular-nums; text-align: left; outline-offset: 6px; }
+.cx-money input::placeholder { color: rgba(255, 255, 255, 0.3); }
+.cx-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.cx-chip { min-height: 38px; padding: 0 14px; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 999px; background: transparent; color: #fff; font-size: 0.86rem; cursor: pointer; }
+.cx-chip:hover { background: rgba(255, 255, 255, 0.1); }
+.cx-hint { display: inline-flex; align-items: flex-start; gap: 6px; margin: 4px 0 0; font-size: 0.78rem; line-height: 1.4; color: rgba(255, 255, 255, 0.6); text-align: left; max-width: 34ch; }
+.cx-hint svg { flex: none; margin-top: 2px; }
+.cx-big { margin: 0; font: 700 2.4rem/1.1 var(--font-outfit, var(--font-ui)); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.cx-gift { color: #3fd08a; animation: cx-pop 600ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes cx-pop { from { transform: scale(0.6); opacity: 0; } }
+.cx-sum { width: 100%; margin: 4px 0 0; padding: 10px 14px; border-radius: 14px; background: rgba(255, 255, 255, 0.07); }
+.cx-sum div { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; font-size: 0.88rem; color: rgba(255, 255, 255, 0.75); }
+.cx-sum dt, .cx-sum dd { margin: 0; }
+.cx-sum .cx-tot { margin-top: 4px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.14); font-weight: 700; color: #fff; }
+.cx-warn { margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 0.84rem; color: #ffb4b4; background: rgba(220, 38, 38, 0.18); }
+.cx-quote { margin: 8px 0 0; padding: 12px 14px; border-radius: 16px; font-size: 0.98rem; line-height: 1.45; font-style: italic; background: rgba(255, 255, 255, 0.08); max-width: 32ch; }
+
+/* a finished call */
+.cx-res { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 50%; background: rgba(255, 255, 255, 0.12); }
+.cx[data-tone="ok"] .cx-res { background: #16a34a; box-shadow: 0 10px 30px -8px rgba(22, 163, 74, 0.8); animation: cx-pop 500ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.cx[data-tone="bad"] .cx-res { background: #dc2626; }
+.cx[data-tone="ok"] h2 { color: #3fd08a; }
+
+@media (max-height: 560px) { .cx { padding: 18px 18px 16px; gap: 3px; } .cx-av { width: 64px; height: 64px; font-size: 1.7rem; } .cx-act { margin-top: 12px; } .cx-big { font-size: 1.8rem; } }
+@media (prefers-reduced-motion: reduce) { .cx, .cx-scrim, .cx-gift, .cx-res, .cx-dot, .cx-av.cx-ring::before, .cx-av.cx-ring::after { animation: none !important; } .cx-bar i { transition: none; } }

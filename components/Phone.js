@@ -14,6 +14,8 @@ import { chat, useChat } from "@/lib/chat";
 import CareerApp from "./apps/CareerApp";
 import CoursesApp from "./apps/CoursesApp";
 import InvestApp from "./apps/InvestApp";
+import BankApp from "./apps/BankApp";
+import CallsApp from "./apps/CallsApp";
 import RelationshipApp from "./apps/RelationshipApp";
 import PartiesApp from "./apps/PartiesApp";
 import SpendingApp from "./apps/SpendingApp";
@@ -39,6 +41,8 @@ const APPS = {
   jobs: { name: "Jobs", icon: "jobs", tone: "green", C: CareerApp },
   courses: { name: "Courses", icon: "courses", tone: "teal", C: CoursesApp },
   invest: { name: "Invest", icon: "invest", tone: "gold", C: InvestApp },
+  bank: { name: "Bank", icon: "bank", tone: "navy", C: BankApp }, // balance, savings, goals, net worth and the statement
+  calls: { name: "Calls", icon: "call", tone: "green", C: CallsApp }, // call home for support, or ring an online player to ask for money; the call screens are components/CallLayer.js
   love: { name: "Love", icon: "love", tone: "rose", C: RelationshipApp },
   parties: { name: "Parties", icon: "party", tone: "violet", C: PartiesApp },
   spending: { name: "Spending", icon: "receipt", tone: "rose", C: SpendingApp }, // club spending history (0203, Royal Divas, Quantum)
@@ -58,7 +62,7 @@ const APPS = {
   developer: { name: "Developer", icon: "code", tone: "dev", C: DeveloperApp }, // who made Life in OAU; its Message button opens the real Messages app on the developer's player
 };
 export const PHONE_APPS = Object.keys(APPS);
-const GRID = ["messages", "jobs", "courses", "invest", "vouchers", "love", "parties", "spending", "forbes", "awards", "housing", "ride", "offishall", "luxury", "hire", "bet", "games", "sug", "guide", "developer", "settings"];
+const GRID = ["messages", "calls", "bank", "jobs", "courses", "invest", "vouchers", "love", "parties", "spending", "forbes", "awards", "housing", "ride", "offishall", "luxury", "hire", "bet", "games", "sug", "guide", "developer", "settings"];
 /** In Floor O (N-QRS Custody) the PHONE keeps working: custody stops you leaving, not using your phone. Only the apps that are about getting somewhere (rides, drivers, moving house) are
  *  tucked away. Every app that stays follows its own rules: the server still refuses anything custody forbids (working a shift, going out...) with a clear message. */
 const CUSTODY_HIDDEN = ["ride", "hire", "housing"];

@@ -1346,3 +1346,70 @@ model GameSeat {
 
   @@index([matchId])
 }
+
+
+// ---- Bank app and Calls app (lib/bankService.js, lib/callService.js) ----
+// Savings money is held in the SAVINGS system account of the ledger (like BUSINESS and MARKET); this row says how much of it is the player's.
+// Account.balance stays the one spendable wallet. CHECK (balance >= 0) and "goals never hold more than the balance" are enforced in the migration.
+model SavingsAccount {
+  characterId String   @id
+  balance     BigInt   @default(0) // kobo
+  updatedAt   DateTime @default(now())
+}
+
+// A savings goal: part of the savings balance set aside towards a target. Closed goals release their money back to the free savings.
+model SavingsGoal {
+  id          BigInt    @id @default(autoincrement())
+  characterId String
+  name        String
+  targetKobo  BigInt
+  savedKobo   BigInt    @default(0)
+  status      String    @default("ACTIVE") // ACTIVE | ACHIEVED | CLOSED
+  createdAt   DateTime  @default(now())
+  achievedAt  DateTime?
+  closedAt    DateTime?
+
+  @@index([characterId, status])
+}
+
+// One phone call. kind PLAYER is a live call between two players (a state machine: RINGING -> ANSWERED -> ENDED, or DECLINED / MISSED / CANCELLED);
+// kind PARENT is a call home, resolved on the server in one step and stored finished. Money only ever moves through the ledger, after the callee approves.
+model PhoneCall {
+  id         String    @id @default(cuid())
+  kind       String // PLAYER | PARENT
+  callerId   String
+  callerName String
+  calleeId   String? // null for a call home
+  calleeName String // for a call home: the parent's name (Mummy / Daddy)
+  requestId  String // the caller's request id: dialling again with it returns the same call
+  status     String // RINGING | ANSWERED | DECLINED | MISSED | CANCELLED | ENDED
+  endReason  String?
+  createdAt  DateTime  @default(now())
+  ringingAt  DateTime? // when the callee's phone first showed the call (until then the caller sees "Calling")
+  ringUntil  DateTime
+  answeredAt DateTime?
+  endedAt    DateTime?
+  idleUntil  DateTime? // an answered call nobody asks anything on hangs up by itself now
+  gameWeek   Int
+  askKobo    BigInt? // the money asked for during the call (parent calls: what the parent gave)
+  askStatus  String    @default("NONE") // NONE | PENDING | APPROVED | REJECTED | EXPIRED | CANCELLED | FAILED
+  askAt      DateTime?
+  askUntil   DateTime?
+  decidedAt  DateTime?
+  paidKobo   BigInt? // what really moved (the fee is separate)
+  feeKobo    BigInt?
+  outcome    String? // parent calls: NO_ANSWER | CALL_DECLINED | REFUSED | LATER | GIVEN
+  line       String? // parent calls: what the parent said
+
+  @@unique([callerId, requestId])
+  @@index([calleeId, status])
+  @@index([callerId, status])
+  @@index([callerId, createdAt])
+  @@index([calleeId, createdAt])
+}
+
+// When a player's game was last open. The phone polls every few seconds while the tab is visible; a player seen in the last 25 seconds is "online" for calls.
+model PhoneLine {
+  characterId String   @id
+  seenAt      DateTime
+}
