@@ -21,10 +21,24 @@ export default function HomeGarage({ character, onBack }) {
     return () => { alive = false; scene.current = null; current?.dispose(); };
   }, [vehicleKey, character?.look, character?.gender]); // rebuild only when ownership or paint changes
   const car = vehicles.find((v) => String(v.id) === String(selected)) ?? null;
-  async function drive() { if (!car || busy || near == null || String(near) !== String(car.id)) return; setBusy(true); const r = await call("/api/rides", { action: "use", modelId: car.modelId }); setBusy(false); if (r.failed) return toast.error(r.error || "That vehicle could not be selected.");
-    game.pushDone((s) => s ? { ...s, character: { ...s.character, activeCar: car.modelId, activeCarColor: car.color } } : s);
-    if (scene.current?.startDrive(car.id)) { setDrv({ speed: 0, onRoad: false, hit: null }); return; } // drive out of the garage along the driveway; the map is one tap away once on the road
-    toast.success(`${car.name} is ready. Head out on the map to drive.`); onBack?.(); router.push("/map");
+  // The car pulls out of the garage the moment the player taps (local, immediate). "This is my active vehicle" is told to the server in the background:
+  // if the server refuses (not yours, a stale list), the car is parked again, the screen goes back to what it was, and the reason is shown.
+  async function drive() {
+    if (!car || busy || drv || near == null || String(near) !== String(car.id)) return;
+    const chosen = car, started = !!scene.current?.startDrive(chosen.id);
+    if (started) setDrv({ speed: 0, onRoad: false, hit: null }); else setBusy(true);   // no driveway to roll down: fall back to waiting for the answer
+    const patch = (x) => x ? { ...x, character: { ...x.character, activeCar: chosen.modelId, activeCarColor: chosen.color } } : x;
+    const id = game.push(patch);
+    const r = await call("/api/rides", { action: "use", modelId: chosen.modelId });
+    if (!started) setBusy(false);
+    if (r.failed) {
+      game.rollback(id); game.scheduleRefresh();
+      if (started) { scene.current?.stopDrive({ park: true }); setDrv(null); setSelected(null); setNear(null); }
+      return toast.error(r.error || "That vehicle could not be selected.");
+    }
+    game.done(id); game.scheduleRefresh();
+    if (started) return; // already driving out along the driveway; the map is one tap away once on the road
+    toast.success(`${chosen.name} is ready. Head out on the map to drive.`); onBack?.(); router.push("/map");
   }
   function park() { scene.current?.stopDrive({ park: true }); setDrv(null); setSelected(null); setNear(null); }
   function toMap() { if (!drv?.onRoad) return; const car2 = car; scene.current?.stopDrive({ park: false }); setDrv(null); toast.success(`${car2?.name ?? "Your car"} is on the road. Pick a destination on the map.`); onBack?.(); router.push("/map"); }

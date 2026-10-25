@@ -1,3 +1,4 @@
+// components/apps/MessagesApp.js
 // components/apps/MessagesApp.js: the Messages app. Inbox, chat, profile, send money, block and report, all inside the phone.
 // Everything here reads one live copy of the chat (lib/chat.js). A message you send is on screen before anything is sent;
 // its ticks then move on their own: clock, one grey tick (sent), two grey (delivered), two blue (read).
@@ -599,11 +600,13 @@ function ChatView({ who, onBack }) {
       confirmLabel: "Delete for everyone",
       tone: "danger",
     }))) return;
+    // Show the delete at once; the request goes out in the background. A refusal puts the message back (and says why).
+    const undo = chat.beginDelete({ id: message.id, mode, with: who });
     setDeletingId(message.id);
     const r = await call("/api/messages/delete", { id: message.id, mode });
     setDeletingId(null);
-    if (r.failed) return fail(r);
-    chat.onDeleted({ id: message.id, mode, mine: r.mine, with: r.peerName });
+    if (r.failed) { undo?.(); return fail(r); }
+    if (!undo) chat.onDeleted({ id: message.id, mode, mine: r.mine, with: r.peerName });
   }
 
   // composer
