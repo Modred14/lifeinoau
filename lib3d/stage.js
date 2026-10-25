@@ -2,10 +2,12 @@
 // Shared 3D setup: renderer, camera, drag-to-rotate controls, a render loop that sleeps when off-screen, and clean-up. Browser only.
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { createGovernor } from "./perfGovernor.js";
 
 export function createStage(container, opts = {}) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: !!opts.alpha, powerPreference: "high-performance" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, opts.maxDpr ?? 1.75));
+  const maxRatio = Math.min(window.devicePixelRatio || 1, opts.maxDpr ?? 1.75), gov = createGovernor({ max: maxRatio, min: Math.min(maxRatio, 0.75) }); // a weak phone drops to a softer picture instead of dropping frames
+  renderer.setPixelRatio(maxRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = opts.exposure ?? 1.05;
   renderer.shadowMap.enabled = opts.shadows !== false; renderer.shadowMap.type = THREE.PCFShadowMap; // PCFSoftShadowMap was removed in newer three.js
   const el = renderer.domElement; el.style.cssText = "display:block;width:100%;height:100%;touch-action:none;outline:none"; container.appendChild(el);
@@ -15,7 +17,7 @@ export function createStage(container, opts = {}) {
   const resize = () => { const w = container.clientWidth || 1, h = container.clientHeight || 1; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
   const io = new IntersectionObserver(([e]) => { visible = e.isIntersecting; }); io.observe(container);
-  const tick = () => { if (!alive) return; raf = requestAnimationFrame(tick); if (!visible || document.hidden) return; const now = performance.now(), raw = (now - last) / 1000; last = now; elapsed += raw; const dt = Math.min(raw, 0.1), t = elapsed; cbs.forEach((f) => f(t, dt)); if (!manual) { if (fly) stepFly(dt); controls.update(); } renderer.render(scene, camera); after.forEach((f) => f(t, dt)); };
+  const tick = () => { if (!alive) return; raf = requestAnimationFrame(tick); if (!visible || document.hidden) return; const now = performance.now(), raw = (now - last) / 1000; last = now; elapsed += raw; const dt = Math.min(raw, 0.1), t = elapsed; cbs.forEach((f) => f(t, dt)); const q = gov.frame(raw); if (q != null) { renderer.setPixelRatio(q); resize(); } if (!manual) { if (fly) stepFly(dt); controls.update(); } renderer.render(scene, camera); after.forEach((f) => f(t, dt)); };
   // button / keyboard alternatives to dragging: rotate, tilt and zoom by a step
   const nudge = ({ az = 0, pol = 0, zoom = 1, panX = 0, panZ = 0 } = {}) => { if (panX || panZ) { // slide the map along the ground: panX right, panZ forward (a fraction of the view distance), whichever way the camera is turned
       const fwd = controls.target.clone().sub(camera.position).setY(0).normalize(), right = new THREE.Vector3(-fwd.z, 0, fwd.x), d = camera.position.distanceTo(controls.target), mv = right.multiplyScalar(panX * d).add(fwd.multiplyScalar(panZ * d));
@@ -32,5 +34,10 @@ export function createStage(container, opts = {}) {
   tick();
   return { THREE, renderer, scene, camera, controls, onFrame: (f) => { cbs.push(f); return () => { const i = cbs.indexOf(f); if (i >= 0) cbs.splice(i, 1); }; }, setManual: (v) => { v = !!v; // while a caller drives the camera itself (a trip, a building interior), the orbit controls must not also react to touches and the wheel: they call update() from their own pointer handlers and would fight it
       if (v && !manual) ctlWas = controls.enabled; if (v) controls.enabled = false; else if (manual) controls.enabled = ctlWas; manual = v; fly = null; if (!v) controls.update(); }, onAfterRender: (f) => after.push(f), nudge, flyTo, resize,
-    dispose() { alive = false; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); controls.dispose(); scene.traverse((o) => { o.geometry?.dispose?.(); }); renderer.dispose(); el.remove(); } };
+    dispose() { alive = false; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); controls.dispose();
+      // free everything this stage put on the GPU: geometries, materials AND their textures (before, only geometries were freed, so every map / room / garage visit left textures behind)
+      const seen = new Set(), free = (m) => { if (!m || seen.has(m)) return; seen.add(m); for (const k in m) { const v = m[k]; if (v && v.isTexture) v.dispose(); } m.dispose?.(); };
+      scene.traverse((o) => { o.geometry?.dispose?.(); Array.isArray(o.material) ? o.material.forEach(free) : free(o.material); });
+      renderer.dispose(); renderer.forceContextLoss?.(); /* browsers allow only a handful of live WebGL contexts: give this one back at once so moving between screens never starves the next */ el.remove(); },
+    get pixelRatio() { return gov.ratio; } };
 }

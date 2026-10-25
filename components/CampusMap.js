@@ -58,7 +58,7 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
           lab = new CSS2DRenderer(); lab.domElement.style.cssText = "position:absolute;inset:0;pointer-events:none;overflow:hidden"; host.appendChild(lab.domElement);
           const list = campus.places.map((L) => { const el = document.createElement("div"); el.style.pointerEvents = "auto"; const o = new CSS2DObject(el); o.position.copy(L.pos); stage.scene.add(o); return { id: L.id, el, L, w: labelWidth(L.name, L.tier) }; });
           list.sort((a, b) => a.L.tier - b.L.tier); setMounts(list.map(({ id, el }) => ({ id, el, L: campus.places.find((p) => p.id === id) })));
-          const size = () => lab.setSize(box.current.clientWidth, box.current.clientHeight); size(); ro = new ResizeObserver(size); ro.observe(box.current);
+          const kick = { n: 30 }; /* frames the tags are redrawn for even if the camera is still (first paint, resize) */ const size = () => { lab.setSize(box.current.clientWidth, box.current.clientHeight); kick.n = 30; }; size(); ro = new ResizeObserver(size); ro.observe(box.current);
           const v = new stage.THREE.Vector3(); let frame = 0; const tagState = new Map(), items = list.map((it) => ({ id: it.id, tier: it.L.tier, x: it.L.x / SC, z: it.L.z / SC, y: (it.L.pos?.y ?? 3) / SC, bid: it.L.bid, w: it.w }));
           // on a trip: name tags of the places near the traveller (lib3d/destinations.js decides which), a click on one sends the trip there
           const tripTags = () => {
@@ -76,7 +76,13 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
               v.copy(it.L.pos).project(stage.camera); if (v.z > 1 || Math.abs(v.x) > 1.08 || Math.abs(v.y) > 1.08) show = false;
               if (show) { const sx = (v.x * 0.5 + 0.5) * w, sy = (-v.y * 0.5 + 0.5) * h, r = [sx - it.w / 2, sy - 20, sx + it.w / 2, sy + 4]; if (!isSel && taken.some((t) => r[0] < t[2] && r[2] > t[0] && r[1] < t[3] && r[3] > t[1])) show = false; else taken.push(r); }
               it.el.style.visibility = show ? "visible" : "hidden"; it.el.style.zIndex = isSel ? 9 : 4 - it.L.tier; } };
-          stage.onAfterRender(() => { lab.render(stage.scene, stage.camera); if (frame++ % 3 === 0) declutter(); });
+          // The name tags only need their screen positions recomputed when the camera moved or the box was resized: standing still costs nothing (before, every tag was re-projected on every frame).
+          const pPos = new stage.THREE.Vector3(NaN, 0, 0), pQuat = new stage.THREE.Quaternion(); let pAsp = 0, pZoom = 0;
+          stage.onAfterRender(() => {
+            const cam = stage.camera, moved = cam.position.distanceToSquared(pPos) > 1e-10 || !pQuat.equals(cam.quaternion) || cam.aspect !== pAsp || cam.zoom !== pZoom;
+            if (moved || kick.n > 0) { lab.render(stage.scene, cam); pPos.copy(cam.position); pQuat.copy(cam.quaternion); pAsp = cam.aspect; pZoom = cam.zoom; if (!moved) kick.n--; }
+            if (frame++ % 3 === 0) declutter();
+          });
         }
         api.current = { stage, campus, view, light, data, THREE: stage.THREE };
         box.current.dataset.ready = "1";

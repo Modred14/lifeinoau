@@ -154,3 +154,28 @@ const mk = (fetchImpl, o = {}) => createCaller({ fetchImpl, sleep: () => wait(1)
   assert.equal(reset, 1);
   console.log("OK   signing in or out resets cached screens");
 }
+
+// 5. identical reads in flight share ONE request; each caller still gets its own copy
+{
+  let n = 0; const f = script(async () => { n++; await wait(10); return reply(200, { v: n }); });
+  const c = mk(f);
+  const [a, b, d] = await Promise.all([c.call("/api/state"), c.call("/api/state"), c.call("/api/other")]);
+  assert.equal(f.calls.filter((x) => x.path === "/api/state").length, 1, "two identical reads = one request");
+  assert.equal(f.calls.length, 2, "a different path is its own request");
+  assert.notEqual(a, b); a.mutated = true; assert.equal(b.mutated, undefined, "callers do not share one object");
+  assert.equal((await c.call("/api/state")).status, 200); assert.equal(f.calls.length, 3, "once finished, the next read asks again");
+  console.log("OK   identical reads in flight share one request");
+}
+
+// 6. a read with its own signal/timeout is never shared, and a change starts a fresh generation of reads
+{
+  const f = script(async () => { await wait(10); return reply(200, { ok: 1 }); });
+  const c = mk(f), ac = new AbortController();
+  await Promise.all([c.call("/r", undefined, { signal: ac.signal }), c.call("/r", undefined, { signal: ac.signal })]);
+  assert.equal(f.calls.length, 2, "cancellable reads are separate requests");
+  const before = f.calls.length;
+  const first = c.call("/s"); const write = c.call("/w", { x: 1 }); const second = c.call("/s");
+  await Promise.all([first, write, second]);
+  assert.equal(f.calls.length - before, 3, "a read asked after a change does not join the read from before it");
+  console.log("OK   cancellable reads are not shared; reads after a write start fresh");
+}

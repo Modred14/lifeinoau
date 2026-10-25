@@ -1,4 +1,4 @@
-const CACHE = "oau-campus-v4";
+const CACHE = "oau-campus-v5";
 const SHELL = ["/", "/home", "/offline.html"]; // /home is the installed app's start_url (see src/app/manifest.js); /play only redirects to it
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
@@ -14,6 +14,17 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
   if (request.mode === "navigate") {
     event.respondWith(fetch(request).catch(async () => await caches.match(url.pathname) || await caches.match("/offline.html")));
+    return;
+  }
+  // The campus map data, the road graph and the 3D avatar models are big and change rarely: show the saved copy at once and refresh it quietly in the
+  // background (stale-while-revalidate), so a returning player on a slow network never waits for them, and a new version is picked up on the next visit.
+  if (url.pathname.startsWith("/data/") || url.pathname.startsWith("/models/")) {
+    event.respondWith(caches.open(CACHE).then(async (cache) => {
+      const saved = await cache.match(request);
+      const fresh = fetch(request).then((response) => { if (response.status === 200 && response.type === "basic") cache.put(request, response.clone()).catch(() => {}); return response; });
+      if (saved) { event.waitUntil(fresh.catch(() => {})); return saved; }
+      return fresh;
+    }));
     return;
   }
   if (!url.pathname.startsWith("/_next/static/") && !url.pathname.startsWith("/campus/") && !url.pathname.startsWith("/app-icons/")) return;
