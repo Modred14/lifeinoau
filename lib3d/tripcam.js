@@ -19,6 +19,23 @@ export const zoomByWheel = (z, deltaY, kind) => clampZoom(z * Math.exp(clamp(del
 /** Frame-rate independent approach of `cur` to `want` with rate `k` (per second). */
 export const ease = (cur, want, k, dt) => cur + (want - cur) * (1 - Math.exp(-k * dt));
 
+const TAU = Math.PI * 2;
+/**
+ * The shortest signed turn from angle `a` to angle `b`, in [-PI, PI], however many whole turns apart the two numbers are. (The old formula only held while b - a stayed above -3 PI:
+ * a camera angle that had been wound up by a few left-hand loops then took the LONG way round to find the road behind the car, so the view spun the wrong way.)
+ */
+export function angDiff(a, b) { let d = (b - a) % TAU; if (d > Math.PI) d -= TAU; else if (d < -Math.PI) d += TAU; return d; }
+/** How fast the chase camera swings in behind a vehicle (per second): quicker at speed, and quickest while riding as a passenger. */
+export const swingRate = (speed, ride = false) => (ride ? 5 : 2.6 + Math.min(1.6, Math.abs(speed) * 0.1));
+/**
+ * One step of the chase camera's heading (the direction from the vehicle back to the camera) towards `want`, the opposite of the vehicle's own heading. Takes the short way round
+ * every time, and hands back an angle within half a turn of `want`, so it can never wind up however long the player drives in circles.
+ */
+export function followYaw(cur, want, speed, dt, ride = false) {
+  const next = cur + angDiff(cur, want) * (1 - Math.exp(-swingRate(speed, ride) * dt));
+  return want + angDiff(want, next);
+}
+
 /** The wanted framing for this moment: distance behind, height above, and the field of view. Faster vehicles pull the camera back a little. */
 export function frame({ inVeh, speed = 0, zoom = 1, pitch = 0 }) {
   const c = inVeh ? CAM.veh : CAM.walk, back = Math.max(MIN_BACK, (c.back + (inVeh ? Math.min(5, Math.abs(speed) * 0.12) : 0)) * zoom);

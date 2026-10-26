@@ -40,45 +40,137 @@ body[data-trip] .map-chrome { display: none !important; } /* the bottom bar is n
 }
 @media (max-width: 380px) { .ts-mode small { font-size: 0.68rem; } }
 
-/* ---- the trip: the little map, the line saying where you are going, the controls ---- */
-.th { position: fixed; inset: 0; z-index: 25; pointer-events: none; }
+/* ---- the trip: where you are going (top left), the little map and the speed (top right), the steering wheel / stick (bottom left), the pedals (bottom right) ----
+   The middle of the screen, where the road ahead and the vehicle are, is never covered: everything hugs a corner or an edge. Sizes come from the --th-* variables, set once for each kind
+   of screen below (phone upright, phone on its side, tablet, laptop / desktop) instead of squeezing one layout: a phone gets big thumb-sized pads, a desktop gets small ones because the
+   keyboard drives there, and a phone held sideways, which has hardly any height, puts the pedals in one row and shrinks the map. Flat colours only, no gradients.
+   Pressed states use `scale` / `translate` (not `transform`) so they never fight a centring transform. */
+.th {
+  --th-l: max(12px, env(safe-area-inset-left, 0px)); --th-r: max(12px, env(safe-area-inset-right, 0px));
+  --th-top: calc(var(--safe-t) + var(--hud-h) + 10px); --th-bottom: calc(var(--safe-b) + 14px); /* --safe-b already includes the bottom bar */
+  --th-mini: 112px; --th-wheel: clamp(124px, 34vw, 150px); --th-stick: 132px; --th-run: 84px; --th-pw: 78px; --th-gas-h: 112px; --th-brake-h: 88px; --th-aux: 44px; --th-info-w: 300px;
+  --th-surface: rgba(13, 19, 33, 0.9); --th-line: rgba(255, 255, 255, 0.16); --th-gas: #1f9d55; --th-brake: #c93c3c; --th-amber: #ffd24a; --th-ok: #3fd08a;
+  position: fixed; inset: 0; z-index: 25; pointer-events: none;
+}
 .th > * { pointer-events: auto; }
-.th-mini { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--safe-t) + var(--hud-h, 70px) + 8px); width: 148px; height: 148px; padding: 0; border-radius: 50%; border: 0; background: transparent; box-shadow: 0 10px 28px -8px rgba(0, 0, 0, 0.6); }
-.th-mini:hover:not(:disabled) { background: transparent; }
+
+/* top left: cancel, and the card that says where you are going */
+.th-info { position: absolute; left: var(--th-l); top: var(--th-top); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: min(var(--th-info-w), calc(100vw - var(--th-l) - var(--th-r) - var(--th-mini) - 24px)); pointer-events: none; }
+.th-info > * { pointer-events: auto; }
+.th .th-cancel { min-height: 36px; padding: 0 12px; border-radius: 99px; gap: 6px; font-size: 0.82rem; font-weight: 600; background: var(--th-surface); border: 1px solid var(--th-line); color: #fff; }
+.th .th-cancel:hover:not(:disabled) { background: #1d2a47; border-color: rgba(255, 255, 255, 0.3); }
+.th-card { box-sizing: border-box; width: 100%; min-height: 52px; display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 16px; background: var(--th-surface); border: 1px solid var(--th-line); color: #fff; }
+.th[data-phase="drive"] .th-card { border-color: rgba(63, 208, 138, 0.5); }
+.th-dir { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #2fe38a; color: #06210f; transition: transform 0.18s ease-out; }
+.th-card-t { min-width: 0; flex: 1; display: grid; gap: 2px; }
+.th-card-t b { font: 650 0.92rem/1.25 var(--font-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.th-card-t span { color: #7be3ad; font-size: 0.78rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* top right: the little map, with the speed under it */
+.th-side { position: absolute; right: var(--th-r); top: var(--th-top); display: grid; justify-items: end; gap: 16px; pointer-events: none; }
+.th-side > * { pointer-events: auto; }
+.th-mini { position: relative; width: var(--th-mini); height: var(--th-mini); padding: 0; border-radius: 50%; border: 0; background: #0d1321; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.88), 0 10px 24px -10px rgba(0, 0, 0, 0.75); }
+.th-mini:hover:not(:disabled) { background: #0d1321; border: 0; }
 .th-mini canvas { width: 100%; height: 100%; border-radius: 50%; display: block; }
-.th-mini-hint { position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%); font-size: 0.66rem; font-weight: 700; background: rgba(13, 19, 33, 0.85); color: #fff; padding: 2px 9px; border-radius: 99px; white-space: nowrap; }
-.th-chip { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--safe-t) + var(--hud-h, 70px) + 170px); max-width: calc(100% - 24px); display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-radius: 99px; background: rgba(13, 19, 33, 0.82); backdrop-filter: blur(10px); color: #fff; font-size: 0.9rem; white-space: nowrap; }
-.th-chip b { overflow: hidden; text-overflow: ellipsis; }
-.th-chip span { color: #7be3ad; font-weight: 700; }
-.th-cancel { position: absolute; left: 12px; top: calc(var(--safe-t) + var(--hud-h, 70px) + 10px); background: rgba(13, 19, 33, 0.82); border-color: rgba(255, 255, 255, 0.18); gap: 6px; }
-.th-stick { position: absolute; left: 22px; bottom: calc(var(--safe-b) + 28px); width: 132px; height: 132px; border-radius: 50%; background: rgba(255, 255, 255, 0.22); border: 2px solid rgba(255, 255, 255, 0.55); backdrop-filter: blur(4px); touch-action: none; display: grid; place-items: center; }
-.th-stick i { width: 58px; height: 58px; border-radius: 50%; background: rgba(255, 255, 255, 0.92); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35); }
+.th-mini-hint { position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%); font-size: 0.66rem; font-weight: 700; background: var(--th-surface); border: 1px solid var(--th-line); color: #fff; padding: 2px 9px; border-radius: 99px; white-space: nowrap; }
+.th-speed { display: inline-flex; align-items: center; gap: 5px; padding: 5px 6px 5px 12px; border-radius: 99px; background: var(--th-surface); border: 1px solid var(--th-line); color: #fff; line-height: 1; }
+.th-speed:not(:has(em)) { padding-right: 12px; }
+.th-speed b { min-width: 2ch; text-align: right; font: 700 1.1rem var(--font-head); font-variant-numeric: tabular-nums; }
+.th-speed small { color: #9fb0c8; font-size: 0.66rem; font-weight: 600; }
+.th-speed em { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--th-gas); color: #fff; font: 800 0.72rem var(--font-ui); font-style: normal; }
+.th-speed em[data-gear="R"] { background: var(--th-amber); color: #1a1500; }
+
+/* the buttons that are held down (walking stick, run, pedals): flat, big, and they show when they are pressed */
+.th-stick { position: absolute; left: max(22px, env(safe-area-inset-left, 0px)); bottom: calc(var(--safe-b) + 28px); width: var(--th-stick); height: var(--th-stick); border-radius: 50%; background: rgba(13, 19, 33, 0.5); border: 2px solid rgba(255, 255, 255, 0.5); touch-action: none; display: grid; place-items: center; }
+.th-stick i { width: 44%; height: 44%; border-radius: 50%; background: rgba(255, 255, 255, 0.92); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35); }
 .th .th-btn { background: rgba(255, 255, 255, 0.9); color: #161b26; border: 0; border-radius: 18px; font-weight: 800; letter-spacing: 0.03em; touch-action: none; user-select: none; display: grid; place-items: center; box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.5); }
 .th .th-btn:hover:not(:disabled) { background: #fff; border: 0; }
 .th .th-btn:active { scale: 0.95; }
-.th-run { position: absolute; right: 22px; bottom: calc(var(--safe-b) + 40px); width: 84px; height: 84px; border-radius: 50% !important; }
-/* the steering wheel: bottom left, clear of the bottom bar (--safe-b already includes it) and of the pedals on the right; it takes its own finger and never scrolls the page */
-.th-wheel { position: absolute; left: max(14px, env(safe-area-inset-left)); bottom: calc(var(--safe-b) + 22px); width: clamp(128px, 36vw, 176px); aspect-ratio: 1; border-radius: 50%; touch-action: none; overscroll-behavior: contain; cursor: grab; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.4)); }
-.th-wheel:active { cursor: grabbing; }
-.th-wheel svg { width: 100%; height: 100%; display: block; will-change: transform; pointer-events: none; }
-.th .th-exit { position: absolute; right: max(18px, env(safe-area-inset-right)); bottom: calc(var(--safe-b) + 164px); display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 18px; border-radius: 999px; background: #ffd24a; color: #1a1500; font-size: 0.95rem; letter-spacing: 0.01em; }
+.th .th-btn[data-down] { background: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.6); scale: 0.95; }
+.th .th-run { position: absolute; right: max(22px, env(safe-area-inset-right, 0px)); bottom: calc(var(--safe-b) + 40px); width: var(--th-run); height: var(--th-run); border-radius: 50%; }
+
+/* bottom left: the steering wheel. It takes its own finger and never scrolls the page; the pad shows green while a finger is on it, and the mark on top is the straight-ahead position */
+.th-wheel { position: absolute; left: var(--th-l); bottom: var(--th-bottom); width: var(--th-wheel); aspect-ratio: 1; border-radius: 50%; background: rgba(13, 19, 33, 0.5); border: 1px solid var(--th-line); box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.7); touch-action: none; overscroll-behavior: contain; cursor: grab; transition: border-color 0.12s, background-color 0.12s, box-shadow 0.12s; }
+.th-wheel::after { content: ""; position: absolute; top: -9px; left: 50%; margin-left: -6px; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 7px solid rgba(255, 255, 255, 0.75); pointer-events: none; }
+.th-wheel[data-held="1"] { cursor: grabbing; background: rgba(13, 19, 33, 0.68); border-color: var(--th-ok); box-shadow: 0 0 0 3px rgba(63, 208, 138, 0.35); }
+.th-wheel svg { width: 100%; height: 100%; padding: 3%; box-sizing: border-box; display: block; will-change: transform; pointer-events: none; }
+
+/* bottom right: horn and exit above, brake (hold to reverse) and gas below */
+.th-pedals { position: absolute; right: var(--th-r); bottom: var(--th-bottom); display: grid; grid-template-columns: repeat(2, var(--th-pw)); grid-template-areas: "aux aux" "brake gas"; gap: 10px; align-items: end; pointer-events: none; }
+.th-pedals > * { pointer-events: auto; }
+.th-aux { grid-area: aux; display: flex; justify-content: flex-end; align-items: center; gap: 10px; pointer-events: none; }
+.th-aux > * { pointer-events: auto; }
+.th .th-horn { width: var(--th-aux); height: var(--th-aux); min-height: 0; padding: 0; border-radius: 50%; background: var(--th-surface); color: #fff; border: 1px solid var(--th-line); box-shadow: none; }
+.th .th-horn:hover:not(:disabled) { background: #1d2a47; border: 1px solid rgba(255, 255, 255, 0.3); }
+.th .th-horn:active { background: #fff; color: #161b26; }
+.th .th-exit { position: static; display: inline-flex; align-items: center; gap: 8px; height: var(--th-aux); min-height: 0; padding: 0 16px; border-radius: 999px; background: var(--th-amber); color: #1a1500; font-size: 0.9rem; letter-spacing: 0.01em; }
 .th .th-exit:hover:not(:disabled) { background: #ffe07a; }
 .th .th-exit:disabled { opacity: 0.8; background: #e8dfb0; }
-.th-act { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-b) + 176px); display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; max-width: calc(100% - 24px); }
+.th .th-pedal { position: relative; width: 100%; display: grid; align-content: end; justify-items: center; gap: 2px; padding: 0 4px 12px; border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 22px; color: #fff; font: 800 0.86rem var(--font-ui); letter-spacing: 0.06em; box-shadow: 0 8px 16px -8px rgba(0, 0, 0, 0.7); transition: scale 0.08s, translate 0.08s, background-color 0.08s, box-shadow 0.08s; }
+.th .th-gas { grid-area: gas; height: var(--th-gas-h); background: var(--th-gas); }
+.th .th-brake { grid-area: brake; height: var(--th-brake-h); background: var(--th-brake); }
+.th .th-gas:hover:not(:disabled) { background: var(--th-gas); border: 1px solid rgba(255, 255, 255, 0.28); }
+.th .th-brake:hover:not(:disabled) { background: var(--th-brake); border: 1px solid rgba(255, 255, 255, 0.28); }
+.th .th-gas[data-down] { background: #29bd68; }
+.th .th-brake[data-down] { background: #e24d4d; }
+.th .th-pedal[data-down] { translate: 0 3px; scale: 0.97; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.7); }
+.th .th-pedal small { font: 600 0.56rem var(--font-ui); letter-spacing: 0; text-transform: none; opacity: 0.9; }
+.th-grip { position: absolute; top: 12px; left: 50%; width: 44%; transform: translateX(-50%); display: grid; gap: 5px; pointer-events: none; }
+.th-grip i { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.42); }
+
+/* a keyboard legend, on a laptop or desktop only, that fades out after a few seconds */
+.th-keys { display: none; }
+@media (hover: hover) and (pointer: fine) and (min-width: 1100px) {
+  .th .th-keys { position: absolute; left: 50%; bottom: var(--th-bottom); transform: translateX(-50%); display: flex; gap: 16px; padding: 7px 16px; border-radius: 99px; background: var(--th-surface); border: 1px solid var(--th-line); color: #cfd9ea; font-size: 0.76rem; white-space: nowrap; pointer-events: none; animation: th-keys-out 0.6s ease 12s forwards; }
+  .th-keys span { display: inline-flex; align-items: center; gap: 4px; }
+  .th-keys kbd { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.08); color: #fff; font: 700 0.7rem ui-monospace, monospace; }
+}
+@keyframes th-keys-out { to { opacity: 0; visibility: hidden; } }
+
+/* ---- one set of sizes for each kind of screen ---- */
+@media (max-width: 340px) { .th { --th-pw: 64px; --th-wheel: 104px; --th-mini: 96px; } }
+/* a phone held upright: Exit car is just its door icon, so the horn and Exit stay in the corner under the thumb and never reach towards the vehicle in the middle (the label comes back on a tablet) */
+@media (max-width: 599px) { .th .th-exit { width: var(--th-aux); padding: 0; justify-content: center; border-radius: 50%; } .th .th-exit span { display: none; } }
+/* a tablet, or any window that is both wide and tall */
+@media (min-width: 600px) and (min-height: 560px) {
+  .th { --th-mini: 150px; --th-wheel: 172px; --th-stick: 150px; --th-run: 96px; --th-pw: 92px; --th-gas-h: 132px; --th-brake-h: 104px; --th-aux: 48px; --th-info-w: 330px; }
+  .th-card { padding: 10px 14px; } .th-card-t b { font-size: 1rem; } .th-card-t span { font-size: 0.84rem; } .th-dir { width: 38px; height: 38px; }
+  .th .th-pedal { font-size: 0.95rem; } .th .th-pedal small { font-size: 0.62rem; } .th-speed b { font-size: 1.25rem; }
+}
+/* a laptop or desktop with a mouse: the keyboard drives, so the pads are smaller and the map is bigger */
+@media (min-width: 1024px) and (min-height: 640px) and (pointer: fine) {
+  .th { --th-mini: 176px; --th-wheel: 148px; --th-stick: 132px; --th-run: 84px; --th-pw: 80px; --th-gas-h: 112px; --th-brake-h: 88px; --th-aux: 44px; --th-info-w: 340px; }
+  .th .th-pedal { font-size: 0.86rem; } .th .th-pedal small { font-size: 0.56rem; }
+}
+/* a phone held sideways: very little height, so the map shrinks, the pedals sit in one row beside a column of horn and exit, and Cancel becomes just a cross beside the card */
+@media (max-height: 520px) and (orientation: landscape) {
+  .th { --th-mini: 92px; --th-wheel: 116px; --th-stick: 112px; --th-run: 72px; --th-pw: 72px; --th-gas-h: 92px; --th-brake-h: 76px; --th-aux: 44px; --th-info-w: 290px; }
+  .th-info { width: min(var(--th-info-w), calc(44vw - 66px), calc(100vw - var(--th-l) - var(--th-r) - var(--th-mini) - 24px)); } /* the card stops short of the middle of the screen */
+  .th-info { flex-direction: row; align-items: flex-start; gap: 6px; }
+  .th .th-cancel { flex: none; width: 40px; min-height: 40px; padding: 0; justify-content: center; } .th .th-cancel span { display: none; }
+  .th-card { min-height: 40px; padding: 6px 10px; } .th-dir { width: 28px; height: 28px; }
+  .th-side { gap: 14px; }
+  .th-pedals { grid-template-columns: auto repeat(2, var(--th-pw)); grid-template-areas: "aux brake gas"; }
+  .th-aux { flex-direction: column-reverse; align-items: center; gap: 8px; }
+  .th .th-exit { width: var(--th-aux); padding: 0; justify-content: center; border-radius: 50%; } .th .th-exit span { display: none; }
+  .th .th-pedal { padding-bottom: 8px; } .th-grip { top: 8px; gap: 4px; }
+}
+@media (max-height: 380px) and (orientation: landscape) {
+  .th { --th-mini: 72px; --th-wheel: 100px; --th-stick: 96px; --th-run: 64px; --th-pw: 66px; --th-gas-h: 80px; --th-brake-h: 66px; --th-aux: 44px; }
+  .th-side { display: flex; flex-direction: row-reverse; align-items: flex-start; gap: 8px; } /* the speed beside the map, not under it: there is no room under it */
+  .th-mini-hint, .th-speed small { display: none; } .th-card-t span { font-size: 0.72rem; }
+}
+@media (prefers-reduced-motion: reduce) { .th .th-pedal, .th-wheel, .th-dir { transition: none; } .th .th-keys { animation: none; } }
+
+/* contextual buttons in the middle of the lower screen (get in, close the door): they stand just above the stick / wheel */
+.th-act { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-b) + var(--th-stick) + 44px); display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; max-width: calc(100% - 24px); }
 .th .th-act-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 18px; border-radius: 999px; background: #ffd24a; color: #1a1500; font-size: 0.95rem; }
-.th .th-brake small { display: block; font-size: 0.56rem; font-weight: 700; letter-spacing: 0; opacity: 0.85; text-transform: none; margin-top: 2px; }
-.th-pedals { position: absolute; right: 18px; bottom: calc(var(--safe-b) + 28px); display: flex; align-items: flex-end; gap: 12px; }
-.th .th-gas { width: 78px; height: 110px; background: #17a34a; color: #fff; }
-.th .th-gas:hover:not(:disabled) { background: #17a34a; }
-.th .th-brake { width: 78px; height: 84px; background: #dc2626; color: #fff; }
-.th .th-brake:hover:not(:disabled) { background: #dc2626; }
-.th .th-horn { width: 52px; height: 52px; border-radius: 50%; margin-bottom: 4px; }
 .th-pre-scrim { position: fixed; inset: 0; z-index: 70; background: rgba(7, 10, 18, 0.6); display: grid; place-items: center; padding: 12px; }
 .th-pre { width: min(760px, 100%); background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 22px; overflow: hidden; display: grid; box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.7); }
 .th-pre header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 10px 18px; }
 .th-pre header b { font: 700 1.1rem var(--font-head); }
 .th-pre header .ghost { background: transparent; color: var(--muted); border: 0; width: 44px; height: 44px; padding: 0; border-radius: 12px; display: grid; place-items: center; }
-.th-pre canvas { width: 100%; height: auto; max-height: 62vh; aspect-ratio: 900 / 640; background: #eceee3; display: block; }
+.th-pre canvas { width: 100%; height: auto; max-height: min(62vh, calc(100dvh - 150px - var(--safe-b))); aspect-ratio: 900 / 640; object-fit: contain; background: #eceee3; display: block; }
 .th-pre footer { display: flex; align-items: center; gap: 10px; padding: 10px 18px 14px; font-size: 0.9rem; color: var(--muted); font-weight: 500; }
 .th-key { width: 42px; height: 8px; flex: none; border-radius: 9px; }
 .th-key.solid { background: #1a73e8; }
@@ -110,7 +202,7 @@ body[data-trip] .map-chrome { display: none !important; } /* the bottom bar is n
 .dock .card .go-there { display: inline-flex; gap: 8px; align-items: center; }
 .map-here { position: fixed; z-index: 20; left: 10px; top: calc(var(--safe-t) + 124px); max-width: min(70vw, 360px); font-size: 0.8rem; padding: 6px 12px; border-radius: 99px; background: rgba(13, 19, 33, 0.88); color: #fff; display: inline-flex; gap: 6px; align-items: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .map-here b { color: #f0c05a; }
-@media (max-width: 520px) { .th-mini { width: 124px; height: 124px; } .th-chip { top: calc(var(--safe-t) + var(--hud-h, 70px) + 146px); } .ts-mode small { font-size: 0.64rem; } }
+@media (max-width: 520px) { .ts-mode small { font-size: 0.64rem; } }
 
 /* ---- walking around inside (components/BuildingInside.js, lib3d/interiors/scene.js) ---- */
 .bi3 { position: fixed; inset: 0; z-index: 75; background: #0d1321; animation: bi-in 380ms ease; touch-action: none; }
@@ -215,15 +307,11 @@ body[data-trip] .map-chrome { display: none !important; } /* the bottom bar is n
 .stage[data-tags="1"] .bl:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 
 /* door and guidance controls */
-.th .th-opendoor { position: absolute; left: 50%; translate: -50% 0; transform: none; bottom: calc(var(--safe-b) + 176px); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4); animation: th-pop 0.2s ease-out; }
-.th .th-stop { position: absolute; left: 50%; translate: -50% 0; transform: none; bottom: calc(var(--safe-b) + 232px); display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px; border-radius: 999px; background: rgba(13, 19, 33, 0.88); color: #fff; border: 1px solid rgba(255, 255, 255, 0.35); font-size: 0.85rem; }
-.th .th-opendoor ~ .th-stop { bottom: calc(var(--safe-b) + 236px); }
-.th-way { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--safe-t) + var(--hud-h, 70px) + 214px); display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px); padding: 6px 14px 6px 8px; border-radius: 99px; background: rgba(13, 19, 33, 0.82); backdrop-filter: blur(10px); color: #fff; font-size: 0.85rem; white-space: nowrap; }
-.th-way i { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #2fe38a; color: #06210f; transition: transform 0.2s ease-out; }
-.th-way span { overflow: hidden; text-overflow: ellipsis; }
+.th .th-opendoor { position: absolute; left: 50%; translate: -50% 0; transform: none; bottom: calc(var(--safe-b) + var(--th-stick, 132px) + 44px); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4); animation: th-pop 0.2s ease-out; }
+.th .th-stop { position: absolute; left: 50%; translate: -50% 0; transform: none; bottom: calc(var(--safe-b) + var(--th-stick, 132px) + 100px); display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px; border-radius: 999px; background: rgba(13, 19, 33, 0.88); color: #fff; border: 1px solid rgba(255, 255, 255, 0.35); font-size: 0.85rem; }
+.th .th-opendoor ~ .th-stop { bottom: calc(var(--safe-b) + var(--th-stick, 132px) + 104px); }
 @keyframes th-pop { from { opacity: 0; scale: 0.92; } to { opacity: 1; scale: 1; } }
-@media (max-width: 520px) { .th-way { top: calc(var(--safe-t) + var(--hud-h, 70px) + 190px); } }
-@media (prefers-reduced-motion: reduce) { .th .th-opendoor { animation: none; } .th-way i { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .th .th-opendoor { animation: none; } }
 /* Stop walking / Open door / Go in: dark on hover too (white text stays readable), and they never shift away from the cursor (centred with `translate`, pressed with `scale`) */
 .th .th-stop, .th .th-stop:hover:not(:disabled), .th .th-stop:focus-visible { background: rgba(13, 19, 33, 0.94); color: #fff; border: 1px solid rgba(255, 255, 255, 0.35); }
 .th .th-stop:hover:not(:disabled) { background: #1b2540; border-color: rgba(255, 255, 255, 0.6); }
@@ -253,3 +341,12 @@ body[data-nav="on"] .ts-scroll { padding-bottom: 14px; }
 .pa-acts .pa-chip[data-risk="risky"] svg { color: var(--danger-text); }
 .pa-acts .pa-chip[data-risk="risky"][aria-pressed="true"] { background: #ff8a94; border-color: #ff8a94; color: #2a0a0e; }
 .pa-acts .pa-chip[data-risk="risky"][aria-pressed="true"] svg { color: #2a0a0e; }
+
+/* on a phone held sideways the contextual buttons (Get in, Close door, Open door, Stop walking) stand beside the walking stick, not above it, where there is no height to spare.
+   Last in the file on purpose: the rules above set their normal place and this must win. */
+@media (max-height: 520px) and (orientation: landscape) {
+  .th .th-act, .th .th-opendoor, .th .th-stop { left: calc(max(22px, env(safe-area-inset-left, 0px)) + var(--th-stick) + 16px); right: auto; transform: none; translate: none; justify-content: flex-start; max-width: calc(100vw - var(--th-stick) - var(--th-run) - 96px); bottom: calc(var(--safe-b) + 28px + var(--th-stick) / 2 - 24px); }
+  .th .th-act { flex-wrap: nowrap; gap: 8px; } .th .th-act .th-act-btn { padding: 0 14px; font-size: 0.88rem; white-space: nowrap; }
+  .th .th-stop { bottom: calc(var(--safe-b) + 28px + var(--th-stick) / 2 + 36px); }
+  .th .th-opendoor ~ .th-stop { bottom: calc(var(--safe-b) + 28px + var(--th-stick) / 2 + 40px); }
+}

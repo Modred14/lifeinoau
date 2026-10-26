@@ -24,7 +24,9 @@ import { createAvatar } from "./avatar/loadAvatar.js";
 import { lookKey } from "../lib/look.js";
 import { paintBase, drawMini, drawPreview } from "./minimap.js";
 import { createGuide } from "./tripguide.js";
-import { CAM, PITCH, clamp, ease, frame, clearBack, followBack, zoomByPinch, zoomByWheel } from "./tripcam.js";
+import { CAM, PITCH, clamp, ease, frame, clearBack, followBack, zoomByPinch, zoomByWheel, angDiff, followYaw } from "./tripcam.js";
+import { createKeys, isActKey } from "./tripkeys.js";
+import { stepKeySteer } from "./keysteer.js";
 import { attachTripPointer } from "./tripinput.js";
 
 let netCache = null;
@@ -37,7 +39,6 @@ export function resolvePlace(data, id) {
 }
 
 const smoothK = (x) => x * x * (3 - 2 * x);
-const angDiff = (a, b) => ((b - a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
 const yawOf = (hx, hz) => Math.atan2(hx, hz);
 const lerp = (a, b, k) => a + (b - a) * k;
 
@@ -159,8 +160,11 @@ export async function startTrip(env, o) {
   camPt.x = P.x; camPt.z = P.z; WK.hx = Math.sin(camYaw + Math.PI); WK.hz = Math.cos(camYaw + Math.PI);
 
   // ---- controls: keys (cleared when the window loses focus, so a key never sticks), and dragging the picture to look around ----
-  const keys = new Set(), kd = (e) => { if (e.target?.closest?.("input,textarea")) return; keys.add(e.key.toLowerCase()); if (e.key === " " || e.key.startsWith("Arrow")) e.preventDefault(); }, ku = (e) => keys.delete(e.key.toLowerCase()), blur = () => keys.clear();
-  window.addEventListener("keydown", kd); window.addEventListener("keyup", ku); window.addEventListener("blur", blur); disposers.push(() => { window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); window.removeEventListener("blur", blur); });
+  // lib3d/tripkeys.js: keys are told apart by where they are on the keyboard (so W A S D work on any layout), a shortcut such as Cmd+D is never a control, letting go of Cmd drops everything
+  // held (a Mac sends no key-up for the others while it is down), and losing focus or hiding the tab clears the lot, so a key can never stay "pressed" and steer the car by itself.
+  const kb = createKeys(), kd = (e) => { if (kb.press(e)) e.preventDefault(); }, ku = (e) => kb.release(e), blur = () => kb.clear(), hide = () => { if (document.hidden) kb.clear(); };
+  window.addEventListener("keydown", kd); window.addEventListener("keyup", ku); window.addEventListener("blur", blur); document.addEventListener("visibilitychange", hide);
+  disposers.push(() => { window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); window.removeEventListener("blur", blur); document.removeEventListener("visibilitychange", hide); });
   // Looking round, zooming and (on a touch screen, while driving) swiping to steer all come through lib3d/tripinput.js: every finger is tracked by its own id on the canvas only, so a finger on
   // the on-screen stick or a button is never also read as a camera drag, a second finger pinches instead of rotating, and the orbit controls are switched off for the whole trip (stage.setManual).
   const inVehNow = () => !!vehicle && ["ride", "drive", "paying"].includes(F.phase);
@@ -173,16 +177,19 @@ export async function startTrip(env, o) {
     wheel: (dy) => { if (inVehNow()) zoomV = zoomByWheel(zoomV, dy, "veh"); else zoomW = zoomByWheel(zoomW, dy, "walk"); },
   });
   disposers.push(() => pointer.detach());
-  const K = (a, b) => (keys.has(a) || keys.has(b) ? 1 : 0), driving = () => F.phase === "drive";
+  const driving = () => F.phase === "drive";
   // One-shot buttons (the HUD buttons and the E / F keys) are read once and cleared every frame, so a press is never seen twice and never lingers into a later phase.
   const taken = (n) => { const v = !!input[n]; input[n] = false; return v; };
-  const keyHit = new Set(), kh = (e) => { if (e.repeat || e.target?.closest?.("input,textarea")) return; const k = e.key.toLowerCase(); if (k === "e" || k === "f") keyHit.add("act"); };
+  const keyHit = new Set(), kh = (e) => { if (isActKey(e)) keyHit.add("act"); };
   window.addEventListener("keydown", kh); disposers.push(() => window.removeEventListener("keydown", kh));
-  const read = () => {
-    const drive = driving(), afoot = F.phase === "afoot", act = keyHit.delete("act"), exitBtn = taken("exit"), enterBtn = taken("enter"), closeBtn = taken("close"), doorBtn = taken("door"), goInBtn = taken("goin"), stopBtn = taken("stop"), atDoor = F.phase === "door";
-    const wheel = Math.max(-1, Math.min(1, (input.steer ?? 0) + K("d", "arrowright") - K("a", "arrowleft")));
-    return { fwd: Math.max(K("w", "arrowup"), input.jy > 0 ? input.jy : 0), back: Math.max(K("s", "arrowdown"), input.jy < 0 ? -input.jy : 0), right: Math.max(K("d", "arrowright"), input.jx > 0 ? input.jx : 0) - Math.max(K("a", "arrowleft"), input.jx < 0 ? -input.jx : 0), run: keys.has("shift") || !!input.run,
-      gas: drive ? Math.max(K("w", "arrowup"), input.gas ?? 0) : 0, brake: drive ? Math.max(K("s", "arrowdown") || K(" ", " "), input.brake ?? 0) : 0, steer: drive ? wheel : 0,
+  // The keys steer through lib3d/keysteer.js: a key moves the steering towards full lock at a limited rate and lets it back to straight, like a wheel, instead of throwing it to full lock.
+  let keySteer = 0;
+  const read = (dt = 0) => {
+    const kk = kb.read(), drive = driving(), afoot = F.phase === "afoot", act = keyHit.delete("act"), exitBtn = taken("exit"), enterBtn = taken("enter"), closeBtn = taken("close"), doorBtn = taken("door"), goInBtn = taken("goin"), stopBtn = taken("stop"), atDoor = F.phase === "door";
+    keySteer = drive ? stepKeySteer(keySteer, kk.steer, dt) : 0;
+    const wheel = Math.max(-1, Math.min(1, (input.steer ?? 0) + keySteer));   // the on-screen wheel and the keys add up; +1 is a right turn
+    return { fwd: Math.max(kk.up, input.jy > 0 ? input.jy : 0), back: Math.max(kk.down, input.jy < 0 ? -input.jy : 0), right: Math.max(kk.right, input.jx > 0 ? input.jx : 0) - Math.max(kk.left, input.jx < 0 ? -input.jx : 0), run: !!kk.run || !!input.run,
+      gas: drive ? Math.max(kk.up, input.gas ?? 0) : 0, brake: drive ? Math.max(kk.down, kk.space, input.brake ?? 0) : 0, steer: drive ? wheel : 0,
       exit: drive && (exitBtn || act), enter: afoot && (enterBtn || (act && F.canEnter)), close: afoot && (closeBtn || (act && !F.canEnter && F.canClose)),
       door: atDoor && (doorBtn || (act && F.door === "closed")), goIn: atDoor && (goInBtn || (act && F.door === "open")), stop: stopBtn };   // Open Door / Go in / stop the automatic walk: the buttons, and E or F for the door
   };
@@ -234,7 +241,7 @@ export async function startTrip(env, o) {
     // the framing eases between "on foot" and "in the vehicle" (about half a second), so getting in or out never makes the camera jump
     vehMix = ease(vehMix, inVeh && v ? 1 : 0, 2.6, dt); const m = vehMix, tgt = v ? { x: lerp(P.x, v.x, m), z: lerp(P.z, v.z, m) } : P;
     const headYaw = v ? yawOf2(v.hx, v.hz) + Math.PI : camYaw; // camera yaw: the direction from the target back to the camera
-    if (inVeh && v) { const d = angDiff(camYaw, headYaw); camYaw += d * (1 - Math.exp(-dt * (F.phase === "ride" ? 5 : 2.6 + Math.min(1.6, sp * 0.1)))); }   // behind the car, following its turns a moment late rather than snapping with them
+    if (inVeh && v) camYaw = followYaw(camYaw, headYaw, sp, dt, F.phase === "ride");   // behind the car, following its turns a moment late rather than snapping with them (tripcam.js: always the short way round, never wound up)
     else if (["alight", "exit", "door", "enter", "intro", "board", "approach", "reenter"].includes(F.phase) && WK.mode !== "manual" && !pointer.active) { const want = yawOf2(P.hx, P.hz) + Math.PI, d = angDiff(camYaw, want); camYaw += d * (1 - Math.exp(-dt * 1.6)); }
     // in a vehicle, looking round springs back to the road ahead; on foot the view stays exactly where the player put it (it never swings by itself while they steer)
     if (inVeh && !pointer.active && time - userAt > 1.2) { userYaw *= Math.exp(-dt * 2.2); userPitch *= Math.exp(-dt * 1.4); }
@@ -277,7 +284,7 @@ export async function startTrip(env, o) {
   const off = stage.onFrame((tm, dt0) => {
     if (!alive) return; const dt = Math.min(dt0, 0.1); time += dt;
     // what the person is asking for: a direction in the world from the stick / keys and where the camera looks (the same for walking and for steering the car)
-    const inp = read(), viewYaw = camYaw + (inVehNow() ? userYaw : 0), f = { x: Math.sin(viewYaw + Math.PI), z: Math.cos(viewYaw + Math.PI) }, // the stick is relative to the view the player SEES
+    const inp = read(dt), viewYaw = camYaw + (inVehNow() ? userYaw : 0), f = { x: Math.sin(viewYaw + Math.PI), z: Math.cos(viewYaw + Math.PI) }, // the stick is relative to the view the player SEES
        r = { x: -f.z, z: f.x }, ax = (inp.fwd - inp.back) * f.x + inp.right * r.x, az = (inp.fwd - inp.back) * f.z + inp.right * r.z, m = Math.min(1, Math.hypot(ax, az));
     traffic.update(dt);
     if (inp.stop) flow.stopAuto(); if (inp.door) flow.pressDoor(); if (inp.goIn) flow.enterNow();
@@ -292,7 +299,7 @@ export async function startTrip(env, o) {
     if (gd.show) { rb.mesh.visible = true; if (gd.rev !== rbRev || time - rbAt > (gd.kind === "drive" ? 0.12 : 0.2)) { rbRev = gd.rev; rbAt = time; rb.set(gd.pts, gd.s, gd.kind === "walk" ? 1.3 : 2.4, gd.kind === "walk" ? "#4aa8ff" : "#2fe38a"); } rb.tex.offset.y -= dt * 1.6; } else rb.mesh.visible = false;
     const live = { x: pos.x, z: pos.z, hx: pos.hx, hz: pos.hz, route: { pts: gd.pts, len: gd.len }, mode: gd.kind === "walk" ? "trek" : "drive", dest: { x: B.front.x, z: B.front.z } }, mini = o.miniCanvas?.(), prev = o.previewCanvas?.();
     if (mini) drawMini(mini, base, live); if (prev) drawPreview(prev, base, live);
-    if (time - lastState > 0.1) { lastState = time; o.onState?.({ phase: F.phase, mode, auto, eta: F.eta, left: F.eta, remain: Math.round(flow.remainMetres()), speed: Math.round(Math.abs(F.speed ?? 0) * 3.6), canHorn: mode === "car" && F.phase === "drive", ownCar: mode === "car" && !plan.driven, canExit: !!F.canExit, exiting: !!F.exiting, canEnter: !!F.canEnter, canClose: !!F.canClose, steerAngle: flow.own ? flow.own.steer : 0, estimate: plan.secs, notice: F.notice, routeKind: gd.kind, routeLen: Math.round(gd.len), settling: F.pay === "pending" && ["door", "enter"].includes(F.phase), walking: F.phase === "approach" && WK.mode, autoWalk: WK.mode === "auto", parts: plan.parts,
+    if (time - lastState > 0.1) { lastState = time; o.onState?.({ phase: F.phase, mode, auto, eta: F.eta, left: F.eta, remain: Math.round(flow.remainMetres()), speed: Math.round(Math.abs(F.speed ?? 0) * 3.6), canHorn: mode === "car" && F.phase === "drive", ownCar: mode === "car" && !plan.driven, canExit: !!F.canExit, exiting: !!F.exiting, canEnter: !!F.canEnter, canClose: !!F.canClose, steerAngle: flow.own ? flow.own.steer : 0, gear: flow.own ? (flow.own.reversing || flow.own.v < -0.05 ? "R" : "D") : "", estimate: plan.secs, notice: F.notice, routeKind: gd.kind, routeLen: Math.round(gd.len), settling: F.pay === "pending" && ["door", "enter"].includes(F.phase), walking: F.phase === "approach" && WK.mode, autoWalk: WK.mode === "auto", parts: plan.parts,
         door: F.door, hasDoor: !!(B.building && enterable), canOpen: !!F.canOpen, canGoIn: !!F.canGoIn, auto: !!F.auto, to: curTo, turn: F.phase === "drive" ? turnTo() : null }); }
   });
 
