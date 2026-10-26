@@ -131,30 +131,37 @@ body[data-trip] .map-chrome { display: none !important; } /* the bottom bar is n
 /* ---- building activities (components/ActivityLayer.js): a folded card; unfold it and START is the one big button ---- */
 .th .bi3-use.act { background: var(--green); color: #fff; }
 .th .bi3-use.act:hover:not(:disabled) { background: #1a9449; }
-.bi3-act { position: absolute; left: 50%; bottom: calc(var(--safe-b) + 40px); transform: translateX(-50%); width: min(420px, calc(100% - 24px)); background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 14px 36px -10px rgba(0, 0, 0, 0.7); display: grid; overflow: hidden; z-index: 5; animation: bi3-rise 0.18s ease-out; }
+.bi3-act { position: absolute; left: 50%; bottom: calc(var(--safe-b) + 40px); transform: translateX(-50%); width: min(420px, calc(100% - 24px)); background: linear-gradient(180deg, rgba(63, 208, 138, 0.09), rgba(63, 208, 138, 0) 42%), var(--surface); color: var(--text); border: 1px solid rgba(63, 208, 138, 0.22); border-radius: 22px; box-shadow: 0 14px 36px -10px rgba(0, 0, 0, 0.7); display: grid; overflow: hidden; z-index: 5; animation: bi3-rise 0.18s ease-out; }
 @keyframes bi3-rise { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
-.bi3-act-h { position: relative; display: flex; align-items: center; gap: 4px; padding-right: 8px; }
-.bi3-act .bi3-act-tg { flex: 1; min-width: 0; min-height: 60px; padding: 10px 8px 10px 14px; justify-content: flex-start; gap: 12px; border: 0; border-radius: 0; background: transparent; color: var(--text); text-align: left; }
-.bi3-act .bi3-act-tg:hover:not(:disabled) { background: rgba(255, 255, 255, 0.04); border: 0; }
-.bi3-act-tg > svg { color: var(--green-text); flex: none; }
-.bi3-act-tg b { flex: 1; font: 600 1.02rem var(--font-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bi3-chev, .pa-chev { display: grid; place-items: center; color: var(--muted); transition: transform var(--t-base) var(--ease); }
-.bi3-act-tg[aria-expanded="true"] .bi3-chev { transform: rotate(180deg); }
+.bi3-act-h { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 8px 4px 14px; }
+.bi3-act-ico { flex: none; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; background: rgba(63, 208, 138, 0.16); color: var(--green-text); box-shadow: inset 0 0 0 1px rgba(63, 208, 138, 0.25); }
+.bi3-act-title { flex: 1; min-width: 0; font: 700 1.08rem var(--font-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pa-chev { display: grid; place-items: center; color: var(--muted); transition: transform var(--t-base) var(--ease); }
 .bi3-act .bi3-x { display: inline-grid; place-items: center; flex: none; width: 44px; min-height: 44px; height: 44px; padding: 0; border-radius: 12px; background: transparent; border: 0; color: var(--muted); }
 .bi3-act .bi3-x:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); border: 0; color: var(--text); }
-.bi3-act-bar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--green-text); transition: width 0.3s linear; }
-.bi3-act-b { display: grid; gap: 12px; padding: 2px 14px 14px; animation: bi3-fade 0.18s ease-out; }
+.bi3-act-b { display: grid; gap: 14px; padding: 6px 16px 16px; animation: bi3-fade 0.18s ease-out; }
 @keyframes bi3-fade { from { opacity: 0; } }
 .bi3-act-sub { margin: 0; font-size: 0.88rem; line-height: 1.45; color: var(--muted); }
 .bi3-act-why { margin: 0; font-size: 0.86rem; color: var(--gold-text); background: rgba(242, 184, 75, 0.1); border: 1px solid rgba(242, 184, 75, 0.3); border-radius: 12px; padding: 9px 12px; }
 .bi3-act-done { margin: 0; font-size: 0.86rem; color: var(--green-text); background: rgba(63, 208, 138, 0.1); border: 1px solid rgba(63, 208, 138, 0.3); border-radius: 12px; padding: 9px 12px; }
-.bi3-act-doing { margin: 0; font-size: 0.9rem; color: var(--muted); }
+.bi3-act-doing { margin: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--muted); }
+.bi3-act-doing svg { color: var(--green-text); }
+/* what the activity does, as chips */
+.bi3-fx { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.bi3-fx li { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; font: 600 0.78rem var(--font-ui); background: rgba(255, 255, 255, 0.07); color: #cfd8e6; }
+.bi3-fx li[data-k="gain"] { background: rgba(63, 208, 138, 0.14); color: var(--green-text); }
+.bi3-fx li[data-k="loss"] { background: rgba(255, 77, 94, 0.13); color: #ff9aa3; }
+.bi3-fx li[data-k="time"] { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+/* while it runs: what you are doing, the big number, the bar */
+.bi3-live { display: grid; gap: 10px; }
+.bi3-live-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 0.95rem; color: var(--muted); }
+.bi3-live-row b { font: 800 1.7rem/1 var(--font-head); color: var(--text); font-variant-numeric: tabular-nums; }
 .bi3-act-doing b { color: var(--text); }
 .bi3-act-sel { display: grid; gap: 6px; font-size: 0.8rem; color: var(--muted); }
 .bi3-act-sel select { min-height: 48px; border-radius: 12px; background: var(--raised); color: var(--text); border: 1px solid var(--line); padding: 0 12px; font: inherit; }
 .bi3-act-sel option { color: #111; }
 .bi3-act-btns { display: grid; gap: 8px; }
-.bi3-act .bi3-b { width: 100%; min-height: 46px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-weight: 600; }
+.bi3-act .bi3-b { width: 100%; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-weight: 600; }
 .bi3-act .bi3-b:hover:not(:disabled) { background: rgba(255, 255, 255, 0.05); color: var(--text); border-color: rgba(255, 255, 255, 0.28); }
 .bi3-act .bi3-b.go, .bi3-act .bi3-b.go:hover:not(:disabled) { min-height: 56px; background: var(--green); border-color: transparent; color: #fff; font: 700 1.08rem var(--font-head); letter-spacing: 0.01em; }
 .bi3-act .bi3-b.go:hover:not(:disabled) { background: #1a9449; }
@@ -163,11 +170,12 @@ body[data-trip] .map-chrome { display: none !important; } /* the bottom bar is n
 .bi3-act .bi3-b.alt { min-height: 44px; border-color: transparent; color: var(--danger-text); }
 .bi3-act .bi3-b.alt:hover:not(:disabled) { background: rgba(255, 128, 128, 0.1); border-color: transparent; color: var(--danger-text); }
 .bi3-b:disabled { opacity: 0.45; }
-.bi3-prog { height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
-.bi3-prog i, .bi3-run i { display: block; height: 100%; background: var(--green-text); transition: width 0.3s linear; }
+.bi3-prog { height: 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.bi3-prog i, .bi3-run i { display: block; height: 100%; background: linear-gradient(90deg, #2bb673, var(--green-text)); border-radius: inherit; transition: width 0.3s linear; }
+.bi3-prog i { box-shadow: 0 0 12px rgba(63, 208, 138, 0.55); }
 .bi3-run { position: absolute; left: 50%; bottom: calc(var(--safe-b) + 150px); transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 10px 16px 14px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--text); font-weight: 600; overflow: hidden; z-index: 4; }
 .bi3-run i { position: absolute; left: 0; bottom: 0; height: 3px; }
-@media (prefers-reduced-motion: reduce) { .bi3-act, .bi3-act-b, .pa-act-b { animation: none; } .bi3-prog i, .bi3-run i, .bi3-act-bar, .bi3-chev, .pa-chev { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .bi3-act, .bi3-act-b, .pa-act-b { animation: none; } .bi3-prog i, .bi3-run i, .pa-chev { transition: none; } }
 
 /* ---- "what you can do here" (components/PlaceActivities.js): used in the travel sheet and the map card ---- */
 .pa-acts { display: grid; gap: 10px; }

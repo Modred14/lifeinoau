@@ -16,11 +16,13 @@ import { Icon } from "./Icon";
 
 const NAMES = { energy: "energy", health: "health", happiness: "happiness", academics: "academics", popularity: "popularity" };
 const chips = (a = {}) => Object.entries(a).filter(([k, v]) => NAMES[k] && v).map(([k, v]) => `${v > 0 ? "+" : "−"}${Math.abs(v)} ${NAMES[k]}`);
+/** "−2 energy · +2 happiness · 15s" -> small coloured chips (gain, loss, time, anything else). */
+const fx = (sub = "") => String(sub).split(" · ").filter(Boolean).map((t) => ({ t, k: /^\+/.test(t) ? "gain" : /^[−-]/.test(t) ? "loss" : /^\d+\s?s$/.test(t) ? "time" : "info" }));
 const needsCourse = (k) => k === "course_attend" || k === "course_study" || k === "course_test";
 
 /** `api` is a ref to the 3D scene, `rings` the activity rings drawn in it, `open` the ring whose panel is showing, `onClose` closes it, `onLeave` leaves the building. */
 export default function ActivityLayer({ api, rings, open, onClose, onLeave, ready, onState, onRun, controlRef }) {
-  const [st, setSt] = useState(null), [run, setRun] = useState(null), [busy, setBusy] = useState(false), [course, setCourse] = useState(""), [tick, setTick] = useState(() => serverTime()), [done, setDone] = useState(null), [fold, setFold] = useState(false); // the panel opens expanded; the person can fold it with the arrow. (was: opens folded; the person unfolds it
+  const [st, setSt] = useState(null), [run, setRun] = useState(null), [busy, setBusy] = useState(false), [course, setCourse] = useState(""), [tick, setTick] = useState(() => serverTime()), [done, setDone] = useState(null);
   const runRef = useRef(null), finishing = useRef(false), starting = useRef(false), e0 = useRef(0); // e0: energy when the run began (for the rising bar while sleeping)
   const pos = () => { const s = api.current?.state; return s ? { x: s.x, z: s.z, floor: s.floor } : null; };
   const ring = (id) => rings.find((r) => r.activity === id);
@@ -77,7 +79,6 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
 
   useEffect(() => () => { if (runRef.current) fetch("/api/activity", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "cancel" }) }).catch(() => {}); }, []); // leaving the building ends a running activity
 
-  useEffect(() => { setFold(false); }, [open?.activity]); // each ring's panel starts expanded
   const info = open ? st?.hubs?.find((h) => h.id === open.activity) : null;
   const begin = async (param) => {
     if (!info || busy || run || starting.current) return; const p = pos(); if (!p) { toast.error("Your position is not known yet. Walk a step and try again."); return; }
@@ -117,21 +118,22 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
       {open && (
         <div className="bi3-act" role="dialog" aria-label={open.label}>
           <div className="bi3-act-h">
-            <button type="button" className="bi3-act-tg" aria-expanded={!fold} onClick={() => setFold((f) => !f)} data-sound="none">
-              <Icon name={info?.icon ?? "sparkle"} size={22} weight="fill" /><b>{open.label}</b>{info?.kind === "hustle_risky" && <i className="bp-risky">RISKY</i>}<span className="bi3-chev" aria-hidden="true"><Icon name="down" size={16} /></span>
-            </button>
+            <span className="bi3-act-ico"><Icon name={info?.icon ?? "sparkle"} size={22} weight="fill" /></span>
+            <b className="bi3-act-title">{open.label}</b>{info?.kind === "hustle_risky" && <i className="bp-risky">RISKY</i>}
             <button type="button" className="bi3-x" aria-label="Close" onClick={onClose} data-sound="none"><Icon name="close" size={18} /></button>
-            {run && <i className="bi3-act-bar" style={{ width: `${Math.min(100, (1 - sec / total) * 100)}%` }} />}
           </div>
-          {!fold && <div className="bi3-act-b">
+          <div className="bi3-act-b">
           {!st ? <p className="mut">Checking…</p> : !info ? <p className="mut">That is not available right now.</p> : (
             <>
-              <p className="bi3-act-sub">{info.sub}</p>
+              <ul className="bi3-fx" aria-label="What it does">{fx(info.sub).map((f, i) => <li key={i} data-k={f.k}>{f.k === "time" && <Icon name="timer" size={13} />}{f.t}</li>)}</ul>
               {info.kind === "hustle_risky" && <p className="bi3-act-why" role="note"><i className="bp-risky">RISKY</i> You may be caught: cash is seized and you serve time in Floor O (N-QRS Custody).</p>}
               {run ? (
                 <>
-                  <div className="bi3-prog" aria-label="Progress"><i style={{ width: `${Math.min(100, (1 - sec / total) * 100)}%` }} /></div>
-                  <p className="bi3-act-doing">{info.doing} {info.full ? <b>Energy {energyNow}%</b> : <b>{sec}s</b>} · stay on the ring</p>
+                  <div className="bi3-live">
+                    <div className="bi3-live-row"><span>{info.doing}</span><b>{info.full ? `Energy ${energyNow}%` : `${sec}s`}</b></div>
+                    <div className="bi3-prog" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(prog * 100)} aria-label="Progress"><i style={{ width: `${Math.min(100, prog * 100)}%` }} /></div>
+                    <p className="bi3-act-doing"><Icon name="pin" size={14} weight="fill" /> Stay on the ring</p>
+                  </div>
                   <div className="bi3-act-btns"><button type="button" className="bi3-b" onClick={cancel} data-sound="none">Stop</button></div>
                 </>
               ) : (
@@ -147,7 +149,7 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
               )}
             </>
           )}
-          </div>}
+          </div>
         </div>
       )}
     </>
