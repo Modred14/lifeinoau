@@ -3,7 +3,7 @@
 // The rules (cost, time, limits) and the position check are on the server (lib/activityService.js); this only shows them and asks. It reports where
 // you stand every few seconds, and stops the activity the moment you walk away from the ring.
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { call, naira, notifyError } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { confirmAction } from "@/lib/confirm";
@@ -26,6 +26,14 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
   const runRef = useRef(null), finishing = useRef(false), starting = useRef(false), e0 = useRef(0); // e0: energy when the run began (for the rising bar while sleeping)
   const pos = () => { const s = api.current?.state; return s ? { x: s.x, z: s.z, floor: s.floor } : null; };
   const ring = (id) => rings.find((r) => r.activity === id);
+  // the card is docked on the bottom bar like the activities panel: tell the room how tall it is so the stick and buttons stay clear of it
+  const card = useRef(null);
+  useLayoutEffect(() => {
+    const el = card.current, scene = el?.closest(".bi3"); if (!el || !scene) return;
+    const m = () => scene.style.setProperty("--bp-h", `${Math.round(el.getBoundingClientRect().height)}px`); m();
+    const ro = typeof ResizeObserver === "function" ? new ResizeObserver(m) : null; ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [!!open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refresh = useCallback(async () => {
     const r = await call("/api/activity"); if (r.failed) { onState?.({ failed: true, error: r.error }); return null; }
@@ -62,6 +70,7 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
         const text = r.note ?? r.message ?? "Done."; setDone({ text, bits, capped: r.capped?.length > 0, bad: !!r.caught });
         toast[r.caught ? "error" : "success"](`${text}${bits.length ? " " + bits.join(" · ") : ""}`, r.earnedKobo && r.earnedKobo !== "0" ? { sound: "coin" } : undefined);
         game.refresh();
+        onClose?.(); // done: the card hands the dock back to the activities panel (the result is in the toast)
       }
       refresh();
     } finally { finishing.current = false; }
@@ -107,7 +116,7 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
     autoed.current = open; if (info.kind !== "stats" && info.kind !== "hustle_safe") return;
     begin();
   }, [open, st, info, run, busy]); // eslint-disable-line react-hooks/exhaustive-deps
-  const cancel = async () => { await call("/api/activity", { op: "cancel" }); stop("You stopped. A fee already paid is not refunded."); refresh(); };
+  const cancel = async () => { await call("/api/activity", { op: "cancel" }); stop("You stopped. A fee already paid is not refunded."); refresh(); onClose?.(); };
 
   const sec = run ? Math.max(0, Math.ceil((run.endsAt - tick) / 1000)) : 0, total = run ? Math.max(1, Math.round((run.endsAt - run.startedAt) / 1000)) : 1;
   const prog = run ? Math.min(1, 1 - sec / total) : 0, energyNow = Math.round(e0.current + (100 - e0.current) * prog); // sleeping: energy climbs evenly to 100%
@@ -116,7 +125,7 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
     <>
       {run && !open && <div className="bi3-run" role="status"><Icon name={runInfo?.icon ?? "timer"} size={18} /><span>{runInfo?.doing ?? "Working…"} {runInfo?.full ? `Energy ${energyNow}%` : `${sec}s`}</span><i style={{ width: `${Math.min(100, (1 - sec / total) * 100)}%` }} /></div>}
       {open && (
-        <div className="bi3-act" role="dialog" aria-label={open.label}>
+        <div className="bi3-act" ref={card} role="dialog" aria-label={open.label}>
           <div className="bi3-act-h">
             <span className="bi3-act-ico"><Icon name={info?.icon ?? "sparkle"} size={22} weight="fill" /></span>
             <b className="bi3-act-title">{open.label}</b>{info?.kind === "hustle_risky" && <i className="bp-risky">RISKY</i>}

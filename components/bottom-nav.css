@@ -71,12 +71,10 @@ body[data-nav="on"] .sx { padding-bottom: var(--safe-b); }
 body[data-nav="on"] .sx-bar-fixed { bottom: var(--safe-b); padding-bottom: 12px; }
 body[data-nav="on"] .sx-toast { bottom: calc(20px + var(--safe-b)); }
 
-/* ---- docked: the building activities panel sits right above the bar and the two are ONE surface ----
-   While <body data-dock="on"> the bar stops floating: it goes flush with the bottom edge, takes the panel's width and background, keeps only the
-   side borders, and draws no top edge (the panel draws the single top border). The device's bottom inset becomes the bar's own padding, and the
-   gap that the floating bar used to leave is no longer part of the band the other layers must clear. */
-body[data-dock="on"] { --nav-gap: 0px; --nav-band: var(--nav-bar-h); }
+/* ---- docked: the activities panel (or the running-activity card) sits right on top of the bar and the two are ONE surface ----
+   While <body data-dock="on"> the bar keeps its lifted position (same gap from the bottom edge as the floating bar) and its width, but joins the
+   layer above it: same background, side and bottom borders only, square top corners and no top edge (the panel / card draws the single top border). */
 body[data-dock="on"] .nav {
-  bottom: 0; width: min(560px, 100%); box-sizing: border-box; padding-bottom: calc(6px + var(--safe-b));
-  background: var(--bp-bg); border: 0 solid var(--bp-line); border-width: 0 1px; border-radius: 0; box-shadow: none;
+  box-sizing: border-box; background: var(--bp-bg); border: 0 solid var(--bp-line); border-width: 0 1px 1px;
+  border-radius: 0 0 calc(var(--nav-bar-h) / 2) calc(var(--nav-bar-h) / 2); box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.75);
 }

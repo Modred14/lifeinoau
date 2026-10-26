@@ -20,16 +20,15 @@ const ON_RING = 0.3; // metres: closer than this to the centre of a ring counts 
 /** One activity as a compact tile in the horizontal rail: icon, name, what it gives, how long. Tapping it walks you to where it is done. */
 function Tile({ c, state, onGo }) {
   const parts = String(c.summary ?? "").split(" · ").filter(Boolean), time = `${c.seconds}s`;
-  const effects = parts.filter((x) => x !== time && x !== c.price).join(" · ");
+  const effects = parts.filter((x) => x !== time).join(" · ");
   return (
     <button type="button" className="bp-tile" data-state={state} data-risk={c.risk} aria-disabled={state === "unavailable" ? "true" : undefined} onClick={onGo} data-sound="none">
-      <span className="bp-ico"><Icon name={c.icon} size={22} weight="fill" /></span>
+      <span className="bp-top">
+        <span className="bp-ico"><Icon name={c.icon} size={20} weight="fill" /></span>
+        <span className="bp-chipm"><Icon name="timer" size={13} /> {time}</span>
+      </span>
       <b className="bp-tile-t">{c.label}</b>
       {effects && <small className="bp-tile-s">{effects}</small>}
-      <span className="bp-meta">
-        <span className="bp-chipm"><Icon name="timer" size={13} /> {time}</span>
-        {c.price && <span className="bp-chipm" data-k="price">{c.price}</span>}
-      </span>
     </button>
   );
 }
@@ -65,20 +64,21 @@ export default function BuildingPanel({ place, rings, state, api, ready, runHubI
     const el = root.current, scene = el?.closest(".bi3"), nav = document.querySelector(".nav");
     const measure = () => {
       if (!el) return;
-      el.style.setProperty("--bp-nav-h", `${Math.round(nav?.getBoundingClientRect().height ?? 0)}px`);
-      scene?.style.setProperty("--bp-h", `${Math.round(el.getBoundingClientRect().height)}px`);
+      // the bar is lifted off the bottom edge, so the dock sits on the bar's TOP edge (its height plus the gap under it); the scene gets it so the activity card docks at the same place
+      scene?.style.setProperty("--bp-nav-h", `${Math.max(0, Math.round(window.innerHeight - (nav?.getBoundingClientRect().top ?? window.innerHeight)))}px`);
+      if (!el.hidden) scene?.style.setProperty("--bp-h", `${Math.round(el.getBoundingClientRect().height)}px`); // hidden while the activity card shows: the card reports its own height
     };
     measure();
     const ro = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
     if (ro) { if (el) ro.observe(el); if (nav) ro.observe(nav); }
     window.addEventListener("resize", measure); window.addEventListener("orientationchange", measure);
-    return () => { delete document.body.dataset.dock; ro?.disconnect(); window.removeEventListener("resize", measure); window.removeEventListener("orientationchange", measure); scene?.style.removeProperty("--bp-h"); };
+    return () => { delete document.body.dataset.dock; ro?.disconnect(); window.removeEventListener("resize", measure); window.removeEventListener("orientationchange", measure); scene?.style.removeProperty("--bp-h"); scene?.style.removeProperty("--bp-nav-h"); };
   }, []);
 
   // While we walk, the panel folds to its compact bar so the character, the room and the controls stay in view. It opens again by itself afterwards.
   const busy = !!walk || !!ringOpen || !!running;
   const solo = !walk && (!!ringOpen || !!running); // the activity card in the room (ActivityLayer) shows this on its own, so the panel steps aside: one card, not two
-  useLayoutEffect(() => { if (solo) delete document.body.dataset.dock; else document.body.dataset.dock = "on"; }, [solo]); // hidden panel: the bottom bar goes back to floating on its own
+  // the bar stays joined to whatever is docked on it: this panel, or the activity card that replaces it while an activity runs
   const loading = !cards && !failed, open = !busy && (userOpen ?? (loading || failed || (cards?.length ?? 0) > 0));
 
   // ---- the walk itself
