@@ -1,116 +1,30 @@
-/* components/building-panel.css: the Building Activities Panel (components/BuildingPanel.js).
-
-   It is docked straight on top of the bottom bar. While it is mounted <body data-dock="on"> and bottom-nav.css turns the bar into the lower half of
-   the SAME surface: same width, same background, same side borders, no border between them. The panel draws the one top edge (rounded corners and
-   a single 1px line); the bar draws no top border and no pill outline of its own. The panel sits `--bp-nav-h` (the bar's measured height) above
-   the bottom edge, so safe areas and a slimmer landscape bar are followed without any constant. Everything else in the room that lives near the
-   bottom (stick, run button, prompts, the activity card) is lifted by `--bp-h` (the panel's measured height, set on .bi3). */
-
-.bp {
-  --bp-radius: 28px;
-  position: absolute; left: 50%; bottom: var(--bp-nav-h, 0px); transform: translateX(-50%); z-index: 6;
-  width: min(520px, calc(100% - 2 * var(--edge))); box-sizing: border-box; display: grid; grid-template-rows: auto auto auto; color: var(--text);
-  background: var(--bp-bg); border: 1px solid var(--bp-line); border-bottom: 0; border-radius: var(--bp-radius) var(--bp-radius) 0 0;
-  box-shadow: 0 -16px 36px -18px rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(20px) saturate(1.3); -webkit-backdrop-filter: blur(20px) saturate(1.3);
-  animation: bp-in 0.32s var(--ease) both;
-}
-/* a screen with no bottom bar (the lobby fallback, a cell hold): the panel keeps clear of the device's own inset */
-body:not([data-nav="on"]) .bp { padding-bottom: var(--safe-b); }
-@keyframes bp-in { from { opacity: 0; transform: translate(-50%, 18px); } to { opacity: 1; transform: translate(-50%, 0); } }
-
-/* ---- handle ---- */
-.bp-handle { display: grid; place-items: center; height: 26px; cursor: grab; touch-action: none; border-radius: var(--bp-radius) var(--bp-radius) 0 0; outline-offset: -3px; }
-.bp-handle i { width: 40px; height: 4px; border-radius: 4px; background: rgba(255, 255, 255, 0.28); transition: background-color var(--t-fast) var(--ease), width var(--t-base) var(--ease); }
-.bp-handle:hover i, .bp-handle:focus-visible i { background: rgba(255, 255, 255, 0.5); width: 52px; }
-
-/* ---- the compact bar (the whole panel while folded) ---- */
-.bp-bar { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 14px 10px; }
-.bp-bar-ico { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: rgba(95, 227, 192, 0.12); color: #5fe3c0; }
-.bp-bar-ico[data-k="walk"] { background: rgba(242, 184, 75, 0.14); color: var(--gold-text); animation: bp-pulse 1.4s ease-in-out infinite; }
-.bp-bar-ico[data-k="run"] { background: rgba(63, 208, 138, 0.16); color: var(--green-text); }
-@keyframes bp-pulse { 50% { transform: scale(1.08); } }
-.bp-bar-t { flex: 1; min-width: 0; display: grid; line-height: 1.25; }
-.bp-bar-t b { font: 600 0.95rem var(--font-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bp-bar-t small { font-size: 0.78rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bp .bp-bar-x { flex: none; min-height: 36px; padding: 0 12px; gap: 6px; border-radius: var(--r-pill); font: 600 0.82rem var(--font-ui); background: rgba(255, 255, 255, 0.07); color: var(--text); border: 1px solid var(--bp-line); }
-.bp .bp-bar-x:hover:not(:disabled) { background: rgba(255, 255, 255, 0.13); border-color: rgba(255, 255, 255, 0.22); }
-.bp[data-open="1"] .bp-bar-x svg { transform: rotate(180deg); }
-.bp-bar-x svg { transition: transform var(--t-base) var(--ease); }
-.bp[data-busy="1"] .bp-bar-x { background: rgba(255, 77, 94, 0.12); border-color: rgba(255, 77, 94, 0.4); color: #ff9aa3; }
-
-/* ---- the sheet: opens and folds smoothly; its height follows the viewport, the safe areas and the bar ---- */
-.bp-sheet { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 0.3s var(--ease), opacity 0.2s ease; visibility: hidden; }
-.bp-sheet[data-open="1"] { grid-template-rows: 1fr; opacity: 1; visibility: visible; }
-.bp-sheet:not([data-open="1"]) { transition: grid-template-rows 0.3s var(--ease), opacity 0.2s ease, visibility 0s linear 0.3s; }
-.bp-sheet-i { min-height: 0; overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr); }
-.bp-chips { display: flex; gap: 8px; padding: 2px 14px 10px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; scroll-snap-type: x proximity; overscroll-behavior-x: contain; }
-.bp-chips::-webkit-scrollbar { display: none; }
-.bp .bp-chip { flex: none; scroll-snap-align: start; min-height: 34px; padding: 0 14px; gap: 6px; border-radius: var(--r-pill); font: 600 0.82rem var(--font-ui); background: rgba(255, 255, 255, 0.05); color: var(--muted); border: 1px solid var(--bp-line); white-space: nowrap; }
-.bp .bp-chip small { font-size: 0.72rem; opacity: 0.7; }
-.bp .bp-chip:hover:not(:disabled) { color: var(--text); background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.2); }
-.bp .bp-chip[aria-pressed="true"], .bp .bp-chip[aria-pressed="true"]:hover:not(:disabled) { background: #5fe3c0; border-color: #5fe3c0; color: #06241c; }
-.bp-scroll { min-width: 0; padding: 0; }
-.bp-scroll > .bp-empty { margin: 0 14px 14px; }
-.bp-wrap { margin: 0; padding: 0; flex: none; display: flex; scroll-snap-align: start; }
-.bp[hidden] { display: none; }
-
-/* ---- the rail: activities side by side, swiped sideways ---- */
-.bp-rail { list-style: none; margin: 0; padding: 2px 14px 14px; display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; scroll-padding: 0 14px;
-  touch-action: pan-x; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 22px), transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 22px), transparent 100%); }
-.bp-rail::-webkit-scrollbar { display: none; }
-
-/* ---- tiles: icon + timer on one row, then the name and what it gives. Short on purpose. ---- */
-.bp .bp-tile { position: relative; width: 150px; height: 100%; box-sizing: border-box; padding: 10px 12px 12px; gap: 6px; display: grid; grid-template-rows: auto auto 1fr; justify-items: stretch; align-items: start; align-content: start; text-align: left;
-  border: 1px solid var(--bp-line); border-radius: 20px; color: var(--text); cursor: pointer;
-  background: linear-gradient(160deg, rgba(95, 227, 192, 0.1), rgba(95, 227, 192, 0) 55%), rgba(255, 255, 255, 0.04);
-  transition: transform var(--t-fast) var(--ease), border-color var(--t-base) var(--ease), background-color var(--t-base) var(--ease), opacity var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease); }
-.bp .bp-tile:hover:not(:disabled) { border-color: rgba(95, 227, 192, 0.45); background-color: rgba(255, 255, 255, 0.07); }
-.bp .bp-tile:active { transform: scale(0.97); }
-.bp-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.bp-ico { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: rgba(95, 227, 192, 0.14); color: #5fe3c0; box-shadow: inset 0 0 0 1px rgba(95, 227, 192, 0.2); }
-.bp-tile-t { font: 700 0.96rem/1.25 var(--font-ui); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.bp-tile-s { font-size: 0.78rem; line-height: 1.35; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.bp-chipm { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: var(--r-pill); font: 700 0.72rem var(--font-ui); background: rgba(255, 255, 255, 0.08); color: #dbe3ef; white-space: nowrap; }
-.bp-chipm[data-k="price"] { background: rgba(242, 184, 75, 0.14); color: var(--gold-text); }
-.bp-tile[data-state="selected"] { border-color: var(--gold-text); box-shadow: 0 0 0 1px rgba(242, 184, 75, 0.35); }
-.bp-tile[data-state="running"] { border-color: var(--green-text); box-shadow: 0 0 0 1px rgba(63, 208, 138, 0.35); }
-.bp-tile[data-state="unavailable"] { opacity: 0.55; border-style: dashed; }
-.bp-tile[data-state="unavailable"] .bp-ico { background: rgba(255, 255, 255, 0.06); color: var(--muted); box-shadow: none; }
-.bp-tile[data-risk="risky"] { border-color: rgba(255, 77, 94, 0.4); background: linear-gradient(160deg, rgba(255, 77, 94, 0.12), rgba(255, 77, 94, 0) 55%), rgba(255, 255, 255, 0.04); }
-.bp-tile[data-risk="risky"] .bp-ico { background: rgba(255, 77, 94, 0.15); color: #ff8a94; box-shadow: inset 0 0 0 1px rgba(255, 77, 94, 0.25); }
-
-/* RISKY: one badge, used on the cards, in the details, in the confirmation and on the activity card in the room (components/ActivityLayer.js) */
-.bp-risky { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 6px; font: 800 0.64rem/1.5 var(--font-ui); letter-spacing: 0.09em; text-transform: uppercase; background: rgba(255, 77, 94, 0.16); color: #ff8a94; border: 1px solid rgba(255, 77, 94, 0.6); }
-.bp .bp-go { width: 100%; min-height: 48px; gap: 8px; border-radius: 14px; font: 700 0.95rem var(--font-ui); background: var(--green); color: #fff; border: 0; }
-.bp .bp-go:hover:not(:disabled) { background: #1a9449; border: 0; }
-
-/* ---- loading / empty / error ---- */
-.bp-skel { cursor: default; align-content: center; }
-.bp-skel span { display: block; height: 12px; width: 70%; border-radius: 6px; background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.05)); background-size: 200% 100%; animation: bp-shimmer 1.3s linear infinite; }
-.bp-skel span + span { width: 45%; }
-@keyframes bp-shimmer { to { background-position: -200% 0; } }
-.bp-empty { display: grid; justify-items: center; gap: 6px; text-align: center; padding: 22px 16px; border: 1px dashed var(--bp-line); border-radius: 16px; color: var(--muted); }
-.bp-empty b { color: var(--text); font: 600 0.98rem var(--font-ui); }
-.bp-empty p { margin: 0; font-size: 0.84rem; line-height: 1.5; max-width: 36ch; }
-.bp-empty .bp-go { width: auto; padding: 0 20px; margin-top: 6px; }
-
-/* ---- what lives near the bottom of the room moves up with the panel ---- */
-.bi3 .th-stick { bottom: calc(var(--safe-b) + var(--bp-h, 0px) + 28px); }
-.bi3 .th-run { bottom: calc(var(--safe-b) + var(--bp-h, 0px) + 40px); }
-.bi3 .th .bi3-use, .bi3 .bi3-run { bottom: calc(var(--safe-b) + var(--bp-h, 0px) + 16px); }
-/* the running-activity card is the same dock as the panel: it replaces it while an activity runs, and the panel comes back when it ends */
-.bi3 .bi3-act { --bp-radius: 28px; bottom: var(--bp-nav-h, 0px); width: min(520px, calc(100% - 2 * var(--edge))); max-height: calc(100dvh - var(--safe-t) - var(--bp-nav-h, 0px) - 16px); overflow-y: auto; box-sizing: border-box;
-  background: var(--bp-bg); border: 1px solid var(--bp-line); border-bottom: 0; border-radius: var(--bp-radius) var(--bp-radius) 0 0; box-shadow: 0 -16px 36px -18px rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(20px) saturate(1.3); -webkit-backdrop-filter: blur(20px) saturate(1.3); animation: bp-in 0.32s var(--ease) both; }
-.bi3 .bi3-act-h { padding-top: 16px; }
-.bi3 .bi3-act-h .bi3-x svg { transition: transform var(--t-base) var(--ease); }
-.bi3 .bi3-act[data-fold="1"] .bi3-fold svg { transform: rotate(180deg); }
-.bi3 .bi3-act[data-fold="1"] .bi3-act-h { padding-bottom: 12px; }
-.bi3 .bi3-act-mini { position: absolute; left: 14px; bottom: 4px; max-width: calc(100% - 28px); height: 3px; border-radius: 3px; background: var(--green-text, #3fd08a); transition: width 0.25s linear; }
-.bi3 .bi3-help { bottom: calc(var(--safe-b) + var(--bp-h, 0px) + 6px); }
-
-@media (prefers-reduced-motion: reduce) {
-  .bp, .bp-sheet, .bp-tile, .bp-bar-x svg, .bp-handle i, .bp-bar-ico[data-k="walk"], .bp-skel span { animation: none; transition: none; }
-}
+/* components/billboard-panel.css: the billboard buy flow inside the map's place card */
+.bbp { display: grid; gap: var(--s3); }
+.bbp-badge { margin: 0; display: inline-flex; align-items: center; gap: 6px; width: fit-content; padding: 3px 10px; border-radius: var(--r-pill); font-size: 0.74rem; font-weight: 600; background: rgba(232, 162, 58, 0.14); color: var(--gold-text); border: 1px solid rgba(232, 162, 58, 0.4); }
+.bbp-now { display: flex; gap: var(--s3); align-items: center; padding: var(--s3); border-radius: var(--r-md); background: var(--bg); border: 1px solid var(--line); min-height: 76px; }
+.bbp-now img { width: 112px; height: 60px; object-fit: contain; background: #0b111c; border-radius: var(--r-sm); flex: none; }
+.bbp-now div { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.bbp-now b { font-size: 0.8rem; color: var(--green-text); }
+.bbp-now span { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bbp-bar { display: block; height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; margin-top: 4px; }
+.bbp-bar i { display: block; height: 100%; background: var(--green-text); transition: width 0.5s linear; }
+.bbp-line { margin: 0; font-size: 0.82rem; }
+.bbp-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.bbp-slot { display: grid; gap: 0; min-height: 48px; padding: 4px 0; justify-items: center; align-content: center; border-radius: var(--r-sm); }
+.bbp-slot b { font-size: 0.95rem; }
+.bbp-slot span { font-size: 0.66rem; opacity: 0.8; }
+.bbp-slot.on { background: var(--green); border-color: var(--green-text); color: #fff; }
+.bbp-slot.mine { border-color: var(--gold-text); }
+.bbp-slot:disabled:not(.mine) { opacity: 0.45; }
+.bbp-actions { margin: 0; }
+.bbp-buy { display: grid; gap: var(--s2); }
+.bbp-buy p { margin: 0; }
+.bbp-pick { display: grid; gap: var(--s2); justify-items: start; }
+.bbp-prev { max-width: 100%; max-height: 120px; border-radius: var(--r-sm); border: 1px solid var(--line); background: #0b111c; object-fit: contain; }
+.bbp-mine h3 { margin: 0 0 var(--s2); font-size: 0.9rem; }
+.bbp-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); padding: 6px 0; border-top: 1px solid var(--line); font-size: 0.85rem; }
+/* the billboard card scrolls inside the dock (the dock card sets the height limit); its blocks get the same breathing room as the other cards */
+.dock .card.bb { --dock-gap: 16px; }
+.dock .card.bb .bbp { gap: 14px; }
+.dock .card.bb .bbp-actions { margin: 0; }
+@media (prefers-reduced-motion: reduce) { .bbp-bar i { transition: none; } }

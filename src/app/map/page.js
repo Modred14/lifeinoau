@@ -1,6 +1,6 @@
 // src/app/map/page.js
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { ICON_OF, KIND_LABEL, MAP_GROUPS } from "@/lib3d/landmarks.js";
@@ -147,6 +147,14 @@ export default function MapPage() {
   const tripEnded = (why) => { setTrip(null); if (why === "error") toast.error("The trip could not start. Try again."); };
   const tripNotice = (m) => toast.error(m); // a ride that cannot reach you, a way that is blocked: said plainly, and you can try again from the sheet
   const tripPlace = trip ? find(trip.to) : null, insidePlace = inside ? find(inside) : null;
+  // the place card is docked on the bottom bar and the two read as one surface (globals.css .dock, bottom-nav.css). The travel sheet and the building panel set and clear the same
+  // flag, so this re-asserts it whenever one of them closes while the card is still showing
+  const dockOn = !!(L && !trip && !direct);
+  useLayoutEffect(() => {
+    if (!dockOn) return undefined;
+    document.body.dataset.dock = "on";
+    return () => { delete document.body.dataset.dock; };
+  }, [dockOn, sheet, inside]);
   return (
     <>
       <div className="mapwrap">
