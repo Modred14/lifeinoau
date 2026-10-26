@@ -1,0 +1,8 @@
+/* components/road-transition.css: the dark full-screen "Entering Main Road…" screen between the home compound and the town map */
+.rt { position: fixed; inset: 0; z-index: 9000; display: grid; place-items: center; align-content: center; gap: 14px; background: #04060b; color: #f3f6fb; opacity: 0; pointer-events: none; transition: opacity 320ms ease; }
+.rt[data-on="1"] { opacity: 1; pointer-events: auto; }
+.rt b { font-size: clamp(1.15rem, 4.6vw, 1.6rem); font-weight: 700; letter-spacing: 0.02em; }
+.rt i { display: block; width: min(200px, 52vw); height: 3px; border-radius: 3px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+.rt i::after { content: ""; display: block; width: 40%; height: 100%; border-radius: 3px; background: #3fd08a; animation: rt-run 1.1s ease-in-out infinite; }
+@keyframes rt-run { 0% { transform: translateX(-110%); } 100% { transform: translateX(260%); } }
+@media (prefers-reduced-motion: reduce) { .rt { transition-duration: 1ms; } .rt i::after { animation: none; width: 100%; } }

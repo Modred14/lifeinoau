@@ -7,9 +7,9 @@ import { Icon } from "./Icon";
  *  `apiRef.current` gives the parent the scene's methods (rotateView, pulse, rotateSelected, goToBed, wakeUp, cancelSleep, ...).
  *  Sleep callbacks: onAsleep(id) the character is lying down; onAwake() fully standing again; onWakeTap() the player tapped the floor
  *  to get up (the scene already runs the get-up); onSleepCancel() the player tapped the floor while still walking to the bed. */
-export default function RoomStage({ room, items, roomError, onRetry, look, gender, mode, selected, onSelect, onMove, onUse, onAsleep, onAwake, onWakeTap, onSleepCancel, apiRef, tool }) {
+export default function RoomStage({ room, items, roomError, onRetry, look, gender, mode, selected, onSelect, onMove, onUse, onAsleep, onAwake, onWakeTap, onSleepCancel, apiRef, tool, vehicles, onVehicle, onDrive, onLeave }) {
   const box = useRef(null), bar = useRef(null), scene = useRef(null), cbs = useRef({}), [ready, setReady] = useState(false), [failed, setFailed] = useState(false);
-  cbs.current = { onSelect, onMove, onUse, onAsleep, onAwake, onWakeTap, onSleepCancel };
+  cbs.current = { onSelect, onMove, onUse, onAsleep, onAwake, onWakeTap, onSleepCancel, onVehicle, onDrive, onLeave };
   const roomKey = room ? `${room.w}x${room.d}:${room.theme}:${room.layout ?? ""}:${room.grime ?? 0}` : "", lookKey = JSON.stringify([look ?? null, gender]);
 
   useEffect(() => {
@@ -25,6 +25,9 @@ export default function RoomStage({ room, items, roomError, onRetry, look, gende
           onAwake: () => cbs.current.onAwake?.(),
           onWakeTap: () => cbs.current.onWakeTap?.(),
           onSleepCancel: () => cbs.current.onSleepCancel?.(),
+          onVehicle: (id) => cbs.current.onVehicle?.(id),   // a tap on a parked vehicle in the compound
+          onDrive: (d) => cbs.current.onDrive?.(d),
+          onLeave: (d) => cbs.current.onLeave?.(d),
         });
         s.attachToolbar(bar.current); scene.current = s; if (apiRef) apiRef.current = s; setReady(true);
       } catch (e) { console.error("3D room unavailable", e); if (alive) setFailed(true); }
@@ -36,6 +39,7 @@ export default function RoomStage({ room, items, roomError, onRetry, look, gende
   useEffect(() => { if (ready && room && items) scene.current.setItems(items); }, [ready, items, roomKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (ready) scene.current.setAvatar(look ?? undefined, gender); }, [ready, lookKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (ready) scene.current.setMode(mode); }, [ready, mode]);
+  useEffect(() => { if (ready && vehicles) scene.current.setVehicles(vehicles); }, [ready, vehicles]);
   useEffect(() => { if (ready) scene.current.select(selected ?? null, true); }, [ready, selected]);
 
   return (

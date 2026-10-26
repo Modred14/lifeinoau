@@ -24,6 +24,7 @@ import {
 import { ITEMS, sizeOf, isOutdoor } from "../lib/furniture.js";
 import { plotFor, lawnBox } from "../lib/plot.js";
 import { buildPlot, GROUND } from "./plot3d.js";
+import { createCompoundFleet } from "./compoundFleet.js";
 import { layoutOf, wallRuns, zoneAt } from "../lib/layouts.js";
 
 const WALL_H = 3.4, // rooms are about twice the floor area they were, so the walls (the ceiling line) rise a little with them
@@ -361,6 +362,8 @@ export function createRoomScene(container, cb = {}) {
     itemsRoot = new THREE.Group(),
     avRoot = new THREE.Group();
   scene.add(world, itemsRoot, avRoot);
+  // the player's vehicles, parked in the compound: tap one to drive it out (lib3d/compoundFleet.js). The person is in the vehicle while it is driven, so the standing figure hides.
+  const fleet = createCompoundFleet({ scene, camera, stage, cb: { onDrive: (d) => { avRoot.visible = !d.driving; cb.onDrive?.(d); }, onLeave: (d) => cb.onLeave?.(d), onPlan: (p) => cb.onParking?.(p) } });
   const marker = new THREE.Group(),
     markerFill = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
@@ -590,6 +593,7 @@ export function createRoomScene(container, cb = {}) {
       spawn();
     }
     fit(true);
+    fleet.setRoom(room, placedList());
   }
 
   // ----- camera -----
@@ -608,7 +612,7 @@ export function createRoomScene(container, cb = {}) {
     return view === "yard" ? { dist: fitR(yardR), target: [yx, 0.2, yz], max: fitR(yardR) * 1.15 } : { dist: fitR(houseR), target: [0, 0.6, 0], max: fitR(yardR) * 1.15 };
   }
   function fit(reset) {
-    if (!room) return;
+    if (!room || fleet.isDriving()) return;
     const f = framing();
     fitDist = f.dist;
     controls.minDistance = fitDist * 0.5;
@@ -702,6 +706,7 @@ export function createRoomScene(container, cb = {}) {
       } else if (!have) addItem(d, !firstItems);
     }
     firstItems = false;
+    fleet.setItems(list.filter((i) => i.placed && i.x != null));
     applyRoomFinishes();
     keepAvatarFree();
     updateMarker();
@@ -1111,6 +1116,8 @@ export function createRoomScene(container, cb = {}) {
       return;
     }
     if (d.moved) return;
+    if (fleet.isDriving()) return; // at the wheel: a tap on the picture does nothing
+    if (mode === "home" && !me.sleep) { aim(e); const car = fleet.pick(ray); if (car != null) { cb.onVehicle?.(car); return; } } // a tap on a parked vehicle: get in and drive
     if (mode === "buy") {
       if (d.id) select(d.id);
       else select(null);
@@ -1135,6 +1142,7 @@ export function createRoomScene(container, cb = {}) {
   const proj = new THREE.Vector3();
   stage.onFrame((t, dt) => {
     if (!room) return;
+    fleet.update(dt);
     if (Math.abs(spinLeft) > 0.002) {
       const step = spinLeft * (1 - Math.exp(-dt * 7));
       stage.nudge({ az: step });
@@ -1293,6 +1301,11 @@ export function createRoomScene(container, cb = {}) {
     rotateSelected,
     setView,
     getView: () => view,
+    setVehicles: (list) => fleet.setVehicles(list),
+    startDrive: (id) => fleet.start(id),
+    stopDrive: (o) => fleet.stop(o),
+    setDriveInput: (i) => fleet.setInput(i),
+    isDriving: () => fleet.isDriving(),
     pulse,
     walkTo,
     goToBed,
@@ -1308,6 +1321,7 @@ export function createRoomScene(container, cb = {}) {
     resize: () => stage.resize(),
     dispose() {
       disposed = true;
+      fleet.dispose();
       ro.disconnect();
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);

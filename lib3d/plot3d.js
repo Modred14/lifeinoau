@@ -83,13 +83,10 @@ export function buildPlot(room, { mat, tree }) {
   for (let z = pl.z0 + 5; z < pl.z1 - 4; z += 5) { spots.push([pl.x0 + 0.65, z]); spots.push([pl.x1 - 0.65, z]); }
   spots.forEach(([x, z], i) => { if (P.reserved.some((r) => hits(r, x - 0.4, z - 0.4, 0.8, 0.8)) || gate(x, z)) return; const kind = i % 3 === 0 ? "palm" : "bush", t = tree(kind, i); t.position.set(wx(x), GROUND, wz(z)); t.rotation.y = i * 2.1; t.scale.setScalar(kind === "palm" ? 0.9 : 0.8); g.add(t); trees.push({ g: t, a: Math.atan2(wz(z), wx(x)), kind, s: 1, base: t.scale.x }); });
 
-  // ---- the neighbours either side: their lawns, walls and houses, beyond a gap, so nothing here ever overlaps another plot ----
+  // ---- the lots either side: just their lawns and walls (no buildings), beyond a gap, so nothing here ever overlaps another plot ----
   const side = (x0, x1, dir) => {
     const lot = { x0, x1, z0: pl.z0, z1: pl.z1 };
     slab(lot, GROUND - 0.27, 0.27, M.grass); slab({ x0: lot.x0 + 0.1, x1: lot.x1 - 0.1, z0: lot.z0 + 0.1, z1: lot.z1 - 0.1 }, GROUND - 0.005, 0.01, M.lawn);
-    const hx0 = dir < 0 ? x1 - 9.5 : x0 + 0.5, hx1 = hx0 + 9, hz0 = pl.z0 + 3, hz1 = pl.z0 + 12;
-    slab({ x0: hx0, x1: hx1, z0: hz0, z1: hz1 }, GROUND, 3, M.nWall, true); slab({ x0: hx0 - 0.4, x1: hx1 + 0.4, z0: hz0 - 0.4, z1: hz1 + 0.4 }, GROUND + 3, 0.25, M.nRoof, true);
-    for (let i = 0; i < 3; i++) slab({ x0: hx0 + 1.2 + i * 2.8, x1: hx0 + 2.4 + i * 2.8, z0: hz1, z1: hz1 + 0.06 }, GROUND + 1.1, 1.0, M.nGlass);
     slab({ x0: lot.x0, x1: lot.x1, z0: pl.z1 - 0.5, z1: pl.z1 - 0.2 }, GROUND, 0.7, M.wall); // their front wall continues ours along the road
     slab({ x0: dir < 0 ? lot.x1 - 0.1 : lot.x0, x1: dir < 0 ? lot.x1 : lot.x0 + 0.1, z0: lot.z0, z1: lot.z1 }, GROUND, 0.7, M.wall);
   };

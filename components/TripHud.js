@@ -47,12 +47,12 @@ export default function TripHud({ trip, placeName, st, input, miniRef, previewRe
   const m = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + " km" : n + " m");
   const vname = trip.mode === "bus" ? "bus" : trip.mode === "keke" ? "keke" : "car";
   const doorLine = !doorOn ? "" : st.door === "closed" ? (st.canOpen ? "At the door" : "Walk up to the door") : st.door === "back" ? "Stepping back…" : st.door === "opening" ? "Opening the door…" : st.door === "closing" ? "Closing the door…" : "Door open: go in";
-  const line = doorLine ? `${doorLine}${placeName ? " · " + placeName : ""}` : st?.settling ? "Confirming your fare…" : steering ? (st?.exiting ? "Stopping the car…" : `Drive to ${placeName}`) : phase === "afoot" ? `Walk to ${placeName}` : phase === "trek" ? `Walk to ${placeName}` : phase === "approach" ? `${st?.autoWalk ? "Walking" : "Walk"} to the ${vname}` : phase === "ride" ? `${vname[0].toUpperCase() + vname.slice(1)} to ${placeName}` : TEXT[phase] ?? "";
+  const line = doorLine ? `${doorLine}${placeName ? " · " + placeName : ""}` : st?.settling ? "Confirming your fare…" : steering ? (st?.exiting ? "Stopping the car…" : st?.free ? "Driving on the main road · tap a place name to go there" : `Drive to ${placeName}`) : phase === "afoot" ? `Walk to ${placeName}` : phase === "trek" ? `Walk to ${placeName}` : phase === "approach" ? `${st?.autoWalk ? "Walking" : "Walk"} to the ${vname}` : phase === "ride" ? `${vname[0].toUpperCase() + vname.slice(1)} to ${placeName}` : TEXT[phase] ?? "";
   // how long is left: the same arithmetic as the estimate on the travel sheet, from where everything is right now
   const eta = st?.eta != null && phase !== "inside" && phase !== "door" ? fmtDuration(st.eta) : "";
   const showSpeed = st && ["drive", "ride"].includes(phase), gear = st?.gear || "D", stopped = (st?.speed ?? 0) < 1;
   // the line under the title: time left and distance; near the end of a drive it says where to stop instead
-  const sub = steering && st && st.remain <= 45 ? `Pull over at the green bay · ${m(st.remain)}` : [eta ? `${eta} left` : "", st && ["trek", "drive", "ride", "walk", "afoot"].includes(phase) ? m(st.remain) : ""].filter(Boolean).join(" · ");
+  const sub = st?.free ? "" : steering && st && st.remain <= 45 ? `Pull over at the green bay · ${m(st.remain)}` : [eta ? `${eta} left` : "", st && ["trek", "drive", "ride", "walk", "afoot"].includes(phase) ? m(st.remain) : ""].filter(Boolean).join(" · ");
   return (
     <div className="th" data-phase={phase} style={{ WebkitTouchCallout: "none", userSelect: "none", WebkitUserSelect: "none" }}>
       <div className="th-info">
@@ -108,7 +108,7 @@ export default function TripHud({ trip, placeName, st, input, miniRef, previewRe
             <canvas ref={previewRef} width="900" height="640" />
             <footer>
               <span className={"th-key " + ((st?.routeKind ?? (trip.mode === "trek" ? "walk" : "drive")) === "walk" ? "dots" : "solid")} aria-hidden="true" />
-              {(st?.routeKind ?? (trip.mode === "trek" ? "walk" : "drive")) === "walk" ? "Walking route" : "Driving route"}{st ? ` · ${m(st.remain)} to go` : ""}
+              {(st?.routeKind ?? (trip.mode === "trek" ? "walk" : "drive")) === "walk" ? "Walking route" : "Driving route"}{st && !st.free ? ` · ${m(st.remain)} to go` : ""}
             </footer>
           </div>
         </div>

@@ -40,6 +40,7 @@ export function createTripFlow(env, o) {
   const walker = new Walker(world, nav, { x: plan.start.x, z: plan.start.z, hx: 0, hz: 1 });
   const S = { phase: "intro", t: 0, time: 0, eta: plan.secs, notice: null, ended: false, entered: false, pay: "none", doorK: 0, boardK: 0, alightK: 0, speed: 0, vehDoorK: 0, vehDoorSide: -1, seatK: 0, exiting: false, canExit: false, canEnter: false, canClose: false,
     door: "closed", hinge: "left", canOpen: false, canGoIn: false, auto: false, target: 0 };   // door: "closed" | "back" | "opening" | "open" | "closing"
+  let free = !!o.free;   // a free drive: your own car on the road with no destination yet (leaving your compound). Nothing is "arrived at" until a place is chosen (retarget).
   let hero = null, own = null, inProf = null, heroT = 0, spawnAt = 0, spawnTries = 0, waitedForVehicle = 0, boardFrom = null, alightTo = null, lastEta = -1, retargeted = false, approachDoor = null, departed = false, alightFrom = null;
   let dframe = null, dBack = null, dHeld = 0, dStall = 0, dT = 0, arrivals = 0, enterSecs = ENTER_SECONDS, enterPts = null;
   let doorSide = -1, doorStart = 0, doorTarget = 0, closeAsk = false, exitAsk = false, exitTo = null, exitArrival = false, exitSeat = null, reTo = null;
@@ -96,7 +97,7 @@ export function createTripFlow(env, o) {
   function driveOwn(dt, inp) {
     if (inp.exit) requestExit();
     let drv = { gas: inp.gas ?? 0, brake: inp.brake ?? 0, steer: inp.steer ?? 0 };
-    const dist = Math.hypot(own.x - plan.drop.x, own.z - plan.drop.z), near = dist < ARRIVE_RADIUS;
+    const dist = Math.hypot(own.x - plan.drop.x, own.z - plan.drop.z), near = !free && dist < ARRIVE_RADIUS;
     if (exitAsk && drv.gas > 0.3) { exitAsk = false; S.exiting = false; }     // you changed your mind: you pressed the gas
     if (exitAsk) drv = gentleStop(own, Math.min(4.5, own.P.brake * 0.6), own.P);
     else if (near && own.v > 0.3 && own.v < PARK_ASSIST_BELOW && !drv.gas) drv.brake = Math.max(drv.brake, 0.4);   // by the drop-off the car helps you park: it eases to a stop if you let go of the gas
@@ -276,10 +277,40 @@ export function createTripFlow(env, o) {
     if (S.door === "back" || S.door === "opening" || S.door === "closing" || exitAsk) return bad("busy");
     let route = null;
     if (mode === "trek" || ph === "afoot") { route = mode === "trek" ? np.walk : nav.plan(walker.x, walker.z, np.goal.x, np.goal.z); if (!route?.ok || route.pts.length < 2) return bad("unreachable"); }
-    plan = np; B = np.B; enterable = en; shutDoor(); enterPts = null; S.target++;
+    plan = np; B = np.B; enterable = en; shutDoor(); enterPts = null; S.target++; free = false;   // a place was chosen: from now on it is an ordinary trip to it
     if (mode === "trek") { arrivals++; S.pay = "none"; go("trek"); }       // an answer about the place you were going to no longer counts
     if (route) startAuto(route);
     return { ok: true };
+  }
+
+  /**
+   * A drive that starts already at the wheel: your own car is put on the road at the planned spot (on the lane, nose along the way of the traffic) and moving at `sp.v` m/s,
+   * with no walk to it and no getting in. This is how leaving the home compound continues on the map without a break.
+   */
+  /**
+   * Where on the lane beside the place to put a car that is already moving: the nearest spot (the kerb spot first, then up and down the lane) from which the car can roll on without
+   * leaving the carriageway for the next stretch, both on the lane's own line and straight ahead of its nose for the first metres (a car that is steered by a person at once).
+   */
+  function freeSpawnS() {
+    const lane = plan.pick.lane, hl = (dims?.len ?? 4.8) / 2, hw = (dims?.wid ?? 1.9) / 2;
+    const fits = (x, z, hx, hz) => { const rx = -hz, rz = hx; for (const u of [-hl, 0, hl]) for (const w of [-hw, 0, hw]) if (!onRoad(x + hx * u + rx * w, z + hz * u + rz * w)) return false; return true; };
+    for (const d of [0, 4, -4, 8, -8, 12, -12, 16, -16, 24, -24, 32, -32, 44, -44]) {
+      const at = plan.pick.s + d, s0 = Math.max(0, at - 4); if (at < 4 || at > lane.len - 32) continue;
+      const r = graph.makeRoute([{ kind: "lane", id: lane.id, s0, s1: Math.min(lane.len, at + 30) }], plan.opts); if (!r) continue;
+      const q = {}; let ok = true;
+      for (let t = at - s0; t <= Math.min(r.len, at - s0 + 28) && ok; t += 2) { const p = r.path.at(t, q); ok = fits(p.x, p.z, p.hx, p.hz); }
+      if (!ok) continue;
+      const p0 = r.path.at(at - s0, q), x0 = p0.x, z0 = p0.z, hx = p0.hx, hz = p0.hz;
+      for (let t = 0; t <= 8 && ok; t += 2) ok = fits(x0 + hx * t, z0 + hz * t, hx, hz);
+      if (ok) return at;
+    }
+    return null;
+  }
+  function bootDrive(sp) {
+    const at = freeSpawnS(); if (at != null) plan = { ...plan, pick: { ...plan.pick, s: at } };
+    if (!spawnVehicle()) { notice("There is no room on the road here. Try again."); end("unavailable"); return; }
+    makeOwn(); own.v = Math.max(0, Math.min(sp?.v ?? 0, own.P?.vmax ?? 22)); own.distance = 0;
+    S.seatK = 1; S.vehDoorK = 0; person.seated = true; person.seat = seatLocal(); person.visible = true; S.pay = "none"; go("drive");
   }
 
   function update(dt, inp = {}) {
@@ -366,7 +397,7 @@ export function createTripFlow(env, o) {
       case "exit": return remainingSecs(plan, "alight", { alightLeft: Math.max(0, alightSecs() - S.t) });
       case "afoot": case "reenter": return remainingSecs(plan, "walk", { walkLeft });
       case "ride": return hero ? remainingSecs(plan, "ride", { rideS: hero.s, rideV: hero.v, rideT: heroT }) : 0;
-      case "drive": return remainingSecs({ ...plan, route: plan.route }, "ride", { rideS: Math.min(plan.route.len, plan.route.path.nearest(own.x, own.z, 0, plan.route.len + 1)), rideV: Math.max(0, own.v) });
+      case "drive": if (free) return 0; return remainingSecs({ ...plan, route: plan.route }, "ride", { rideS: Math.min(plan.route.len, plan.route.path.nearest(own.x, own.z, 0, plan.route.len + 1)), rideV: Math.max(0, own.v) });
       case "paying": case "alight": return remainingSecs(plan, "alight", { alightLeft: Math.max(0, alightSecs() - (ph === "alight" ? S.t : 0)) });
       case "walk": return remainingSecs(plan, "walk", { walkLeft });
       case "door": case "enter": return Math.max(0, plan.parts.door - S.t);
@@ -374,11 +405,12 @@ export function createTripFlow(env, o) {
     }
   }
   /** Metres still to go on the road (rides) or on foot (the trek and the last walk). */
-  function remainMetres() { const ph = S.phase; if (ph === "ride" && hero) return Math.max(0, hero.route.len - hero.s); if (ph === "drive") return Math.max(0, Math.hypot(own.x - plan.drop.x, own.z - plan.drop.z)); if (ph === "approach") return walker.path ? Math.max(0, walker.path.len - walker.ps) : 0; return Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z); }
+  function remainMetres() { const ph = S.phase; if (ph === "ride" && hero) return Math.max(0, hero.route.len - hero.s); if (ph === "drive") return free ? 0 : Math.max(0, Math.hypot(own.x - plan.drop.x, own.z - plan.drop.z)); if (ph === "approach") return walker.path ? Math.max(0, walker.path.len - walker.ps) : 0; return Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z); }
 
   function dispose() {
     S.ended = true; sim.removeExternal("player"); sim.removeExternal("own"); world.removeBody("own"); world.removeBody(LEAF_ID);
     if (hero) { if (departed) hero.role = "npc"; else sim.remove(hero); }
   }
-  return { update, dispose, state: S, walker, person, get plan() { return plan; }, kind, pressDoor, enterNow, retarget: retargetTrip, stopAuto, get doorFrame() { return dframe; }, get hero() { return hero; }, get approachDoor() { return approachDoor ?? plan.doorIn; }, get own() { return own; }, get vehicle() { return own ?? hero; }, eta: () => S.eta, remainMetres, cancel: () => end("cancelled"), get driving() { return S.phase === "drive"; } };
+  if (o.spawn && ownCar) bootDrive(o.spawn);
+  return { update, dispose, state: S, get free() { return free; }, walker, person, get plan() { return plan; }, kind, pressDoor, enterNow, retarget: retargetTrip, stopAuto, get doorFrame() { return dframe; }, get hero() { return hero; }, get approachDoor() { return approachDoor ?? plan.doorIn; }, get own() { return own; }, get vehicle() { return own ?? hero; }, eta: () => S.eta, remainMetres, cancel: () => end("cancelled"), get driving() { return S.phase === "drive"; } };
 }

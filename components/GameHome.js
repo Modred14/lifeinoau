@@ -19,7 +19,7 @@ import { serverTime } from "@/lib/serverClock";
 import { Icon } from "./Icon";
 import BuySheet from "./BuySheet";
 import PlayerAvatar from "./PlayerAvatar";
-import HomeGarage from "./HomeGarage";
+import CompoundDrive, { useVehicles } from "./CompoundDrive";
 import "./game-home.css";
 
 const RoomStage = dynamic(() => import("./RoomStage"), {
@@ -72,8 +72,9 @@ export default function GameHome({
     [selected, setSelected] = useState(null),
     [collapsed, setCollapsed] = useState(false),
     [needsOpen, setNeedsOpen] = useState(false),
-    [garageOpen, setGarageOpen] = useState(false),
+    [driving, setDriving] = useState(false),
     [, bumpView] = useState(0); // the yard / house button reads the scene's view, so it re-renders when it is pressed
+  const vehicles = useVehicles(), fleetHandlers = useRef({});
   const api = useRef(null),
     queue = useRef(Promise.resolve()),
     ids = useRef(new Map()); // temporary id of an item that was just bought -> its real id once the server has answered
@@ -360,6 +361,7 @@ export default function GameHome({
       className="gx"
       data-mode={buying ? "buy" : "home"}
       data-sheet={collapsed ? "min" : "full"}
+      data-drive={driving ? "1" : undefined}
     >
       <div className="gx-bg" aria-hidden="true">
         <i />
@@ -367,7 +369,7 @@ export default function GameHome({
         <i />
       </div>
       <div className="gx-scene">
-        {garageOpen ? <HomeGarage character={c} onBack={() => setGarageOpen(false)} /> : <RoomStage
+        <RoomStage
           room={roomReady ? rd.room : null}
           items={roomReady ? rd.items : null}
           roomError={roomReady ? null : roomErr}
@@ -384,7 +386,12 @@ export default function GameHome({
           onSleepCancel={() => setGoing(null)}
           apiRef={api}
           tool={tool}
-        />}
+          vehicles={vehicles}
+          onVehicle={(id) => fleetHandlers.current.onVehicle?.(id)}
+          onDrive={(d) => fleetHandlers.current.onDrive?.(d)}
+          onLeave={(d) => fleetHandlers.current.onLeave?.(d)}
+        />
+        <CompoundDrive vehicles={vehicles} api={api} handlers={fleetHandlers} onDriving={setDriving} />
       </div>
 
       {/* top left: what needs attention */}
@@ -508,8 +515,8 @@ export default function GameHome({
       </div>
 
       {/* top right: look around */}
-      <div className={"gx-tr" + (garageOpen ? " gx-tr--garage" : "")}>
-        {!garageOpen && <><button
+      <div className="gx-tr">
+        <><button
           type="button"
           className="gx-round"
           aria-label="Turn the room left"
@@ -524,11 +531,8 @@ export default function GameHome({
           onClick={() => api.current?.rotateView(1)}
         >
           <Icon name="rotateRight" size={20} />
-        </button></>}
-        {buying && !garageOpen && (() => { const yard = api.current?.getView?.() === "yard"; return <button type="button" className="gx-round" aria-label={yard ? "Look at the house" : "Look at the yard"} title={yard ? "Look at the house" : "Look at the yard"} aria-pressed={yard} onClick={() => { api.current?.setView?.(yard ? "house" : "yard"); bumpView((n) => n + 1); }}><Icon name={yard ? "hostel" : "farm"} size={20} /></button>; })()}
-        <button type="button" className="gx-round gx-garage-toggle" aria-label={garageOpen ? "Return to your room" : "Open your home garage"} title={garageOpen ? "Return to your room" : "Open your home garage"} onClick={() => { setGarageOpen((v) => !v); setSelected(null); setUse(null); }}>
-          <Icon name={garageOpen ? "hostel" : "ride"} size={20} />
-        </button>
+        </button></>
+        {buying && (() => { const yard = api.current?.getView?.() === "yard"; return <button type="button" className="gx-round" aria-label={yard ? "Look at the house" : "Look at the yard"} title={yard ? "Look at the house" : "Look at the yard"} aria-pressed={yard} onClick={() => { api.current?.setView?.(yard ? "house" : "yard"); bumpView((n) => n + 1); }}><Icon name={yard ? "hostel" : "farm"} size={20} /></button>; })()}
       </div>
 
       {/* bottom left: you */}

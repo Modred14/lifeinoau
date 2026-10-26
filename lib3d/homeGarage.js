@@ -63,8 +63,7 @@ export function createHomeGarage(container, vehicles, options = {}) {
     rect(side * (lane + G.NOSE + G.BAY_D - 0.6) - 0.15, side * (lane + G.NOSE + G.BAY_D - 0.6) + 0.15, z - 1.4, z + 1.4, 0.0, 0.12, M.concrete); } // wheel stops
 
   // ---- the neighbours either side, outside the wall: a gap, a lawn and a house, so nothing here touches another plot ----
-  for (const side of [-1, 1]) { const x0 = side * (W + 2), x1 = side * (W + 14); rect(Math.min(x0, x1), Math.max(x0, x1), L.zTop, L.frontZ, -0.18, 0.18, M.grass);
-    const hx0 = side * (W + 5), hx1 = side * (W + 13); rect(Math.min(hx0, hx1), Math.max(hx0, hx1), L.zTop + 3, L.zTop + 13, 0, 3.4, M.nWall, true); rect(Math.min(hx0, hx1) - 0.4, Math.max(hx0, hx1) + 0.4, L.zTop + 2.6, L.zTop + 13.4, 3.4, 0.3, M.nRoof, true); }
+  for (const side of [-1, 1]) { const x0 = side * (W + 2), x1 = side * (W + 14); rect(Math.min(x0, x1), Math.max(x0, x1), L.zTop, L.frontZ, -0.18, 0.18, M.grass); }
 
   // ---- the vehicles ----
   for (const slot of layout.slots) { const v = makeVehicle(slot.modelId || "", slot.color); v.root.position.set(slot.x, 0, slot.z); v.root.rotation.y = slot.yaw; v.root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } }); group.add(v.root); carMeshes.set(String(slot.id), { ...slot, vehicle: v }); }

@@ -24,9 +24,10 @@ const labelWidth = (name, tier) => Math.min(190, name.length * (tier === 1 ? 7.4
  * panning. autoRotate is off unless asked for. Every named building carries a label above its roof;
  * labels are real buttons. They thin out with distance and never overlap, and the "Labels" button hides them all.
  */
-export default function CampusMap({ youId = null, trip = null, tripInput = null, getMini = null, getPreview = null, onTripState, onTripArrive, onTripEnter, onTripEnd, onTripNotice, onTripRetarget, tripGuard, interactive = true, zoomOnly = false, pins = true, autoRotate = false, selectedId = null, onSelect, billboards = null, className = "", style, view = HOME_VIEW }) {
+export default function CampusMap({ youId = null, trip = null, tripInput = null, getMini = null, getPreview = null, onTripState, onTripArrive, onTripEnter, onTripEnd, onTripNotice, onTripRetarget, tripGuard, onReady, interactive = true, zoomOnly = false, pins = true, autoRotate = false, selectedId = null, onSelect, billboards = null, className = "", style, view = HOME_VIEW }) {
   const box = useRef(null), api = useRef(null), noFly = useRef(false), sel = useRef(selectedId), cb = useRef(onSelect), [mounts, setMounts] = useState([]), [failed, setFailed] = useState(false), [labels, setLabels] = useState(true), [look, setLook] = useState(false), [hint, setHint] = useState(interactive);
   sel.current = selectedId; cb.current = onSelect;
+  const readyCb = useRef(onReady); readyCb.current = onReady;   // told once the map is drawn and can take a trip
   const tripCb = useRef({}); tripCb.current = { onTripState, onTripArrive, onTripEnter, onTripEnd, onTripNotice, onTripRetarget, tripGuard, getMini, getPreview, tripInput }; const tripRef = useRef(null);
   const canZoom = interactive || zoomOnly, hold = () => { noFly.current = true; setTimeout(() => { noFly.current = false; }, 400); }; // a tap on the map shouldn't re-centre it
 
@@ -90,7 +91,7 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
           });
         }
         api.current = { stage, campus, view, light, data, THREE: stage.THREE };
-        box.current.dataset.ready = "1";
+        box.current.dataset.ready = "1"; readyCb.current?.();
       } catch (e) { console.error("3D map unavailable", e); if (alive) setFailed(true); }
     })();
     return () => { alive = false; off.forEach((f) => f()); ro?.disconnect(); campus?.dispose(); lab?.domElement.remove(); stage?.dispose(); api.current = null; };

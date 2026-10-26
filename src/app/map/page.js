@@ -9,6 +9,8 @@ import { Icon } from "@/components/Icon";
 import BillboardPanel from "@/components/BillboardPanel";
 import TravelSheet from "@/components/TravelSheet";
 import TripHud from "@/components/TripHud";
+import RoadTransition from "@/components/RoadTransition";
+import { peekDriveHandoff, takeDriveHandoff } from "@/lib/driveHandoff.js";
 import PlaceActivities from "@/components/PlaceActivities";
 import { featuresAt } from "@/lib/features.js";
 import BuildingInside from "@/components/BuildingInside";
@@ -19,7 +21,7 @@ import { isOpenSpace } from "@/lib3d/interiors/openSpaces.js";
 import { call, naira } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { game, useGame, run, cash } from "@/lib/gameStore";
-import { fareKobo, placeOf, ownsCar, driverActive, MODE_INFO } from "@/lib/travel.js";
+import { fareKobo, placeOf, ownsCar, driverActive, homePlace, MODE_INFO } from "@/lib/travel.js";
 import { playSound } from "@/lib/sound";
 import { serverTime } from "@/lib/serverClock";
 import { isClub, clubOf, clubStatus, closedMessage, HOURS_LABEL } from "@/lib/clubs.js";
@@ -38,6 +40,17 @@ export default function MapPage() {
   const [data, setData] = useState(null), [sheet, setSheet] = useState(false), [trip, setTrip] = useState(null), [tripSt, setTripSt] = useState(null), [inside, setInside] = useState(null), [fade, setFade] = useState(false), [counts, setCounts] = useState({}), [focus, setFocus] = useState(null), [want, setWant] = useState(null);
   const g = useGame(), ch = g?.character, here = ch ? placeOf(ch) : null, miniRef = useRef(null), previewRef = useRef(null), input = useRef({}).current, tripRef = useRef(null), targetRef = useRef(null);
   tripRef.current = trip;
+  // Driving out of the home compound: the "Entering Main Road…" screen is up from the first frame, and as soon as the map is ready the same vehicle (model, paint, speed) is put on the road
+  // beside the player's home, at the wheel, as a free drive (lib3d/tripflow.js): the usual controls, the usual name tags, and the position goes to other players as for any trip.
+  const [entering, setEntering] = useState(() => !!peekDriveHandoff()), [mapReady, setMapReady] = useState(false);
+  useEffect(() => {
+    if (!entering || !mapReady || !data || !ch || trip) return;
+    const h = takeDriveHandoff(); if (!h) { setEntering(false); return; }
+    if (held || !ownsCar(ch)) { setEntering(false); return; }
+    const home = homePlace(ch.hostel); input.jx = input.jy = input.steer = input.gas = input.brake = 0; input.run = false; setTripSt(null);
+    setTrip({ id: crypto.randomUUID(), from: home, to: home, mode: "car", driver: false, act: null, free: true, spawn: { v: h.v }, look: ch.look ?? null, gender: ch.gender ?? "M", car: h.modelId, carColor: h.color, people: [], isEnterable: (id) => { const p = find(id); return !!p && (hasInterior(p.id, p.kind) || isOpenSpace(p.id)); }, selfName: ch.name ?? "", name: "the main road" });
+  }, [entering, mapReady, data, !!ch, !!trip]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!entering) return; const t = tripSt?.phase === "drive" ? setTimeout(() => setEntering(false), 450) : setTimeout(() => setEntering(false), 9000); return () => clearTimeout(t); }, [entering, tripSt?.phase]);
   // Serving a sentence: held at Floor O (N-QRS Custody) and not allowed to travel. The server refuses every trip too; this only stops offering it.
   const held = !!g?.floorZero && +new Date(g.floorZero.releaseAt) > serverTime();
   // Caught: whatever flow got you arrested, you are taken straight into the cell at Floor O on the map (never to the house).
@@ -146,7 +159,7 @@ export default function MapPage() {
   }
   function entered() { // only enclosed buildings open an interior; open-air places (billboards, grounds, statues, gates...) just end the trip with you standing there
     const t = tripRef.current, p = t ? find(t.to) : null, indoors = !!p && (hasInterior(p.id, p.kind) || isOpenSpace(p.id)); setFade(true); setTimeout(() => { if (t && indoors) { setFocus(t.act ?? null); setInside(t.to); } else if (t) setSel(t.to); setTrip(null); setFade(false); }, 520); }
-  const tripEnded = (why) => { setTrip(null); if (why === "error") toast.error("The trip could not start. Try again."); };
+  const tripEnded = (why) => { setTrip(null); setEntering(false); if (why === "error") toast.error("The trip could not start. Try again."); };
   const tripNotice = (m) => toast.error(m); // a ride that cannot reach you, a way that is blocked: said plainly, and you can try again from the sheet
   const tripPlace = trip ? find(trip.to) : null, insidePlace = inside ? find(inside) : null;
   // the place card is docked on the bottom bar and the two read as one surface (globals.css .dock, bottom-nav.css). The travel sheet and the building panel set and clear the same
@@ -173,12 +186,14 @@ export default function MapPage() {
           onTripArrive={pay}
           onTripEnter={entered}
           onTripEnd={tripEnded}
+          onReady={() => setMapReady(true)}
           onTripNotice={tripNotice}
           onTripRetarget={retargeted}
           tripGuard={tripGuard}
         />
       </div>
       {trip && <TripHud trip={trip} placeName={trip.name} st={tripSt} input={input} miniRef={miniRef} previewRef={previewRef} onCancel={() => setTrip(null)} />}
+      <RoadTransition on={entering} />
       <div className="trip-fade" data-on={fade ? "1" : undefined} aria-hidden="true" />
       {insidePlace && held && insidePlace.id === "floor0" ? <CustodyCell st={g ?? {}} look={ch?.look ?? null} gender={ch?.gender ?? "M"} selfName={ch?.name ?? ""} onFree={() => { setInside(null); setFocus(null); }} /> : insidePlace && <BuildingInside place={insidePlace} onCustody={() => { setFocus(null); setInside("floor0"); }} look={ch?.look ?? null} gender={ch?.gender ?? "M"} focus={focus} selfName={ch?.name ?? ""} onLeave={() => { setInside(null); setFocus(null); }} />}
       {(sheet || direct) && L && <TravelSheet place={L} here={youPlace?.name} hasCar={ownsCar(ch)} driver={driverActive(ch, g?.week) ? { name: ch.driverName } : null} people={counts[L.id] ?? 0} distanceM={youPlace && L.located && youPlace.located ? Math.round(Math.hypot(L.x - youPlace.x, L.z - youPlace.z)) : null} character={ch} balanceKobo={g?.balanceKobo ?? null} jailed={held} highlight={want} eta={eta} onGo={begin} onClose={() => { closeSheet(); setWant(null); }} />}
