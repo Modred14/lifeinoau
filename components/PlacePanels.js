@@ -77,10 +77,6 @@ export function HustlePanel({ kind, onClose }) {
     return r;
   };
   const start = async () => {
-    if (d.kind === "backstairs" && !(await confirmAction({
-      title: "Backstairs run: VERY RISKY",
-      message: `Either you make ${k(d.payMin)} to ${k(d.payMax)}, or N-QRS catches you at the end of the run, seizes 30% of your cash, and you serve time inside Floor O (N-QRS Custody). Patrol risk right now: ${d.risk}. Once a day. If you walk away before it is done you get nothing.`,
-      confirmLabel: "Take the risk", tone: "danger" }))) return;
     act("start");
   };
   const left = run ? Math.max(0, run.endsAt - now) : 0, pct = run ? Math.min(100, Math.round(((now - run.startedAt) / (run.endsAt - run.startedAt)) * 100)) : 0;

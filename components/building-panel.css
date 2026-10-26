@@ -101,10 +101,14 @@ body:not([data-nav="on"]) .bp { padding-bottom: var(--safe-b); }
 .bi3 .th-run { bottom: calc(var(--safe-b) + var(--bp-h, 0px) + 40px); }
 .bi3 .th .bi3-use, .bi3 .bi3-run { bottom: calc(var(--safe-b) + var(--bp-h, 0px) + 16px); }
 /* the running-activity card is the same dock as the panel: it replaces it while an activity runs, and the panel comes back when it ends */
-.bi3 .bi3-act { bottom: var(--bp-nav-h, 0px); width: min(520px, calc(100% - 2 * var(--edge))); max-height: calc(100dvh - var(--safe-t) - var(--bp-nav-h, 0px) - 16px); overflow-y: auto; box-sizing: border-box;
+.bi3 .bi3-act { --bp-radius: 28px; bottom: var(--bp-nav-h, 0px); width: min(520px, calc(100% - 2 * var(--edge))); max-height: calc(100dvh - var(--safe-t) - var(--bp-nav-h, 0px) - 16px); overflow-y: auto; box-sizing: border-box;
   background: var(--bp-bg); border: 1px solid var(--bp-line); border-bottom: 0; border-radius: var(--bp-radius) var(--bp-radius) 0 0; box-shadow: 0 -16px 36px -18px rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(20px) saturate(1.3); -webkit-backdrop-filter: blur(20px) saturate(1.3); animation: bp-in 0.32s var(--ease) both; }
 .bi3 .bi3-act-h { padding-top: 16px; }
+.bi3 .bi3-act-h .bi3-x svg { transition: transform var(--t-base) var(--ease); }
+.bi3 .bi3-act[data-fold="1"] .bi3-fold svg { transform: rotate(180deg); }
+.bi3 .bi3-act[data-fold="1"] .bi3-act-h { padding-bottom: 12px; }
+.bi3 .bi3-act-mini { position: absolute; left: 14px; bottom: 4px; max-width: calc(100% - 28px); height: 3px; border-radius: 3px; background: var(--green-text, #3fd08a); transition: width 0.25s linear; }
 .bi3 .bi3-help { bottom: calc(var(--safe-b) + var(--bp-h, 0px) + 6px); }
 
 @media (prefers-reduced-motion: reduce) {

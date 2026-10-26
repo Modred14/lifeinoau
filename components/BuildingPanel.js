@@ -9,7 +9,6 @@
 "use client";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./Icon";
-import { confirmAction } from "@/lib/confirm";
 import { toast } from "@/lib/toast";
 import { buildCards, chipsFor, nearestRing, waitLabel, walkSeconds } from "@/lib/buildingPanel.js";
 import { pickCard } from "@/lib/hubActions.js";
@@ -92,7 +91,6 @@ export default function BuildingPanel({ place, rings, state, api, ready, runHubI
     if (c.hard) { toast.info("You cannot do that right now."); return; }
     going.current = true;
     try {
-      if (c.risky && !(await confirmAction({ tone: "danger", ...c.risky.confirm }))) return; // a risky activity is always confirmed before the character sets off
       if (!api.current) return; // the room was closed while the question was open
       const s = api.current.state, target = nearestRing(c.rings, (r) => api.current.routeInfo(r.x, r.z, r.floor ?? 0), s);
       if (!target) { toast.error(`No way to walk to ${c.label} from here. Move to another part of the building and try again.`); return; }

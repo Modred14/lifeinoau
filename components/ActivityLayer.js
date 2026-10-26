@@ -22,7 +22,7 @@ const needsCourse = (k) => k === "course_attend" || k === "course_study" || k ==
 
 /** `api` is a ref to the 3D scene, `rings` the activity rings drawn in it, `open` the ring whose panel is showing, `onClose` closes it, `onLeave` leaves the building. */
 export default function ActivityLayer({ api, rings, open, onClose, onLeave, ready, onState, onRun, controlRef }) {
-  const [st, setSt] = useState(null), [run, setRun] = useState(null), [busy, setBusy] = useState(false), [course, setCourse] = useState(""), [tick, setTick] = useState(() => serverTime()), [done, setDone] = useState(null);
+  const [fold, setFold] = useState(false), [st, setSt] = useState(null), [run, setRun] = useState(null), [busy, setBusy] = useState(false), [course, setCourse] = useState(""), [tick, setTick] = useState(() => serverTime()), [done, setDone] = useState(null);
   const runRef = useRef(null), finishing = useRef(false), starting = useRef(false), e0 = useRef(0); // e0: energy when the run began (for the rising bar while sleeping)
   const pos = () => { const s = api.current?.state; return s ? { x: s.x, z: s.z, floor: s.floor } : null; };
   const ring = (id) => rings.find((r) => r.activity === id);
@@ -34,6 +34,8 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
     const ro = typeof ResizeObserver === "function" ? new ResizeObserver(m) : null; ro?.observe(el);
     return () => ro?.disconnect();
   }, [!!open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { setFold(false); }, [open?.id, open?.activity]);
 
   const refresh = useCallback(async () => {
     const r = await call("/api/activity"); if (r.failed) { onState?.({ failed: true, error: r.error }); return null; }
@@ -93,8 +95,7 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
     if (!info || busy || run || starting.current) return; const p = pos(); if (!p) { toast.error("Your position is not known yet. Walk a step and try again."); return; }
     starting.current = true; // one start at a time, even for a double tap (the state below only updates on the next render)
     try {
-      if (info.kind === "hustle_risky" && !open?.confirmed && !(await confirmAction({ title: "Back-Room Deal: VERY RISKY", message: `You either make ₦${HUSTLE.risky.min.toLocaleString("en-NG")} to ₦${HUSTLE.risky.max.toLocaleString("en-NG")}, or N-QRS catches you and you serve ${HUSTLE.risky.jailMin} to ${HUSTLE.risky.jailMax} minutes inside Floor O (N-QRS Custody). You can only try once a day.`, confirmLabel: "Take the risk", tone: "danger" }))) return;
-      if (param === "cheat" && !(await confirmAction({ title: "Cheat in the exam?", message: "If you are caught you score very low, get a strike and may be suspended. If not, you gain marks.", confirmLabel: "Cheat anyway", tone: "danger" }))) return;
+            if (param === "cheat" && !(await confirmAction({ title: "Cheat in the exam?", message: "If you are caught you score very low, get a strike and may be suspended. If not, you gain marks.", confirmLabel: "Cheat anyway", tone: "danger" }))) return;
       setBusy(true); setDone(null);
       const startE = st?.energy ?? null, h0 = rings.find((q) => q.activity === info.id);
       try {
@@ -125,13 +126,15 @@ export default function ActivityLayer({ api, rings, open, onClose, onLeave, read
     <>
       {run && !open && <div className="bi3-run" role="status"><Icon name={runInfo?.icon ?? "timer"} size={18} /><span>{runInfo?.doing ?? "Working…"} {runInfo?.full ? `Energy ${energyNow}%` : `${sec}s`}</span><i style={{ width: `${Math.min(100, (1 - sec / total) * 100)}%` }} /></div>}
       {open && (
-        <div className="bi3-act" ref={card} role="dialog" aria-label={open.label}>
+        <div className="bi3-act" ref={card} role="dialog" aria-label={open.label} data-fold={fold ? "1" : undefined}>
           <div className="bi3-act-h">
             <span className="bi3-act-ico"><Icon name={info?.icon ?? "sparkle"} size={22} weight="fill" /></span>
             <b className="bi3-act-title">{open.label}</b>{info?.kind === "hustle_risky" && <i className="bp-risky">RISKY</i>}
+            <button type="button" className="bi3-x bi3-fold" aria-label={fold ? "Expand" : "Collapse"} aria-expanded={!fold} onClick={() => setFold((f) => !f)} data-sound="none"><Icon name="down" size={18} /></button>
             <button type="button" className="bi3-x" aria-label="Close" onClick={onClose} data-sound="none"><Icon name="close" size={18} /></button>
+            {run && fold && <i className="bi3-act-mini" style={{ width: `${Math.min(100, prog * 100)}%` }} />}
           </div>
-          <div className="bi3-act-b">
+          <div className="bi3-act-b" hidden={fold}>
           {!st ? <p className="mut">Checking…</p> : !info ? <p className="mut">That is not available right now.</p> : (
             <>
               <ul className="bi3-fx" aria-label="What it does">{fx(info.sub).map((f, i) => <li key={i} data-k={f.k}>{f.k === "time" && <Icon name="timer" size={13} />}{f.t}</li>)}</ul>

@@ -55,7 +55,7 @@ body[data-trip] .map-chrome { display: none !important; } /* the bottom bar is n
 .th-stick i { width: 58px; height: 58px; border-radius: 50%; background: rgba(255, 255, 255, 0.92); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35); }
 .th .th-btn { background: rgba(255, 255, 255, 0.9); color: #161b26; border: 0; border-radius: 18px; font-weight: 800; letter-spacing: 0.03em; touch-action: none; user-select: none; display: grid; place-items: center; box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.5); }
 .th .th-btn:hover:not(:disabled) { background: #fff; border: 0; }
-.th .th-btn:active { transform: scale(0.95); }
+.th .th-btn:active { scale: 0.95; }
 .th-run { position: absolute; right: 22px; bottom: calc(var(--safe-b) + 40px); width: 84px; height: 84px; border-radius: 50% !important; }
 /* the steering wheel: bottom left, clear of the bottom bar (--safe-b already includes it) and of the pedals on the right; it takes its own finger and never scrolls the page */
 .th-wheel { position: absolute; left: max(14px, env(safe-area-inset-left)); bottom: calc(var(--safe-b) + 22px); width: clamp(128px, 36vw, 176px); aspect-ratio: 1; border-radius: 50%; touch-action: none; overscroll-behavior: contain; cursor: grab; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.4)); }
@@ -215,12 +215,41 @@ body[data-trip] .map-chrome { display: none !important; } /* the bottom bar is n
 .stage[data-tags="1"] .bl:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 
 /* door and guidance controls */
-.th .th-opendoor { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-b) + 176px); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4); animation: th-pop 0.2s ease-out; }
-.th .th-stop { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-b) + 232px); display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px; border-radius: 999px; background: rgba(13, 19, 33, 0.88); color: #fff; border: 1px solid rgba(255, 255, 255, 0.35); font-size: 0.85rem; }
+.th .th-opendoor { position: absolute; left: 50%; translate: -50% 0; transform: none; bottom: calc(var(--safe-b) + 176px); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4); animation: th-pop 0.2s ease-out; }
+.th .th-stop { position: absolute; left: 50%; translate: -50% 0; transform: none; bottom: calc(var(--safe-b) + 232px); display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px; border-radius: 999px; background: rgba(13, 19, 33, 0.88); color: #fff; border: 1px solid rgba(255, 255, 255, 0.35); font-size: 0.85rem; }
 .th .th-opendoor ~ .th-stop { bottom: calc(var(--safe-b) + 236px); }
 .th-way { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--safe-t) + var(--hud-h, 70px) + 214px); display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px); padding: 6px 14px 6px 8px; border-radius: 99px; background: rgba(13, 19, 33, 0.82); backdrop-filter: blur(10px); color: #fff; font-size: 0.85rem; white-space: nowrap; }
 .th-way i { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #2fe38a; color: #06210f; transition: transform 0.2s ease-out; }
 .th-way span { overflow: hidden; text-overflow: ellipsis; }
-@keyframes th-pop { from { opacity: 0; transform: translateX(-50%) scale(0.92); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
+@keyframes th-pop { from { opacity: 0; scale: 0.92; } to { opacity: 1; scale: 1; } }
 @media (max-width: 520px) { .th-way { top: calc(var(--safe-t) + var(--hud-h, 70px) + 190px); } }
 @media (prefers-reduced-motion: reduce) { .th .th-opendoor { animation: none; } .th-way i { transition: none; } }
+/* Stop walking / Open door / Go in: dark on hover too (white text stays readable), and they never shift away from the cursor (centred with `translate`, pressed with `scale`) */
+.th .th-stop, .th .th-stop:hover:not(:disabled), .th .th-stop:focus-visible { background: rgba(13, 19, 33, 0.94); color: #fff; border: 1px solid rgba(255, 255, 255, 0.35); }
+.th .th-stop:hover:not(:disabled) { background: #1b2540; border-color: rgba(255, 255, 255, 0.6); }
+.th .th-act-btn.th-opendoor, .th .th-act-btn.th-opendoor:hover:not(:disabled), .th .th-act-btn.th-opendoor:focus-visible { background: rgba(13, 19, 33, 0.94); color: #fff; border: 1px solid rgba(255, 255, 255, 0.35); }
+.th .th-act-btn.th-opendoor:hover:not(:disabled) { background: #1b2540; border-color: rgba(255, 255, 255, 0.6); }
+.th .th-stop:hover, .th .th-opendoor:hover { transform: none; }
+
+/* ---- the travel sheet is docked right on the bottom bar, one surface with it (same as the activities panel / running-activity card) ---- */
+body[data-nav="on"] .ts-scrim { align-items: flex-end; padding-bottom: var(--safe-b); }
+body[data-nav="on"] .ts { --safe-b: env(safe-area-inset-bottom, 0px); --bp-radius: 28px; width: min(520px, calc(100% - 2 * var(--edge))); max-height: calc(100dvh - var(--nav-band) - env(safe-area-inset-bottom, 0px) - 12px);
+  background: var(--bp-bg); border: 1px solid var(--bp-line); border-bottom: 0; border-radius: var(--bp-radius) var(--bp-radius) 0 0; padding-top: 10px; box-shadow: 0 -16px 36px -18px rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(20px) saturate(1.3); -webkit-backdrop-filter: blur(20px) saturate(1.3); }
+body[data-nav="on"] .ts-grab { display: block; }
+body[data-nav="on"] .ts-head { padding-top: 4px; }
+body[data-nav="on"] .ts-foot { padding-bottom: 14px; background: transparent; border-top-color: var(--bp-line); }
+body[data-nav="on"] .ts-scroll { padding-bottom: 14px; }
+
+/* ---- activities: small chips (icon + name) ---- */
+.pa-acts { gap: 8px; }
+.pa-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.pa-acts .pa-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--bp-line, var(--line)); background: rgba(255, 255, 255, 0.06); color: var(--text); font: 600 0.8rem var(--font-ui); text-decoration: none; white-space: nowrap; cursor: pointer; transition: background-color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease); }
+.pa-acts .pa-chip svg { color: var(--green-text); flex: none; }
+.pa-acts .pa-chip:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.24); color: var(--text); }
+.pa-acts .pa-chip[aria-pressed="true"], .pa-acts .pa-chip[aria-pressed="true"]:hover:not(:disabled) { background: #5fe3c0; border-color: #5fe3c0; color: #06241c; }
+.pa-acts .pa-chip[aria-pressed="true"] svg { color: #06241c; }
+.pa-acts .pa-chip[data-risk="risky"] { border-color: rgba(255, 128, 128, 0.45); }
+.pa-acts .pa-chip[data-risk="risky"] svg { color: var(--danger-text); }
+.pa-acts .pa-chip[data-risk="risky"][aria-pressed="true"] { background: #ff8a94; border-color: #ff8a94; color: #2a0a0e; }
+.pa-acts .pa-chip[data-risk="risky"][aria-pressed="true"] svg { color: #2a0a0e; }
