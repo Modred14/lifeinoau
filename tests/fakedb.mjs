@@ -1,9 +1,10 @@
 // tests/fakedb.mjs: a small in-memory stand-in for the Prisma client, just rich enough for the services' queries (where with
-// OR / in / not / gt / lt, orderBy, take, increment, unique keys, include of account and faculty). A transaction that throws is rolled back.
+// OR / AND / in / not / gt / lt, Json path filters, orderBy, take, increment, unique keys, include of account and faculty). A transaction that throws is rolled back.
 const isObj = (v) => v && typeof v === "object" && !(v instanceof Date) && typeof v !== "bigint";
 const eq = (a, b) => (typeof a === "bigint" || typeof b === "bigint" ? BigInt(a ?? 0) === BigInt(b ?? 0) : a instanceof Date && b instanceof Date ? +a === +b : a === b);
 function cond(v, c) {
   if (!isObj(c)) return eq(v, c);
+  if (Array.isArray(c.path)) { const { path, ...rest } = c; return cond(path.reduce((a, k) => (a == null ? a : a[k]), v), rest); } // a Json filter: { path: ["academics"], gt: 0 }
   return Object.entries(c).every(([k, x]) => {
     if (k === "in") return x.some((y) => eq(v, y));
     if (k === "notIn") return !x.some((y) => eq(v, y));

@@ -7,7 +7,7 @@ import { LANDMARKS } from "../lib3d/landmarks.js";
 import { withExtras } from "../lib3d/mapExtras.js";
 import { classify, buildInterior } from "../lib3d/interiors/index.js";
 import { activityHubs, MIN_GAP } from "../lib3d/interiors/activityHubs.js";
-import { ACTIVITIES, MAP, BUDGET, PRESENCE, STAT_KEYS, HUSTLE_NAMES, activitiesFor, effectsOf, budgeted, spentOf, unmet, cooldownEnd, stepAllowed, nearHub, apply, worthless } from "../lib/activities.js";
+import { ACTIVITIES, MAP, BUDGET, PRESENCE, STAT_KEYS, HUSTLE_NAMES, activitiesFor, effectsOf, budgeted, spentOf, unmet, cooldownEnd, stepAllowed, nearHub, apply, worthless, LIMITED } from "../lib/activities.js";
 import { ACTIVITY_SECONDS, ACTIVITY_MS } from "../lib/activityTime.js";
 import { makeDb } from "./fakedb.mjs";
 import * as G from "../lib/gameService.js";
@@ -62,7 +62,7 @@ for (const [id, a] of Object.entries(ACTIVITIES)) {
   if ((a.d.academics ?? 0) > 1 || (a.d.popularity ?? 0) > 1) bits.push("academics/popularity step above 1");
   if ((a.d.energy ?? 0) > 30) bits.push("energy step above 30");
   if ((a.d.health ?? 0) > 20) bits.push("health step above 20");
-  if (a.kind === "stats" && a.d.energy > 0 && !a.cd) bits.push("energy gain without a cooldown");
+  if (a.kind !== "exam" && (a.cd || a.week != null || (a.day != null && a.day < 99))) bits.push("a repeat limit on an activity that may be repeated freely");
   if (a.kind === "stats" && !Object.values(a.d).some((v) => v > 0) && !Object.values(a.d).some((v) => v < 0)) bits.push("changes nothing");
   if (!Array.isArray(a.anim) || !a.anim.length) bits.push("no animation");
   chk(`activity ${id} is balanced`, bits.length === 0, bits.join(", "));
@@ -74,22 +74,25 @@ assert.deepEqual(effectsOf(me, ACTIVITIES.sleep_bed).d, { health: 2, energy: 50 
 assert.equal(effectsOf({ ...me, personalities: ["Introvert"] }, ACTIVITIES.union_meeting).d.popularity, undefined, "an Introvert gains nothing from a 1-point social gain");
 assert.equal(effectsOf({ ...me, personalities: ["Extrovert"] }, ACTIVITIES.union_meeting).d.popularity, 2);
 assert.equal(effectsOf({ ...me, personalities: ["Party Animal"] }, ACTIVITIES.dance).d.happiness, 6);
-{ const out = budgeted({ health: 2, energy: 100 }, { energy: 60, health: 0 }); assert.deepEqual(out.d, { energy: 10, health: 2 }); assert.deepEqual(out.capped, ["energy"]);
-  assert.deepEqual(budgeted({ energy: 30 }, { energy: 70 }).d, {}, "nothing left of the allowance");
-  assert.deepEqual(budgeted({ energy: -12 }, { energy: 70 }).d, { energy: -12 }, "costs always apply"); }
-{ const dayStart = Date.UTC(2026, 9, 18), week = 5, runs = [{ status: "DONE", delta: { energy: 30, academics: 1 }, startedAt: new Date(dayStart + 1000), gameWeek: week }, { status: "DONE", delta: { energy: 20 }, startedAt: new Date(dayStart - 1000), gameWeek: week }, { status: "CANCELLED", delta: { energy: 99 }, startedAt: new Date(dayStart + 5), gameWeek: week }];
-  const sp = spentOf(runs, { week, dayStart }); assert.equal(sp.energy, 30, "energy is counted per day, and only finished runs"); assert.equal(sp.academics, 1, "academics is counted per game week"); }
+{ const out = budgeted({ health: 2, academics: 3 }, { academics: 2, health: 0 }); assert.deepEqual(out.d, { health: 2, academics: 1 }); assert.deepEqual(out.capped, ["academics"]);
+  assert.deepEqual(budgeted({ popularity: 2 }, { popularity: 5 }).d, {}, "nothing left of the weekly allowance");
+  assert.deepEqual(budgeted({ academics: -1 }, { academics: 3 }).d, { academics: -1 }, "costs always apply");
+  assert.deepEqual(budgeted({ energy: 100, health: 20, happiness: 50 }, { energy: 9999, health: 9999, happiness: 9999 }).d, { energy: 100, health: 20, happiness: 50 }, "energy, health and happiness have no allowance: they only stop at 100"); }
+{ const dayStart = Date.UTC(2026, 9, 18), week = 5, runs = [{ status: "DONE", delta: { energy: 30, academics: 1 }, startedAt: new Date(dayStart + 1000), gameWeek: week }, { status: "DONE", delta: { popularity: 2 }, startedAt: new Date(dayStart - 1000), gameWeek: week }, { status: "DONE", delta: { popularity: 4 }, startedAt: new Date(dayStart - 1000), gameWeek: week - 1 }, { status: "CANCELLED", delta: { academics: 99 }, startedAt: new Date(dayStart + 5), gameWeek: week }];
+  const sp = spentOf(runs, { week, dayStart }); assert.equal(sp.energy, 0, "energy has no allowance, so nothing is counted"); assert.equal(sp.academics, 1, "academics is counted per game week, finished runs only"); assert.equal(sp.popularity, 2, "popularity is counted per game week (last week does not count)"); }
 { const base = { now: 1000, runs: [], day: 0, week: 0 };
   assert.equal(unmet({ ...me, energy: 95 }, ACTIVITIES.sleep_bed, base), "You are not tired enough for that.");
   assert.equal(unmet({ ...me, energy: 5 }, ACTIVITIES.play_squash, base), "You are too tired for that. Rest first.");
   assert.equal(unmet({ ...me, health: 95 }, ACTIVITIES.health_checkup, base) !== null, true);
-  assert.match(unmet(me, ACTIVITIES.sleep_bed, { ...base, cooldownEndsAt: 5000 }), /Again in/);
-  assert.match(unmet(me, ACTIVITIES.sleep_bed, { ...base, day: 6 }), /times today/);
-  assert.match(unmet(me, ACTIVITIES.class_test, { ...base, week: 1 }), /this week/);
+  assert.match(unmet(me, ACTIVITIES.sleep_bed, { ...base, cooldownEndsAt: 5000 }), /Again in/, "unmet still honours a cooldown if an activity ever declares one");
+  assert.match(unmet(me, ACTIVITIES.sit_exam, { ...base, day: 1 }), /today/, "the exam keeps its once-a-day rule");
+  assert.equal(unmet(me, ACTIVITIES.sleep_bed, { ...base, day: 50 }), null, "a bed has no daily count any more");
+  assert.equal(unmet(me, ACTIVITIES.class_test, { ...base, week: 9 }), null, "a class test has no weekly count any more");
   assert.equal(unmet(me, ACTIVITIES.sleep_bed, base), null);
-  assert.equal(cooldownEnd(ACTIVITIES.sleep_bed, [{ status: "DONE", startedAt: new Date(1000), finishedAt: new Date(2000), endsAt: new Date(2000) }]), 2000 + 60 * 1000);
+  assert.equal(cooldownEnd(ACTIVITIES.sleep_bed, [{ status: "DONE", startedAt: new Date(1000), finishedAt: new Date(2000), endsAt: new Date(2000) }]), 0, "no cooldown after sleeping");
+  assert.equal(cooldownEnd({ cd: 60 }, [{ status: "DONE", startedAt: new Date(1000), finishedAt: new Date(2000), endsAt: new Date(2000) }]), 2000 + 60 * 1000, "the cooldown rule itself still works for an activity that declares one");
   assert.equal(cooldownEnd(ACTIVITIES.sleep_bed, [{ status: "CANCELLED", startedAt: new Date(1000) }]), 0, "a stopped run does not start a cooldown"); }
-assert.equal(worthless(ACTIVITIES.health_checkup, me, { health: 8 }), true); assert.equal(worthless(ACTIVITIES.sleep_bed, me, { energy: 70 }), false, "sleep ignores the energy allowance");
+assert.equal(worthless(ACTIVITIES.bookshop_revision, me, { academics: 3 }), true, "a PAID activity whose every gain is cut is refused (nobody pays for nothing)"); assert.equal(worthless(ACTIVITIES.research_session, me, { academics: 3 }), false, "a free one always runs"); assert.equal(worthless(ACTIVITIES.sleep_bed, me, { energy: 70 }), false, "sleep ignores the energy allowance");
 assert.deepEqual(apply({ ...me, energy: 95 }, { energy: 30, health: -60 }).stats.energy, 100);
 assert.equal(apply({ ...me, health: 10 }, { health: -60 }).stats.health, 0);
 // position rules
@@ -98,6 +101,9 @@ assert.equal(stepAllowed({ x: 0, z: 0, at: 0 }, { x: 30, z: 0 }, 10_000), true);
 assert.equal(nearHub({ x: 1, z: 1, floor: 0 }, { x: 2, z: 1, floor: 0 }), true); assert.equal(nearHub({ x: 1, z: 1, floor: 1 }, { x: 2, z: 1, floor: 0 }), false, "another floor is not near");
 assert.equal(nearHub({ x: 0, z: 0, floor: 0 }, { x: PRESENCE.hubRadius + 0.1, z: 0, floor: 0 }), false);
 assert.ok(Object.keys(BUDGET).every((k) => STAT_KEYS.includes(k)));
+assert.deepEqual(Object.keys(BUDGET).sort(), ["academics", "popularity"], "only the two progression stats keep a weekly allowance");
+assert.deepEqual(LIMITED, ["sit_exam"], "the exam is the only activity that still carries a count");
+for (const id of ["event_gig", "back_room_deal"]) assert.ok(!ACTIVITIES[id].cd && ACTIVITIES[id].day === 99 && ACTIVITIES[id].kind.startsWith("hustle"), id + ": the hustles' rate limits live in lib/engine.js and are untouched");
 // activities per building differ in purpose: spot checks on the catalog's meaning
 assert.ok(ACTIVITIES.sleep_bed.full && !ACTIVITIES.nap_common.full, "a bed fills the bar, a sofa only tops it up");
 assert.ok(ACTIVITIES.triage_treatment.d.health > ACTIVITIES.buy_medicine.d.health, "treatment heals more than medicine");
@@ -188,8 +194,8 @@ try {
     const s = await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); assert.ok(s.started); clock += ACTIVITIES.sleep_bed.sec * 1000 + 100;
     const f = await S.finishActivity(w.db, "u1", { requestId: req(), ...at(h) }); assert.deepEqual(f.applied, { health: 2, energy: 70 }); assert.equal(w.c.energy, 100); assert.equal(w.c.health, 72);
     let e = await err(S.startActivity(w.db, "u1", { hubId: beds[1].id, requestId: req(), ...at(h) })); assert.ok(e, "another bed is too far to use from here");
-    await walkTo("h_awo", beds[1]); w.c.energy = 50; e = await err(S.startActivity(w.db, "u1", { hubId: beds[1].id, requestId: req(), ...at(beds[1]) })); assert.ok(e && /Again in/.test(e.message), "a cooldown follows sleeping: " + e?.message);
-    clock += 61_000; await S.report(w.db, "u1", at(beds[1])); w.c.energy = 95; e = await err(S.startActivity(w.db, "u1", { hubId: beds[1].id, requestId: req(), ...at(beds[1]) })); assert.ok(e && /not tired/.test(e.message), "not when you are not tired: " + e?.message); chk("sleeping restores energy once per cooldown and only when tired", true); }
+    await walkTo("h_awo", beds[1]); w.c.energy = 50; const again = await S.startActivity(w.db, "u1", { hubId: beds[1].id, requestId: req(), ...at(beds[1]) }); assert.ok(again.started, "no cooldown follows sleeping: you can sleep again at once");
+    clock += ACTIVITY_MS + 100; await S.finishActivity(w.db, "u1", { requestId: req(), ...at(beds[1]) }); w.c.energy = 95; e = await err(S.startActivity(w.db, "u1", { hubId: beds[1].id, requestId: req(), ...at(beds[1]) })); assert.ok(e && /not tired/.test(e.message), "not when you are not tired: " + e?.message); chk("sleeping restores energy, repeats freely, and only when tired", true); }
   { const w = world({ hostel: "Fajuyi", energy: 20, placeId: "h_awo" }); const h = ringOf("h_awo", "sleep_bed"); await go(w, "h_awo", h);
     const e = await err(S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) })); assert.ok(e && /not your room/i.test(e.message), "you cannot sleep in someone else's hall"); }
   { const w = world({ energy: 20, placeId: "blk_1a" }); const h = ringOf("blk_1a", "bunk_rest"); await go(w, "blk_1a", h); const s = await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); assert.ok(s.started, "anyone can rest on a block bunk"); }
@@ -197,9 +203,29 @@ try {
   { const w = world({ energy: 0, hostel: "Awo", placeId: "h_awo" }); const h = ringOf("h_awo", "sleep_bed"); await go(w, "h_awo", h);
     await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); clock += ACTIVITY_MS + 100; const f = await S.finishActivity(w.db, "u1", { requestId: req(), ...at(h) });
     assert.equal(f.applied.energy, 100); assert.equal(w.c.energy, 100); assert.equal(w.T.activityRun[0].delta.energy, undefined, "sleep does not count against the energy allowance");
-    // up to 6 sleeps a day
-    for (let i = 0; i < 5; i++) { clock += 61_000; w.c.energy = 10; await S.report(w.db, "u1", at(h)); await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); clock += ACTIVITY_MS + 100; await S.finishActivity(w.db, "u1", { requestId: req(), ...at(h) }); }
-    clock += 61_000; w.c.energy = 10; await S.report(w.db, "u1", at(h)); const e = await err(S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) })); assert.ok(e && /times today/.test(e.message), "six sleeps a day at most"); chk("a sleep takes 15 seconds and refills energy", true); }
+    // as many sleeps as the player wants: ten in a row, straight after one another, none refused
+    for (let i = 0; i < 10; i++) { w.c.energy = 10; const s2 = await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); assert.ok(s2.started, `sleep ${i + 2} starts`); clock += ACTIVITY_MS + 100; await S.finishActivity(w.db, "u1", { requestId: req(), ...at(h) }); assert.equal(w.c.energy, 100); }
+    chk("a sleep takes 15 seconds, refills energy and can be repeated without limit", true); }
+
+  // ---- repeating: free and paid activities have no cooldown and no daily count
+  { const w = world({ energy: 40, placeId: "h_awo", hostel: "Awo" }); const h = ringOf("h_awo", "nap_common"); await go(w, "h_awo", h);
+    for (let i = 0; i < 12; i++) { w.c.energy = 40; const s = await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); assert.ok(s.started, `nap ${i + 1} starts`); clock += ACTIVITY_MS + 100; const f = await S.finishActivity(w.db, "u1", { requestId: req(), ...at(h) }); assert.equal(f.applied.energy, 10, `nap ${i + 1} gives its full +10 (no energy allowance cuts it)`); assert.deepEqual(f.capped, []); }
+    assert.equal(w.T.activityRun.filter((r) => r.status === "DONE").length, 12); const st = await S.status(w.db, "u1"); assert.equal(st.hubs.find((q) => q.id === h.id).blocked, null, "and the ring still shows as available"); chk("a free activity can be repeated 12 times in a row with its full reward", true); }
+  { const w = world({ energy: 40, placeId: "new_bukateria" }); const h = ringOf("new_bukateria", "eat_meal"); await go(w, "new_bukateria", h); const before = w.bal();
+    for (let i = 0; i < 5; i++) { w.c.energy = 40; const s = await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); assert.ok(s.started, `meal ${i + 1} starts`); clock += ACTIVITY_MS + 100; await S.finishActivity(w.db, "u1", { requestId: req(), ...at(h) }); }
+    assert.equal(w.bal(), before - 5n * N(1500), "a paid activity is paid for each time, and repeats"); chk("a paid activity repeats, paying its fee each time", true); }
+  // the weekly allowance on academics: the activity still runs every time, it just stops adding past the allowance
+  { const w = world({ energy: 100, academics: 40, placeId: "library" }); const h = ringOf("library", "research_session"); await go(w, "library", h); const got = [];
+    for (let i = 0; i < 6; i++) { w.c.energy = 100; const s = await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); assert.ok(s.started, `research ${i + 1} is never refused`); clock += ACTIVITY_MS + 100; const f = await S.finishActivity(w.db, "u1", { requestId: req(), ...at(h) }); got.push(f.applied.academics ?? 0); }
+    assert.deepEqual(got, [1, 1, 1, 0, 0, 0], "academics gains stop at the weekly allowance of 3, but the activity keeps running");
+    // heavy repeating cannot push the weekly count out of view: 700 newer runs of something else do not reset the allowance
+    const week = w.T.activityRun[0].gameWeek; for (let i = 0; i < 700; i++) w.T.activityRun.push({ id: BigInt(1000 + i), characterId: "c1", requestId: "bulk-" + i, activityId: "nap_common", hubId: "x", placeId: "library", status: "DONE", startedAt: new Date(clock + i), endsAt: new Date(clock + i), finishedAt: new Date(clock + i), gameWeek: week, delta: { energy: 10 } });
+    w.c.energy = 100; clock += 1000; await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); clock += ACTIVITY_MS + 100; const f2 = await S.finishActivity(w.db, "u1", { requestId: req(), ...at(h) }); assert.equal(f2.applied.academics ?? 0, 0, "the weekly allowance is still counted after 700 other runs");
+    chk("academics keep a weekly allowance that never blocks a repeat and cannot be reset by heavy repeating", true); }
+  // money: the hustle's own limits are exactly what they were
+  { const w = world({ luck: 100, energy: 100 }); const h = ringOf("sub", "back_room_deal"); await go(w, "sub", h); await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); clock += ACTIVITY_MS + 100; const f = await S.finishActivity(w.db, "u1", { requestId: req(), ...at(h) });
+    if (!f.caught) { clock += 7 * H; await S.report(w.db, "u1", at(h)); w.c.energy = 100; const e = await err(S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) })); assert.ok(e && e.status === 429 && /risky hustle today/.test(e.message), "the risky hustle is still once a day: " + e?.message); }
+    chk("the money-earning hustles keep their rate limits", true); }
 
   // ---- paying: fees go through the ledger, and a player who cannot pay starts nothing
   { const w = world({ energy: 50, placeId: "new_bukateria" }); const h = ringOf("new_bukateria", "eat_meal"); await go(w, "new_bukateria", h); const before = w.bal();
@@ -211,7 +237,7 @@ try {
   // ---- health only when hurt
   { const w = world({ health: 95, placeId: "health_centre" }); const h = ringOf("health_centre", "health_checkup"); await go(w, "health_centre", h);
     let e = await err(S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) })); assert.ok(e && /good health/.test(e.message)); w.c.health = 40;
-    await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); clock += ACTIVITIES.health_checkup.sec * 1000 + 100; const f = await S.finishActivity(w.db, "u1", { requestId: req(), ...at(h) }); assert.equal(f.applied.health, 8, "health +10 but only 8 a day from activities: the budget cuts it"); assert.deepEqual(f.capped, ["health"]); }
+    await S.startActivity(w.db, "u1", { hubId: h.id, requestId: req(), ...at(h) }); clock += ACTIVITIES.health_checkup.sec * 1000 + 100; const f = await S.finishActivity(w.db, "u1", { requestId: req(), ...at(h) }); assert.equal(f.applied.health, 10, "health +10 in full: health has no daily allowance any more"); assert.deepEqual(f.capped, []); }
 
   // ---- classes, a test and the exam: a course must be named, position must be right, the existing rules apply
   { const w = world({ placeId: "f_science", energy: 100 }); const hc = ringOf("f_science", "attend_class"); await go(w, "f_science", hc);
@@ -220,12 +246,13 @@ try {
     e = await err(S.startActivity(w.db, "u1", { hubId: hc.id, requestId: req(), ...at(hc), param: "LAW 101" })); assert.ok(e && e.status === 400, "and it must be one of yours");
     await S.startActivity(w.db, "u1", { hubId: hc.id, requestId: req(), ...at(hc), param: code }); clock += ACTIVITIES.attend_class.sec * 1000 + 100; const f = await S.finishActivity(w.db, "u1", { requestId: req(), ...at(hc) }); assert.match(f.note, /lecture/);
     assert.equal(w.T.courseProgress[0].attended, 1); assert.equal(w.c.energy, 88, "the lecture costs the 12 energy the Courses rules say");
-    clock += ACTIVITIES.attend_class.cd * 1000 + 100; await S.report(w.db, "u1", at(hc));
-    e = await err(S.startActivity(w.db, "u1", { hubId: hc.id, requestId: req(), ...at(hc), param: code })); assert.ok(e && /already attended/.test(e.message), "once per course per week: " + e?.message);
+    // the same lecture again, straight away: allowed (it costs energy again), and the attendance record still counts the week once
+    const again = await S.startActivity(w.db, "u1", { hubId: hc.id, requestId: req(), ...at(hc), param: code }); assert.ok(again.started, "a lecture can be repeated"); clock += ACTIVITIES.attend_class.sec * 1000 + 100; await S.finishActivity(w.db, "u1", { requestId: req(), ...at(hc) });
+    assert.equal(w.T.courseProgress[0].attended, 1, "attendance is recorded once per week however many lectures are sat"); assert.equal(w.c.energy, 76, "the second lecture cost its 12 energy again");
     // a test
     const ht = ringOf("f_science", "class_test"); await walkTo("f_science", ht);
     await S.startActivity(w.db, "u1", { hubId: ht.id, requestId: req(), ...at(ht), param: code }); clock += ACTIVITIES.class_test.sec * 1000 + 100; const tf = await S.finishActivity(w.db, "u1", { requestId: req(), ...at(ht) }); assert.ok(tf.score >= 0 && tf.score <= 20 && tf.outOf === 20, "a score out of 20");
-    e = await err(S.startActivity(w.db, "u1", { hubId: ht.id, requestId: req(), ...at(ht), param: code })); assert.ok(e && /this week/.test(e.message), "one class test a week");
+    const t2 = await S.startActivity(w.db, "u1", { hubId: ht.id, requestId: req(), ...at(ht), param: code }); assert.ok(t2.started, "a class test can be taken again");
     // the exam: week 6 of a player who joined in week 1 (the fixture's clock puts the game in week 1, so the exam is refused)
     const he = ringOf("f_science", "sit_exam"); await walkTo("f_science", he);
     e = await err(S.startActivity(w.db, "u1", { hubId: he.id, requestId: req(), ...at(he) })); assert.ok(e && /no exam this week/.test(e.message), "no exam outside exam weeks");

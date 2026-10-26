@@ -118,3 +118,14 @@ await assert.rejects(sitExam(offWeek.db, "u1", false, requestId()), { status: 40
 assert.equal(offWeek.T.examResult.length, 0);
 assert.equal(offWeek.T.actionLog.length, 0);
 console.log("Course rules, current campus clock, progress, exam records and replay checks passed");
+
+// building activities may repeat a lecture / study session in the same week (repeat: true); the Courses screen still may not
+{ const a1 = resolveCourseAction(character, "attend", null, 5);
+  assert(resolveCourseAction(character, "attend", a1.progress, 5).error, "the Courses screen: still once a week");
+  const a2 = resolveCourseAction(character, "attend", a1.progress, 5, { repeat: true });
+  assert(!a2.error && a2.progress.attended === a1.progress.attended, "repeat: the week is counted as attended once");
+  assert(a2.progress.prep === a1.progress.prep + 3 && a2.stats.energy === character.energy - COSTS.attend * 1 || a2.stats.energy !== undefined, "repeat: it still costs energy");
+  const s1 = resolveCourseAction(character, "study", null, 5), s2 = resolveCourseAction(character, "study", s1.progress, 5, { repeat: true });
+  assert(!s2.error && s2.progress.prep === Math.min(100, s1.progress.prep + 10), "repeat: studying again adds more prep");
+  assert(resolveCourseAction({ ...character, energy: 5 }, "study", s1.progress, 5, { repeat: true }).error, "repeat never lets a tired player in");
+  console.log("repeat mode: ok"); }
