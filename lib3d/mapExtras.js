@@ -76,7 +76,7 @@ export const EXTRA_META = {
   motion_ground: { blurb: "The open field between the Amphitheatre and the Senate Building. Concerts, rallies, big evenings and the odd football match all end up here.", actions: [{ label: "This week's parties", href: "/parties" }], verified: false },
   religious_ground: { blurb: "A quiet walled ground just before the Main Bowl, with a church for each fellowship. Come for a service, or just for the calm.", actions: [], verified: false },
   ...Object.fromEntries(CHURCHES.map((c) => [c.id, { blurb: `${c.name}, in the Religious Ground before the Main Bowl. Services, choir practice and fellowship.`, actions: [], verified: false }])),
-  floor0: { blurb: "Where N-QRS takes you when you get caught. You are held here and serve your whole sentence inside: you can message other players, or pay the bail to walk out early.", actions: [{ label: "Go to Floor O", href: "/home" }], verified: false },
+  floor0: { blurb: "Where N-QRS takes you when you get caught. You are held here and serve your whole sentence inside: you can message other players, or pay the bail to walk out early.", actions: [], verified: false },
   ...Object.fromEntries(BILLBOARDS.map((b) => [b.id, { blurb: `A billboard at ${b.where}. Ten poster spots, each shown for ${BILLBOARD.SECONDS} seconds in turn.`, actions: [], verified: false }])),
 };
 

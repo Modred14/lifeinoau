@@ -40,6 +40,8 @@ export default function MapPage() {
   tripRef.current = trip;
   // Serving a sentence: held at Floor O (N-QRS Custody) and not allowed to travel. The server refuses every trip too; this only stops offering it.
   const held = !!g?.floorZero && +new Date(g.floorZero.releaseAt) > serverTime();
+  // Caught: whatever flow got you arrested, you are taken straight into the cell at Floor O on the map (never to the house).
+  useEffect(() => { if (held && here === "floor0" && !inside && !trip) { setFocus(null); setInside("floor0"); } }, [held, here, inside, trip]);
   const refreshBb = () =>
     call("/api/billboards").then((r) => {
       if (!r.failed) setBb(r);
@@ -178,7 +180,7 @@ export default function MapPage() {
       </div>
       {trip && <TripHud trip={trip} placeName={trip.name} st={tripSt} input={input} miniRef={miniRef} previewRef={previewRef} onCancel={() => setTrip(null)} />}
       <div className="trip-fade" data-on={fade ? "1" : undefined} aria-hidden="true" />
-      {insidePlace && held && insidePlace.id === "floor0" ? <CustodyCell st={g ?? {}} look={ch?.look ?? null} gender={ch?.gender ?? "M"} selfName={ch?.name ?? ""} onFree={() => { setInside(null); setFocus(null); }} /> : insidePlace && <BuildingInside place={insidePlace} look={ch?.look ?? null} gender={ch?.gender ?? "M"} focus={focus} selfName={ch?.name ?? ""} onLeave={() => { setInside(null); setFocus(null); }} />}
+      {insidePlace && held && insidePlace.id === "floor0" ? <CustodyCell st={g ?? {}} look={ch?.look ?? null} gender={ch?.gender ?? "M"} selfName={ch?.name ?? ""} onFree={() => { setInside(null); setFocus(null); }} /> : insidePlace && <BuildingInside place={insidePlace} onCustody={() => { setFocus(null); setInside("floor0"); }} look={ch?.look ?? null} gender={ch?.gender ?? "M"} focus={focus} selfName={ch?.name ?? ""} onLeave={() => { setInside(null); setFocus(null); }} />}
       {(sheet || direct) && L && <TravelSheet place={L} here={youPlace?.name} hasCar={ownsCar(ch)} driver={driverActive(ch, g?.week) ? { name: ch.driverName } : null} people={counts[L.id] ?? 0} distanceM={youPlace && L.located && youPlace.located ? Math.round(Math.hypot(L.x - youPlace.x, L.z - youPlace.z)) : null} character={ch} balanceKobo={g?.balanceKobo ?? null} jailed={held} highlight={want} eta={eta} onGo={begin} onClose={() => { closeSheet(); setWant(null); }} />}
       {youPlace && !trip && <div className="map-here" role="status"><Icon name="pin" size={14} weight="fill" /> {held ? <>You are held in <b>{CUSTODY_NAME}</b> until your sentence ends</> : <>You are at <b>{youPlace.name}</b></>}</div>}
       <div

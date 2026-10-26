@@ -69,7 +69,7 @@ export function HustlePanel({ kind, onClose }) {
     game.refresh?.();
     if (action === "finish") {
       setResult(r);
-      if (r.caught) { toast.error(`N-QRS HAS CAUGHT YOU. They seized ${naira(r.seizedKobo)} and you are in Floor O (N-QRS Custody). Bail starts at ${naira(r.billKobo)}.`, { duration: 8000 }); setTimeout(() => router.push("/home"), 1800); }
+      if (r.caught) { toast.error(`N-QRS HAS CAUGHT YOU. They seized ${naira(r.seizedKobo)} and you are in Floor O (N-QRS Custody). Bail starts at ${naira(r.billKobo)}.`, { duration: 8000 }); game.refresh(); setTimeout(() => router.push("/map"), 600); }
       else if (r.abandoned) toast.info(r.note);
       else toast.success(`${d.kind === "crew" ? "The crowd has gone home." : "The package moved."} You earned ${naira(r.earnedKobo)}.`, { sound: "coin" });
     }

@@ -92,7 +92,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
     const L = await call("/api/lecture?at=" + encodeURIComponent(place.id)); if (L.failed) return toast.error(L.error || "Could not reach the server.");
     lec.current = L; const c = L.courses.find((x) => x.code === code); if (!c) return toast.error("That lecturer is not in this building.");
     if (!c.canConfront) return toast.error(c.reason || "You cannot confront them now.");
-    const ok = await confirmAction({ title: `Fight ${c.lecturer.name}?`, message: `Beat them and there is an 80% chance N-QRS comes: they rescue the lecturer and arrest YOU. They seize 30% of your cash, you get a strike, and you serve your whole sentence in Floor O (N-QRS Custody). Lose and you get hurt. Costs ${L.energyCost} energy. Once a week.`, confirmLabel: "Fight", tone: "danger" });
+    const ok = await confirmAction({ title: `Fight ${c.lecturer.name}?`, message: `Beat them and there is a 70% chance N-QRS comes: they rescue the lecturer and arrest YOU. They seize 30% of your cash, you get a strike, and you serve your whole sentence in Floor O (N-QRS Custody). Lose and you get hurt. Costs ${L.energyCost} energy. Once a week.`, confirmLabel: "Fight", tone: "danger" });
     if (!ok) return;
     const r = await call("/api/lecture", { action: "approach", code, requestId: crypto.randomUUID() });
     if (r.failed) return toast.error(r.error || "You could not walk up to them.");

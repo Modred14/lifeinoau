@@ -143,7 +143,7 @@ oau-life-backend/
 | `/api/parent/call` | POST | `app/api/parent/call/route.js` | Call parent (once per week) |
 | `/api/risky` | POST | `app/api/risky/route.js` | Risky hustle (once per in-game day; paid or jailed) |
 | `/api/exam` | POST | `app/api/exam/route.js` | Sit or cheat in an exam |
-| `/api/fight` | POST | `app/api/fight/route.js` | Report a lecturer brawl; the server decides the cost (80% QRS catch after a win) |
+| `/api/fight` | POST | `app/api/fight/route.js` | Report a lecturer brawl; the server decides the cost (70% QRS catch after a win) |
 | `/api/floor0/pay` | POST | `app/api/floor0/pay/route.js` | Pay the bail to leave Floor O (N-QRS Custody) |
 | `/api/players` | GET | `app/api/players/route.js` | Search players by name |
 | `/api/profile` | GET | `app/api/profile/route.js` | Public profile |
@@ -263,7 +263,7 @@ from you there in the last 4 minutes, not in custody, suspended or expelled, 20 
 `POST /api/fight` is refused without it. The browser reports who won; `lib/fight.js` + `lib/fightService.js` decide the cost and settle everything in ONE transaction.
 - **You lose:** -20 health, -10 happiness, -5 popularity. Nobody comes.
 - **You win, and slip away (20%):** +15 happiness, +8 popularity, +25 suspicion. N-QRS still arrives, rescues the lecturer, finds nobody to arrest and leaves (39 s).
-- **You win and N-QRS catches you (80%):** they arrive, **rescue the lecturer**, apprehend **you** and walk you out to Floor O (57 s). The usual arrest rules apply
+- **You win and N-QRS catches you (70%):** they arrive, **rescue the lecturer**, apprehend **you** and walk you out to Floor O (57 s). The usual arrest rules apply
   (30% of cash seized, bill, sentence served inside Floor O, a strike, reason "Beat up <lecturer>"). The lecturer is never the one arrested.
 The response is a **timeline stamped by the server** from the moment the fight was settled (`lib/lectureResponse.js`); `lib3d/interiors/lectureEncounter.js`
 turns server time into where everyone stands and `lib3d/interiors/scene.js` draws it, so a refresh, a second tab or a reconnect resumes at the right moment

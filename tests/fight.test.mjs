@@ -33,6 +33,6 @@ assert.ok(resolveFight(c, { ...good, landed: 1 }, () => 1).error, "a win without
 { const r = resolveFight(c, { won: false, ms: 9000, landed: 2, taken: 12 }, () => 1); assert.equal(r.won, false); assert.ok(r.stats.health < c.health && r.stats.energy === c.energy - FIGHT_ENERGY); }
 { const r = resolveFight(c, good, () => DSA_CATCH_PERCENT); assert.ok(r.won && r.caught, "a roll at the line is caught"); assert.ok(r.stats.suspicion <= c.suspicion && r.stats.health < c.health, "arrest stats"); }
 { const r = resolveFight(c, good, () => DSA_CATCH_PERCENT + 1); assert.ok(r.won && !r.caught, "a roll above the line escapes"); assert.ok(r.stats.popularity > c.popularity && r.stats.suspicion > c.suspicion); }
-assert.equal(DSA_CATCH_PERCENT, 80);
-{ let n = 0, k = 20000; for (let i = 0; i < k; i++) if (resolveFight(c, good, (a, b) => a + Math.floor(Math.random() * (b - a + 1))).caught) n++; const p = n / k; assert.ok(p > 0.78 && p < 0.82, `caught about 80% of the time (got ${p})`); }
+assert.equal(DSA_CATCH_PERCENT, 70);
+{ let n = 0, k = 20000; for (let i = 0; i < k; i++) if (resolveFight(c, good, (a, b) => a + Math.floor(Math.random() * (b - a + 1))).caught) n++; const p = n / k; assert.ok(p > 0.68 && p < 0.72, `caught about 70% of the time (got ${p})`); }
 console.log("fight tests passed");

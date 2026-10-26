@@ -1,6 +1,6 @@
 // components/LectureFight.js
 // Fight a lecturer: a full-screen 3D brawl (auto-played, and you can take over any time), then the server decides what it costs you.
-// If you win, the QRS van comes for you 80% of the time: you are chased, carried into the van and driven to Floor O.
+// If you win, the QRS van comes for you 70% of the time: you are chased, carried into the van and driven to Floor O.
 // The scenes live in lib3d/lectureScene.js, the rules in lib/fightSim.js (the brawl) and lib/fight.js (the consequences).
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
