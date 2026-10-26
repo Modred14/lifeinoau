@@ -116,7 +116,7 @@ chk("the pure rules hold", true);
 const H = 3_600_000, MIN = 60_000, DAY = 24 * H, N = (n) => BigInt(n) * 100n;
 const START = Date.UTC(2026, 9, 1, 15, 30);
 const realNow = Date.now; let clock = START + 5 * DAY + H; Date.now = () => clock;
-const models = ["character", "account", "actionLog", "ledgerEntry", "floorZero", "gameClock", "notification", "achievement", "examResult", "achievementAward", "business", "holding", "partyTicket", "bond", "activityRun", "courseProgress", "clubVip", "clubBuyout", "clubEvent", "clubTransaction", "block"];
+const models = ["character", "account", "actionLog", "ledgerEntry", "floorZero", "gameClock", "notification", "achievement", "examResult", "achievementAward", "business", "holding", "partyTicket", "bond", "activityRun", "courseProgress", "classTest", "clubVip", "clubBuyout", "clubEvent", "clubTransaction", "block"];
 const FACULTY = { name: "Science", difficulty: 1.1 };
 function world(over = {}) {
   const db = makeDb(models, { unique: { actionLog: ["characterId", "requestId"], ledgerEntry: ["idempotencyKey"], activityRun: ["characterId", "requestId"], examResult: ["characterId", "gameWeek"] }, join: { character: (r, T) => r && ({ ...r, account: T.account.find((a) => a.characterId === r.id), faculty: FACULTY }) } });
@@ -257,6 +257,27 @@ try {
     const he = ringOf("f_science", "sit_exam"); await walkTo("f_science", he);
     e = await err(S.startActivity(w.db, "u1", { hubId: he.id, requestId: req(), ...at(he) })); assert.ok(e && /no exam this week/.test(e.message), "no exam outside exam weeks");
     chk("classes and tests follow the course rules", true); }
+  // ---- a surprise test the lecturer announced is sat at the class test ring, and is recorded. (It used to stay PENDING for ever, because the only screen
+  // that could sit it is never shown, so lib/tick.js turned every one into a missed test with its penalty.)
+  { const w = world({ placeId: "f_science", energy: 100 }); const ht = ringOf("f_science", "class_test"); await go(w, "f_science", ht);
+    const st = await S.status(w.db, "u1"), [c0, c1] = st.courses.map((x) => x.code), week = (await S.report(w.db, "u1", at(ht))).week;
+    w.T.classTest.push({ id: 1n, characterId: "c1", sessionStartWeek: 1, gameWeek: week, code: c1, status: "PENDING", score: null });
+    const wrong = await err(S.startActivity(w.db, "u1", { hubId: ht.id, requestId: req(), ...at(ht), param: c0 })); assert.ok(wrong && wrong.status === 409 && wrong.message.includes(c1), "while a surprise test waits, the test ring is for that course: " + wrong?.message);
+    assert.equal(w.T.classTest[0].status, "PENDING", "a refused start changes nothing");
+    await S.startActivity(w.db, "u1", { hubId: ht.id, requestId: req(), ...at(ht), param: c1 }); clock += ACTIVITIES.class_test.sec * 1000 + 100; const f = await S.finishActivity(w.db, "u1", { requestId: req(), ...at(ht) });
+    assert.equal(w.T.classTest[0].status, "TAKEN", "the announced test is now sat"); assert.equal(w.T.classTest[0].score, f.score, "and the score is recorded"); assert.ok(w.T.classTest[0].takenAt);
+    const again = await S.startActivity(w.db, "u1", { hubId: ht.id, requestId: req(), ...at(ht), param: c0 }); assert.ok(again.started, "afterwards the ring is a free practice test for any course"); clock += ACTIVITIES.class_test.sec * 1000 + 100; await S.finishActivity(w.db, "u1", { requestId: req(), ...at(ht) });
+    assert.equal(w.T.classTest.length, 1, "a practice test creates no record"); chk("a surprise test is sat at the ring and recorded as TAKEN", true); }
+  // graduates have no coursework: the rings say so and refuse, and the exam is never open to them
+  { const w = world({ placeId: "f_science", energy: 100, graduated: true, joinedWeek: -4 }); const hc = ringOf("f_science", "attend_class"), he = ringOf("f_science", "sit_exam"); await go(w, "f_science", hc);
+    const st = await S.status(w.db, "u1"); assert.match(st.hubs.find((h) => h.id === hc.id).blocked, /graduated/); assert.match(st.hubs.find((h) => h.id === he.id).blocked, /graduated|no exam/);
+    const e = await err(S.startActivity(w.db, "u1", { hubId: hc.id, requestId: req(), ...at(hc), param: st.courses[0].code })); assert.ok(e && /graduated/.test(e.message)); assert.equal(w.T.activityRun.length, 0); chk("a graduate cannot attend, study or sit exams", true); }
+  // an exam started in the last seconds of its week cannot be recorded any more: the run ends cleanly instead of rolling back and leaving the player stuck
+  { const saved = clock; clock = Date.UTC(2026, 9, 7, 23, 0, 0) - 50_000; // game week 1 ends at 00:00 game time on 8 Oct (23:00 UTC)
+    const w = world({ placeId: "lt_1000", energy: 100, joinedWeek: -4 }); const he = ringOf("lt_1000", "sit_exam"); await go(w, "lt_1000", he);
+    const s1 = await S.startActivity(w.db, "u1", { hubId: he.id, requestId: req(), ...at(he), param: "" }); assert.ok(s1.started, "the exam starts in the last seconds of its week"); clock += ACTIVITIES.sit_exam.sec * 1000 + 100;
+    const f = await S.finishActivity(w.db, "u1", { requestId: req(), ...at(he) }); assert.equal(f.cancelled, true); assert.match(f.message, /exam week ended/); assert.equal(w.T.examResult.length, 0, "nothing is recorded");
+    assert.equal(w.T.activityRun.filter((r) => r.status === "RUNNING").length, 0, "no run is left RUNNING"); assert.equal(w.T.activityRun[0].status, "CANCELLED"); clock = saved; chk("an exam that outlives its week ends cleanly", true); }
   { const w = world({ placeId: "lt_1000", energy: 100, joinedWeek: -4 }); // joined 5 weeks before week 1: this is week 6 of study
     const he = ringOf("lt_1000", "sit_exam"); await go(w, "lt_1000", he);
     await S.startActivity(w.db, "u1", { hubId: he.id, requestId: req(), ...at(he), param: "" }); clock += ACTIVITIES.sit_exam.sec * 1000 + 100; const f = await S.finishActivity(w.db, "u1", { requestId: req(), ...at(he) });

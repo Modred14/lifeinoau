@@ -55,8 +55,9 @@ export default function Courses() {
       </p>
       {d.examToday ? (
         <p>
-          <b>Exam today.</b> Sit it on the game screen before the week ends.
-          Your attendance and preparation so far decide your score.
+          <b>Exam week.</b> Sit it before the week ends: go to your faculty
+          building or a lecture theatre and use the examination ring. Your
+          attendance and preparation so far decide your score.
         </p>
       ) : (
         <p className="mut">
@@ -85,26 +86,26 @@ export default function Courses() {
           <Meter label="Preparation" pct={c.prep} color="var(--gold-text)" />
           <div className="row" style={{ marginTop: 10 }}>
             <button
-              disabled={c.attendedThisWeek || d.energy < d.costs.attend}
+              disabled={d.energy < d.costs.attend}
               onClick={() => act("attend", c.code)}
             >
               Attend lecture
               <br />
               <span className="mut">
                 {c.attendedThisWeek
-                  ? "done this week"
+                  ? `counted this week · ${d.costs.attend} energy`
                   : `${d.costs.attend} energy`}
               </span>
             </button>
             <button
-              disabled={c.studiedThisWeek || d.energy < d.costs.study}
+              disabled={d.energy < d.costs.study}
               onClick={() => act("study", c.code)}
             >
               Study
               <br />
               <span className="mut">
                 {c.studiedThisWeek
-                  ? "done this week"
+                  ? `studied this week · ${d.costs.study} energy`
                   : `${d.costs.study} energy`}
               </span>
             </button>
@@ -119,7 +120,8 @@ export default function Courses() {
       ))}
       <p className="mut">
         Lecture slots are for flavour: you can attend any time during the game
-        week. Lecturers are fictional, and the courses are game content, not the
+        week, and a week counts once towards your attendance however many
+        lectures you sit in it. Lecturers are fictional, and the courses are game content, not the
         official OAU curriculum.
       </p>
     </>

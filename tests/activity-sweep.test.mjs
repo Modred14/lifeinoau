@@ -29,7 +29,7 @@ const H = 3_600_000, MIN = 60_000, DAY = 24 * H, N = (n) => BigInt(n) * 100n;
 const START = Date.UTC(2026, 9, 1, 15, 30);
 const DAYTIME = START + 5 * DAY + H, NIGHT = Date.UTC(2026, 9, 6, 21, 30); // the clubs only open from 8 PM to 5 AM game time
 const realNow = Date.now; let clock = DAYTIME; Date.now = () => clock;
-const models = ["character", "account", "actionLog", "ledgerEntry", "floorZero", "gameClock", "notification", "achievement", "examResult", "achievementAward", "business", "holding", "partyTicket", "bond", "activityRun", "courseProgress", "clubVip", "clubBuyout", "clubEvent", "clubTransaction", "block"];
+const models = ["character", "account", "actionLog", "ledgerEntry", "floorZero", "gameClock", "notification", "achievement", "examResult", "achievementAward", "business", "holding", "partyTicket", "bond", "activityRun", "courseProgress", "classTest", "clubVip", "clubBuyout", "clubEvent", "clubTransaction", "block"];
 const FACULTY = { name: "Science", difficulty: 1.1 };
 function world(over = {}) {
   const db = makeDb(models, { unique: { actionLog: ["characterId", "requestId"], ledgerEntry: ["idempotencyKey"], activityRun: ["characterId", "requestId"], examResult: ["characterId", "gameWeek"] }, join: { character: (r, T) => r && ({ ...r, account: T.account.find((a) => a.characterId === r.id), faculty: FACULTY }) } });

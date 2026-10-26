@@ -444,8 +444,9 @@ export default function GameHome({
                 <div>
                   <h2 id="ex-h">Exam week</h2>
                   <p>
-                    Exams are sat in person. Go to the examination hall of your
-                    own faculty ({c.faculty}) before the week ends.
+                    Exams are sat in person. Go to your faculty building
+                    ({c.faculty}) or a lecture theatre and use the examination
+                    ring before the week ends.
                   </p>
                 </div>
                 <div className="gx-alert-acts">
