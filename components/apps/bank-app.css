@@ -1,5 +1,6 @@
 /* components/apps/bank-app.css: the Bank app inside the phone. Uses the phone's own light tokens (--surface, --muted, --green ...), so it matches the other apps. */
-.bk { display: grid; gap: 10px; }
+.bk { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; width: 100%; max-width: 100%; min-width: 0; } /* minmax(0,1fr): the single column may shrink to the handset, so long names and amounts truncate instead of widening every card past the screen */
+.bk > * { min-width: 0; max-width: 100%; }
 .bk .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .bk-label { display: inline-flex; align-items: center; gap: 5px; font-size: 0.78rem; font-weight: 500; color: var(--muted); letter-spacing: 0.01em; }
 .bk-sub { margin: 4px 0 0; font-size: 0.82rem; line-height: 1.4; color: var(--muted); }
@@ -7,7 +8,7 @@
 .bk-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
 /* the card: navy glass with a gold chip, like the bottom bar and the game's dark scenes */
-.bk-card { position: relative; overflow: hidden; display: grid; gap: 2px; padding: 18px 18px 16px; border-radius: 24px; color: #fff; isolation: isolate;
+.bk-card { position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 18px 18px 16px; border-radius: 24px; color: #fff; isolation: isolate;
   background: linear-gradient(145deg, #0d1321 0%, #1b2a4a 52%, #2b3f73 100%); box-shadow: 0 14px 30px -14px rgba(13, 19, 33, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.14); }
 .bk-card::before, .bk-card::after { content: ""; position: absolute; z-index: -1; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.07); }
 .bk-card::before { width: 220px; height: 220px; right: -70px; top: -90px; background: radial-gradient(circle at 30% 30%, rgba(232, 162, 58, 0.28), transparent 65%); }
@@ -21,14 +22,15 @@
 .bk-card .bk-label { color: rgba(255, 255, 255, 0.7); }
 .bk-bal { margin: 0; font: 700 2rem/1.1 var(--font-outfit, var(--font-ui)); letter-spacing: -0.02em; overflow-wrap: anywhere; }
 .bk-card-bot { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; margin-top: 14px; font-size: 0.82rem; }
-.bk-holder { font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bk-num { font-variant-numeric: tabular-nums; letter-spacing: 0.1em; color: rgba(255, 255, 255, 0.78); white-space: nowrap; }
+.bk-holder { flex: 1 1 0; min-width: 0; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-num { flex: none; font-variant-numeric: tabular-nums; letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.78); white-space: nowrap; }
 
-.bk-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bk-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .bk-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-weight: 600; }
-.bk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.bk-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .bk-grid .card { display: grid; gap: 4px; margin: 0; }
-.bk-grid b { font-size: 1.1rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.bk-grid b { font-size: clamp(0.95rem, 4.4vw, 1.1rem); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+@media (max-width: 360px) { .bk-grid { grid-template-columns: minmax(0, 1fr); } .bk-bal { font-size: 1.7rem; } } /* the narrowest phones: one balance per row so a number never breaks in the middle */
 
 .bk-nw { margin: 0; }
 .bk-nw-total { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
@@ -46,6 +48,7 @@
 .bk-goals-h h3 { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
 .bk-goals-h button { min-height: 36px; padding: 6px 12px; font-size: 0.84rem; display: inline-flex; align-items: center; gap: 4px; }
 .bk-goals { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.bk-goal b, .bk-row > b, .bk-row > span { min-width: 0; overflow-wrap: anywhere; }
 .bk-goal { padding: 14px; border-radius: 18px; background: var(--surface); }
 .bk-goal.done { background: color-mix(in srgb, var(--green) 10%, var(--surface)); }
 .bk-pct { font-size: 0.82rem; font-weight: 600; color: var(--muted); }
@@ -80,6 +83,6 @@
 .bk-sheet #bk-amt { font: 600 1.5rem/1.2 var(--font-outfit, var(--font-ui)); min-height: 54px; font-variant-numeric: tabular-nums; }
 .bk-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
 .bk-chips button { min-height: 36px; padding: 4px 14px; border-radius: 999px; font-size: 0.86rem; }
-.bk-sheet-acts { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; margin-top: 14px; }
+.bk-sheet-acts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 10px; margin-top: 14px; }
 .bk-sheet-acts button { min-height: 48px; }
 @media (prefers-reduced-motion: reduce) { .bk-prog i { transition: none; } }

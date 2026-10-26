@@ -13,6 +13,9 @@ import { useGame } from "@/lib/gameStore";
 import { lookKey } from "@/lib/look.js";
 
 const HOME_VIEW = { x: 0, z: 8, dist: 210, az: 0.7, pol: 0.95 };
+// campusReal.js anchors a label ROOF_LIFT scene units (12 m) over the roof: right for the overview map, where the tag must clear the roof from far away. On a trip the camera is at street
+// level, so the tag drops to TRIP_GAP (2.5 m) over the roof and sits directly on its building where the player can read it at a glance.
+const ROOF_LIFT = 1.2, TRIP_GAP = 0.25;
 const labelWidth = (name, tier) => Math.min(190, name.length * (tier === 1 ? 7.4 : 6.4) + 26);
 
 /**
@@ -56,20 +59,22 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
         // labels: HTML buttons that follow each building's roof
         if (pins) {
           lab = new CSS2DRenderer(); lab.domElement.style.cssText = "position:absolute;inset:0;pointer-events:none;overflow:hidden"; host.appendChild(lab.domElement);
-          const list = campus.places.map((L) => { const el = document.createElement("div"); el.style.pointerEvents = "auto"; const o = new CSS2DObject(el); o.position.copy(L.pos); stage.scene.add(o); return { id: L.id, el, L, w: labelWidth(L.name, L.tier) }; });
+          const list = campus.places.map((L) => { const el = document.createElement("div"); el.style.pointerEvents = "auto"; const o = new CSS2DObject(el); o.position.copy(L.pos); stage.scene.add(o); return { id: L.id, el, o, L, w: labelWidth(L.name, L.tier), roofY: L.pos.y - ROOF_LIFT }; });
           list.sort((a, b) => a.L.tier - b.L.tier); setMounts(list.map(({ id, el }) => ({ id, el, L: campus.places.find((p) => p.id === id) })));
           const kick = { n: 30 }; /* frames the tags are redrawn for even if the camera is still (first paint, resize) */ const size = () => { lab.setSize(box.current.clientWidth, box.current.clientHeight); kick.n = 30; }; size(); ro = new ResizeObserver(size); ro.observe(box.current);
-          const v = new stage.THREE.Vector3(); let frame = 0; const tagState = new Map(), items = list.map((it) => ({ id: it.id, tier: it.L.tier, x: it.L.x / SC, z: it.L.z / SC, y: (it.L.pos?.y ?? 3) / SC, bid: it.L.bid, w: it.w }));
+          const v = new stage.THREE.Vector3(); let frame = 0; let tagLow = false; const tagState = new Map(), items = list.map((it) => ({ id: it.id, tier: it.L.tier, x: it.L.x / SC, z: it.L.z / SC, y: (it.L.pos?.y ?? 3) / SC, bid: it.L.bid, w: it.w }));
           // on a trip: name tags of the places near the traveller (lib3d/destinations.js decides which), a click on one sends the trip there
           const tripTags = () => {
             const w = box.current.clientWidth, h = box.current.clientHeight, tv = tripRef.current.tagView(), to = tripRef.current.to, byId = new Map(list.map((it) => [it.id, it]));
-            for (const i of items) i.pinned = i.id === to;
+            for (const i of items) { i.pinned = i.id === to; const it = byId.get(i.id); it.o.position.y = it.roofY + TRIP_GAP; i.y = it.o.position.y / SC; }
+            tagLow = true;
             const shown = selectTags(items, { me: tv.me, now: performance.now(), w, h, occluded: tv.occluded, widthOf: (i) => i.w,
-              project: (i) => { const it = byId.get(i.id); v.copy(it.L.pos).project(stage.camera); return { x: (v.x * 0.5 + 0.5) * w, y: (-v.y * 0.5 + 0.5) * h, on: v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05 }; } }, tagState);
+              project: (i) => { const it = byId.get(i.id); v.copy(it.o.position).project(stage.camera); return { x: (v.x * 0.5 + 0.5) * w, y: (-v.y * 0.5 + 0.5) * h, on: v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05 }; } }, tagState);
             for (const it of list) { const op = shown.get(it.id); it.el.style.visibility = op ? "visible" : "hidden"; it.el.style.opacity = op ? String(op) : "0"; it.el.style.zIndex = it.id === to ? 9 : 4 - it.L.tier; }
           };
           const declutter = () => {
             if (box.current.dataset.trip) { if (box.current.dataset.tags === "1" && tripRef.current?.tagView) tripTags(); else for (const it of list) it.el.style.visibility = "hidden"; return; }
+            if (tagLow) { tagLow = false; for (const it of list) it.o.position.y = it.L.pos.y; kick.n = 30; } // the trip is over: the map's labels go back up over the roofs
             for (const it of list) it.el.style.opacity = ""; // nearest-first by tier: show a label only if it is on screen, near enough for its tier, and clear of the ones already shown
             const w = box.current.clientWidth, h = box.current.clientHeight, dist = stage.camera.position.distanceTo(stage.controls.target), maxTier = box.current.dataset.labels === "off" ? 0 : dist > 300 ? 1 : dist > 120 ? 2 : 3, taken = [];
             for (const it of list) { const isSel = it.id === sel.current; let show = isSel || it.L.tier <= maxTier;

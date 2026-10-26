@@ -15,12 +15,36 @@ import { serverTime } from "@/lib/serverClock";
 import { playSound } from "@/lib/sound";
 import { callsLive, callsDo, startCallPolling, parentCall, useParentCall, syncGame } from "@/lib/callsClient";
 import { PLAYER_CALL } from "@/lib/callRules";
+import { GAME_TIME_ZONE } from "@/lib/campus-clock.js";
+import { serverDate } from "@/lib/serverClock";
+import { Icon } from "./Icon";
+import "./phone.css"; // the call is drawn inside the same handset as the phone (frame, status bar, notch, home bar), so it reuses those rules
 import "./call-layer.css";
 
 const left = (iso) => (iso ? Math.max(0, new Date(iso).getTime() - serverTime()) : 0);
 const clock = (ms) => { const s = Math.floor(Math.max(0, ms) / 1000); return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; };
 /** Re-render a few times a second while a call is on (countdowns and the call timer). */
 function useTick(on, ms = 250) { const [, set] = useState(0); useEffect(() => { if (!on) return; const t = setInterval(() => set((n) => n + 1), ms); return () => clearInterval(t); }, [on, ms]); }
+const statusTime = () => serverDate().toLocaleTimeString("en-NG", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: GAME_TIME_ZONE }).replace(/\s?(am|pm)/i, (m) => m.trim().toUpperCase());
+/** The handset a call is shown in: the phone's own frame and status bar around the call screen, so a call never takes over the whole window. */
+function Handset({ children }) {
+  useTick(true, 15000);
+  return (
+    <div className="cx-scrim ph-scrim">
+      <div className="ph cx-ph">
+        <div className="ph-screen cx-screen">
+          <div className="ph-status">
+            <b className="num">{statusTime()}</b>
+            <span className="ph-notch" aria-hidden="true" />
+            <span className="ph-sys"><i className="ph-4g"><i /><i /><i />4G</i><Icon name="battery" size={20} weight="fill" /></span>
+          </div>
+          <div className="cx-body">{children}</div>
+          <span className="cx-homebar" aria-hidden="true"><i /></span>
+        </div>
+      </div>
+    </div>
+  );
+}
 const Avatar = ({ name, ring }) => <span className={`cx-av${ring ? " cx-ring" : ""}`} aria-hidden="true">{String(name || "?").trim().charAt(0).toUpperCase()}</span>;
 const Bar = ({ ms, total }) => <span className="cx-bar" aria-hidden="true"><i style={{ width: `${Math.min(100, (ms / total) * 100)}%` }} /></span>;
 
@@ -184,5 +208,5 @@ export default function CallLayer() {
   else if (active?.status === "ANSWERED") body = <Connected c={active} busy={busy} act={act} balanceKobo={g?.balanceKobo} />;
   else if (showLast) body = <Result c={last} onDone={() => setSeen(last.id)} />;
   if (!body) return null;
-  return <div className="cx-scrim">{body}</div>;
+  return <Handset>{body}</Handset>;
 }
