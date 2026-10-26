@@ -10,8 +10,8 @@ import { playSound } from "@/lib/sound";
 import { confirmAction } from "@/lib/confirm";
 import { usePlayMode, setPlayMode } from "@/lib/ui";
 import { game, roomStore, useStore, begin, finish, cash, canAfford } from "@/lib/gameStore";
-import { ITEMS, MAX_ITEMS, roomScore, sellKobo, priceKobo } from "@/lib/furniture.js";
-import { roomFor, autoPlace } from "@/lib/room.js";
+import { ITEMS, MAX_ITEMS, roomScore, sellKobo, priceKobo, canGoOutside, isFixture, isOutdoor } from "@/lib/furniture.js";
+import { roomFor, autoPlace, isOutside } from "@/lib/room.js";
 import { fmtN } from "@/lib/classes.js";
 import { bailFor, HUSTLE } from "@/lib/engine.js";
 import { SLEEP, wakeResult, msToFull, toMs } from "@/lib/sleep.js";
@@ -77,6 +77,7 @@ export default function GameHome({
   const vehicles = useVehicles(), fleetHandlers = useRef({});
   const api = useRef(null),
     queue = useRef(Promise.resolve()),
+    pendingMoves = useRef(0), // changes of mine still on their way to the server (the quiet refresh below waits for them)
     ids = useRef(new Map()); // temporary id of an item that was just bought -> its real id once the server has answered
   const real = (id) => ids.current.get(String(id)) ?? id;
   const room = useMemo(
@@ -187,6 +188,18 @@ export default function GameHome({
     loadRoom();
   }, [loadRoom]);
   const roomReady = !!(rd?.room && rd?.items);
+  // Another device or tab may have moved things on the compound: every so often, while this screen is open and nothing of mine is on its way, ask the
+  // server whether the room changed (one cheap request by revision) and take its copy if it did, so every device shows the same compound.
+  const revRef = useRef(null);
+  revRef.current = rd?.rev ?? null;
+  useEffect(() => {
+    const t = setInterval(async () => {
+      if (document.hidden || pendingMoves.current || !revRef.current || garageOpen) return;
+      const r = await call("/api/room?rev=" + encodeURIComponent(revRef.current));
+      if (alive.current && !pendingMoves.current && !r.failed && !r.same && r.room && r.items) roomStore.refresh();
+    }, 20_000);
+    return () => clearInterval(t);
+  }, [garageOpen]);
   useEffect(() => () => setPlayMode("home"), []); // leaving the screen always leaves Buy mode
   useEffect(() => {
     if (!buying) setSelected(null);
@@ -202,8 +215,9 @@ export default function GameHome({
         delta ? { store: game, patch: cash(delta) } : null, // the top bar's cash moves too
       ]);
       const go = async () => finish(handles, await call("/api/room", body()));
+      pendingMoves.current++;
       const p = queue.current.then(go, go);
-      queue.current = p.catch(() => {});
+      queue.current = p.catch(() => {}).finally(() => { pendingMoves.current--; });
       return p.then((res) => {
         if (res.failed) {
           fail(res);
@@ -270,9 +284,10 @@ export default function GameHome({
   const place = async (id) => {
     const it = items.find((i) => String(i.id) === String(id));
     if (!it) return;
-    const spot = rd?.room
-      ? autoPlace(rd.room, items.filter((i) => i !== it), it.key)
-      : null;
+    const rest = items.filter((i) => i !== it),
+      spot = rd?.room
+        ? autoPlace(rd.room, rest, it.key) ?? (canGoOutside(it.key) ? autoPlace(rd.room, rest, it.key, null, { outdoors: true }) : null) // a weatherproof piece with no room indoors goes out on the compound
+        : null;
     if (rd?.room && !spot)
       return toast.error("There is no space left in your room.");
     setSelected(String(id));
@@ -284,6 +299,15 @@ export default function GameHome({
     if (!r) setSelected((s) => (s === String(id) ? null : s));
   };
   const sel = items.find((i) => String(i.id) === selected) ?? null;
+  // carry a chair, sofa, table, lamp ... out to the compound, or back into the house: it goes to the best free spot there
+  const carry = async () => {
+    if (!sel || !rd?.room) return;
+    const id = sel.id, out = isOutside(rd.room, sel), where = out ? "inside" : "outside",
+      spot = autoPlace(rd.room, items.filter((i) => String(i.id) !== String(id)), sel.key, null, { outdoors: !out });
+    if (!spot) return toast.error(out ? "There is no space left inside your home." : "There is no space left on your compound.");
+    playSound("place");
+    await send(() => ({ action: "place", id: real(id), where }), { room: patchItem(id, { placed: true, x: spot.x, z: spot.z, rot: spot.rot }) });
+  };
   const store = async () => {
     if (!sel) return;
     const id = sel.id;
@@ -330,10 +354,15 @@ export default function GameHome({
     [send], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  const tool = sel && {
+  const movable = sel && !isFixture(sel.key),
+    carryable = sel && movable && sel.placed && rd?.room && canGoOutside(sel.key) && !isOutdoor(sel.key);
+  const tool = sel && (sel.placed || !isFixture(sel.key)) && {
     name: ITEMS[sel.key].name,
+    locked: !movable, // the home's own fixtures (the toilet, shower, dining table) are looked at, never moved
     onRotate: () => api.current?.rotateSelected(),
     onStore: store,
+    onCarry: carryable ? carry : null,
+    carryLabel: carryable ? (isOutside(rd.room, sel) ? "Bring inside" : "Take outside") : null,
     onSell: sell,
     sellLabel:
       BigInt(sel.paidKobo) > 0n ? fmtN(sellKobo(sel.paidKobo) / 100n) : null,
@@ -380,6 +409,7 @@ export default function GameHome({
           selected={selected}
           onSelect={setSelected}
           onMove={onMove}
+          onBlocked={(why) => toast.error(why)}
           onUse={(u) => !buying && !sleeping && !going && setUse(u)}
           onAsleep={onAsleep}
           onWakeTap={() => wakeNow(false)}

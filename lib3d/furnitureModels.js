@@ -117,6 +117,21 @@ function catalogPiece(g, key) {
   g.userData.finish = def?.finish ?? null;
 }
 
+
+/** A rattan patio chair (also used round the patio tables): at (x, z), turned `yaw`, with a cushion of the given colour. */
+function patioChair(g, x, z, yaw, frame, cushion) {
+  const c = new THREE.Group(); c.position.set(x, 0, z); c.rotation.y = yaw; g.add(c);
+  box(c, [0.6, 0.07, 0.6], [0, 0.4, 0], frame); box(c, [0.6, 0.5, 0.07], [0, 0.45, -0.27], frame).rotation.x = -0.1; for (const [lx, lz] of [[-0.26, -0.26], [0.26, -0.26], [-0.26, 0.26], [0.26, 0.26]]) box(c, [0.05, 0.4, 0.05], [lx, 0, lz], frame);
+  for (const lx of [-0.3, 0.3]) box(c, [0.05, 0.22, 0.5], [lx, 0.5, 0], frame); box(c, [0.5, 0.1, 0.5], [0, 0.47, 0.02], cushion); box(c, [0.46, 0.34, 0.08], [0, 0.55, -0.22], cushion).rotation.x = -0.1;
+}
+/** A round parasol: a cone canopy of alternating colours (colours null: a plain cream canopy), centred over (x, z=0) at height y. */
+function parasol(g, x, y, r, colors) {
+  if (!colors) return;
+  const [a, b] = colors, base = new THREE.Mesh(new THREE.CylinderGeometry(0.03, r, 0.4, 16), mat(a, { side: THREE.DoubleSide })); base.position.set(x, y + 0.2, 0); base.castShadow = true; g.add(base);
+  for (let i = 0; i < 8; i += 2) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.031, r + 0.01, 0.405, 4, 1, false, (i * Math.PI) / 4, Math.PI / 4), mat(b, { side: THREE.DoubleSide })); w.position.set(x, y + 0.2, 0); g.add(w); }
+  ball(g, 0.05, [x, y + 0.42, 0], "#c9a45a");
+}
+
 function bed(g, wide, sheet) {
   const W = wide ? 1.92 : 0.92, D = 1.92;
   box(g, [W, 0.3, D], [0, 0, 0], WOOD_D);
@@ -443,6 +458,66 @@ const BUILD = {
   },
   garden_statue: (g) => {
     box(g, [0.5, 0.22, 0.5], [0, 0, 0], "#a9a69c"); box(g, [0.34, 0.14, 0.34], [0, 0.22, 0], "#bdb9ad"); cyl(g, [0.1, 0.16, 0.5], [0, 0.36, 0], "#cfcbbf"); ball(g, 0.12, [0, 0.98, 0], "#d6d2c6"); box(g, [0.34, 0.06, 0.1], [0, 0.72, 0], "#cfcbbf");
+  },
+  // ---- the compound range (outdoor pieces) ----
+  patio_chair: (g) => patioChair(g, 0, 0, 0, "#c9a36a", "#4f9d84"),
+  patio_side_table: (g) => {
+    cyl(g, [0.34, 0.34, 0.06], [0, 0.56, 0], "#a8794a"); cyl(g, [0.06, 0.09, 0.56], [0, 0, 0], "#7a5533"); cyl(g, [0.26, 0.28, 0.04], [0, 0, 0], "#7a5533");
+    cyl(g, [0.07, 0.06, 0.1], [0.08, 0.62, 0.04], "#eee7da"); ball(g, 0.05, [-0.1, 0.68, -0.05], "#e25942");
+  },
+  patio_dining_set: (g) => {
+    box(g, [1.7, 0.07, 0.95], [0, 0.72, 0], "#a8794a"); for (const [x, z] of [[-0.75, -0.38], [0.75, -0.38], [-0.75, 0.38], [0.75, 0.38]]) box(g, [0.07, 0.72, 0.07], [x, 0, z], "#7a5533");
+    for (const x of [-0.45, 0.45]) { patioChair(g, x, -0.82, Math.PI, "#c9a36a", "#e8a23a"); patioChair(g, x, 0.82, 0, "#c9a36a", "#e8a23a"); }
+    cyl(g, [0.03, 0.03, 2.05], [0, 0.04, 0], "#6e7378"); parasol(g, 0, 2.05, 1.2, ["#f4efe2", "#e8a23a"]);
+  },
+  outdoor_sofa: (g) => {
+    box(g, [2.8, 0.14, 0.9], [0, 0.18, 0], "#8b5e3c"); for (const x of [-1.4, 1.4]) box(g, [0.14, 0.62, 0.9], [x, 0.18, 0], "#8b5e3c"); box(g, [2.8, 0.55, 0.12], [0, 0.18, -0.4], "#8b5e3c");
+    for (const x of [-0.92, 0, 0.92]) { box(g, [0.88, 0.2, 0.68], [x, 0.32, 0.08], "#e9e2d2"); box(g, [0.86, 0.46, 0.2], [x, 0.5, -0.28], "#e9e2d2").rotation.x = -0.12; }
+    for (const [x, c] of [[-1.05, "#4f9d84"], [1.05, "#e8a23a"]]) { const p = box(g, [0.36, 0.34, 0.12], [x, 0.56, -0.05], c); p.rotation.z = x * 0.12; }
+    for (const [x, z] of [[-1.3, -0.38], [1.3, -0.38], [-1.3, 0.38], [1.3, 0.38]]) box(g, [0.07, 0.18, 0.07], [x, 0, z], "#5b3d27");
+  },
+  swing_bench: (g) => {
+    for (const x of [-0.95, 0.95]) for (const z of [-0.4, 0.4]) { const l = box(g, [0.07, 2.3, 0.07], [x * 0.92, 0, z * 1.9], "#7a5533"); l.rotation.z = x * 0.07; }
+    box(g, [2.1, 0.09, 0.1], [0, 2.24, 0], "#7a5533"); box(g, [2.3, 0.05, 1.2], [0, 2.3, 0], "#f4efe2"); for (const x of [-0.9, -0.45, 0, 0.45, 0.9]) box(g, [0.14, 0.052, 1.22], [x + 0.22, 2.3, 0], "#e8a23a");
+    for (const x of [-0.75, 0.75]) cyl(g, [0.012, 0.012, 1.75], [x, 0.5, 0.05], "#6e7378");
+    box(g, [1.7, 0.1, 0.66], [0, 0.46, 0.05], "#b07a4a"); box(g, [1.7, 0.6, 0.08], [0, 0.52, -0.26], "#b07a4a").rotation.x = -0.14; box(g, [1.5, 0.12, 0.54], [0, 0.56, 0.08], "#4f9d84");
+  },
+  picnic_table: (g) => {
+    for (let i = 0; i < 4; i++) box(g, [2.7, 0.06, 0.22], [0, 0.74, -0.34 + i * 0.226], "#a8794a");
+    for (const z of [-0.78, 0.78]) { box(g, [2.7, 0.06, 0.3], [0, 0.42, z], "#a8794a"); } for (const x of [-1.0, 1.0]) { box(g, [0.08, 0.76, 0.1], [x, 0, -0.5], "#7a5533").rotation.x = 0.2; box(g, [0.08, 0.76, 0.1], [x, 0, 0.5], "#7a5533").rotation.x = -0.2; box(g, [0.08, 0.06, 1.7], [x, 0.4, 0], "#7a5533"); }
+  },
+  sun_lounger: (g) => {
+    box(g, [0.78, 0.07, 1.0], [0, 0.34, 0.45], "#d9d2c1"); box(g, [0.78, 0.07, 0.98], [0, 0.55, -0.45], "#d9d2c1").rotation.x = 0.52; box(g, [0.7, 0.1, 0.92], [0, 0.4, 0.45], "#f4efe2"); box(g, [0.7, 0.1, 0.9], [0.0, 0.6, -0.45], "#f4efe2").rotation.x = 0.52;
+    for (const [x, z] of [[-0.34, 0.85], [0.34, 0.85], [-0.34, -0.05], [0.34, -0.05]]) box(g, [0.05, 0.34, 0.05], [x, 0, z], "#5b6168"); box(g, [0.5, 0.12, 0.22], [0, 0.64, -0.78], "#e8a23a").rotation.x = 0.52;
+  },
+  fire_pit: (g) => {
+    for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; box(g, [0.26, 0.2, 0.2], [Math.cos(a) * 0.4, 0, Math.sin(a) * 0.4], i % 2 ? "#8f8c82" : "#a9a69c").rotation.y = -a; }
+    cyl(g, [0.34, 0.34, 0.05], [0, 0.04, 0], "#2b2a28"); const f = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.5, 8), glow("#ff8a2a", 1.8)); f.position.y = 0.32; g.add(f); const f2 = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.32, 8), glow("#ffd36b", 2)); f2.position.y = 0.3; g.add(f2);
+    for (const [x, z] of [[0, -0.9], [0, 0.9], [-0.9, 0], [0.9, 0]]) { const l = cyl(g, [0.2, 0.2, 0.55], [x, 0.2, z], "#8b5e3c", {}, 12); l.rotation.z = Math.PI / 2; l.rotation.y = Math.atan2(x, z); l.position.y = 0.25; }
+  },
+  outdoor_rug: (g) => {
+    box(g, [2.9, 0.03, 1.9], [0, 0, 0], "#2f6f74"); box(g, [2.7, 0.034, 1.7], [0, 0, 0], "#efe6cf"); box(g, [2.5, 0.038, 1.5], [0, 0, 0], "#2f6f74");
+    for (let i = -3; i <= 3; i++) box(g, [0.14, 0.042, 1.5], [i * 0.34, 0, 0], i % 2 ? "#e8a23a" : "#efe6cf");
+  },
+  bird_bath: (g) => {
+    cyl(g, [0.2, 0.26, 0.1], [0, 0, 0], "#bdb9ad"); cyl(g, [0.09, 0.13, 0.62], [0, 0.1, 0], "#d1cdc0"); cyl(g, [0.38, 0.14, 0.16], [0, 0.72, 0], "#c9c5b8");
+    cyl(g, [0.32, 0.32, 0.02], [0, 0.86, 0], "#8fc4d6", { transparent: true, opacity: 0.8 }); ball(g, 0.06, [0.1, 0.94, 0.04], "#c0522b"); ball(g, 0.04, [0.15, 0.97, 0.04], "#c0522b"); box(g, [0.05, 0.02, 0.025], [0.2, 0.96, 0.04], "#e8a23a");
+  },
+  topiary_pair: (g) => {
+    for (const x of [-0.24, 0.24]) { cyl(g, [0.16, 0.12, 0.3], [x, 0, 0], "#efe6cf"); cyl(g, [0.02, 0.02, 0.28], [x, 0.3, 0], "#6e4a2c"); ball(g, 0.23, [x, 0.78, 0], "#3f7a45"); ball(g, 0.14, [x, 1.1, 0], "#4f8a52"); }
+  },
+  bbq_grill: (g) => {
+    const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.36, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat("#2b2f3a", { metalness: 0.3 })); bowl.rotation.x = Math.PI; bowl.position.y = 0.95; bowl.castShadow = true; g.add(bowl);
+    for (const [x, z] of [[-0.25, -0.2], [0.25, -0.2], [0, 0.28]]) { const l = box(g, [0.04, 0.78, 0.04], [x, 0, z], "#2b2f3a"); l.rotation.z = x * 0.2; }
+    cyl(g, [0.34, 0.34, 0.02], [0, 0.92, 0], "#b8c0c8", { metalness: 0.6 }, 20); box(g, [0.5, 0.04, 0.3], [0, 0.4, 0], "#2b2f3a"); box(g, [0.5, 0.05, 0.05], [0, 0.88, 0.38], "#a8794a"); ball(g, 0.05, [0.12, 0.96, 0.05], "#e0572a");
+  },
+  garden_gazebo: (g) => {
+    box(g, [2.9, 0.1, 2.9], [0, 0, 0], "#a8794a"); for (let i = 0; i < 7; i++) box(g, [2.9, 0.012, 0.02], [0, 0.1, -1.2 + i * 0.4], "#7a5533");
+    for (const [x, z] of [[-1.3, -1.3], [1.3, -1.3], [-1.3, 1.3], [1.3, 1.3]]) box(g, [0.14, 2.4, 0.14], [x, 0.1, z], "#f4efe2");
+    box(g, [2.9, 0.12, 0.12], [0, 2.46, -1.3], "#f4efe2"); box(g, [2.9, 0.12, 0.12], [0, 2.46, 1.3], "#f4efe2"); box(g, [0.12, 0.12, 2.9], [-1.3, 2.46, 0], "#f4efe2"); box(g, [0.12, 0.12, 2.9], [1.3, 2.46, 0], "#f4efe2");
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(2.35, 0.95, 4), mat("#7a4b32")); roof.rotation.y = Math.PI / 4; roof.position.y = 3.05; roof.castShadow = true; g.add(roof); ball(g, 0.1, [0, 3.58, 0], "#c9a45a");
+    for (const [x, z, w, d] of [[0, -1.18, 2.3, 0.4], [-1.18, 0, 0.4, 2.3], [1.18, 0, 0.4, 2.3]]) { box(g, [w, 0.08, d], [x, 0.5, z], "#8b5e3c"); box(g, [w > d ? w : 0.08, 0.5, w > d ? 0.08 : d], [x + (w > d ? 0 : x > 0 ? 0.16 : -0.16), 0.56, z + (w > d ? -0.16 : 0)], "#8b5e3c"); }
+    const l = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), glow("#ffd98a", 1.2)); l.position.set(0, 2.2, 0); g.add(l);
   },
   dining_set: (g) => {
     box(g, [1.3, 0.06, 0.86], [0, 0.72, 0], WOOD_L);

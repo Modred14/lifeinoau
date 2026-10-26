@@ -76,7 +76,7 @@ chk("an insufficient balance rejects the purchase without charging or creating a
 
 const owned = replay.items.find((i) => i.key === "center_table_glass"), others = replay.items.filter((i) => i.id !== owned.id);
 let validTurn = null;
-outer: for (let x = 0; x < replay.room.w; x++) for (let z = 0; z < replay.room.d; z++) if (room.fits(replay.room, others, owned.key, x, z, 1, owned.id)) { validTurn = { x, z, rot: 1 }; break outer; }
+outer: for (let x = 0; x < replay.room.w; x++) for (let z = 0; z < replay.room.d; z++) if (room.placementIssue(replay.room, others, owned.key, x, z, 1, owned.id) === null) { validTurn = { x, z, rot: 1 }; break outer; }
 chk("the owned item can be rotated and repositioned to a legal open location", !!validTurn);
 if (validTurn) {
   const moved = await service.placeItem(db, "player-user", { id: owned.id, ...validTurn });

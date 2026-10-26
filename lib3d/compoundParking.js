@@ -11,7 +11,8 @@
 //   leaving ... the whole lawn (inside the hedges), the driveway, the gate and the road are drivable; the house, the garage, outdoor furniture and the other
 //               parked vehicles are solid. Driving out ends when the whole vehicle is on the carriageway (`onCarriageway`).
 import { plotFor } from "../lib/plot.js";
-import { ITEMS, isOutdoor, sizeOf } from "../lib/furniture.js";
+import { ITEMS, sizeOf } from "../lib/furniture.js";
+import { isOutside } from "../lib/room.js";
 import { garageVehicleSize } from "./garageLayout.js";
 
 export const CELL_M = 0.9; // a room cell is about 0.9 m (lib3d/room.js draws a 1.75 m person 1.95 cells tall)
@@ -43,7 +44,8 @@ export function compoundWorld(room, items = []) {
     { x0: -0.45, x1: W + 0.45, z0: -0.45, z1: D + 0.55, kind: "house" },
     { x0: ga.x0 - 0.45, x1: ga.x1 + 0.45, z0: ga.z0 - 0.45, z1: ga.z1 + 0.15, kind: "garage" },
   ];
-  for (const it of items) { if (!it || it.placed === false || it.x == null || !ITEMS[it.key] || !isOutdoor(it.key)) continue; const [w, d] = sizeOf(it.key, it.rot ?? 0); solids.push({ x0: it.x - 0.1, x1: it.x + w + 0.1, z0: it.z - 0.1, z1: it.z + d + 0.1, kind: "item" }); }
+  for (const it of items) { if (!it || it.placed === false || it.x == null || !ITEMS[it.key] || ITEMS[it.key].flat || !isOutside(room, it)) continue; // whatever stands out on the lawn is solid (a carried-out sofa too), but a rug lies flat and a car drives over it
+    const [w, d] = sizeOf(it.key, it.rot ?? 0); solids.push({ x0: it.x - 0.1, x1: it.x + w + 0.1, z0: it.z - 0.1, z1: it.z + d + 0.1, kind: "item" }); }
   const gate = { x0: P.gate.x0 + 0.35, x1: P.gate.x1 - 0.35, z0: pl.z1 - 1.6, z1: P.kerb + 0.1 }; // through the open gate, between its pillars, and across the footpath
   const road = { x0: P.road.x0, x1: P.road.x1, z0: P.road.z0, z1: P.road.z1 - 0.25 };
   const drive = { x0: P.drive.x0 + 0.15, x1: P.drive.x1 - 0.15, z0: Math.max(P.drive.z0, lawn.z0), z1: P.kerb + 0.1 };

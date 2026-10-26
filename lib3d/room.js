@@ -2,7 +2,7 @@
 // The player's room as a little diorama: floor, walls with a window and a door, furniture and the character, on a lawn disc.
 // The two walls nearest the camera drop away so you always see in. Browser only.
 //
-//   const room = createRoomScene(container, { onSelect(id|null), onMove(id, {x, z, rot}), onReady() });
+//   const room = createRoomScene(container, { onSelect(id|null), onMove(id, {x, z, rot}), onBlocked(reason), onReady() });
 //   room.setRoom({ w, d, theme }); room.setItems(items); room.setAvatar(look, gender); room.setMode("home" | "buy");
 //
 // Sleep callbacks: onAsleep(id) the character is lying on the bed; onAwake() it is standing again beside the bed;
@@ -15,13 +15,14 @@ import { createIdleController, IDLE_DELAY } from "./avatar/idleEmote.js";
 import { buildFurniture, setGlow, posterTex } from "./furnitureModels.js";
 import {
   THEMES,
-  fits,
   blockedCells,
   findPath,
   spawnCell,
   cellsOf,
+  isOutside,
+  placementIssue,
 } from "../lib/room.js";
-import { ITEMS, sizeOf, isOutdoor } from "../lib/furniture.js";
+import { ITEMS, sizeOf, isOutdoor, canGoOutside, isFixture } from "../lib/furniture.js";
 import { plotFor, lawnBox } from "../lib/plot.js";
 import { buildPlot, GROUND } from "./plot3d.js";
 import { createCompoundFleet } from "./compoundFleet.js";
@@ -659,31 +660,41 @@ export function createRoomScene(container, cb = {}) {
       [x, z] = [d.x + w / 2 - W / 2, d.z + dd / 2 - D / 2];
     return { x, z, yaw: (-d.rot * Math.PI) / 2 };
   };
+  // A piece stands on the house floor, or out on the lawn (a little lower, on a concrete pad): where it stands decides, so a chair carried out steps down and
+  // one carried in steps up. Nothing floats: the height always follows the level of the ground under it.
+  const LAWN_Y = -0.3;
+  function level(it, d = it.data) {
+    it.out = isOutside(room, d);
+    it.y0 = it.out ? LAWN_Y : 0;
+    if (it.pad) it.pad.visible = it.out;
+  }
   function addItem(d, animate) {
-    const group = buildFurniture(d.key),
-      y0 = isOutdoor(d.key) ? -0.3 : 0; // outdoor things stand on the lawn, below the floor, on a little concrete pad
+    const group = buildFurniture(d.key);
     group.userData.itemId = String(d.id);
-    if (y0) {
-      const pad = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.6, ITEMS[d.key].w - 0.05), 0.08, Math.max(0.6, ITEMS[d.key].d - 0.1)), mat("#bdb8ab", { roughness: 1 }));
-      pad.position.y = -0.04;
-      pad.receiveShadow = true;
-      group.add(pad);
-    }
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.6, ITEMS[d.key].w - 0.05), 0.08, Math.max(0.6, ITEMS[d.key].d - 0.1)), mat("#bdb8ab", { roughness: 1 }));
+    pad.position.y = -0.04;
+    pad.receiveShadow = true;
+    pad.visible = false;
+    group.add(pad);
     itemsRoot.add(group);
     const t = targetOf(d);
-    group.position.set(t.x, y0, t.z);
+    group.position.set(t.x, 0, t.z);
     group.rotation.y = t.yaw;
     if (group.userData.spin) fans.push(group.userData.spin);
     const it = {
       data: d,
       group,
+      pad,
       t,
       age: animate ? 0 : 1,
       lift: 0,
-      y0,
+      y0: 0,
+      out: false,
       shake: 0,
       leaving: 0,
     };
+    level(it);
+    group.position.y = it.y0;
     if (animate) group.scale.setScalar(0.001);
     items.set(String(d.id), it);
     return it;
@@ -703,6 +714,7 @@ export function createRoomScene(container, cb = {}) {
       if (have && !have.leaving) {
         have.data = d;
         have.t = targetOf(d);
+        level(have);
       } else if (!have) addItem(d, !firstItems);
     }
     firstItems = false;
@@ -737,7 +749,7 @@ export function createRoomScene(container, cb = {}) {
     selectedId = id;
     const it = items.get(id);
     if (it) setGlow(it.group, true);
-    if (it && mode === "buy") setView(isOutdoor(it.data.key) ? "yard" : "house"); // garden things are placed from above the whole plot
+    if (it && mode === "buy") setView(it.out ? "yard" : "house"); // garden things are placed from above the whole plot
     updateMarker();
     if (!silent) cb.onSelect?.(id);
   }
@@ -753,20 +765,21 @@ export function createRoomScene(container, cb = {}) {
       col = ok ? "#3fd08a" : "#ff6b6b";
     marker.visible = true;
     marker.scale.set(w, 1, dd);
-    marker.position.set(d.x + w / 2 - W / 2, isOutdoor(d.key) ? GROUND : 0, d.z + dd / 2 - D / 2);
+    marker.position.set(d.x + w / 2 - W / 2, isOutside(room, d) ? GROUND : 0, d.z + dd / 2 - D / 2);
     markerFill.material.color.set(col);
     markerEdge.material.color.set(col);
     markerFill.scale.set(1, 1, 1);
   }
   function rotateSelected() {
     const it = items.get(selectedId);
-    if (!it) return false;
+    if (!it || isFixture(it.data.key)) return false;
     const d = it.data,
       rot = (d.rot + 1) % 4,
       [w0, d0] = sizeOf(d.key, d.rot),
       [w1, d1] = sizeOf(d.key, rot),
       bx = d.x + Math.round((w0 - w1) / 2),
       bz = d.z + Math.round((d0 - d1) / 2);
+    let why = null;
     for (const [sx, sz] of [
       [0, 0],
       [1, 0],
@@ -778,17 +791,21 @@ export function createRoomScene(container, cb = {}) {
       [1, -1],
       [-1, 1],
     ]) {
-      if (fits(room, placedList(), d.key, bx + sx, bz + sz, rot, d.id)) {
+      const w = placementIssue(room, placedList(), d.key, bx + sx, bz + sz, rot, d.id);
+      if (!w) {
         commit(it, { x: bx + sx, z: bz + sz, rot });
         return true;
       }
+      why ??= w;
     }
     it.shake = 0.4;
+    cb.onBlocked?.(why ? `It cannot turn here. ${why}` : "It cannot turn here.");
     return false;
   }
   function commit(it, p) {
     it.data = { ...it.data, ...p };
     it.t = targetOf(it.data);
+    level(it);
     updateMarker();
     cb.onMove?.(it.data.id, p);
   }
@@ -869,7 +886,7 @@ export function createRoomScene(container, cb = {}) {
   function cancelSleep() { if (me.sleep?.stage !== "walk") return false; me.sleep = null; me.path = []; return true; }
 
   // ----- the character -----
-  const blocked = () => blockedCells(placedList());
+  const blocked = () => blockedCells(placedList(), room);
   const cellOf = () => [
     Math.min(W - 1, Math.max(0, Math.floor(me.x + W / 2))),
     Math.min(D - 1, Math.max(0, Math.floor(me.z + D / 2))),
@@ -1028,10 +1045,11 @@ export function createRoomScene(container, cb = {}) {
       if (e.button !== 0 || !room) return;
       aim(e);
       const id = hitItem(),
-        outdoorHit = id && isOutdoor(items.get(id)?.data.key),
+        outdoorHit = id && items.get(id)?.out,
         f = hitFloor(outdoorHit ? yardPlane : floorPlane);
       down = { x: e.clientX, y: e.clientY, id, moved: false, f };
-      if (mode === "buy" && id) {
+      if (mode === "buy" && id && isFixture(items.get(id).data.key)) select(id); // the home's own fixtures can be looked at, never dragged
+      else if (mode === "buy" && id) {
         const it = items.get(id),
           t = it.t;
         select(id);
@@ -1067,11 +1085,17 @@ export function createRoomScene(container, cb = {}) {
     el.style.cursor = "grabbing";
     aim(e);
     const it = items.get(drag.id),
-      outdoor = isOutdoor(it.data.key),
-      f = hitFloor(outdoor ? yardPlane : floorPlane);
+      key = it.data.key,
+      outOnly = isOutdoor(key),
+      mayCross = canGoOutside(key); // a weatherproof piece can be carried between the house floor and the lawn
+    // where the pointer is on the house floor, an indoor piece follows it there; anywhere else it follows the lawn (outdoor-only pieces only ever follow the lawn)
+    const onFloor = hitFloor(floorPlane),
+      inHouse = onFloor && Math.abs(onFloor.x) < W / 2 && Math.abs(onFloor.z) < D / 2,
+      f = outOnly || (mayCross && !inHouse) ? hitFloor(yardPlane) : onFloor;
     if (!f) return;
-    const [w, dd] = sizeOf(it.data.key, it.data.rot),
-      box = outdoor ? lawnBox(room) : { x0: 0, z0: 0, x1: W, z1: D }; // indoors the room's floor; outdoors the plot's lawn
+    const [w, dd] = sizeOf(key, it.data.rot),
+      lawn = lawnBox(room),
+      box = outOnly || (mayCross && !inHouse) ? lawn : { x0: 0, z0: 0, x1: W, z1: D }; // indoors the room's floor; outdoors the plot's lawn
     const x = Math.min(
         box.x1 - w,
         Math.max(box.x0, Math.round(f.x - drag.offx + W / 2 - w / 2)),
@@ -1080,17 +1104,11 @@ export function createRoomScene(container, cb = {}) {
         box.z1 - dd,
         Math.max(box.z0, Math.round(f.z - drag.offz + D / 2 - dd / 2)),
       );
-    const ok = fits(
-      room,
-      placedList(),
-      it.data.key,
-      x,
-      z,
-      it.data.rot,
-      it.data.id,
-    );
-    drag.last = { ...it.data, x, z, ok };
+    const why = placementIssue(room, placedList(), key, x, z, it.data.rot, it.data.id);
+    drag.last = { ...it.data, x, z, ok: !why };
+    drag.why = why;
     it.t = targetOf(drag.last);
+    level(it, drag.last); // it steps down onto the lawn, or up onto the floor, as it is carried
     it.lift = 0.18;
     updateMarker(drag.last);
   }
@@ -1110,7 +1128,8 @@ export function createRoomScene(container, cb = {}) {
       else {
         it.data = { ...dr.start };
         it.t = targetOf(it.data);
-        if (!dr.last.ok) it.shake = 0.35;
+        level(it);
+        if (!dr.last.ok) { it.shake = 0.35; if (dr.why) cb.onBlocked?.(dr.why); }
         updateMarker();
       }
       return;

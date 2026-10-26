@@ -5,13 +5,13 @@ import { starterPlan, starterFor, ITEMS, isOutdoor, inShop } from "../lib/furnit
 import { roomFor, fits, autoPlace, blockedCells, spawnCell, consistent, outdoorSlots, cellsOf, cutOff } from "../lib/room.js";
 import { LAYOUTS, layoutOf, canStep, zoneAt, wallRuns, doorCellsOf } from "../lib/layouts.js";
 let bad = 0; const chk = (l, c) => { if (!c) bad++; console.log((c ? "OK  " : "FAIL") + " " + l); };
-const HOMES = ["Ojaja", "Off-campus", "1-Bedroom Flat", "2-Bedroom Flat"];
+const HOMES = ["Ojaja", "Off-campus", "1-Bedroom Flat", "2-Bedroom Flat", "3-Bedroom House", "4-Bedroom House"];
 
 // ---- the plans ----
 chk("Ojaja has one room for sleeping and sitting: that room, a kitchen, a bathroom and the hall, and no separate living room", (() => { const L = layoutOf(roomFor("Ojaja")); return L && L.zones.map((z) => z.kind).sort().join() === "bath,bed,kitchen,passage" && L.zones.find((z) => z.kind === "bed").name === "Bedroom and living room"; })());
 chk("off campus has its own plan, with a bedroom and a separate living area (the combined room is only Ojaja's)", (() => { const L = layoutOf(roomFor("Off-campus")); return L && L !== layoutOf(roomFor("Ojaja")) && L.zones.map((z) => z.kind).sort().join() === "bath,bed,kitchen,living,passage" && L.zones.find((z) => z.kind === "bed").name !== "Bedroom and living room"; })());
 chk("1-bedroom flat: bedroom, living room, kitchen, bathroom, a separate toilet and the hall", layoutOf(roomFor("1-Bedroom Flat")).zones.map((z) => z.kind).sort().join() === "bath,bed,kitchen,living,passage,toilet");
-chk("2-bedroom flat: two bedrooms, living room, kitchen, bathroom, a separate toilet and the hall", layoutOf(roomFor("2-Bedroom Flat")).zones.map((z) => z.id).sort().join() === "bath,bed1,bed2,kitchen,living,passage,toilet");
+chk("2-bedroom flat: two bedrooms each with its own bathroom, living room, kitchen, a guest toilet and the hall", layoutOf(roomFor("2-Bedroom Flat")).zones.map((z) => z.id).sort().join() === "bath1,bath2,bed1,bed2,kitchen,living,passage,toilet");
 chk("school halls stay one plain room", !roomFor("Awo").layout && !roomFor("Angola").layout);
 for (const h of HOMES) {
   const room = roomFor(h, "p1"), L = layoutOf(room), start = [L.entry.x, L.entry.z], seen = new Set([start.join()]), q = [start];
@@ -22,10 +22,8 @@ for (const h of HOMES) {
 }
 { const L = layoutOf(roomFor("2-Bedroom Flat"));
   const doorsBetween = (p, q) => L.doors.filter(([a, b, c, d]) => [zoneAt(L, a, b).id, zoneAt(L, c, d).id].sort().join() === [p, q].sort().join());
-  const into = doorsBetween("bed1", "passage"), off = doorsBetween("bed2", "living");
-  const doorsOf = (id) => L.doors.filter(([a, b, c, d]) => zoneAt(L, a, b).id === id || zoneAt(L, c, d).id === id);
-  chk("2-bedroom flat: bedroom 1 and bedroom 2 are not joined to each other (the main bedroom opens on the hall, the second off the living room)", doorsBetween("bed1", "bed2").length === 0 && doorsOf("bed1").length === 1 && doorsOf("bed2").length === 1 && into.length === 1 && off.length === 1 && canStep(L, [into[0][0], into[0][1]], [into[0][2], into[0][3]]) && canStep(L, [off[0][0], off[0][1]], [off[0][2], off[0][3]]));
-  chk("2-bedroom flat: the toilet and the bathroom each have their own door onto the hall", doorsBetween("toilet", "passage").length === 1 && doorsBetween("bath", "passage").length === 1 && doorsBetween("toilet", "bath").length === 0); }
+  chk("2-bedroom flat: the front door opens into the living room, which leads to the main bedroom, the hall and the kitchen; the second bedroom opens off the hall", zoneAt(L, L.entry.x, L.entry.z).kind === "living" && doorsBetween("living", "bed1").length === 1 && doorsBetween("living", "passage").length === 1 && doorsBetween("living", "kitchen").length === 1 && doorsBetween("passage", "bed2").length === 1 && doorsBetween("bed1", "bed2").length === 0);
+  chk("2-bedroom flat: each bedroom has its own bathroom, reached only through the bedroom; the guest toilet is on the hall", doorsBetween("bed1", "bath1").length === 1 && doorsBetween("bed2", "bath2").length === 1 && L.doors.filter(([a, b, c, d]) => [zoneAt(L, a, b).id, zoneAt(L, c, d).id].some((id) => id === "bath1")).length === 1 && doorsBetween("toilet", "passage").length === 1); }
 { const L = layoutOf(roomFor("1-Bedroom Flat")), doorsBetween = (p, q) => L.doors.filter(([a, b, c, d]) => [zoneAt(L, a, b).id, zoneAt(L, c, d).id].sort().join() === [p, q].sort().join());
   chk("1-bedroom flat: the front door opens into the living room, which leads to the bedroom and the hall; the toilet and bathroom are separate rooms off the hall", zoneAt(L, L.entry.x, L.entry.z).kind === "living" && doorsBetween("bed", "living").length === 1 && doorsBetween("living", "passage").length === 1 && doorsBetween("toilet", "passage").length === 1 && doorsBetween("bath", "passage").length === 1 && doorsBetween("toilet", "bath").length === 0); }
 
@@ -60,7 +58,7 @@ for (const h of ["Awo", ...HOMES]) {
   chk("a generator takes no room inside: it does not block the floor", blockedCells([{ key: "generator", placed: true, x: room.w, z: room.d - 2, rot: 3 }]).size === 0); }
 
 // ---- rent and moving ----
-chk("rent per session: 1-bedroom flat N600,000 and 2-bedroom flat N900,000 (the most expensive home)", sessionRentOf("1-Bedroom Flat") === 600_000 && sessionRentOf("2-Bedroom Flat") === 900_000 && PRIVATE_HOMES.every((h) => sessionRentOf(h) <= 900_000));
+chk("rent per session: 1-bedroom flat N600,000, 2-bedroom flat N900,000, 3-bedroom house N1,350,000 and 4-bedroom house N1,900,000 (the most expensive home)", sessionRentOf("1-Bedroom Flat") === 600_000 && sessionRentOf("2-Bedroom Flat") === 900_000 && sessionRentOf("3-Bedroom House") === 1_350_000 && sessionRentOf("4-Bedroom House") === 1_900_000 && PRIVATE_HOMES.every((h) => sessionRentOf(h) <= 1_900_000));
 for (const h of ["1-Bedroom Flat", "2-Bedroom Flat"]) { let t = 0n; for (let i = 0; i < SESSION_WEEKS; i++) t += rentInstalmentKobo(h, i); chk(`${h}: the 12 weekly instalments add up to the session price`, t === BigInt(sessionRentOf(h)) * 100n); }
 chk("flats are not school hostels, and school halls still are", !isSchoolHostel("1-Bedroom Flat") && !isSchoolHostel("2-Bedroom Flat") && isSchoolHostel("Awo"));
 chk("a flat has 1 to 2 (1-bed) or 2 to 4 (2-bed) people", [...new Set(Array.from({ length: 200 }, (_, i) => occupantsFor("2-Bedroom Flat", "x" + i)))].sort().join() === "2,3,4" && [...new Set(Array.from({ length: 200 }, (_, i) => occupantsFor("1-Bedroom Flat", "x" + i)))].sort().join() === "1,2");
@@ -82,7 +80,7 @@ chk("the 4 school halls of each gender are offered", schoolHalls("M").length ===
   chk("the 3D walls leave a gap at every door and cover every other boundary", walls.doors.length === LAYOUTS.flat2.doors.length && walls.walls.length > 0); }
 chk("the generator is still sold in the shop, and the dining set, the toilet and shower and the separate toilet are fixtures", inShop("generator") && !inShop("dining_set") && !inShop("ensuite") && !inShop("toilet"));
 { const keys = (h) => starterFor(h, 2), n = (l, k) => l.filter((x) => x === k).length;
-  chk("only the flats come with a separate toilet; every home has the toilet and shower in its bathroom",["1-Bedroom Flat", "2-Bedroom Flat"].every((h) => n(keys(h), "toilet") === 1 && n(keys(h), "ensuite") === 1) && ["Ojaja", "Off-campus"].every((h) => n(keys(h), "toilet") === 0 && n(keys(h), "ensuite") === 1));
+  chk("the flats and houses come with a guest toilet, and a toilet and shower in each bedroom's bathroom (one per bedroom); Ojaja and off campus have one bathroom", [["1-Bedroom Flat", 1], ["2-Bedroom Flat", 2], ["3-Bedroom House", 3], ["4-Bedroom House", 4]].every(([h, n_]) => n(keys(h), "toilet") === 1 && n(keys(h), "ensuite") === n_) && ["Ojaja", "Off-campus"].every((h) => n(keys(h), "toilet") === 0 && n(keys(h), "ensuite") === 1));
   const plan = (h, z) => starterPlan(h, 2).filter(([, zone]) => zone === z).map(([k]) => k);
   chk("off campus: the TV, rug and armchair are in the living area and the beds in the bedroom; Ojaja keeps everything in the one room", plan("Off-campus", "living").sort().join() === "armchair,rug,tv" && plan("Off-campus", "bed").every((k) => k !== "tv" && k !== "rug" && k !== "armchair") && ["rug", "armchair", "desk"].every((k) => plan("Ojaja", "bed").includes(k)) && plan("Ojaja", "living").length === 0);
   chk("2-bedroom flat: the dining table stands in the living room", plan("2-Bedroom Flat", "living").includes("dining_set") && plan("2-Bedroom Flat", "dining").length === 0); }

@@ -1,3 +1,4 @@
+
 # Voucher administration
 
 Voucher management is available only to authenticated users with the server-side `ADMIN` role through `/api/admin/vouchers`. The API creates draft vouchers with cryptographically random codes; the raw code appears only once in the create response, while the database stores its hash.

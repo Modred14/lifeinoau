@@ -24,7 +24,9 @@ const HOME_PLANS = {
   ojaja: { home: "Ojaja", size: [10, 11], rooms: { bed: [10, 8], kitchen: [4, 3], bath: [3, 3] } },
   offcampus: { home: "Off-campus", size: [15, 10], rooms: { bed: [8, 7], living: [7, 6], kitchen: [4, 4], bath: [3, 3] } },
   flat1: { home: "1-Bedroom Flat", size: [13, 16], rooms: { bed: [8, 8], living: [10, 8], kitchen: [5, 5], bath: [4, 3], toilet: [3, 3] } },
-  flat2: { home: "2-Bedroom Flat", size: [20, 16], rooms: { bed1: [9, 8], bed2: [8, 7], living: [11, 9], kitchen: [6, 5], bath: [4, 4], toilet: [3, 3] } },
+  flat2: { home: "2-Bedroom Flat", size: [22, 17], rooms: { bed1: [9, 8], bed2: [9, 8], bath1: [4, 4], bath2: [4, 4], living: [13, 9], kitchen: [6, 5], toilet: [3, 3] } },
+  house3: { home: "3-Bedroom House", size: [26, 20], rooms: { bed1: [9, 7], bed2: [9, 7], bed3: [8, 7], bath1: [4, 4], bath2: [4, 4], bath3: [8, 3], living: [12, 10], kitchen: [6, 5], toilet: [3, 3] } },
+  house4: { home: "4-Bedroom House", size: [31, 20], rooms: { bed1: [9, 7], bed2: [9, 7], bed3: [9, 7], bed4: [9, 7], bath1: [4, 4], bath2: [4, 4], bath3: [9, 3], bath4: [9, 3], living: [13, 10], kitchen: [5, 7], toilet: [3, 3] } },
 };
 chk("roomFor() reports the real sizes of the homes: the plan, not one of the rooms", Object.values(HOME_PLANS).every(({ home, size }) => { const r = roomFor(home, "p"); return r.w === size[0] && r.d === size[1]; }));
 chk("the plans are exactly the size HOME_SIZE says", Object.entries(HOME_SIZE).every(([k, [w, d]]) => LAYOUTS[k].w === w && LAYOUTS[k].d === d && LAYOUTS[k].grid.length === d && LAYOUTS[k].grid.every((r) => r.length === w)));
@@ -54,7 +56,7 @@ for (const [id, L] of Object.entries(LAYOUTS)) {
 }
 
 // ---- what each home comes with fits, nothing is walled in, and the character can walk everywhere ----
-const HOMES = ["Ojaja", "Off-campus", "1-Bedroom Flat", "2-Bedroom Flat"];
+const HOMES = ["Ojaja", "Off-campus", "1-Bedroom Flat", "2-Bedroom Flat", "3-Bedroom House", "4-Bedroom House"];
 function walkable(room, placed) {
   const bl = blockedCells(placed), start = spawnCell(room), L = layoutOf(room); let free = 0, reached = 0;
   for (let z = 0; z < room.d; z++) for (let x = 0; x < room.w; x++) { if (bl.has(x + "," + z)) continue; free++; if ((x === start[0] && z === start[1]) || findPath(room, bl, start, [x, z]).length) reached++; }
@@ -92,7 +94,7 @@ for (const h of ["Awo", "Ojaja", "2-Bedroom Flat"]) {
 for (const h of ["Awo", "Angola", ...HOMES]) {
   const room = roomFor(h, "p"), placed = []; for (let i = 0; i < 9; i++) { const s = autoPlace(room, placed, "generator"); if (s) placed.push({ id: "g" + i, key: "generator", placed: true, ...s }); }
   chk(`${h}: the eight east-wall generator spots are outside the east wall of the bigger room, a ninth goes elsewhere on the lawn, and all still work`, placed.length === 9 && outdoorSlots(room).every(([x, z]) => isOutsideCell(room, x) && z >= 0 && z < room.d) && placed.every((p) => fits(room, placed, "generator", p.x, p.z, p.rot, p.id)));
-  chk(`${h}: nothing can be put outside the floor`, !fits(room, [], "sofa", room.w - 1, 0, 0) && !fits(room, [], "plant", room.w, 0, 0) && !fits(room, [], "plant", -1, 0, 0) && !fits(room, [], "plant", 0, room.d, 0));
+  chk(`${h}: nothing can be put outside the floor`, !fits(room, [], "sofa", room.w - 1, 0, 0) && !fits(room, [], "wardrobe", room.w, 0, 0) && !fits(room, [], "wardrobe", -1, 0, 0) && !fits(room, [], "wardrobe", 0, room.d, 0)); // a wardrobe never leaves the house; a weatherproof plant may go out on the lawn (tests/houses.test.mjs)
 }
 chk("the shop limit on owned things is unchanged", MAX_ITEMS === 60);
 

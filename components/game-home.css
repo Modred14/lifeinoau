@@ -179,3 +179,4 @@
 .gx-sleep h2 { justify-content: center; }
 .gx-sleep-t { font: 600 1.7rem/1.1 var(--font-head); letter-spacing: -0.02em; }
 @media (prefers-reduced-motion: reduce) { .gx-use, .gx-sleep { animation: none; } }
+.rs-locked { padding: 0 10px; font: 600 0.78rem var(--font-head); opacity: 0.8; white-space: nowrap; }

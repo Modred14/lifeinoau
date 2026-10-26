@@ -11,7 +11,7 @@ const { GameError } = await import("./fixtures/room-gameService-stub.mjs");
 let bad = 0;
 const chk = (label, ok, extra = "") => { if (!ok) bad++; console.log(`${ok ? "OK  " : "FAIL"} ${label}${!ok && extra ? `: ${extra}` : ""}`); };
 const refused = async (promise, status) => { try { await promise; return false; } catch (e) { return e instanceof GameError && e.status === status; } };
-const HOMES = ["Awo", "Angola", "Ojaja", "Off-campus", "1-Bedroom Flat", "2-Bedroom Flat"];
+const HOMES = ["Awo", "Angola", "Ojaja", "Off-campus", "1-Bedroom Flat", "2-Bedroom Flat", "3-Bedroom House", "4-Bedroom House"];
 const hit = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.z0 < b.z1 && a.z1 > b.z0, inside = (r, x, z) => x >= r.x0 - 1e-9 && x <= r.x1 + 1e-9 && z >= r.z0 - 1e-9 && z <= r.z1 + 1e-9;
 const touches = (a, b) => a.x0 <= b.x1 + 1e-9 && a.x1 >= b.x0 - 1e-9 && a.z0 <= b.z1 + 1e-9 && a.z1 >= b.z0 - 1e-9; // overlap or share an edge
 
@@ -38,9 +38,9 @@ chk("an outdoor thing can be dropped on any free lawn cell, in every rotation, i
 const bad2 = [["on the house floor", 2, 2], ["in the garage", p.garage.x0 + 1, p.garage.z0 + 1], ["on the driveway", Math.ceil(p.drive.x0) + 1, p.drive.z0 + 2], ["on the footpath", Math.ceil(p.path.at(-1).x0), p.path.at(-1).z0 + 2], ["on the front walk", p.link.x0 + 2, Math.ceil(p.link.z0)], ["through the boundary wall", p.plot.x0, 2], ["outside the plot", p.plot.x1 + 3, 2], ["on the road", 3, p.road.z0 + 1]];
 for (const [why, x, z] of bad2) chk(`an outdoor thing cannot stand ${why}`, !R.fits(room, [], "garden_bench", x, z, 0));
 chk("two outdoor things cannot share a cell, but side by side is fine", (() => { const a = { id: "a", key: "garden_bench", placed: true, x: lb.x0 + 1, z: lb.z0 + 1, rot: 0 }; return !R.fits(room, [a], "wheelie_bin", lb.x0 + 2, lb.z0 + 1, 0) && R.fits(room, [a], "wheelie_bin", lb.x0 + 3, lb.z0 + 1, 0) && R.fits(room, [a], "garden_bench", a.x, a.z, 0, "a"); })());
-chk("indoor things still cannot go outside, and outdoor things cannot go inside", !R.fits(room, [], "sofa", room.w, 0, 0) && !R.fits(room, [], "plant", -1, 0, 0) && !R.fits(room, [], "generator", 1, 1, 0));
+chk("indoor things still cannot go outside, and outdoor things cannot go inside", !R.fits(room, [], "wardrobe", room.w, 0, 0) && !R.fits(room, [], "bed", -1, 0, 0) && !R.fits(room, [], "generator", 1, 1, 0));
 { const placed = []; for (let i = 0; i < 40; i++) { const key = outdoor[i % outdoor.length], s = R.autoPlace(room, placed, key); if (s) placed.push({ id: "o" + i, key, placed: true, ...s }); }
-  chk("many outdoor things all fit without overlap, and every one stands on a legal spot", placed.length === 40 && placed.every((o) => R.fits(room, placed, o.key, o.x, o.z, o.rot, o.id)) && new Set(placed.flatMap((o) => R.cellsOf(o.key, o.x, o.z, o.rot).map((c) => c.join()))).size === placed.reduce((n, o) => n + R.cellsOf(o.key, o.x, o.z, o.rot).length, 0));
+  chk("many outdoor things all fit without overlap, and every one stands on a legal spot", placed.length === 40 && placed.every((o) => R.fits(room, placed, o.key, o.x, o.z, o.rot, o.id)) && (() => { const solid = placed.filter((o) => !ITEMS[o.key].flat); return new Set(solid.flatMap((o) => R.cellsOf(o.key, o.x, o.z, o.rot).map((c) => c.join()))).size === solid.reduce((n, o) => n + R.cellsOf(o.key, o.x, o.z, o.rot).length, 0); })()); // solid pieces never share a cell; a flat rug may lie under them
   chk("outdoor things do not block the walking floor inside, and a home with them is still consistent", R.blockedCells(placed).size === 0 && R.consistent(room, placed)); }
 
 // saving and loading, and whose things they are
