@@ -236,15 +236,6 @@ export default function GameHome({
   const buy = async (key) => {
     const d = ITEMS[key],
       price = priceKobo(key);
-    if (
-      d.price >= 100_000 &&
-      !(await confirmAction({
-        title: `Buy ${d.name}?`,
-        message: `${fmtN(d.price)} leaves your wallet. If you sell it later you get 60% back.`,
-        confirmLabel: `Buy for ${fmtN(d.price)}`,
-      }))
-    )
-      return;
     if (items.length >= MAX_ITEMS)
       return toast.error("Your storage is full. Sell something first.");
     if (!canAfford(price)) return toast.error("You cannot afford that.");
