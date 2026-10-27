@@ -90,6 +90,11 @@ body[data-trip] .map-chrome { display: none !important; } /* the bottom bar is n
 .th .th-run { position: absolute; right: max(22px, env(safe-area-inset-right, 0px)); bottom: calc(var(--safe-b) + 40px); width: var(--th-run); height: var(--th-run); border-radius: 50%; }
 
 /* bottom left: the steering wheel. It takes its own finger and never scrolls the page; the pad shows green while a finger is on it, and the mark on top is the straight-ahead position */
+/* the steering buttons: two big pads, left and right, where the wheel used to be */
+.th-steer { position: absolute; left: var(--th-l); bottom: var(--th-bottom); display: flex; gap: 12px; align-items: flex-end; pointer-events: none; }
+.th-steer > * { pointer-events: auto; }
+.th .th-sb { width: max(64px, calc(var(--th-wheel) * 0.56)); height: max(64px, calc(var(--th-wheel) * 0.56)); min-width: 0; padding: 0; display: grid; place-items: center; border-radius: 22px; border: 2px solid rgba(255, 255, 255, 0.7); background: rgba(23, 35, 33, 0.62); color: #fff; box-shadow: 0 8px 22px rgba(13, 27, 23, 0.3); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); touch-action: none; transition: background-color 0.12s, border-color 0.12s, transform 0.08s; }
+.th .th-sb[data-down="1"] { background: rgba(38, 117, 78, 0.88); border-color: var(--th-ok, #3fd08a); transform: scale(0.96); }
 .th-wheel { position: absolute; left: var(--th-l); bottom: var(--th-bottom); width: var(--th-wheel); aspect-ratio: 1; border-radius: 50%; background: rgba(13, 19, 33, 0.5); border: 1px solid var(--th-line); box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.7); touch-action: none; overscroll-behavior: contain; cursor: grab; transition: border-color 0.12s, background-color 0.12s, box-shadow 0.12s; }
 .th-wheel::after { content: ""; position: absolute; top: -9px; left: 50%; margin-left: -6px; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 7px solid rgba(255, 255, 255, 0.75); pointer-events: none; }
 .th-wheel[data-held="1"] { cursor: grabbing; background: rgba(13, 19, 33, 0.68); border-color: var(--th-ok); box-shadow: 0 0 0 3px rgba(63, 208, 138, 0.35); }

@@ -110,7 +110,14 @@ function sub(c, inp, h, probe, P) {
   const angMid = c.ang + (c.yawRate * h) / 2, ang1 = c.ang + c.yawRate * h, dist = vm * h, mx = Math.sin(angMid), mz = Math.cos(angMid);
   const nx = c.x + mx * dist, nz = c.z + mz * dist, hx = Math.sin(ang1), hz = Math.cos(ang1);
   const hit = probe ? probe(nx, nz, hx, hz) : null;
-  if (!hit || hit.pen <= c.pen + 1e-6) {
+  let free = !hit || hit.pen <= c.pen + 1e-6;
+  if (!free) {
+    // c.pen is how bad the last accepted place was. Something else may have moved since (a car driving into ours head-on, a door, a nudge), so where we stand NOW can be worse than c.pen says.
+    // Judged against the stale number every move, even straight backwards out of the overlap, looked "worse" and the car was pinned for good. Measure where we really are, and let any move that
+    // is no worse than that (so reversing away from what we hit) go through; only moves that dig deeper in are refused.
+    const here = probe(c.x, c.z, c.hx, c.hz)?.pen ?? 0; c.pen = here; free = hit.pen <= here + 1e-6;
+  }
+  if (free) {
     c.x = nx; c.z = nz; c.ang = ang1; c.hx = hx; c.hz = hz; c.v = v1; c.pen = hit ? hit.pen : 0; c.distance += Math.abs(dist);
   } else {
     // something solid: stay where we are, lose the speed at once, and give a little back so the car is never pinned (the kerb, a wall or another car)

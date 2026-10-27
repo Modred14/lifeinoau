@@ -40,6 +40,12 @@ const run = (fps, sec, inp, car = createCar(), probe = null) => { const f = type
   run(60, 6, (t) => ({ brake: 1 }), c, probe); ok("it can reverse away from the wall (never pinned)", c.z + c.hz * 2.25 < wallZ - 3);
   // started half inside something: it can drive out, but not deeper in
   const deep = (x, z) => ({ pen: Math.max(0, 10 - z) }), d = createCar({ z: 4 }); d.pen = 6; run(60, 5, { gas: 1 }, d, deep); ok("a car that starts overlapping can drive out of it", d.z > 10); }
+// 5b. something drives INTO a stopped car (a head-on hit): the car now overlaps it, and the player must still be able to reverse out
+{ let obsZ = 99; const probe = (x, z, hx, hz) => { const over = z + hz * 2.25 - obsZ; return over > 0 ? { pen: 50 + Math.round(20 * over) } : null; };
+  const c = createCar(); c.pen = 0; run(60, 1, {}, c, probe);                 // standing still, nothing in the way
+  obsZ = c.z + 1.5;                                                          // the other car arrives and ends up inside ours
+  run(60, 0.5, { gas: 1 }, c, probe); ok("pushing on into the car that hit us does not drive us far into it", c.z + c.hz * 2.25 - obsZ < 1.2);
+  const z0 = c.z; run(60, 5, { brake: 1 }, c, probe); ok("after a head-on hit the player can hold the brake and reverse out (never locked in place)", c.z < z0 - 1.5 && c.reversing); }
 // 6. asking to get out: the assistant stops the car at a steady rate
 { const c = createCar(); run(60, 4, { gas: 1 }, c); let prev = c.v, maxDrop = 0; for (let i = 0; i < 60 * 8 && c.v > 0.2; i++) { stepCar(c, gentleStop(c, 4.5), 1 / 60); maxDrop = Math.max(maxDrop, prev - c.v); prev = c.v; } ok("the car comes to a gentle stop", c.v <= 0.2 && maxDrop < 7 / 60); }
 // 7. the wheel

@@ -3,12 +3,12 @@
 // when you steer yourself, and a button to call the trip off. The travel engine (lib3d/travel.js) draws the maps into the canvases and reads `input`.
 //
 // Where things sit (components/travel.css has the sizes for each screen): the mini map and the speed readout are in the TOP RIGHT; the panel that says where you are going (with Cancel)
-// is in the TOP LEFT; the steering wheel (or the walking stick) is in the bottom left corner and the pedals in the bottom right. The middle of the screen, where the road ahead and the
+// is in the TOP LEFT; the steering buttons, left and right (or the walking stick), are in the bottom left corner and the pedals in the bottom right. The middle of the screen, where the road ahead and the
 // vehicle are, is left empty on every screen size.
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
-import SteeringWheel from "./SteeringWheel";
+import SteerButtons from "./SteerButtons";
 import { playSound } from "@/lib/sound";
 import { fmtDuration } from "@/lib/travel.js";
 import "./travel.css";
@@ -75,7 +75,7 @@ export default function TripHud({ trip, placeName, st, input, miniRef, previewRe
       {walking && (<><Stick input={input} /><Hold className="th-btn th-run" label="Run" onDown={() => (input.run = true)} onUp={() => (input.run = false)}>RUN</Hold></>)}
       {steering && (
         <>
-          <SteeringWheel input={input} />
+          <SteerButtons input={input} />
           <div className="th-pedals">
             <div className="th-aux">
               <button type="button" className="th-btn th-horn" aria-label="Horn" data-sound="none" style={NO_GESTURE} onPointerDown={() => playSound("horn")} onClick={(e) => { if (e.detail === 0) playSound("horn"); /* Enter or Space on the focused button: a pointer press has already honked */ }} onContextMenu={(e) => e.preventDefault()}><Icon name="horn" size={22} weight="fill" /></button>

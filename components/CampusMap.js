@@ -136,7 +136,11 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
         sync.start();
       } catch (e) { if (e?.reason && e.reason !== "error") { tripCb.current.onTripNotice?.(e.text ?? e.message); end(e.reason); } else { console.error("trip failed", e); end("error"); } }
     })();
-    return () => { dead = true; if (sync) sync.stop({ clear: true }); else call("/api/travel", { action: "trip" }); unhook?.(); handle?.dispose(); tripRef.current = null; if (box.current) delete box.current.dataset.trip; delete box.current.dataset.tags; const b = api.current; if (b) { const L = (entered ? b.campus.resolve(trip.to) : b.campus.resolve(trip.from)) ?? b.campus.resolve(trip.to); /* a trip that did not arrive (cancelled, refused, the fare failed) leaves the camera, like the player, where the server still has them */ if (L) b.stage.flyTo(L.x, 0, L.z, 70, 1.0); } };
+    return () => { dead = true; // leaving the map (Home, Buy, Phone) in the middle of a drive runs this after the screen is gone: nothing here may throw, or the page falls over into the error screen
+      try { if (sync) sync.stop({ clear: true }); else call("/api/travel", { action: "trip" }); } catch { /* the server drops a silent traveller after a few seconds anyway */ }
+      try { unhook?.(); } catch { /* ignore */ }
+      try { handle?.dispose(); } catch (e) { console.warn("trip cleanup", e); }
+      tripRef.current = null; const el = box.current; if (el) { delete el.dataset.trip; delete el.dataset.tags; } const b = api.current; if (b) { const L = (entered ? b.campus.resolve(trip.to) : b.campus.resolve(trip.from)) ?? b.campus.resolve(trip.to); /* a trip that did not arrive (cancelled, refused, the fare failed) leaves the camera, like the player, where the server still has them */ if (L) b.stage.flyTo(L.x, 0, L.z, 70, 1.0); } };
   }, [trip?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { const a = api.current; if (a && billboards) a.campus.setBillboards(billboards); }, [billboards, mounts]);

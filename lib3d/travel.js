@@ -309,8 +309,11 @@ export async function startTrip(env, o) {
     traffic, get plan() { return plan; }, get to() { return curTo; }, retarget, setLook,
     tagView: () => { camM.x = cam.position.x / S; camM.y = cam.position.y / S; camM.z = cam.position.z / S; return { me: { x: P.x, z: P.z }, cam: camM, occluded: (it) => sightBlocked(svc.world, heights, camM, it, it.bid) }; }, setTravellers: (l) => traffic.setTravellers(l), pos: () => { const inV = !!flow.vehicle && ["ride", "drive", "paying"].includes(F.phase), p = inV ? flow.vehicle : P; return { x: p.x, z: p.z, h: Math.atan2(p.hx, p.hz), mode: inV ? mode : "trek" }; }, route: () => gd, cancel: () => flow.cancel(),
     horn() { if (hornT > 0) return; hornT = 0.4; o.onHorn?.(); },
-    dispose() { if (!alive) return; alive = false; off?.(); for (const d of disposers.reverse()) { try { d(); } catch { /* clean up as much as possible */ } } stage.scene.remove(world); stage.setManual(false); campus.setTripMode(false);
-      cam.near = saved.near; cam.fov = saved.fov; cam.updateProjectionMatrix(); Object.assign(light.sun.shadow.camera, { left: saved.shadow.l, right: saved.shadow.r, top: saved.shadow.t, bottom: saved.shadow.b }); light.sun.shadow.camera.updateProjectionMatrix(); },
+    dispose() { if (!alive) return; alive = false; off?.(); for (const d of disposers.reverse()) { try { d(); } catch { /* clean up as much as possible */ } } /* the map may already be torn down (the player tapped Home mid-drive): put the shared scene back as far as it still exists, and never throw */
+      const safe = (f) => { try { f(); } catch { /* the stage or campus is already disposed */ } };
+      safe(() => stage.scene.remove(world)); safe(() => stage.setManual(false)); safe(() => campus.setTripMode(false));
+      safe(() => { cam.near = saved.near; cam.fov = saved.fov; cam.updateProjectionMatrix(); });
+      safe(() => { Object.assign(light.sun.shadow.camera, { left: saved.shadow.l, right: saved.shadow.r, top: saved.shadow.t, bottom: saved.shadow.b }); light.sun.shadow.camera.updateProjectionMatrix(); }); },
   };
   return api;
 }
