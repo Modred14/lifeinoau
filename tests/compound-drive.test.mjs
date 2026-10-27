@@ -9,6 +9,7 @@ import { PLOT_RULES, plotFor } from "../lib/plot.js";
 import { planParking, exitRoute, metresWorld, onCarriageway, poseBox, CELL_M } from "../lib3d/compoundParking.js";
 import { createDriver, autopilot, blockedPose } from "../lib3d/garageDrive.js";
 import { garageVehicleSize } from "../lib3d/garageLayout.js";
+import { topSpeedMps } from "../lib/vehiclePerformance.js";
 import { setDriveHandoff, peekDriveHandoff, takeDriveHandoff, HANDOFF_TTL_MS } from "../lib/driveHandoff.js";
 import { withExtras } from "../lib3d/mapExtras.js";
 import { buildServices } from "../lib3d/worldsvc.js";
@@ -52,7 +53,7 @@ for (const room of ROOMS) {
 
 // ---- the hand-over ----
 setDriveHandoff({ modelId: "camry-2014", color: "#111", v: 99 }, 1000);
-chk("the hand-over keeps the model, the paint and the speed, limited to what the car can do", peekDriveHandoff(1500)?.modelId === "camry-2014" && peekDriveHandoff(1500).v === 22);
+chk("the hand-over keeps the model, the paint and the speed, limited to what the car can do", peekDriveHandoff(1500)?.modelId === "camry-2014" && peekDriveHandoff(1500).v === topSpeedMps("camry-2014"));
 chk("the hand-over is used once", !!takeDriveHandoff(1500) && takeDriveHandoff(1500) === null);
 setDriveHandoff({ modelId: "a", v: -5 }, 1000);
 chk("a reversing vehicle hands over a standstill, never a negative speed", takeDriveHandoff(1001).v === 0);

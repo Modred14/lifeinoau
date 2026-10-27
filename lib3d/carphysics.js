@@ -5,48 +5,59 @@
 //   - the car goes where its front wheels point: it turns about a point on the rear axle, so there is no sideways slide and no turning on the spot,
 //   - the wheels take time to turn (a rate, not a jump) and turn less the faster you go,
 //   - the body takes time to start turning (a short lag on the yaw rate), and a tight turn at speed is limited by grip (the car runs wide instead of sliding),
-//   - the throttle and brake pedals ramp in, engine power falls away towards the top speed, and drag, rolling resistance and engine braking slow a coasting car,
+//   - the throttle and brake pedals ramp in; the engine pushes with at most the tyres' launch limit and then with constant POWER (a = power / speed, as a real car does), drag grows with
+//     the square of the speed and brings full throttle to rest exactly at the vehicle's real top speed; rolling resistance and engine braking slow a coasting car,
+//     (power, drag and the top speed come from the vehicle's real figures: lib/vehiclePerformance.js),
 //   - the brake stops the car and never reverses it by itself; holding the brake once stopped (a moment later) selects reverse, as in a driving game,
-//   - everything is integrated in equal sub-steps of at most MAX_STEP seconds, so the result hardly depends on the frame rate.
+//   - everything is integrated in equal sub-steps of at most MAX_STEP seconds AND at most MAX_STEP_M metres, so the result hardly depends on the frame rate and a car at 90 m/s still
+//     checks for a wall every half metre (it can never skip through one).
 // Convention: x east, z south, heading (hx, hz) = (sin ang, cos ang). `steer` on the car is the front wheel angle, positive = LEFT (the car's own +x is its left).
 // Input: { gas 0..1, brake 0..1, steer -1..1 } where steer +1 is a RIGHT turn (D / the wheel turned clockwise).
 import { OWN_CAR_MAX } from "../lib/travel.js";
+import { VEHICLE_PERFORMANCE, STANDARD_VEHICLE, deriveLongitudinal, PEDAL_UP } from "../lib/vehiclePerformance.js";
+
+/** The lock available at speed falls to a half at this speed (m/s): a faster vehicle keeps its lock to a higher speed, so a supercar is as steerable at its own speeds as a family car is at its. */
+const lockRef = (vmax) => 12 * Math.sqrt(Math.max(1, vmax / 22));
 
 export const CAR = {
-  wheelbase: 2.7, vmax: OWN_CAR_MAX, reverseMax: 5,
-  accel: 5.2,            // m/s2 at a standstill, falling to 0 at vmax
+  wheelbase: 2.7, reverseMax: 5,
   reverseAccel: 2.4,
-  brake: 8.5,            // m/s2, the harshest the pedal brakes
   engineBrake: 1.1,      // m/s2 when coasting in gear
-  rolling: 0.35,         // m/s2 always opposing motion
-  drag: 0.0012,          // 1/m: drag decel = drag * v^2
   steerMax: 0.56,        // rad at a crawl (about 32 degrees)
   steerRate: 1.5,        // rad/s turning in
   steerReturn: 2.3,      // rad/s coming back to straight
-  steerSpeedRef: 12,     // m/s at which the available lock has dropped to a half
   latG: 7.0,             // m/s2 of sideways acceleration the tyres hold
   yawLag: 0.09,          // s: how long the body takes to follow the wheels
-  pedalUp: 6, pedalDown: 14, // 1/s: how fast a pedal ramps in / out
+  pedalUp: PEDAL_UP, pedalDown: 14, // 1/s: how fast a pedal ramps in / out
   reverseDelay: 0.22,    // s stopped with the brake held before reverse is engaged
   maxStep: 1 / 90,
+  ...deriveLongitudinal(STANDARD_VEHICLE),   // vmax, accel (the launch limit, m/s2), power, drag, rolling, brake
+  steerSpeedRef: lockRef(deriveLongitudinal(STANDARD_VEHICLE).vmax),
 };
+/** The longest distance (m) a car may move in one sub-step, however fast it goes: the collision probe is asked at least this often along the way. */
+export const MAX_STEP_M = 0.5, MAX_SUBSTEPS = 400;
 
-// Every vehicle drives differently: its own wheelbase, power, brakes, steering lock and grip. A profile overrides the standard CAR; the top speed never goes above OWN_CAR_MAX
-// (the server's cap on what a driven car may report). Wheelbases are the real ones, the same as in lib3d/vehicleSpecs.js (a test checks they agree).
-export const PROFILES = {
-  "corolla-2011":    { wheelbase: 2.60, accel: 4.4, brake: 8.0, vmax: 20, steerMax: 0.58, latG: 6.4, yawLag: 0.10 },
-  "accord-2014":     { wheelbase: 2.776, accel: 5.4, brake: 8.4, vmax: 21, steerMax: 0.56, latG: 6.8, yawLag: 0.10 },
-  "camry-2014":      { wheelbase: 2.775, accel: 5.2, brake: 8.2, vmax: 21, steerMax: 0.56, latG: 6.6, yawLag: 0.10 },
-  "is350-2014":      { wheelbase: 2.80, accel: 6.4, brake: 9.0, vmax: 22, steerMax: 0.55, latG: 7.6, yawLag: 0.08 },
-  "cclass-2016":     { wheelbase: 2.865, accel: 5.6, brake: 8.8, vmax: 22, steerMax: 0.55, latG: 7.2, yawLag: 0.09 },
-  "gle-2018":        { wheelbase: 2.995, accel: 5.2, brake: 8.0, vmax: 22, steerMax: 0.52, latG: 6.0, yawLag: 0.12 },
-  "rrsport-2016":    { wheelbase: 2.923, accel: 5.4, brake: 8.0, vmax: 22, steerMax: 0.52, latG: 6.0, yawLag: 0.12 },
-  "urus-2025":       { wheelbase: 3.003, accel: 7.4, brake: 9.8, vmax: 22, steerMax: 0.52, latG: 8.0, yawLag: 0.09 },
-  "huracan-2025":    { wheelbase: 2.62, accel: 8.8, brake: 10.6, vmax: 22, steerMax: 0.52, latG: 9.4, yawLag: 0.07, reverseMax: 4 },
-  "cybertruck-2024": { wheelbase: 3.80, accel: 6.8, brake: 8.4, vmax: 22, steerMax: 0.50, latG: 6.0, yawLag: 0.13 },
-  keke:              { wheelbase: 1.95, accel: 2.2, brake: 4.8, vmax: 12, steerMax: 0.70, latG: 4.2, yawLag: 0.10, reverseMax: 2.5, reverseAccel: 1.2, steerSpeedRef: 7 },
-  bus:               { wheelbase: 4.12, accel: 1.9, brake: 5.6, vmax: 15, steerMax: 0.43, latG: 4.4, yawLag: 0.14, reverseMax: 3, reverseAccel: 1.2, steerSpeedRef: 9 },
+// Every vehicle drives differently. Its LONGITUDINAL performance (top speed, power, drag, launch, brakes) comes from lib/vehiclePerformance.js, from the real figures; what is here is its HANDLING:
+// wheelbase, steering lock, grip, how fast the body follows the wheels, and reverse. The top speed never goes above OWN_CAR_MAX (the server's cap on what a driven vehicle may report,
+// itself the fastest vehicle in the table). Wheelbases are the real ones, the same as in lib3d/vehicleSpecs.js (a test checks they agree).
+const HANDLING = {
+  "corolla-2011":    { wheelbase: 2.60, steerMax: 0.58, latG: 6.4, yawLag: 0.10 },
+  "accord-2014":     { wheelbase: 2.776, steerMax: 0.56, latG: 6.8, yawLag: 0.10 },
+  "camry-2014":      { wheelbase: 2.775, steerMax: 0.56, latG: 6.6, yawLag: 0.10 },
+  "is350-2014":      { wheelbase: 2.80, steerMax: 0.55, latG: 7.6, yawLag: 0.08 },
+  "cclass-2016":     { wheelbase: 2.865, steerMax: 0.55, latG: 7.2, yawLag: 0.09 },
+  "gle-2018":        { wheelbase: 2.995, steerMax: 0.52, latG: 6.0, yawLag: 0.12 },
+  "rrsport-2016":    { wheelbase: 2.923, steerMax: 0.52, latG: 6.0, yawLag: 0.12 },
+  "urus-2025":       { wheelbase: 3.003, steerMax: 0.52, latG: 8.0, yawLag: 0.09 },
+  "huracan-2025":    { wheelbase: 2.62, steerMax: 0.52, latG: 9.4, yawLag: 0.07, reverseMax: 4 },
+  "cybertruck-2024": { wheelbase: 3.80, steerMax: 0.50, latG: 6.0, yawLag: 0.13 },
+  keke:              { wheelbase: 1.95, steerMax: 0.70, latG: 4.2, yawLag: 0.10, reverseMax: 2.5, reverseAccel: 1.2, steerSpeedRef: 7 },
+  bus:               { wheelbase: 4.12, steerMax: 0.43, latG: 4.4, yawLag: 0.14, reverseMax: 3, reverseAccel: 1.2, steerSpeedRef: 9 },
 };
+export const PROFILES = Object.fromEntries(Object.entries(HANDLING).map(([id, h]) => {
+  const L = deriveLongitudinal(VEHICLE_PERFORMANCE[id]);
+  return [id, { ...h, ...L, steerSpeedRef: h.steerSpeedRef ?? lockRef(L.vmax) }];
+}));
 /** The handling of a vehicle by its id (a car id, "keke" or "bus"); an unknown id drives like the standard car. */
 export function carProfile(id) { const o = PROFILES[id]; if (!o) return CAR; const P = { ...CAR, ...o }; P.vmax = Math.min(P.vmax, OWN_CAR_MAX); return P; }
 
@@ -80,7 +91,7 @@ function sub(c, inp, h, probe, P) {
   // ---- speed ----
   const v0 = c.v; let a = 0, pedal = false;
   if (v0 >= 0 && !c.reversing) {
-    a += P.accel * c.thr * Math.max(0, 1 - (v0 / P.vmax) ** 2); pedal ||= c.thr > 0;
+    a += c.thr * Math.min(P.accel, P.power / Math.max(v0, 0.1)); pedal ||= c.thr > 0;   // the tyres' launch limit, then constant power; drag (below) holds it at the top speed
     if (c.brk > 0 && v0 > 0.02) { a -= P.brake * c.brk; pedal = true; }
     if (v0 > 0) a -= P.drag * v0 * v0 + P.rolling + (c.thr < 0.05 && c.brk < 0.05 ? P.engineBrake : 0);
   } else {
@@ -132,7 +143,8 @@ function sub(c, inp, h, probe, P) {
 /** Moves the car on by dt seconds (in equal sub-steps). Returns the car. */
 export function stepCar(c, inp, dt, probe = null, P = CAR) {
   if (!(dt > 0)) return c;
-  const n = Math.max(1, Math.ceil(dt / P.maxStep)), h = dt / n; c.impact = 0;
+  // sub-steps: short enough in time, and short enough in distance that the collision probe is asked every MAX_STEP_M metres however fast the car is going
+  const reach = (Math.abs(c.v) + P.accel * dt) * dt, n = Math.min(MAX_SUBSTEPS, Math.max(1, Math.ceil(dt / P.maxStep), Math.ceil(reach / MAX_STEP_M))), h = dt / n; c.impact = 0;
   for (let i = 0; i < n; i++) sub(c, inp, h, probe, P);
   return c;
 }

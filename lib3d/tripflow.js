@@ -20,7 +20,7 @@ import { KINDS, doorPoint, toWorld, rideProfile } from "./trafficsim.js";
 import { remainingSecs } from "./tripplan.js";
 import { INTRO_SECONDS, BOARD_SECONDS, ALIGHT_SECONDS, CAR_BOARD_SECONDS, CAR_ALIGHT_SECONDS, EXIT_STOP_SPEED, EXIT_REFUSE_SPEED } from "../lib/travel.js";
 import { boxesOverlap } from "./collide.js";
-import { createCar, stepCar, gentleStop, carProfile } from "./carphysics.js";
+import { createCar, stepCar, gentleStop, carProfile, CAR } from "./carphysics.js";
 import { exitSpots, pickDoorSide } from "./carexit.js";
 import { SWING, BACK_SPEED, LEAF_ID, canOpenAt, atThreshold, doorLocal, planDoorOpening, inSwing, swingBlocked, leafBody } from "./doorway.js";
 import { RETARGET_WHY } from "./tripretarget.js";
@@ -309,7 +309,7 @@ export function createTripFlow(env, o) {
   function bootDrive(sp) {
     const at = freeSpawnS(); if (at != null) plan = { ...plan, pick: { ...plan.pick, s: at } };
     if (!spawnVehicle()) { notice("There is no room on the road here. Try again."); end("unavailable"); return; }
-    makeOwn(); own.v = Math.max(0, Math.min(sp?.v ?? 0, own.P?.vmax ?? 22)); own.distance = 0;
+    makeOwn(); own.v = Math.max(0, Math.min(sp?.v ?? 0, own.P?.vmax ?? CAR.vmax)); own.distance = 0;
     S.seatK = 1; S.vehDoorK = 0; person.seated = true; person.seat = seatLocal(); person.visible = true; S.pay = "none"; go("drive");
   }
 
