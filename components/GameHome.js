@@ -194,12 +194,12 @@ export default function GameHome({
   revRef.current = rd?.rev ?? null;
   useEffect(() => {
     const t = setInterval(async () => {
-      if (document.hidden || pendingMoves.current || !revRef.current || garageOpen) return;
+      if (document.hidden || pendingMoves.current || !revRef.current || driving) return;
       const r = await call("/api/room?rev=" + encodeURIComponent(revRef.current));
       if (alive.current && !pendingMoves.current && !r.failed && !r.same && r.room && r.items) roomStore.refresh();
     }, 20_000);
     return () => clearInterval(t);
-  }, [garageOpen]);
+  }, [driving]);
   useEffect(() => () => setPlayMode("home"), []); // leaving the screen always leaves Buy mode
   useEffect(() => {
     if (!buying) setSelected(null);
