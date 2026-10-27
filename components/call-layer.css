@@ -75,3 +75,24 @@
 
 @media (max-height: 700px) { .cx { padding: 0 2px 8px; gap: 3px; } .cx-av { width: 64px; height: 64px; font-size: 1.7rem; } .cx-act { margin-top: 12px; } .cx-big { font-size: 1.8rem; } }
 @media (prefers-reduced-motion: reduce) { .cx, .cx-scrim, .cx-gift, .cx-res, .cx-dot, .cx-av.cx-ring::before, .cx-av.cx-ring::after { animation: none !important; } .cx-bar i { transition: none; } }
+
+/* ---- everything on the call screen stays INSIDE the handset's screen, whatever the width or height ----
+   A grid column sizes itself to its widest child, so a long line, the amount box or the quick-amount chips used to push the column wider than the screen and
+   got cut off at the right edge. Every column here is exactly the screen's width, every child may shrink to it, and long text wraps. */
+.cx-screen { max-width: 100%; }
+.cx-body { box-sizing: border-box; min-width: 0; width: 100%; overflow-x: hidden; padding: 4px max(14px, 4%) calc(40px + env(safe-area-inset-bottom, 0px)); }
+.cx-body > .cx { min-width: 0; flex: none; }
+.cx, .cx-ask { box-sizing: border-box; grid-template-columns: minmax(0, 1fr); }
+.cx > *, .cx-ask > * { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.cx h2, .cx-sub, .cx-lab, .cx-hint, .cx-kind, .cx-quote, .cx-warn { overflow-wrap: anywhere; text-wrap: balance; }
+.cx-hint { justify-self: stretch; justify-content: center; text-align: left; }
+.cx-money { width: 100%; }
+.cx-money input { width: 100%; font-size: clamp(1.4rem, 7vw, 1.9rem); }
+.cx-chips { width: 100%; }
+.cx-chip { flex: 1 1 auto; min-width: 0; padding: 0 10px; white-space: nowrap; }
+.cx-btn.cx-wide { box-sizing: border-box; padding: 0 12px; white-space: normal; text-align: center; }
+.cx-hang { flex: none; justify-self: center; margin-bottom: 4px; }
+.cx-act { flex-wrap: wrap; }
+.cx-sum { box-sizing: border-box; }
+@media (max-width: 360px) { .cx-body { padding-left: 10px; padding-right: 10px; } .cx-act { gap: 18px; } .cx-chip { font-size: 0.8rem; } }
+@media (max-height: 640px) { .cx-body { padding-bottom: calc(30px + env(safe-area-inset-bottom, 0px)); } .cx-hang { width: 54px; height: 54px; margin-top: 14px; } }
