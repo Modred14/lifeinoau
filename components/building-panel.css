@@ -120,7 +120,7 @@ body:not([data-nav="on"]) .bp { padding-bottom: var(--safe-b); }
 .bp-scroll { overflow-y: auto; overscroll-behavior: contain; }
 /* small phones: a little less side padding, tiles sized so the next one peeks in from the right (the cue that the rail swipes) */
 @media (max-width: 400px) {
-  .bp, .bi3 .bi3-act { width: calc(100% - 16px); --bp-radius: 24px; }
+  .bp, .bi3 .bi3-act { --bp-radius: 24px; } /* width stays the bar's: min(520px, 100% - 2 * var(--edge)) */
   .bp-bar { gap: 10px; padding: 0 12px 8px; }
   .bp-chips { padding: 2px 12px 8px; }
   .bp-rail { padding: 2px 12px 12px; gap: 8px; scroll-padding: 0 12px; }
@@ -138,9 +138,9 @@ body:not([data-nav="on"]) .bp { padding-bottom: var(--safe-b); }
   .bi3 .bi3-act-b { gap: 10px; padding-bottom: 10px; }
   .bi3-act .bi3-b.go { min-height: 46px; }
 }
-/* tablets and desktops: roomier tiles and a wider sheet, and the mouse wheel scrolls the rail sideways (BuildingPanel.js) */
+/* tablets and desktops: roomier tiles, and the mouse wheel scrolls the rail sideways (BuildingPanel.js).
+   The sheet keeps the bottom bar's width (min(520px, ...), bottom-nav.css) so the two read as one surface. */
 @media (min-width: 700px) {
-  .bp, .bi3 .bi3-act { width: min(640px, calc(100% - 2 * var(--edge))); }
   .bp .bp-tile { width: 176px; }
   .bp-rail { scrollbar-width: thin; }
 }
