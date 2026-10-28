@@ -19,6 +19,8 @@ export const KINDS = {
   keke: { len: 2.78, wid: 1.3, cruise: [6.5, 9.5], aMax: 1.7, brake: 3.0, weight: 0.18, doorZ: -0.45, seat: { x: 0, y: 0.62, z: -0.72 }, driver: null },
   bus: { len: 6.08, wid: 1.88, cruise: [7.5, 10.5], aMax: 1.3, brake: 2.8, weight: 0.10, doorZ: -0.6, doorZL: 0.97, seat: { x: -0.5, y: 0.71, z: -0.54 }, driver: { x: 0.45, y: 0.8, z: 1.35 } },
 };
+/** Where a person sits in a vehicle kind (its own space); a kind that has no seat (a trek is on foot: no kind at all) falls back to the car's, so asking never throws. */
+export const seatOf = (kind) => KINDS[kind]?.seat ?? KINDS.car.seat;
 /** Where, in the world, a passenger stands to use a vehicle's door: just outside its right-hand side (side -1, the default) or its left, the driver's (side +1). `v` is { x, z, hx, hz, kind } (centre and heading). */
 export function doorPoint(v, kind = v.kind, side = -1) {
   const d = KINDS[kind], z = side > 0 ? (d.doorZL ?? d.doorZ) : d.doorZ, rx = -v.hz * -side, rz = v.hx * -side, k = (v.wid ?? d.wid) / 2 + 0.55;

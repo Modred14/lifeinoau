@@ -11,7 +11,7 @@ import * as THREE from "three";
 import { S, EX } from "./campusReal.js";
 import { buildRoadNet, isRoad, walkable, Path } from "./roadnet.js";
 import { makeKeke, makeBus, makeVehicle, rollWheels, addDriver } from "./vehicles.js";
-import { KINDS } from "./trafficsim.js";
+import { KINDS, seatOf } from "./trafficsim.js";
 import { loadServices } from "./worldsvc.js";
 import { planTrip } from "./tripplan.js";
 import { planRetarget, RETARGET_WHY } from "./tripretarget.js";
@@ -209,7 +209,7 @@ export async function startTrip(env, o) {
     // hidden only while sitting inside a closed car (its glass is dark); visible the whole time the door is open and while stepping in or out
     const inside = sk >= 0.98 && !vehicle?.open && !(doors && F.vehDoorK > 0.03) && ["ride", "drive", "paying"].includes(F.phase);
     avatar.root.visible = P.visible && !inside;
-    const seat = P.seat ?? KINDS[plan.kind].seat, k = smoothK(sk);
+    const seat = P.seat ?? seatOf(plan.kind), k = smoothK(sk);   // a trek (on foot) has no vehicle kind: nobody sits, so the seat only has to exist (it used to throw every frame, which stopped the camera and the picture)
     avatar.root.position.set(P.x, 0.1 + (seat.y - 0.55) * k, P.z); avatar.root.rotation.y = onFootYaw + angDiff(onFootYaw, vehYaw) * k;
     if (sk >= 0.5) { if (gait !== "sit") { gait = "sit"; if (!(avatar.has?.("sit") && avatar.play("sit"))) avatar.play("idle"); avatar.setSpeed?.(1); } }
     else {

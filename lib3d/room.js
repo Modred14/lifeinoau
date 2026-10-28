@@ -1042,7 +1042,7 @@ export function createRoomScene(container, cb = {}) {
   container.addEventListener(
     "pointerdown",
     (e) => {
-      if (e.button !== 0 || !room) return;
+      if (e.button !== 0 || !room || fleet.isDriving()) return; // at the wheel the picture is not touched: no furniture drag, no tap, nothing that could give the camera back to the orbit controls
       aim(e);
       const id = hitItem(),
         outdoorHit = id && items.get(id)?.out,
@@ -1118,7 +1118,7 @@ export function createRoomScene(container, cb = {}) {
       dr = drag;
     down = null;
     drag = null;
-    controls.enabled = true;
+    if (!fleet.isDriving()) controls.enabled = true; // while a vehicle is driven the stage is in manual mode: the chase camera owns the view, and turning the orbit controls back on made a tap or drag jump the camera
     el.style.cursor = "";
     if (dr?.active) {
       const it = items.get(dr.id);

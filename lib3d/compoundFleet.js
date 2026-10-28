@@ -14,13 +14,13 @@ import { planParking, metresWorld, onCarriageway, CELL_M } from "./compoundParki
 import { createDriver } from "./garageDrive.js";
 import { garageVehicleSize } from "./garageLayout.js";
 import { GROUND } from "./plot3d.js";
+import { createKeys } from "./tripkeys.js";
 
 const K = 1 / CELL_M;
-const KEYMAP = { ArrowUp: "up", w: "up", W: "up", ArrowDown: "down", s: "down", S: "down", ArrowLeft: "left", a: "left", A: "left", ArrowRight: "right", d: "right", D: "right", " ": "down" };
 
 export function createCompoundFleet({ scene, camera, stage, cb = {} }) {
   const root = new THREE.Group(); scene.add(root);
-  const meshes = new Map(), keys = new Set(), pad = { throttle: 0, steer: 0 }, padMat = new THREE.MeshStandardMaterial({ color: "#a3a6a1", roughness: 0.95 });
+  const meshes = new Map(), kb = createKeys(), pad = { throttle: 0, steer: 0 }, padMat = new THREE.MeshStandardMaterial({ color: "#a3a6a1", roughness: 0.95 });
   let room = null, items = [], vehicles = [], plan = null, half = [0, 0], timer = 0, dirty = false, drive = null, alive = true, steerShown = 0, lastReport = "", saved = null;
 
   function clear() {
@@ -42,11 +42,13 @@ export function createCompoundFleet({ scene, camera, stage, cb = {} }) {
   const later = () => { if (drive) { dirty = true; return; } clearTimeout(timer); timer = setTimeout(rebuild, 0); }; // planning takes a moment: never inside the call that asked for it
   const place = (v, cx, cz, yaw, onRoad) => { v.root.position.set(cx - half[0], GROUND + (onRoad ? -0.03 : 0.03), cz - half[1]); v.root.rotation.y = yaw; };
 
-  const kd = (e) => { if (!drive || e.metaKey || e.ctrlKey || e.altKey) return; const k = KEYMAP[e.key]; if (!k) return; keys.add(k); e.preventDefault(); };
-  const ku = (e) => { const k = KEYMAP[e.key]; if (k) keys.delete(k); };
-  const clearInput = () => { keys.clear(); pad.throttle = 0; pad.steer = 0; };
+  // Keys go through lib3d/tripkeys.js, the same as on the map: told apart by their place on the keyboard (any layout), never read while typing in a box (the phone's messages),
+  // a shortcut such as Cmd+D is never a control, and losing focus drops everything held, so a key can never stay pressed.
+  const kd = (e) => { if (drive && kb.press(e)) e.preventDefault(); };
+  const ku = (e) => kb.release(e);
+  const clearInput = () => { kb.clear(); pad.throttle = 0; pad.steer = 0; };
   window.addEventListener("keydown", kd); window.addEventListener("keyup", ku); window.addEventListener("blur", clearInput); document.addEventListener("visibilitychange", clearInput);
-  const input = () => ({ throttle: Math.max(-1, Math.min(1, (keys.has("up") ? 1 : 0) - (keys.has("down") ? 1 : 0) + pad.throttle)), steer: Math.max(-1, Math.min(1, (keys.has("right") ? 1 : 0) - (keys.has("left") ? 1 : 0) + pad.steer)) });
+  const input = () => { const k = kb.read(); return { throttle: Math.max(-1, Math.min(1, k.up - Math.max(k.down, k.space) + pad.throttle)), steer: Math.max(-1, Math.min(1, k.steer + pad.steer)) }; };
 
   const cam = { pos: new THREE.Vector3(), look: new THREE.Vector3(), ready: false }, want = new THREE.Vector3();
 

@@ -17,16 +17,16 @@ export function createStage(container, opts = {}) {
   const resize = () => { const w = container.clientWidth || 1, h = container.clientHeight || 1; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
   const io = new IntersectionObserver(([e]) => { visible = e.isIntersecting; }); io.observe(container);
-  const tick = () => { if (!alive) return; raf = requestAnimationFrame(tick); if (!visible || document.hidden) return; const now = performance.now(), raw = (now - last) / 1000; last = now; elapsed += raw; const dt = Math.min(raw, 0.1), t = elapsed; cbs.forEach((f) => f(t, dt)); const q = gov.frame(raw); if (q != null) { renderer.setPixelRatio(q); resize(); } if (!manual) { if (fly) stepFly(dt); controls.update(); } renderer.render(scene, camera); after.forEach((f) => f(t, dt)); };
+  const tick = () => { if (!alive) return; raf = requestAnimationFrame(tick); if (!visible || document.hidden) return; const now = performance.now(), raw = (now - last) / 1000; last = now; elapsed += raw; const dt = Math.min(raw, 0.1), t = elapsed; cbs.forEach((f) => f(t, dt)); const q = gov.frame(raw); if (q != null) { renderer.setPixelRatio(q); resize(); } if (manual) { if (controls.enabled) controls.enabled = false; fly = null; } else { if (fly && (fly.age += dt) > 4) fly = null; /* a glide that can never finish (target held back by a bound) must not fight the controls for ever */ if (fly) stepFly(dt); controls.update(); } renderer.render(scene, camera); after.forEach((f) => f(t, dt)); };
   // button / keyboard alternatives to dragging: rotate, tilt and zoom by a step
-  const nudge = ({ az = 0, pol = 0, zoom = 1, panX = 0, panZ = 0 } = {}) => { if (panX || panZ) { // slide the map along the ground: panX right, panZ forward (a fraction of the view distance), whichever way the camera is turned
+  const nudge = ({ az = 0, pol = 0, zoom = 1, panX = 0, panZ = 0 } = {}) => { fly = null; /* a button press ends any glide, so the two never fight */ if (panX || panZ) { // slide the map along the ground: panX right, panZ forward (a fraction of the view distance), whichever way the camera is turned
       const fwd = controls.target.clone().sub(camera.position).setY(0).normalize(), right = new THREE.Vector3(-fwd.z, 0, fwd.x), d = camera.position.distanceTo(controls.target), mv = right.multiplyScalar(panX * d).add(fwd.multiplyScalar(panZ * d));
       controls.target.add(mv); camera.position.add(mv); controls.update(); return; }
     const off = camera.position.clone().sub(controls.target), sp = new THREE.Spherical().setFromVector3(off);
     sp.theta += az; sp.phi = Math.min(controls.maxPolarAngle, Math.max(controls.minPolarAngle, sp.phi + pol)); sp.radius = Math.min(controls.maxDistance, Math.max(controls.minDistance, sp.radius * zoom));
     camera.position.copy(controls.target).add(off.setFromSpherical(sp)); controls.update(); };
   // smooth camera move to look at a point from a given distance
-  const flyTo = (x, y, z, dist, pol) => { fly = { to: new THREE.Vector3(x, y, z), dist, pol }; };
+  const flyTo = (x, y, z, dist, pol) => { fly = { to: new THREE.Vector3(x, y, z), dist, pol, age: 0 }; };
   function stepFly(dt) { const k = 1 - Math.pow(0.0015, dt), off = camera.position.clone().sub(controls.target), sp = new THREE.Spherical().setFromVector3(off);
     controls.target.lerp(fly.to, k); sp.radius += (fly.dist - sp.radius) * k; if (fly.pol != null) sp.phi += (fly.pol - sp.phi) * k; camera.position.copy(controls.target).add(off.setFromSpherical(sp));
     if (controls.target.distanceTo(fly.to) < 0.15 && Math.abs(sp.radius - fly.dist) < 0.5) fly = null; }
