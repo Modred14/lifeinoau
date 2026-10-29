@@ -7,20 +7,30 @@ const MPP = 2; // metres per pixel of the painted picture
 let cached = null;
 
 /** Paints roads, buildings, water and green areas of the whole campus once (about 1650 x 900 pixels). */
-export function paintBase(data, net) {
-  if (cached && cached.data === data) return cached;
-  const x0 = net.x0, z0 = net.z0, w = Math.ceil((net.x1 - x0) / MPP), h = Math.ceil((net.z1 - z0) / MPP), c = document.createElement("canvas"); c.width = w; c.height = h;
+export function paintBase(data, net, graph = null) {
+  if (cached && cached.data === data && cached.graph === graph) return cached;
+  // the expressway runs well past the campus, so the picture grows to take it in
+  const ex = graph?.expressway, pad = 120; let ax0 = net.x0, az0 = net.z0, ax1 = net.x1, az1 = net.z1;
+  if (ex) for (const [x, z] of ex.deck) { ax0 = Math.min(ax0, x - pad); ax1 = Math.max(ax1, x + pad); az0 = Math.min(az0, z - pad); az1 = Math.max(az1, z + pad); }
+  const x0 = ax0, z0 = az0, w = Math.ceil((ax1 - x0) / MPP), h = Math.ceil((az1 - z0) / MPP), c = document.createElement("canvas"); c.width = w; c.height = h;
   const g = c.getContext("2d"), tr = (pts) => { g.beginPath(); pts.forEach((p, i) => { const x = (p[0] - x0) / MPP, y = (p[1] - z0) / MPP; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); };
   const fill = (list, color) => { g.fillStyle = color; for (const a of list ?? []) { tr(a.pts); g.fill(); } };
   g.fillStyle = "#eceee3"; g.fillRect(0, 0, w, h);
   fill(data.areas?.park, "#cfe3bd"); fill(data.areas?.wood, "#bcd8a8"); fill(data.areas?.sports, "#c6e0b4"); fill(data.areas?.pitch, "#b9dfc3"); fill(data.areas?.parking, "#e1e1dc"); fill(data.areas?.water, "#a8d4e8");
-  // roads: a grey casing, then white (holes are cut out with the even-odd rule)
-  for (const [lw, col] of [[1.6, "#c4c8cf"], [0, "#ffffff"]]) {
+  // roads: a grey casing, then white. With the road graph these are the roads as built (straightened, as wide as they drive); without it, the old map polygons
+  if (graph) {
+    const path = (e) => { g.beginPath(); const P = e.path, n = Math.max(1, Math.ceil(P.len / 6)), a = {}; for (let i = 0; i <= n; i++) { P.at((P.len * i) / n, a); const x = (a.x - x0) / MPP, y = (a.z - z0) / MPP; i ? g.lineTo(x, y) : g.moveTo(x, y); } };
+    const roads = [...graph.edges, ...graph.foots].filter((e) => !e.hw && !(e.mask & 4));
+    g.lineCap = "round"; g.lineJoin = "round";
+    for (const [grow, col] of [[1.4, "#c4c8cf"], [0, "#ffffff"]]) for (const e of roads) { g.strokeStyle = col; g.lineWidth = Math.max(1.2, (e.foot ? 1.6 : (e.half + (e.foot ? 0 : 0.4)) * 2) / MPP + grow); path(e); g.stroke(); }
+    if (ex) { for (const [lw, col] of [[(ex.half * 2) / MPP + 3, "#c9a14a"], [(ex.half * 2) / MPP, "#f3d98b"]]) { g.strokeStyle = col; g.lineWidth = lw; g.lineCap = "butt"; g.beginPath(); ex.deck.forEach((p, i) => { const x = (p[0] - x0) / MPP, y = (p[1] - z0) / MPP; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); }
+      g.lineCap = "round"; for (const r of ex.ramps) { g.strokeStyle = "#f3d98b"; g.lineWidth = (r.half * 2) / MPP; g.beginPath(); r.pts.forEach((p, i) => { const x = (p[0] - x0) / MPP, y = (p[1] - z0) / MPP; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); } }
+  } else for (const [lw, col] of [[1.6, "#c4c8cf"], [0, "#ffffff"]]) {
     g.fillStyle = col; g.strokeStyle = col; g.lineWidth = lw; g.lineJoin = "round";
     for (const r of data.roads) { g.beginPath(); for (const ring of [r.pts, ...(r.holes ?? [])]) ring.forEach((p, i) => { const x = (p[0] - x0) / MPP, y = (p[1] - z0) / MPP; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); if (lw) g.stroke(); else g.fill("evenodd"); }
   }
   g.fillStyle = "#d8d0bf"; g.strokeStyle = "#b9b09c"; g.lineWidth = 0.6; for (const b of data.buildings) { tr(b.pts); g.fill(); g.stroke(); }
-  cached = { data, canvas: c, x0, z0 };
+  cached = { data, graph, canvas: c, x0, z0 };
   return cached;
 }
 

@@ -5,12 +5,45 @@
 //   - two directed LANES per road (traffic keeps right, as in Nigeria), trimmed back from junctions,
 //   - CONNECTORS: the smooth curves a vehicle drives through a junction from one lane into the next, and which of them cross each other,
 //   - routing over lanes, upstream walking (where does a vehicle that must arrive here come from), and kerbside stopping places,
-//   - surface queries: is this point carriageway, pavement or neither (one spatial hash shared by cars, pedestrians and the renderer).
+//   - surface queries: is this point carriageway, pavement or neither (one spatial hash shared by cars, pedestrians and the renderer),
+//   - LEVELS: a road may run above the ground (the expressway and its ramps, lib3d/highway.js). Every edge has a level mask (1 ground, 2 deck, 3 ramp: both) and a surface query only
+//     sees the levels it asks for (the default is the ground), so people, ambient traffic and pick-ups never meet the deck, while a car on it asks for the deck. heightAt() gives the height.
 // Metres, x east, z south, like the rest of lib3d. Heading (hx, hz); the right-hand side of a heading is (-hz, hx).
 import { Path } from "./roadnet.js";
 
 /** Cross-section rules. A road is `half` metres from its centreline to the kerb on each side, then `sw` metres of pavement. */
-export const XS = { minDrivableClearance: 2.7, lane: 3.5, minHalf: 2.6, maxHalf: 7.0, pavement: 2.0, minPavement: 0.7, setback: 0.7, junctionExtra: 1.6, uTurnTrim: 3 };
+export const XS = { minDrivableClearance: 2.7, lane: 3.5, minHalf: 2.6, maxHalf: 7.0, pavement: 2.0, minPavement: 0.7, setback: 0.7, junctionExtra: 1.6, frontage: 1.0, uTurnTrim: 3 };
+/**
+ * What each class of road is made of, centreline outwards: a median strip (`med`, half its width), `lanes` traffic lanes of XS.lane each way, then a paved `shoulder`; the rest of the free space is pavement.
+ * arterial = the campus' express roads (two lanes each way and a median); collector = a wide campus road (one lane each way and a shoulder for stopping); local = a lane each way.
+ */
+export const CLASSES = {
+  arterial: { lanes: 2, med: 1.0, shoulder: 1.5, cap: 9.5 },
+  collector: { lanes: 1, med: 0, shoulder: 1.5, cap: 5.5 },
+  local: { lanes: 1, med: 0, shoulder: 0.5, cap: 4.0 },
+};
+/**
+ * The cross-section of a class when `avail` metres are free beside the centreline: gives up the shoulder first, then lanes. Returns { half, med, lanes (per direction), shoulder }.
+ * An arterial is as many lanes each way as the road on the map was wide: a 35-45 m dual carriageway (the main road in from the south, the Senate roundabout) gets three, the others two.
+ */
+export function crossSection(cls, avail, rawHalf = 0) {
+  const C = CLASSES[cls] ?? CLASSES.local;
+  if (cls === "arterial") for (let lanes = rawHalf >= 16 ? 3 : 2; lanes >= 2; lanes--) for (const sh of [C.shoulder, 0.8, 0.3, 0]) { const h = C.med + lanes * XS.lane + sh; if (h <= avail + 1e-6) return { half: h, med: C.med, lanes, shoulder: sh }; }
+  // not an express road (or no room for one): as wide as the polygon was, between one lane and the class' cap, and no wider than the free space
+  const want = Math.min(C.cap, Math.max(XS.lane, rawHalf)), half = Math.max(XS.minHalf, Math.min(want, avail));
+  return { half, med: 0, lanes: 1, shoulder: Math.max(0, half - XS.lane) };
+}
+/** Two surfaces that are more than this many metres apart in height are not the same place (a ramp over a road). */
+const LEVEL_GAP = 3.0;
+/** Height of the surface at fraction t of a spatial-hash segment (sg.s0 is where the segment starts along its edge). */
+const segH = (e, sg, t) => (e.h0 === e.h1 ? e.h0 : heightOn(e, sg.s0 + t * Math.hypot(sg.bx - sg.ax, sg.bz - sg.az)));
+/** Level masks: an edge is on the ground (1), on the deck (2) or a ramp (4). A vehicle on level 0 sees ground + ramps (5), on level 1 deck + ramps (6); people see only the ground (1). */
+export const LV_GROUND = 1, LV_DECK = 2, LV_RAMP = 4;
+const maskOfLv = (lv) => (lv === 1 ? LV_DECK : lv === 2 ? LV_RAMP : LV_GROUND);
+/** The surface mask for a vehicle on level `lv` (0 ground, 1 deck): its own level plus the ramps between them. */
+export const carMask = (lv) => (lv ? LV_DECK : LV_GROUND) | LV_RAMP;
+const ease5 = (t) => { t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * t * (t * (t * 6 - 15) + 10); };   // smootherstep: a ramp starts and ends level, so a car never meets a kink
+export const heightOn = (e, s) => (e.h0 === e.h1 ? e.h0 : e.h0 + (e.h1 - e.h0) * ease5(s / (e.len || 1)));
 const CELL = 24;
 const TAU = Math.PI * 2;
 const angDiff = (a, b) => ((b - a + Math.PI * 3) % TAU) - Math.PI;
@@ -64,12 +97,18 @@ function relaxCentreline(pts, need, sdf) {
  * buildings that crowd them, and each road is sized from the clearance that is really left, so lanes never clip a wall.
  */
 export function buildRoadGraph(raw, { sdf = null } = {}) {
-  const nodes = raw.nodes.map((n) => ({ ...n, edges: [], radius: XS.minHalf })), edges = [], foots = [];
+  const nodes = raw.nodes.map((n) => ({ ...n, edges: [], radius: XS.minHalf, mask: 0, h: 0, fixedOnly: true })), edges = [], foots = [];
   // ---- the cross-section of each edge ----
   for (const e of raw.edges) {
-    let pts = e.pts, clr = e.clr ?? 10; const rawHalf = (e.w ?? 4) / 2;
+    let pts = e.pts, clr = e.clr ?? 10; const rawHalf = (e.w ?? 4) / 2, cls = e.cls ?? "collector";
+    // an edge with `fixed` is designed, not found (the expressway and its ramps): its geometry and cross-section are exactly as given and are never nudged or measured against buildings
+    if (e.fixed) {
+      const path = new Path(pts), F = e.fixed, lv = e.lv ?? 0;
+      edges.push({ id: e.id, a: e.a, b: e.b, path, len: path.len, half: F.half, sw: F.sw ?? 0, med: F.med ?? 0, lanesPerDir: F.lanes ?? 1, shoulder: F.shoulder ?? 0, laneOff: F.laneOff ?? null, oneWay: !!e.oneWay, cls: e.kind ?? "express", kind: e.kind ?? "express", hw: !!e.hw, lv, mask: maskOfLv(lv), h0: e.h0 ?? 0, h1: e.h1 ?? e.h0 ?? 0, comp: e.comp ?? 0, lanes: [null, null], rawHalf: F.half, clr: Infinity, foot: false, struct: e.struct ?? null });
+      continue;
+    }
     if (sdf) {
-      const want = Math.min(XS.maxHalf, Math.max(XS.lane, rawHalf)) + XS.setback;
+      const want = Math.min(cls === "arterial" ? 13 : CLASSES[cls]?.cap ?? XS.maxHalf, Math.max(XS.lane, rawHalf)) + XS.setback;
       pts = relaxCentreline(pts, Math.min(want, XS.lane + 1.2), sdf);
       const probe = new Path(pts), edge = Math.min(10, probe.len * 0.25), at = {}; let lo = Infinity;   // clearance along the road, leaving out the junction ends
       for (let s = edge; s <= probe.len - edge; s += 1.5) { probe.at(s, at); lo = Math.min(lo, sdf(at.x, at.z)); }
@@ -80,12 +119,16 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
     const avail = Math.max(0, clr - XS.setback);
     // an alley squeezed between buildings (less than a car and some margin) is a footpath: walkable pavement, but no lanes and no vehicles
     const foot = clr < XS.minDrivableClearance;
-    let half = foot ? 0 : Math.min(XS.maxHalf, Math.max(XS.lane, rawHalf)); if (!foot) half = Math.max(XS.minHalf, Math.min(half, avail));
+    const X = foot ? { half: 0, med: 0, lanes: 1, shoulder: 0 } : crossSection(cls, Math.max(avail - XS.frontage, Math.min(avail, XS.minHalf)), rawHalf), half = X.half;   // keep a strip of pavement against the buildings: people step out of a car onto it, and doors open onto it
     let sw = foot ? Math.max(1.0, Math.min(XS.pavement, clr - 0.3)) : Math.min(XS.pavement, Math.max(0, avail - half)); if (!foot && sw < XS.minPavement) sw = 0;
-    (foot ? foots : edges).push({ id: e.id, a: e.a, b: e.b, path, len: path.len, half, sw, comp: e.comp ?? 0, lanes: [null, null], rawHalf, clr, foot });
+    (foot ? foots : edges).push({ id: e.id, a: e.a, b: e.b, path, len: path.len, half, sw, med: X.med, lanesPerDir: X.lanes, shoulder: X.shoulder, laneOff: null, oneWay: false, cls, kind: cls, hw: false, lv: 0, mask: LV_GROUND, h0: 0, h1: 0, comp: e.comp ?? 0, lanes: [null, null], rawHalf, clr, foot });
   }
   const byId = new Map([...edges, ...foots].map((e) => [e.id, e]));
-  for (const e of edges) { nodes[e.a].edges.push(e.id); if (e.b !== e.a) nodes[e.b].edges.push(e.id); nodes[e.a].radius = Math.max(nodes[e.a].radius, e.half); nodes[e.b].radius = Math.max(nodes[e.b].radius, e.half); }
+  for (const e of edges) {
+    nodes[e.a].edges.push(e.id); if (e.b !== e.a) nodes[e.b].edges.push(e.id); nodes[e.a].radius = Math.max(nodes[e.a].radius, e.half); nodes[e.b].radius = Math.max(nodes[e.b].radius, e.half);
+    if (!e.hw) nodes[e.a].fixedOnly = nodes[e.b].fixedOnly = false;
+    nodes[e.a].mask |= e.mask; nodes[e.b].mask |= e.mask; nodes[e.a].h = Math.max(nodes[e.a].h, e.h0); nodes[e.b].h = Math.max(nodes[e.b].h, e.h1);
+  }
   for (const n of nodes) n.deg = n.edges.length;
 
   // ---- lanes: forward (a -> b) is dir 0, backward is dir 1. Lane centre is half/2 to the right of travel. ----
@@ -99,14 +142,16 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
     arms.forEach((a, i) => { const gp = (arms[(i + 1) % k].ang - a.ang + TAU) % TAU, gm = (a.ang - arms[(i + k - 1) % k].ang + TAU) % TAU, th = Math.max(0.25, Math.min(gp, gm)); armTrim.set(a.e.id * 2 + a.end, Math.min(24, (2.6 + a.e.half * Math.cos(th / 2)) / (2 * Math.sin(th / 2)))); });
   }
   const trimAt = (e, node) => (node.deg <= 1 ? XS.uTurnTrim : Math.min(0.42 * e.len, Math.max(node.radius + XS.junctionExtra, armTrim.get(e.id * 2 + (node.id === e.a ? 0 : 1)) ?? 0)));
+  // where a lane runs, measured from the centreline: the middle of the road's own lane (the right-hand one on an express road, so traffic keeps to the outer lane), or the centreline of a one-way carriageway
+  const laneOffset = (e) => (e.oneWay ? 0 : e.laneOff ?? (e.med > 0 ? Math.min(e.half - 1.0, e.med + XS.lane * (e.lanesPerDir - 0.5)) : e.half / 2));
   for (const e of edges) {
-    for (const dir of [0, 1]) {
-      const from = dir ? e.b : e.a, to = dir ? e.a : e.b, off = e.half / 2;
+    for (const dir of e.oneWay ? [0] : [0, 1]) {
+      const from = dir ? e.b : e.a, to = dir ? e.a : e.b, off = laneOffset(e);
       const ta = trimAt(e, nodes[from]), tb = trimAt(e, nodes[to]), s0 = dir ? e.len - ta : ta, s1 = dir ? tb : e.len - tb;
       const centre = sampleSmooth(e.path, Math.min(s0, s1), Math.max(s0, s1), 1.0), line = dir ? centre.reverse().map((p) => ({ x: p.x, z: p.z, hx: -p.hx, hz: -p.hz })) : centre;
       const pts = line.map((p) => [p.x - p.hz * off, p.z + p.hx * off]);
       if (pts.length < 2) pts.push([pts[0][0] + line[0].hx * 0.5, pts[0][1] + line[0].hz * 0.5]);
-      const lane = { id: lanes.length, edge: e.id, dir, from, to, path: new Path(pts), off, half: e.half, sw: e.sw, comp: e.comp, out: [], in: [], trimA: ta, trimB: tb };
+      const lane = { id: lanes.length, edge: e.id, dir, from, to, path: new Path(pts), off, half: e.half, sw: e.sw, comp: e.comp, hw: e.hw, mask: e.mask, out: [], in: [], trimA: ta, trimB: tb };
       lane.len = lane.path.len; lanes.push(lane); e.lanes[dir] = lane;
     }
   }
@@ -174,39 +219,69 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
   // junction patches: the corner a vehicle sweeps through while it turns is road too (otherwise the inside of every turn would be "off the road")
   const patches = [];
   for (const c of conns) {
-    const half = Math.max(byId.get(lanes[c.from].edge).half, byId.get(lanes[c.to].edge).half) + 0.4, P = c.path.pts, pe = { id: -(c.id + 1), half, sw: 0, comp: lanes[c.from].comp, conn: c.id, path: c.path }; byId.set(pe.id, pe); patches.push(pe);
+    const ef = byId.get(lanes[c.from].edge), et = byId.get(lanes[c.to].edge), half = (ef.hw || et.hw ? Math.min(ef.half, et.half) : Math.max(ef.half, et.half)) + 0.4, P = c.path.pts, mk = lanes[c.from].mask | lanes[c.to].mask, pe = { id: -(c.id + 1), half, sw: 0, med: 0, mask: mk, h0: nodes[c.node].h, h1: nodes[c.node].h, comp: lanes[c.from].comp, conn: c.id, path: c.path }; byId.set(pe.id, pe); patches.push(pe);
     for (let i = 0; i < P.length - 1; i += 2) {
       const j = Math.min(P.length - 1, i + 2), sg = { e: pe.id, ax: P[i][0], az: P[i][1], bx: P[j][0], bz: P[j][1], s0: 0, reach: half };
       const i0 = Math.floor((Math.min(sg.ax, sg.bx) - half) / CELL), i1 = Math.floor((Math.max(sg.ax, sg.bx) + half) / CELL), j0 = Math.floor((Math.min(sg.az, sg.bz) - half) / CELL), j1 = Math.floor((Math.max(sg.az, sg.bz) + half) / CELL);
       for (let a = i0; a <= i1; a++) for (let b = j0; b <= j1; b++) { const k = key(a, b); if (!hash.has(k)) hash.set(k, []); hash.get(k).push(sg); }
     }
   }
-  const nhash = new Map(); for (const n of nodes) { if (!n.deg) continue; const r = n.radius + XS.pavement; for (let a = Math.floor((n.x - r) / CELL); a <= Math.floor((n.x + r) / CELL); a++) for (let b = Math.floor((n.z - r) / CELL); b <= Math.floor((n.z + r) / CELL); b++) { const k = key(a, b); if (!nhash.has(k)) nhash.set(k, []); nhash.get(k).push(n); } }
+  const nhash = new Map(); for (const n of nodes) { if (!n.deg || n.fixedOnly) continue;   /* a junction on the expressway has no disc: the carriageways meet end to end, and a disc would cover the median */ const r = n.radius + XS.pavement; for (let a = Math.floor((n.x - r) / CELL); a <= Math.floor((n.x + r) / CELL); a++) for (let b = Math.floor((n.z - r) / CELL); b <= Math.floor((n.z + r) / CELL); b++) { const k = key(a, b); if (!nhash.has(k)) nhash.set(k, []); nhash.get(k).push(n); } }
 
   const segDist = (sg, x, z) => { const dx = sg.bx - sg.ax, dz = sg.bz - sg.az, l2 = dx * dx + dz * dz || 1; let t = ((x - sg.ax) * dx + (z - sg.az) * dz) / l2; t = Math.max(0, Math.min(1, t)); const px = sg.ax + dx * t, pz = sg.az + dz * t; return { d: Math.hypot(x - px, z - pz), t, px, pz }; };
 
   const G = {
-    nodes, edges, foots, lanes, conns, patches, byEdge: byId, segs, comps: Math.max(0, ...edges.map((e) => e.comp)) + 1, bounds: raw.bounds ?? null,
+    nodes, edges, foots, lanes, conns, patches, byEdge: byId, segs, expressway: raw.expressway ?? null, comps: Math.max(0, ...edges.map((e) => e.comp)) + 1, bounds: raw.bounds ?? null,
     laneOf: (edge, dir) => byId.get(edge)?.lanes[dir] ?? null,
 
-    /** What is at (x, z)? { cls: 0 ground, 1 carriageway, 2 pavement, edge, d (to the centreline), half, sw }. Carriageway wins over pavement. */
-    surfaceAt(x, z, out = {}) {
-      out.cls = 0; out.edge = -1; out.d = Infinity; out.half = 0; out.sw = 0; let bestPav = null;
+    /**
+     * What is at (x, z)? { cls: 0 ground, 1 carriageway, 2 pavement, edge, d (to the centreline), half, sw, h (height of the surface there, m) }. Carriageway wins over pavement.
+     * `mask` says which levels are seen (LV_GROUND = 1 by default: the deck and its ramps do not exist for people, traffic and pick-ups; a vehicle asks for carMask(its level)).
+     * A median (the strip down the middle of an express road) is neither carriageway nor pavement: nobody drives over it, and it is no place to wait.
+     */
+    surfaceAt(x, z, out = {}, mask = LV_GROUND, hRef = NaN) {
+      out.cls = 0; out.edge = -1; out.d = Infinity; out.half = 0; out.sw = 0; out.h = 0; let bestPav = null, bestSeg = null, bestDh = 0;
       const list = hash.get(key(Math.floor(x / CELL), Math.floor(z / CELL)));
-      if (list) for (const sg of list) { const { d } = segDist(sg, x, z), e = byId.get(sg.e); if (d <= e.half) { if (out.cls !== 1 || d < out.d) { out.cls = 1; out.edge = e.id; out.d = d; out.half = e.half; out.sw = e.sw; } } else if (out.cls !== 1 && d <= e.half + e.sw && (!bestPav || d < bestPav.d)) bestPav = { d, e }; }
+      if (list) for (const sg of list) {
+        const e = byId.get(sg.e); if (!(e.mask & mask)) continue; const { d, t } = segDist(sg, x, z); if (hRef === hRef && Math.abs(segH(e, sg, t) - hRef) > LEVEL_GAP) continue;
+        if (d <= e.half) {
+          if (d < (e.med ?? 0)) continue;
+          // where a ramp runs on to the deck both are under the car: take the one at the height the car is at (so the deck stays level to its edge), otherwise the nearer
+          const dh = hRef === hRef ? Math.abs(segH(e, sg, t) - hRef) : 0, better = out.cls !== 1 || (Math.abs(dh - bestDh) > 0.02 ? dh < bestDh : d < out.d);
+          if (better) { out.cls = 1; out.edge = e.id; out.d = d; out.half = e.half; out.sw = e.sw; bestSeg = { sg, t, e }; bestDh = dh; }
+        }
+        else if (out.cls !== 1 && d <= e.half + e.sw && (!bestPav || d < bestPav.d)) bestPav = { d, e };
+      }
+      if (bestSeg && (bestSeg.e.h0 || bestSeg.e.h1)) out.h = heightOn(bestSeg.e, bestSeg.sg.s0 + bestSeg.t * Math.hypot(bestSeg.sg.bx - bestSeg.sg.ax, bestSeg.sg.bz - bestSeg.sg.az));
       const nl = nhash.get(key(Math.floor(x / CELL), Math.floor(z / CELL)));
-      if (nl) for (const n of nl) { const d = Math.hypot(x - n.x, z - n.z); if (d <= n.radius) { out.cls = 1; if (out.edge < 0) out.edge = n.edges[0]; out.d = Math.min(out.d, d); } else if (out.cls !== 1 && d <= n.radius + XS.pavement && !bestPav) bestPav = { d, e: byId.get(n.edges[0]) }; }
+      if (nl) for (const n of nl) { if (!(n.mask & mask) || (hRef === hRef && Math.abs(n.h - hRef) > LEVEL_GAP)) continue; const d = Math.hypot(x - n.x, z - n.z); if (d <= n.radius) { out.cls = 1; if (out.edge < 0) out.edge = n.edges[0]; out.d = Math.min(out.d, d); if (!bestSeg) out.h = n.h; } else if (out.cls !== 1 && d <= n.radius + XS.pavement && !bestPav) bestPav = { d, e: byId.get(n.edges[0]) }; }
       if (out.cls === 0 && bestPav) { out.cls = 2; out.edge = bestPav.e.id; out.d = bestPav.d; out.half = bestPav.e.half; out.sw = bestPav.e.sw; }
       return out;
     },
-    onCarriageway(x, z) { return G.surfaceAt(x, z, G._s ??= {}).cls === 1; },
+    onCarriageway(x, z, mask = LV_GROUND, hRef = NaN) { return G.surfaceAt(x, z, G._s ??= {}, mask, hRef).cls === 1; },
+    /** The height (m) of the road surface a vehicle on level `mask` stands on at (x, z): 0 on the ground, the deck's or ramp's height above it. */
+    heightAt(x, z, mask = LV_DECK | LV_GROUND | LV_RAMP, hRef = NaN) { const s = G.surfaceAt(x, z, G._h ??= {}, mask, hRef); return s.cls === 1 ? s.h : 0; },
+    /**
+     * Which level is a vehicle at (x, z) on? 1 = the deck (or a ramp's upper part), 0 = the ground. `prev` is where it was a moment ago: it only changes when the point is on one level and not the other
+     * (under the deck, or where a ramp meets it, both are there, so the vehicle stays where it was). Also says whether it is on a ramp (`ramp`).
+     */
+    levelAt(x, z, prev = 0, hRef = NaN) {
+      let ground = false, deck = false, ramp = false;
+      const see = (m) => { if (m & LV_GROUND) ground = true; if (m & LV_DECK) deck = true; if (m & LV_RAMP) ramp = true; };
+      const list = hash.get(key(Math.floor(x / CELL), Math.floor(z / CELL)));
+      if (list) for (const sg of list) { const e = byId.get(sg.e), { d, t } = segDist(sg, x, z); if (d <= e.half && d >= (e.med ?? 0) && !(hRef === hRef && Math.abs(segH(e, sg, t) - hRef) > LEVEL_GAP)) see(e.mask); }
+      const nl = nhash.get(key(Math.floor(x / CELL), Math.floor(z / CELL)));
+      if (nl) for (const n of nl) if (Math.hypot(x - n.x, z - n.z) <= n.radius && !(hRef === hRef && Math.abs(n.h - hRef) > LEVEL_GAP)) see(n.mask);
+      const lv = deck && !ground ? 1 : ground && !deck ? 0 : prev;
+      return { lv, ramp, deck, ground };
+    },
 
     /** Nearest point on any road centreline within `max` metres: { edge, s (along the edge), x, z, d, side (+1 = on the right of a->b) }. `main` limits it to the big connected network. */
-    nearestOnRoad(x, z, max = 80, main = false) {
+    nearestOnRoad(x, z, max = 80, main = false, mask = LV_GROUND) {
       let best = null; const r = Math.ceil(max / CELL);
       for (let a = Math.floor(x / CELL) - r; a <= Math.floor(x / CELL) + r; a++) for (let b = Math.floor(z / CELL) - r; b <= Math.floor(z / CELL) + r; b++) {
         const list = hash.get(key(a, b)); if (!list) continue;
-        for (const sg of list) { if (sg.e < 0) continue; const e = byId.get(sg.e); if (main && e.comp !== 0) continue; const q = segDist(sg, x, z); if (q.d > max || (best && q.d >= best.d)) continue;
+        for (const sg of list) { if (sg.e < 0) continue; const e = byId.get(sg.e); if (!(e.mask & mask) || (main && e.comp !== 0)) continue; const q = segDist(sg, x, z); if (q.d > max || (best && q.d >= best.d)) continue;
           const dx = sg.bx - sg.ax, dz = sg.bz - sg.az, l = Math.hypot(dx, dz) || 1, cr = (dx / l) * (z - q.pz) - (dz / l) * (x - q.px);   // >0: the point is on the right of a->b
           best = { edge: e.id, s: sg.s0 + q.t * l, x: q.px, z: q.pz, d: q.d, side: cr >= 0 ? 1 : -1 }; }
       }
@@ -224,7 +299,7 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
       for (const rad of [60, 140, 300, max]) {
         if (rad > max) break;
         for (const e of edges) {
-          if (main && e.comp !== 0) continue; const n = G.nearestOnEdge(e, x, z); if (n.d > rad) continue;
+          if (e.mask !== LV_GROUND || (main && e.comp !== 0)) continue; const n = G.nearestOnEdge(e, x, z); if (n.d > rad) continue;
           const side = n.side; const lane = e.lanes[side === 1 ? 0 : 1]; if (!lane || lane.len < len + 6) continue;
           const sl = G.laneS(lane, n.x, n.z); const s = Math.max(len / 2 + 2, Math.min(lane.len - len / 2 - 3, sl)); const p = lane.path.at(s, {});
           const score = n.d + (Math.abs(s - sl) * 0.8) + (lane.len < 30 ? 12 : 0); if (!best || score < best.score) best = { score, lane, s, x: p.x, z: p.z, hx: p.hx, hz: p.hz, edge: e.id, d: n.d };
@@ -245,7 +320,7 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
       if (fromLane === toLane && toS >= fromS) return G.makeRoute([{ kind: "lane", id: fromLane, s0: fromS, s1: toS }], opts);
       const START = -1, dist = new Map(), prev = new Map(), heap = new Heap(), done = new Set(), tx = T.path.pts[0][0], tz = T.path.pts[0][1];
       const cost = (c, base) => base + c.len + Math.abs(c.turn) * 2 + (c.kind === "uturn" ? 80 : 0) + (c.to === toLane ? 0 : lanes[c.to].len);
-      const relax = (from, c, base) => { if (opts.avoid?.has(c.to)) return; const g = cost(c, base); if (!dist.has(c.to) || g < dist.get(c.to)) { dist.set(c.to, g); prev.set(c.to, [from, c.id]); heap.push(g + Math.hypot(lanes[c.to].path.pts.at(-1)[0] - tx, lanes[c.to].path.pts.at(-1)[1] - tz) * 0.9, c.to); } };
+      const useHw = L.hw || T.hw, relax = (from, c, base) => { if (opts.avoid?.has(c.to) || (lanes[c.to].hw && !useHw)) return; const g = cost(c, base); if (!dist.has(c.to) || g < dist.get(c.to)) { dist.set(c.to, g); prev.set(c.to, [from, c.id]); heap.push(g + Math.hypot(lanes[c.to].path.pts.at(-1)[0] - tx, lanes[c.to].path.pts.at(-1)[1] - tz) * 0.9, c.to); } };
       for (const cid of L.out) relax(START, conns[cid], L.len - fromS);
       let steps = 0;
       while (heap.size && ++steps < 80000) { const [, cur] = heap.pop(); if (done.has(cur)) continue; done.add(cur); if (cur === toLane) break; for (const cid of lanes[cur].out) relax(cur, conns[cid], dist.get(cur)); }
@@ -265,7 +340,7 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
     upstreamRoute(lane, s, dist, rnd = Math.random, opts = {}) {
       const segs2 = [{ kind: "lane", id: lane, s0: Math.max(0, s - dist), s1: s }]; let need = dist - s, cur = lane, guard = 0;
       while (need > 0 && guard++ < 40) {
-        const all = lanes[cur].in.map((cid) => conns[cid]).filter((c) => lanes[c.from].comp === lanes[lane].comp && c.from !== cur), plain = all.filter((c) => c.kind !== "uturn"), ins = plain.length ? plain : all;   // a U-turn at a dead end is a fine way to arrive
+        const all = lanes[cur].in.map((cid) => conns[cid])  .filter((c) => lanes[c.from].comp === lanes[lane].comp && c.from !== cur && (lanes[lane].hw || !lanes[c.from].hw)), plain = all.filter((c) => c.kind !== "uturn"), ins = plain.length ? plain : all;   // a U-turn at a dead end is a fine way to arrive
         if (!ins.length) break;
         const c = ins[Math.floor(rnd() * ins.length)], pl = lanes[c.from]; segs2.unshift({ kind: "conn", id: c.id }); need -= c.len;
         const take = Math.min(pl.len, Math.max(0.5, need)); segs2.unshift({ kind: "lane", id: pl.id, s0: pl.len - take, s1: pl.len }); need -= take; cur = pl.id;

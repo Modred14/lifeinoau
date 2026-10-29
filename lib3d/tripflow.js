@@ -21,6 +21,7 @@ import { remainingSecs } from "./tripplan.js";
 import { INTRO_SECONDS, BOARD_SECONDS, ALIGHT_SECONDS, CAR_BOARD_SECONDS, CAR_ALIGHT_SECONDS, EXIT_STOP_SPEED, EXIT_REFUSE_SPEED } from "../lib/travel.js";
 import { boxesOverlap } from "./collide.js";
 import { createCar, stepCar, gentleStop, carProfile, CAR } from "./carphysics.js";
+import { carMask } from "./roadgraph.js";
 import { exitSpots, pickDoorSide } from "./carexit.js";
 import { SWING, BACK_SPEED, LEAF_ID, canOpenAt, atThreshold, doorLocal, planDoorOpening, inSwing, swingBlocked, leafBody } from "./doorway.js";
 import { RETARGET_WHY } from "./tripretarget.js";
@@ -68,28 +69,47 @@ export function createTripFlow(env, o) {
   const stoppedAtPickup = () => hero && hero.v < 0.2 && (ownCar || hero.s >= hero.route.len - 0.9);   // your own car is already parked there
 
   // ---- own car controller ----
-  function publishOwn() { world.setBody("own", { x: own.x, z: own.z, hx: own.hx, hz: own.hz, hl: own.len / 2, hw: own.wid / 2 }); sim.setExternal("own", { x: own.x, z: own.z, hx: own.hx, hz: own.hz, len: own.len, wid: own.wid, v: own.v }); }
-  function makeOwn() { const h = hero; own = Object.assign(createCar({ x: h.x, z: h.z, ang: Math.atan2(h.hx, h.hz) }), { len: h.len, wid: h.wid, kind, P: carProfile(dims?.id) }); sim.remove(h); hero = null; own.pen = ownProbe(own.x, own.z, own.hx, own.hz)?.pen ?? 0; publishOwn(); }
-  const onRoad = (x, z) => graph.surfaceAt(x, z, onRoad.s ??= {}).cls === 1;
+  // A car high on the expressway or a ramp is not on the ground: people and the traffic below it neither see nor stop for it (the ground cars and walkers of the campus live at height 0).
+  const ELEVATED = 2.5;
+  function publishOwn() {
+    if (own.h > ELEVATED) { world.removeBody("own"); sim.removeExternal("own"); return; }
+    world.setBody("own", { x: own.x, z: own.z, hx: own.hx, hz: own.hz, hl: own.len / 2, hw: own.wid / 2 }); sim.setExternal("own", { x: own.x, z: own.z, hx: own.hx, hz: own.hz, len: own.len, wid: own.wid, v: own.v });
+  }
+  function makeOwn() { const h = hero; own = Object.assign(createCar({ x: h.x, z: h.z, ang: Math.atan2(h.hx, h.hz) }), { len: h.len, wid: h.wid, kind, P: carProfile(dims?.id), lv: 0, h: 0, slope: 0 }); sim.remove(h); hero = null; own.pen = ownProbe(own.x, own.z, own.hx, own.hz)?.pen ?? 0; publishOwn(); }
+  const onRoad = (x, z) => graph.surfaceAt(x, z, onRoad.s ??= {}).cls === 1;      // the ground: people, door checks, kerbside exits
+  const carSurf = {};
+  /** Is (x, z) road for your own car, on the level it is on (the ground, or the expressway deck) and, where roads cross, at the height it is at? */
+  const onRoadOwn = (x, z, mask) => graph.surfaceAt(x, z, carSurf, mask, own.h).cls === 1;
   /**
    * Why a pose is not allowed for your own car: null when it is fine, otherwise { pen, why } with why = "road" (a part of it would be off the carriageway), "building" or "vehicle".
    * `pen` says how bad the place is, so the physics can let a car that is already touching something move AWAY from it (it is never pinned) but never further in.
    */
   function ownProbe(x, z, hx, hz) {
     const hl = own.len / 2, hw = own.wid / 2, rx = -hz, rz = hx; let pen = 0, why = null;
-    for (const u of [-hl, 0, hl]) for (const w of [-hw, 0, hw]) if (!onRoad(x + hx * u + rx * w, z + hz * u + rz * w)) { pen++; why = "road"; }
-    if (world.boxBlocked(x, z, hx, hz, hl, hw, 0.05)) { pen += 100; why = "building"; }
+    const mask = carMask(graph.levelAt(x, z, own.lv, own.h).lv), high = own.h > ELEVATED;      // high up, the ground below (buildings, the lake, other traffic) is not in the way
+    for (const u of [-hl, 0, hl]) for (const w of [-hw, 0, hw]) if (!onRoadOwn(x + hx * u + rx * w, z + hz * u + rz * w, mask)) { pen++; why = "road"; }
+    if (!high && world.boxBlocked(x, z, hx, hz, hl, hw, 0.05)) { pen += 100; why = "building"; }
     const me = { x, z, hx, hz, hl, hw };
-    for (const b of sim.vehicles) {
+    if (!high) for (const b of sim.vehicles) {
       if (Math.abs(b.x - x) > 8 || Math.abs(b.z - z) > 8) continue;
       if (!boxesOverlap(me, { x: b.x, z: b.z, hx: b.hx, hz: b.hz, hl: b.len / 2, hw: b.wid / 2 }, 0.05)) continue;
       pen += 50 + Math.round(20 * Math.max(0, 1 - Math.hypot(x - b.x, z - b.z) / (hl + b.len / 2))); why = "vehicle";
     }
     return pen ? { pen, why } : null;
   }
+  /**
+   * Which level the car is on (the ground, or the expressway deck: they are different roads at the same place) and how high the road is under it. Done after every move; the probe asks
+   * levelAt itself for a position it has not reached yet. `slope` is the climb of the road ahead (radians, + uphill) so the body can lean with a ramp.
+   */
+  function updateLevel() {
+    own.lv = graph.levelAt(own.x, own.z, own.lv, own.h).lv; const mask = carMask(own.lv);
+    own.h = graph.heightAt(own.x, own.z, mask, own.h);
+    const a = graph.heightAt(own.x + own.hx * 2, own.z + own.hz * 2, mask, own.h), b = graph.heightAt(own.x - own.hx * 2, own.z - own.hz * 2, mask, own.h); own.slope = Math.atan2(a - b, 4);
+  }
   /** Asking to get out: the car brakes itself to a stop (not at once, and not at all if it is going far too fast), then the door opens. */
   function requestExit() {
     if (exitAsk || S.phase !== "drive") return;
+    if (own.h > 0.8) { notice("You cannot get out on the expressway or its ramps. Drive down to a normal road first."); return; }
     if (own.v > EXIT_REFUSE_SPEED) { notice("Slow down before you get out."); return; }
     if (!pickExit()) { notice("There is no room to get out here. Move the car and try again."); return; }
     exitAsk = true; S.exiting = true;
@@ -97,11 +117,11 @@ export function createTripFlow(env, o) {
   function driveOwn(dt, inp) {
     if (inp.exit) requestExit();
     let drv = { gas: inp.gas ?? 0, brake: inp.brake ?? 0, steer: inp.steer ?? 0 };
-    const dist = Math.hypot(own.x - plan.drop.x, own.z - plan.drop.z), near = !free && dist < ARRIVE_RADIUS;
+    const dist = Math.hypot(own.x - plan.drop.x, own.z - plan.drop.z), near = !free && dist < ARRIVE_RADIUS && own.h < 1.0;   // driving over the place on the expressway is not arriving at it
     if (exitAsk && drv.gas > 0.3) { exitAsk = false; S.exiting = false; }     // you changed your mind: you pressed the gas
     if (exitAsk) drv = gentleStop(own, Math.min(4.5, own.P.brake * 0.6), own.P);
     else if (near && own.v > 0.3 && own.v < PARK_ASSIST_BELOW && !drv.gas) drv.brake = Math.max(drv.brake, 0.4);   // by the drop-off the car helps you park: it eases to a stop if you let go of the gas
-    stepCar(own, drv, dt, ownProbe, own.P); publishOwn();
+    stepCar(own, drv, dt, ownProbe, own.P); updateLevel(); publishOwn();
     return { near, drv };
   }
   /** Where a stopped car's door and the way out are, with the cars and the world as they are now. */
@@ -233,7 +253,7 @@ export function createTripFlow(env, o) {
   function stepBack(dt) {
     const D = B.door, dx = dBack.x - walker.x, dz = dBack.z - walker.z, dl = Math.hypot(dx, dz); dT += dt; walker.vx = walker.vz = 0; turnToward(dt, -D.nx, -D.nz, 9);   // the person keeps looking at the door
     const giveUp = (m) => { walker.speed = 0; shutDoor(); notice(m); };
-    if (dl > 0.04 && dT < BACK_TIMEOUT) {
+    if (dl > 0.004 && dT < BACK_TIMEOUT) {   // walk right up to the planned spot: it was chosen on the very edge of the swept area, so stopping short would put the person back inside it
       const sp = Math.min(dl, BACK_SPEED * dt), r = world.moveCircle(walker.x, walker.z, (dx / dl) * sp, (dz / dl) * sp, WALK_R); dStall = r.moved < sp * 0.25 ? dStall + dt : 0;
       walker.x = r.x; walker.z = r.z; walker.speed = BACK_SPEED * 0.9; if (dStall > 0.6) giveUp("There is no room to step back. Move to a clearer spot and try again.");
     } else if (inSwing(dframe, walker.x, walker.z, WALK_R + 0.08)) giveUp("There is no room to open the door from here. Move to a clearer spot and try again.");

@@ -4,6 +4,8 @@
 // Layout, footprints and road shapes come from the supplied OpenStreetMap render. Facades and roofs are generic, NOT photo-verified.
 import * as THREE from "three";
 import { buildRoadMeshes, ROAD_COLORS } from "./roadmesh.js";
+import { buildHighwayMeshes } from "./highwaymesh.js";
+import { corridorKeepOut } from "./highway.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { buildGround } from "./ground.js";
 import { buildEdges } from "./edges.js";
@@ -42,8 +44,8 @@ export function buildRealCampus(data, meta = {}) {
   const x0 = b.x0 * S, x1 = b.x1 * S, z0 = b.z0 * S, z1 = b.z1 * S;
   // ---- ground: patchy grass and sand that fades into the sky-blue at its rim, so the map ends softly (ground.js). Water stays blue. ----
   const ground = buildGround(data, S); root.add(ground);
-  const rimKeep = data.places.filter((p) => p.x < b.x0 + 60 || p.x > b.x1 - 60 || p.z < b.z0 + 60 || p.z > b.z1 - 160).map((p) => [p.x, p.z, 60]);
-  let roadFlat = null, roadSurface = null, tripOn = false;
+  const rimKeep = data.places.filter((p) => p.x < b.x0 + 60 || p.x > b.x1 - 60 || p.z < b.z0 + 60 || p.z > b.z1 - 160).map((p) => [p.x, p.z, 60]).concat(corridorKeepOut());
+  let roadFlat = null, roadSurface = null, highway = null, tripOn = false;
   const edges = buildEdges(data, S, { keepOut: rimKeep }); root.add(edges.group); // roads that run off the map, and a belt of trees along its rim
   for (const m of [flat(data.areas.park, "#5aa064", 0.03, { layer: 2 }), flat(data.areas.sports, "#4c9a68", 0.035, { layer: 2 }), flat(data.areas.wood, "#2f6b3b", 0.04, { layer: 2 }),
     flat(data.areas.pitch, "#2fb98a", 0.06, { layer: 3 }), flat(data.areas.water, "#2f6f95", 0.05, { layer: 3, rough: 0.15, metal: 0.2 }), flat(data.areas.parking, "#46505c", 0.06, { layer: 3 }), (roadFlat = flat(data.roads, "#343b46", 0.08, { layer: 4 }))]) if (m) root.add(m);
@@ -120,9 +122,11 @@ export function buildRealCampus(data, meta = {}) {
    */
   const setRoadGraph = (graph) => {
     if (roadSurface) { root.remove(roadSurface); roadSurface.userData.dispose?.(); roadSurface = null; }
-    if (!graph) { if (roadFlat) { roadFlat.material.color.set("#343b46"); roadFlat.userData.layerY = 0.08; } tripMode(tripOn); return; }
+    if (highway) { root.remove(highway); highway.userData.dispose?.(); highway = null; }
+    if (!graph) { if (roadFlat) { roadFlat.visible = true; roadFlat.material.color.set("#343b46"); roadFlat.userData.layerY = 0.08; } tripMode(tripOn); return; }
     roadSurface = buildRoadMeshes(graph, S, 0.08); root.add(roadSurface);
-    if (roadFlat) { roadFlat.material.color.set(ROAD_COLORS.apron); roadFlat.userData.layerY = 0.0754; }
+    if (graph.expressway) { highway = buildHighwayMeshes(graph.expressway, S); root.add(highway); }
+    if (roadFlat) roadFlat.visible = false;   // the old polygons include roads that were pruned or straightened: the graph is the road now
     tripMode(tripOn);
   };
   return { root, anchors, places, pick, resolve, update, setSelected, setYou, tripMode, setTripMode: tripMode, setRoadGraph, setBillboards, dispose, bounds: { x0, x1, z0, z1 }, extent, attribution: data.meta.attribution,

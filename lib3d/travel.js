@@ -95,7 +95,7 @@ export async function startTrip(env, o) {
   const { stage, campus, light, data } = env, cam = stage.camera, ctl = stage.controls;
   const fromP = resolvePlace(data, o.from) ?? resolvePlace(data, "senate"), toP = resolvePlace(data, o.to);
   if (!toP) throw Object.assign(new Error("That place has no position on the map yet."), { reason: "error" });
-  const svc = await loadServices(data), net = svc.net, base = paintBase(data, net), input = o.input ?? {}, mode = o.mode;
+  const svc = await loadServices(data), net = svc.net, base = paintBase(data, net, svc.graph), input = o.input ?? {}, mode = o.mode;
   let plan = planTrip(svc, { from: fromP, to: toP, mode, driver: !!o.driver }), curTo = toP.id, enterable = o.isEnterable ? !!o.isEnterable(toP.id) : true;
   if (!plan.ok) { const e = Object.assign(new Error(WHY[plan.reason] ?? "That trip cannot be planned."), { reason: plan.reason === "unreachable" ? "unreachable" : "noroad", text: WHY[plan.reason] }); throw e; }
   let B = plan.B; const driven = !!plan.driven, auto = driven;
@@ -170,7 +170,7 @@ export async function startTrip(env, o) {
   // the on-screen stick or a button is never also read as a camera drag, a second finger pinches instead of rotating, and the orbit controls are switched off for the whole trip (stage.setManual).
   const inVehNow = () => !!vehicle && ["ride", "drive", "paying"].includes(F.phase);
   // the camera frames the vehicle while you are in it, and eases between the two framings (never a jump): 0 = on foot, 1 = in the vehicle
-  let vehMix = flow.own ? 1 : 0;
+  let vehMix = flow.own ? 1 : 0, vehH = 0;   // vehH: how high above the ground the camera's world is (your car on the expressway), eased so a ramp is a smooth climb
   const el = stage.renderer.domElement, pointer = attachTripPointer(el, {
     mode: () => (!alive || F.phase === "inside" ? "none" : "look"),
     look: (dYaw, dPitch) => { if (inVehNow()) userYaw = clamp(userYaw - dYaw, -1.7, 1.7); else camYaw -= dYaw; userPitch = clamp(userPitch + dPitch, PITCH.min, PITCH.max); userAt = time; },
@@ -210,7 +210,7 @@ export async function startTrip(env, o) {
     const inside = sk >= 0.98 && !vehicle?.open && !(doors && F.vehDoorK > 0.03) && ["ride", "drive", "paying"].includes(F.phase);
     avatar.root.visible = P.visible && !inside;
     const seat = P.seat ?? seatOf(plan.kind), k = smoothK(sk);   // a trek (on foot) has no vehicle kind: nobody sits, so the seat only has to exist (it used to throw every frame, which stopped the camera and the picture)
-    avatar.root.position.set(P.x, 0.1 + (seat.y - 0.55) * k, P.z); avatar.root.rotation.y = onFootYaw + angDiff(onFootYaw, vehYaw) * k;
+    avatar.root.position.set(P.x, 0.1 + (flow.own?.h ?? 0) * k + (seat.y - 0.55) * k, P.z); avatar.root.rotation.y = onFootYaw + angDiff(onFootYaw, vehYaw) * k;
     if (sk >= 0.5) { if (gait !== "sit") { gait = "sit"; if (!(avatar.has?.("sit") && avatar.play("sit"))) avatar.play("idle"); avatar.setSpeed?.(1); } }
     else {
       // the gait matches the speed: standing, a walk, or a run, played at the pace the feet really cover
@@ -226,7 +226,7 @@ export async function startTrip(env, o) {
     if (!vehicle) return; const v = flow.vehicle; vehicle.root.visible = !!v && !(flow.hero?.done);
     if (!v) return;
     const own = !!flow.own, yaw = own ? v.ang : v.yaw ?? yawOf2(v.hx, v.hz), moved = lastVx == null ? 0 : Math.hypot(v.x - lastVx, v.z - lastVz); lastVx = v.x; lastVz = v.z;
-    vehicle.root.position.set(v.x, 0.1, v.z); vehicle.root.rotation.set(own ? v.pitch ?? 0 : 0, yaw, own ? v.roll ?? 0 : 0); // the front wheels: your own car shows its steering; every other vehicle steers by how fast it is turning (the bicycle model, from its heading change)
+    vehicle.root.position.set(v.x, 0.1 + (own ? v.h ?? 0 : 0), v.z); vehicle.root.rotation.set(own ? (v.pitch ?? 0) - (v.slope ?? 0) : 0, yaw, own ? v.roll ?? 0 : 0); // the front wheels: your own car shows its steering; every other vehicle steers by how fast it is turning (the bicycle model, from its heading change)
     let steer = 0, braking = false;
     if (own) { steer = v.steer; braking = (v.brk ?? 0) > 0.08 || (v.reversing && Math.abs(v.v) < 0.5); }
     else { const dy = lastYaw == null || dt <= 0 ? 0 : angDiff(lastYaw, yaw) / dt, sp = Math.abs(v.v ?? 0); steer = sp > 0.4 ? Math.max(-0.6, Math.min(0.6, Math.atan((vehicle.wheelbase ?? 2.7) * dy / sp))) : 0; braking = lastSpeed != null && dt > 0 && (sp - lastSpeed) / dt < -0.9 || sp < 0.15; steerShown += (steer - steerShown) * Math.min(1, dt * 8); steer = steerShown; lastSpeed = sp; }
@@ -251,12 +251,13 @@ export async function startTrip(env, o) {
     const yaw = camYaw + userYaw, bx = Math.sin(yaw), bz = Math.cos(yaw);
     camPt.x = tgt.x; camPt.z = tgt.z;
     // a wall between the person and the camera (centre and either side, so corners too) pulls the camera in at once; it eases back out when the wall is gone
-    camBack = followBack(camBack, clearBack(svc.world, tgt.x, tgt.z, bx, bz, fr.back), dt);
+    vehH = ease(vehH, v && flow.own ? (v.h ?? 0) * m : 0, 5, dt);
+    camBack = followBack(camBack, clearBack(vehH > 2.5 ? null : svc.world, tgt.x, tgt.z, bx, bz, fr.back), dt);   // high on the deck the walls below are not in the camera's way
     const hgt = fr.height * (0.7 + 0.3 * Math.min(1, camBack / fr.back)), cx = tgt.x + bx * camBack, cz = tgt.z + bz * camBack, k = 1 - Math.exp(-dt * (time < 1.4 ? 3.2 : 12)), ky = 1 - Math.exp(-dt * (time < 1.4 ? 3.2 : 7));
-    cam.position.x += (cx * S - cam.position.x) * k; cam.position.z += (cz * S - cam.position.z) * k; cam.position.y += (hgt * S - cam.position.y) * ky;
+    cam.position.x += (cx * S - cam.position.x) * k; cam.position.z += (cz * S - cam.position.z) * k; cam.position.y += ((hgt + vehH) * S - cam.position.y) * ky;
     // look a little ahead of a walking person, so where they are going stays in view; smoothed so a change of direction never snaps the view
     const leadWant = !inVeh && WK.speed > 0.3 ? Math.min(CAM.walk.lead, WK.speed * 0.8) : 0; leadX = ease(leadX, P.hx * leadWant, 2.5, dt); leadZ = ease(leadZ, P.hz * leadWant, 2.5, dt);
-    const ahead = m * Math.min(10, sp * 0.1); ctl.target.set((tgt.x + leadX - bx * ahead) * S, fr.aim * S, (tgt.z + leadZ - bz * ahead) * S); cam.lookAt(ctl.target);
+    const ahead = m * Math.min(10, sp * 0.1); ctl.target.set((tgt.x + leadX - bx * ahead) * S, (fr.aim + vehH) * S, (tgt.z + leadZ - bz * ahead) * S); cam.lookAt(ctl.target);
     if (Math.abs(cam.fov - fr.fov) > 0.05) { cam.fov += (fr.fov - cam.fov) * (1 - Math.exp(-dt * 4)); cam.updateProjectionMatrix(); }
   }
 

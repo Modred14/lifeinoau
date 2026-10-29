@@ -7,9 +7,22 @@ import { buildWorldCollision } from "./collide.js";
 import { createNav } from "./walker.js";
 import { buildRoadNet } from "./roadnet.js";
 
+/**
+ * The columns of the expressway are solid on the ground (people and ground vehicles cannot walk or drive through one); the deck itself is 10 m up and is not. Columns standing in the lake need
+ * nothing: the water already is. Each is the circle that holds the column's footprint.
+ */
+export function addPierCollision(world, hw) {
+  if (!hw) return 0; let n = 0;
+  for (const p of hw.piers ?? []) if (!p.water) { world.addPost(p.x, p.z, Math.hypot(hw.pierSpec.col[0], hw.pierSpec.col[1]) / 2, { kind: "pier" }); n++; }
+  for (const p of hw.rampPiers ?? []) { world.addPost(p.x, p.z, 1.1, { kind: "pier" }); n++; }
+  return n;
+}
+
 /** Builds the services from the merged map data and the generated road graph JSON (`rawGraph`). Takes about a quarter of a second. */
 export function buildServices(data, rawGraph) {
-  const world = buildWorldCollision(data), graph = buildRoadGraph(rawGraph, { sdf: (x, z) => world.sdf(x, z, 12) }), nav = createNav({ world, graph }), net = buildRoadNet(data);
+  const world = buildWorldCollision(data), graph = buildRoadGraph(rawGraph, { sdf: (x, z) => world.sdf(x, z, 16) });
+  addPierCollision(world, rawGraph.expressway);   // after the graph: ground roads are laid out against buildings and water only, the piers were placed clear of them
+  const nav = createNav({ world, graph }), net = buildRoadNet(data);
   return { data, world, graph, nav, net };
 }
 

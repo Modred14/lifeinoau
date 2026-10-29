@@ -98,7 +98,7 @@ function nearestOnPath(path, x, z, s0, s1) {
  */
 export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z: 0 }), rnd = Math.random, density = {} }) {
   const D = { ...DENSITY, ...density }, vehicles = [], peds = [], external = new Map(), reserved = new Map(); let nextId = 1, time = 0, spawnCool = 0, pedCool = 0;
-  const mainLanes = graph.lanes.filter((l) => l.comp === 0 && l.len > 18);
+  const mainLanes = graph.lanes.filter((l) => l.comp === 0 && l.len > 18 && !l.hw);   // ambient traffic keeps to the campus roads: never the expressway or its ramps
   const stats = { spawned: 0, despawned: 0, stuckRemoved: 0, maxOverlapFixed: 0 };
 
   // ---------- routes ----------
@@ -106,7 +106,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
   function wander(lane, s, minLen = 2200) {
     const segs = [{ kind: "lane", id: lane, s0: s, s1: graph.lanes[lane].len }]; let total = graph.lanes[lane].len - s, cur = lane, guard = 0;
     while (total < minLen && guard++ < 80) {
-      const outs = graph.lanes[cur].out.map((c) => graph.conns[c]).filter((c) => c.kind !== "uturn" && graph.lanes[c.to].comp === 0); if (!outs.length) break;
+      const outs = graph.lanes[cur].out.map((c) => graph.conns[c]).filter((c) => c.kind !== "uturn" && graph.lanes[c.to].comp === 0 && !graph.lanes[c.to].hw); if (!outs.length) break;
       const w = outs.map((c) => (c.kind === "straight" ? 0.58 : 0.21)), sum = w.reduce((a, b) => a + b, 0); let r = rnd() * sum, pick = outs[0]; for (let i = 0; i < outs.length; i++) { r -= w[i]; if (r <= 0) { pick = outs[i]; break; } }
       segs.push({ kind: "conn", id: pick.id }); const nl = graph.lanes[pick.to]; segs.push({ kind: "lane", id: nl.id, s0: 0, s1: nl.len }); total += pick.len + nl.len; cur = nl.id;
     }
