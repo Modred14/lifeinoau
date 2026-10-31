@@ -411,6 +411,7 @@ export default function GameHome({
           onVehicle={(id) => fleetHandlers.current.onVehicle?.(id)}
           onDrive={(d) => fleetHandlers.current.onDrive?.(d)}
           onLeave={(d) => fleetHandlers.current.onLeave?.(d)}
+          onEntry={(e) => fleetHandlers.current.onEntry?.(e)}
         />
         <CompoundDrive vehicles={vehicles} api={api} handlers={fleetHandlers} onDriving={setDriving} />
       </div>

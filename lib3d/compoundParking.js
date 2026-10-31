@@ -14,11 +14,16 @@ import { plotFor } from "../lib/plot.js";
 import { ITEMS, sizeOf } from "../lib/furniture.js";
 import { isOutside } from "../lib/room.js";
 import { garageVehicleSize } from "./garageLayout.js";
+import { CELL_M } from "./compoundUnits.js";
+import { walkWorld, hasStandSpot, doorLink } from "./compoundWalk.js";
 
-export const CELL_M = 0.9; // a room cell is about 0.9 m (lib3d/room.js draws a 1.75 m person 1.95 cells tall)
+export { CELL_M }; // a room cell is about 0.9 m (lib3d/room.js draws a 1.75 m person 1.95 cells tall)
 const HEDGE = 1.5; // the hedges, trees and the wall stand within this distance of the plot's edge: nothing parks or drives there
 const GAP = 0.45; // clear space kept between parked vehicles and around anything solid
 const STRIP = 2.6; // the free ground a parked vehicle needs straight ahead of its nose, so it can always pull out
+const ROOMY = 1.5; // the space that lets a person stand beside a door with the door open (about 1.35 m): tried first, so a vehicle can be got into on foot
+const APRON = 1.8; // cells: the clear ground either side of, and in front of, the spot outside the front door
+const NEAR = 9; // metres: only vehicles this close to a new one can lose their door space to it
 
 const hit = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.z0 < b.z1 && a.z1 > b.z0;
 const grow = (r, m) => ({ x0: r.x0 - m, x1: r.x1 + m, z0: r.z0 - m, z1: r.z1 + m });
@@ -100,38 +105,52 @@ function openGround(cw, bodies, wid, step = 0.5) {
  * Returns { slots: [{ ...vehicle, x, z, yaw, len, wid }], unplaced: [vehicle], cw }. A vehicle that cannot be fitted (the lawn is full of the player's own furniture) is listed in `unplaced`.
  */
 export function planParking(room, vehicles = [], items = []) {
-  const cw = compoundWorld(room, items), { lawn, drive, target } = cw, slots = [];
-  const keepOut = [...cw.solids, grow(drive, 0.35)], bodyOf = (s) => poseBox(s.x, s.z, s.yaw, s.len, s.wid);
+  const cw = compoundWorld(room, items), { lawn, drive, target } = cw;
+  // the ground outside the front door is for people: nothing parks across it, so the way out of the house is never shut (a person walks round the vehicles from there)
+  const o = doorLink(room).outside, doorstep = { x0: o.x - APRON, x1: o.x + APRON, z0: o.z - APRON, z1: o.z + APRON };
+  const keepOut = [...cw.solids, grow(drive, 0.35), doorstep], bodyOf = (s) => poseBox(s.x, s.z, s.yaw, s.len, s.wid);
   // candidate centres on a half-cell grid over the lawn, nearest the gate first (ties: west to east, so the result never depends on iteration luck)
   const cand = [];
   for (let x = lawn.x0; x <= lawn.x1; x += 0.5) for (let z = lawn.z0; z <= lawn.z1; z += 0.5) cand.push({ x, z, d: Math.hypot(x - target.x, z - target.z) });
   cand.sort((a, b) => a.d - b.d || a.x - b.x || a.z - b.z);
   const front = (x, z, f, len) => [x + f[0] * (len / 2 + 1.7), z + f[1] * (len / 2 + 1.7)];
-  // two passes: roomy first, then (only for what did not fit) tighter gaps
-  const todo = [...vehicles]; let tight = false;
-  for (let pass = 0; pass < 2 && todo.length; pass++, tight = true) {
-    const gap = tight ? 0.2 : GAP, strip = tight ? 2.2 : STRIP;
-    for (const v of [...todo]) {
-      const { len, wid } = vehicleCells(v.modelId); let placed = null;
-      const ground = openGround(cw, slots.map(bodyOf), wid);
-      for (const c of cand) {
-        const faces = [...FACES].sort((a, b) => (b[0] * (target.x - c.x) + b[1] * (target.z - c.z)) - (a[0] * (target.x - c.x) + a[1] * (target.z - c.z)));
-        for (const f of faces) {
-          const yaw = yawOf(f), box = poseBox(c.x, c.z, yaw, len, wid);
-          if (!inside(lawn, box) || keepOut.some((k) => hit(k, grow(box, 0.15))) || slots.some((s) => hit(bodyOf(s), grow(box, gap)))) continue;
-          const [fx, fz] = front(c.x, c.z, f, len); if (!ground.has(fx, fz)) continue; // boxed in: there is no way from its nose to the gate
-          const ahead = stripAhead(c.x, c.z, f, len, wid, strip);
-          if (!onGround(cw, ahead) || cw.solids.some((k) => hit(k, ahead)) || slots.some((s) => hit(bodyOf(s), ahead))) continue;
-          const next = { ...v, x: c.x, z: c.z, yaw, len, wid }, after = openGround(cw, [...slots, next].map(bodyOf), 2.2); // and it must not shut anyone else in
-          if (![...slots].every((s) => after.has(...front(s.x, s.z, [Math.sin(s.yaw), Math.cos(s.yaw)], s.len)))) continue;
-          placed = next; break;
+  const hasDoorRoom = (list, s) => hasStandSpot(walkWorld(cw, list), s);
+  /** Parks what it can with these passes, in order. While a pass has `door` set, a vehicle is only parked where a person can stand at one of its doors (the door able to swing), and where it takes that away from no vehicle already parked nearby. */
+  function park(passes) {
+    const slots = [], todo = [...vehicles];
+    for (const { gap, strip, door } of passes) {
+      if (!todo.length) break;
+      for (const v of [...todo]) {
+        const { len, wid } = vehicleCells(v.modelId); let placed = null;
+        const ground = openGround(cw, slots.map(bodyOf), wid);
+        for (const c of cand) {
+          const faces = [...FACES].sort((a, b) => (b[0] * (target.x - c.x) + b[1] * (target.z - c.z)) - (a[0] * (target.x - c.x) + a[1] * (target.z - c.z)));
+          for (const f of faces) {
+            const yaw = yawOf(f), box = poseBox(c.x, c.z, yaw, len, wid);
+            if (!inside(lawn, box) || keepOut.some((k) => hit(k, grow(box, 0.15))) || slots.some((s) => hit(bodyOf(s), grow(box, gap)))) continue;
+            const [fx, fz] = front(c.x, c.z, f, len); if (!ground.has(fx, fz)) continue; // boxed in: there is no way from its nose to the gate
+            const ahead = stripAhead(c.x, c.z, f, len, wid, strip);
+            if (!onGround(cw, ahead) || cw.solids.some((k) => hit(k, ahead)) || slots.some((s) => hit(bodyOf(s), ahead))) continue;
+            const next = { ...v, x: c.x, z: c.z, yaw, len, wid };
+            if (door) { const now = [...slots, next]; if (!hasDoorRoom(now, next) || !slots.every((s) => Math.hypot(s.x - next.x, s.z - next.z) * CELL_M > NEAR || hasDoorRoom(now, s))) continue; } // (cheap, so before the flood below)
+            const after = openGround(cw, [...slots, next].map(bodyOf), 2.2); // and it must not shut anyone else in
+            if (![...slots].every((s) => after.has(...front(s.x, s.z, [Math.sin(s.yaw), Math.cos(s.yaw)], s.len)))) continue;
+            placed = next; break;
+          }
+          if (placed) break;
         }
-        if (placed) break;
+        if (placed) { slots.push(placed); todo.splice(todo.indexOf(v), 1); }
       }
-      if (placed) { slots.push(placed); todo.splice(todo.indexOf(v), 1); }
     }
+    return { slots, unplaced: todo, cw };
   }
-  return { slots, unplaced: todo, cw };
+  // Roomiest first. The first way that parks EVERY vehicle wins, so a person can get to a door of each; a lawn too full for that falls back, step by step, to the tight packing the
+  // compound always had (a vehicle is never left out just because the lawn is full: it is only harder to get into, and getting in on foot says so).
+  const TIGHT = [{ gap: GAP, strip: STRIP, door: false }, { gap: 0.2, strip: 2.2, door: false }];
+  const WAYS = [[{ gap: ROOMY, strip: STRIP, door: true }, { gap: GAP, strip: STRIP, door: true }, { gap: 0.2, strip: 2.2, door: true }, ...TIGHT], [{ gap: GAP, strip: STRIP, door: true }, { gap: 0.2, strip: 2.2, door: true }, ...TIGHT], TIGHT];
+  let best = null;
+  for (const way of WAYS) { const r = park(way); if (!best || r.unplaced.length < best.unplaced.length) best = r; if (!r.unplaced.length) break; }
+  return best;
 }
 
 /**

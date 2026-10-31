@@ -37,7 +37,7 @@ export function useVehicles() {
 }
 
 export default function CompoundDrive({ vehicles, api, handlers, onDriving }) {
-  const router = useRouter(), [drv, setDrv] = useState(null), [leaving, setLeaving] = useState(false), pending = useRef(null), live = useRef({ vehicles, drv });
+  const router = useRouter(), [drv, setDrv] = useState(null), [entry, setEntry] = useState(null), [leaving, setLeaving] = useState(false), pending = useRef(null), live = useRef({ vehicles, drv });
   live.current = { vehicles, drv };
   const driving = !!drv; useEffect(() => { onDriving?.(driving); }, [driving]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -46,6 +46,7 @@ export default function CompoundDrive({ vehicles, api, handlers, onDriving }) {
   useEffect(() => {
     handlers.current = {
       onDrive: (d) => setDrv(d.driving ? d : null),
+      onEntry: (e) => setEntry(e?.phase ? e : null),
       onVehicle(id) {
         const v = live.current.vehicles?.find((x) => String(x.id) === String(id)); if (!v || live.current.drv || !api.current) return;
         const before = game.get()?.character, same = before && (before.activeCar || "") === v.modelId && (before.activeCarColor || "") === (v.family ? "" : v.color);
@@ -68,15 +69,21 @@ export default function CompoundDrive({ vehicles, api, handlers, onDriving }) {
   }, [api, handlers, router, abort]);
   useEffect(() => () => { if (!live.current.drv) clearDriveHandoff(); }, []);
 
+  useEffect(() => { // Escape cancels a walk to a vehicle
+    if (entry?.phase !== "walk") return; const k = (e) => { if (e.key === "Escape") api.current?.cancelEntry?.(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
+  }, [entry?.phase, api]);
+
   const hold = (axis, value) => ({
     onPointerDown: (e) => { e.preventDefault(); try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} api.current?.setDriveInput({ [axis]: value }); },
     onPointerUp: () => api.current?.setDriveInput({ [axis]: 0 }), onPointerCancel: () => api.current?.setDriveInput({ [axis]: 0 }), onLostPointerCapture: () => api.current?.setDriveInput({ [axis]: 0 }),
     onContextMenu: (e) => e.preventDefault(),
   });
   return <>
+    {entry && !drv && <section className="hg-entry" role="status" aria-live="polite"><span>{entry.phase === "walk" ? "Walking to the vehicle…" : entry.phase === "enter" ? "Getting in…" : "Getting out…"}</span>
+      {entry.phase === "walk" && <button type="button" onClick={() => api.current?.cancelEntry?.()}>Cancel</button>}</section>}
     {drv && !leaving && <>
       <section className="hg-hud" aria-live="polite"><b>{drv.speed}<small> km/h</small></b><span>{drv.hit ? "Blocked. Reverse and steer around it." : "Drive down the driveway, through the gate and out onto the main road."}</span>
-        <div className="hg-hud-btns"><button type="button" onClick={() => { api.current?.stopDrive({ park: true }); setDrv(null); }}>Park</button></div></section>
+        <div className="hg-hud-btns"><button type="button" onClick={() => { const r = api.current?.exitCar?.(); if (r && !r.ok) toast.error(r.why); }}>Park</button></div></section>
       <div className="hg-pad" role="group" aria-label="Driving controls. Keyboard: arrow keys or W A S D.">
         <div className="hg-steer"><button type="button" aria-label="Steer left" {...hold("steer", -1)}><Icon name="left" size={26} /></button><button type="button" aria-label="Steer right" {...hold("steer", 1)}><Icon name="right" size={26} /></button></div>
         <div className="hg-pedals"><button type="button" className="hg-brake" aria-label="Brake and reverse" {...hold("throttle", -1)}>Brake<small>Reverse</small></button><button type="button" className="hg-gas" aria-label="Accelerate" {...hold("throttle", 1)}>Go</button></div>

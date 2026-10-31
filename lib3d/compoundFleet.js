@@ -5,12 +5,13 @@
 //   const fleet = createCompoundFleet({ scene, camera, stage, cb: { onDrive(d), onLeave(d) } });
 //   fleet.setRoom(room, items); fleet.setVehicles([{ id, modelId, color }]);   // parks them
 //   fleet.pick(raycaster) -> id | null;  fleet.start(id) -> boolean;  fleet.stop({ park });  fleet.setInput({ throttle, steer });  fleet.update(dt)
+//   fleet.slotOf(id) -> where a parked vehicle stands | null;  fleet.canStart(id);  fleet.driveInfo();  fleet.setDoor(id, side, k)   (getting in and out on foot: lib3d/room.js)
 //
 // onDrive({ driving, speed (km/h), hit, reverse }) reports the car while it is driven; onLeave({ id, modelId, color, v (m/s), yaw }) fires once, when the whole vehicle is on the road
 // outside the gate. The room scene is in cells and the models in metres, so a model is scaled by 1 / CELL_M and the physics runs in metres.
 import * as THREE from "three";
 import { makeVehicle, rollWheels } from "./vehicles.js";
-import { planParking, metresWorld, onCarriageway, CELL_M } from "./compoundParking.js";
+import { planParking, compoundWorld, metresWorld, onCarriageway, CELL_M } from "./compoundParking.js";
 import { createDriver } from "./garageDrive.js";
 import { garageVehicleSize } from "./garageLayout.js";
 import { GROUND } from "./plot3d.js";
@@ -21,14 +22,19 @@ const K = 1 / CELL_M;
 export function createCompoundFleet({ scene, camera, stage, cb = {} }) {
   const root = new THREE.Group(); scene.add(root);
   const meshes = new Map(), kb = createKeys(), pad = { throttle: 0, steer: 0 }, padMat = new THREE.MeshStandardMaterial({ color: "#a3a6a1", roughness: 0.95 });
-  let room = null, items = [], vehicles = [], plan = null, half = [0, 0], timer = 0, dirty = false, drive = null, alive = true, steerShown = 0, lastReport = "", saved = null;
+  let room = null, items = [], vehicles = [], plan = null, half = [0, 0], timer = 0, dirty = false, drive = null, alive = true, steerShown = 0, lastReport = "", saved = null, builtKey = "";
 
   function clear() {
     for (const m of meshes.values()) { root.remove(m.vehicle.root); root.remove(m.pad); m.vehicle.root.traverse((o) => { o.geometry?.dispose?.(); }); m.pad.geometry.dispose(); }
     meshes.clear();
   }
+  // Everything the parking depends on: the size and plan of the home, the vehicles (and their paint), and the outdoor furniture. Moving a sofa indoors changes none of it, so it
+  // costs no re-planning and no new models (and a vehicle somebody is walking to is not rebuilt under their feet).
+  const keyOf = () => { const cw = compoundWorld(room, items); return JSON.stringify([room.w, room.d, room.layout ?? "", vehicles.map((v) => `${v.id}:${v.modelId}:${v.color}`), cw.solids.filter((x) => x.kind === "item").map((x) => [x.x0, x.z0, x.x1, x.z1])]); };
   function rebuild() {
-    dirty = false; clear(); plan = null; if (!room || !alive) return;
+    dirty = false; if (!room || !alive) { clear(); plan = null; builtKey = ""; return; }
+    const key = keyOf(); if (plan && key === builtKey) return;
+    clear(); plan = null; builtKey = key;
     plan = planParking(room, vehicles, items); half = [room.w / 2, room.d / 2];
     for (const s of plan.slots) {
       const v = makeVehicle(s.modelId || "", s.color); v.root.scale.setScalar(K);
@@ -37,7 +43,7 @@ export function createCompoundFleet({ scene, camera, stage, cb = {} }) {
       place(v, s.x * 1, s.z * 1, s.yaw, false); pad.position.set(s.x - half[0], GROUND + 0.015, s.z - half[1]); pad.rotation.y = s.yaw;
       root.add(v.root, pad); meshes.set(String(s.id), { slot: s, vehicle: v, pad });
     }
-    cb.onPlan?.({ placed: plan.slots.length, unplaced: plan.unplaced.length });
+    cb.onPlan?.({ placed: plan.slots.length, unplaced: plan.unplaced.length }); cb.onRebuild?.();
   }
   const later = () => { if (drive) { dirty = true; return; } clearTimeout(timer); timer = setTimeout(rebuild, 0); }; // planning takes a moment: never inside the call that asked for it
   const place = (v, cx, cz, yaw, onRoad) => { v.root.position.set(cx - half[0], GROUND + (onRoad ? -0.03 : 0.03), cz - half[1]); v.root.rotation.y = yaw; };
@@ -87,6 +93,14 @@ export function createCompoundFleet({ scene, camera, stage, cb = {} }) {
     setVehicles(list) { const key = (l) => l.map((v) => `${v.id}:${v.modelId}:${v.color}`).join("|"); if (key(list) === key(vehicles)) return; vehicles = list; if (room) later(); },
     pick(ray) { const hits = ray.intersectObjects([...meshes.values()].map((m) => m.vehicle.root), true); for (const h of hits) { let o = h.object; while (o && o.userData.fleetId == null) o = o.parent; if (o) return o.userData.fleetId; } return null; },
     start, stop, update, isDriving: () => !!drive, plan: () => plan,
+    /** Where a parked vehicle stands (a copy of its slot, cells), or null when there is no such vehicle (it was sold, or never fitted). */
+    slotOf: (id) => { const m = meshes.get(String(id)); return m ? { ...m.slot } : null; },
+    /** May this vehicle be got into now? It must be parked here and nobody may be driving. */
+    canStart: (id) => !!plan && !drive && meshes.has(String(id)),
+    /** The vehicle being driven: { id, v (m/s), x, z (metres), yaw }, or null. */
+    driveInfo: () => (drive ? { id: drive.id, v: drive.driver.state.v, x: drive.driver.state.x, z: drive.driver.state.z, yaw: drive.driver.state.yaw } : null),
+    /** Opens (k up to 1) the door on `side` (+1 the driver's, left) of a parked vehicle; the other door is shut. */
+    setDoor(id, side, k) { const m = meshes.get(String(id)); if (!m?.vehicle.setDoor) return; m.vehicle.setDoor(side, k); m.vehicle.setDoor(-side, 0); },
     setInput({ throttle, steer } = {}) { if (throttle != null) pad.throttle = Math.max(-1, Math.min(1, throttle)); if (steer != null) pad.steer = Math.max(-1, Math.min(1, steer)); },
     dispose() { alive = false; clearTimeout(timer); window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); window.removeEventListener("blur", clearInput); document.removeEventListener("visibilitychange", clearInput); clear(); scene.remove(root); padMat.dispose(); },
   };

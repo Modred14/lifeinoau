@@ -14,11 +14,12 @@ const ALONG = [0, -0.7, 0.7, -1.4, 1.4];              // metres along the car fr
 
 /**
  * car: { x, z, hx, hz, len, wid }. kindDef: KINDS[kind] (doorZ / doorZL). ctx: { world, vehicles: [{x,z,hx,hz,len,wid}], onRoad(x, z) -> boolean }.
- * Returns [{ x, z, side, door: {x, z}, road }] best first (empty when there is nowhere safe to get out).
+ * Returns [{ x, z, side, door: {x, z}, road }] best first (empty when there is nowhere safe to get out). ctx.accept(spot) may veto a spot; { first: true } stops at the first spot found (for "is there any?").
  */
-export function exitSpots(car, kindDef, ctx, { preferSide = 1 } = {}) {
-  const { world, vehicles = [], onRoad = () => false } = ctx, hl = car.len / 2, hw = car.wid / 2, me = { x: car.x, z: car.z, hx: car.hx, hz: car.hz, hl, hw }, out = [];
+export function exitSpots(car, kindDef, ctx, { preferSide = 1, first = false } = {}) {
+  const { world, vehicles = [], onRoad = () => false, accept = null } = ctx, hl = car.len / 2, hw = car.wid / 2, me = { x: car.x, z: car.z, hx: car.hx, hz: car.hz, hl, hw }, out = [];
   for (const side of [preferSide, -preferSide]) {
+    if (first && out.length) break; // only "is there any spot?" was asked: the first one found is enough
     const z0 = side > 0 ? kindDef.doorZL ?? kindDef.doorZ : kindDef.doorZ;
     const door = toWorld(car, { x: side * hw, z: z0 });
     ALONG.forEach((dz, ai) => OFFSETS.forEach((off, oi) => {
@@ -29,7 +30,9 @@ export function exitSpots(car, kindDef, ctx, { preferSide = 1 } = {}) {
       const guy = { x: p.x, z: p.z, hx: car.hx, hz: car.hz, hl: PERSON, hw: PERSON };
       if (boxesOverlap(guy, me, 0.1)) return;
       for (const b of vehicles) { if (Math.abs(b.x - p.x) > 9 || Math.abs(b.z - p.z) > 9) continue; if (boxesOverlap(guy, { x: b.x, z: b.z, hx: b.hx, hz: b.hz, hl: b.len / 2, hw: b.wid / 2 }, 0.35)) return; }
-      out.push({ x: p.x, z: p.z, side, door: { x: door.x, z: door.z }, road: !!onRoad(p.x, p.z), rank: (onRoad(p.x, p.z) ? 100 : 0) + (side === preferSide ? 0 : 20) + oi * 2 + ai });
+      const spot = { x: p.x, z: p.z, side, door: { x: door.x, z: door.z }, road: !!onRoad(p.x, p.z), rank: (onRoad(p.x, p.z) ? 100 : 0) + (side === preferSide ? 0 : 20) + oi * 2 + ai };
+      if (accept && !accept(spot)) return;                                                             // the caller's own rule (the garage: the door must have room to swing)
+      if (!(first && out.length)) out.push(spot);
     }));
   }
   return out.sort((a, b) => a.rank - b.rank);

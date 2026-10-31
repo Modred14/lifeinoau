@@ -8,6 +8,9 @@
 // Sleep callbacks: onAsleep(id) the character is lying on the bed; onAwake() it is standing again beside the bed;
 // onWakeTap() the player tapped the floor to get up (the get-up has already started); onSleepCancel() the player tapped the
 // floor while the character was still walking to the bed.
+//
+// Vehicles: onVehicle(id) the character is in the seat of a parked vehicle with its door shut (the screen starts the drive); onEntry({ phase, id }) the walk to a vehicle ("walk"), getting in
+// ("enter") or out ("exit") has begun, or (phase null) it is over or was cancelled; onBlocked(text) says why a vehicle cannot be got into or out of.
 import * as THREE from "three";
 import { createStage } from "./stage.js";
 import { createAvatar } from "./avatar/loadAvatar.js";
@@ -26,6 +29,9 @@ import { ITEMS, sizeOf, isOutdoor, canGoOutside, isFixture } from "../lib/furnit
 import { plotFor, lawnBox } from "../lib/plot.js";
 import { buildPlot, GROUND } from "./plot3d.js";
 import { createCompoundFleet } from "./compoundFleet.js";
+import { CELL_M } from "./compoundUnits.js";
+import { planEntry, planExit, routeFromTo, walkWorld, safeSpotNear, spotStillValid, WALK_R } from "./compoundWalk.js";
+import { enterPose, exitPose } from "./compoundDoor.js";
 import { layoutOf, wallRuns, zoneAt } from "../lib/layouts.js";
 
 const WALL_H = 3.4, // rooms are about twice the floor area they were, so the walls (the ceiling line) rise a little with them
@@ -364,7 +370,7 @@ export function createRoomScene(container, cb = {}) {
     avRoot = new THREE.Group();
   scene.add(world, itemsRoot, avRoot);
   // the player's vehicles, parked in the compound: tap one to drive it out (lib3d/compoundFleet.js). The person is in the vehicle while it is driven, so the standing figure hides.
-  const fleet = createCompoundFleet({ scene, camera, stage, cb: { onDrive: (d) => { avRoot.visible = !d.driving; cb.onDrive?.(d); }, onLeave: (d) => cb.onLeave?.(d), onPlan: (p) => cb.onParking?.(p) } });
+  const fleet = createCompoundFleet({ scene, camera, stage, cb: { onDrive: (d) => { avRoot.visible = !d.driving; cb.onDrive?.(d); }, onLeave: (d) => cb.onLeave?.(d), onPlan: (p) => cb.onParking?.(p), onRebuild: () => { if (act) act.dirty = true; else if (isOutdoors()) settlePerson(null); } } });
   const marker = new THREE.Group(),
     markerFill = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
@@ -864,6 +870,7 @@ export function createRoomScene(container, cb = {}) {
   /** Walk to the bed, then sit and lie down. Returns false if there is no such bed or no character yet. */
   function goToBed(id) {
     const it = items.get(String(id)); if (!it || !av || me.sleep || USE_KIND[it.data.key] !== "bed") return false;
+    if (act) { if (act.phase === "door") return false; cancelAct(); } // getting into or out of a vehicle is not interrupted; a walk towards one is
     me.sleep = { id: String(id), stage: "walk", t: 0, target: null };
     const t = it.t ?? targetOf(it.data); walkTo(Math.floor(t.x + W / 2), Math.floor(t.z + D / 2)); // the bed is blocked, so this lands on the nearest free cell beside it
     return true;
@@ -920,6 +927,7 @@ export function createRoomScene(container, cb = {}) {
   }
   function keepAvatarFree() {
     if (!room || !av) return;
+    if (isOutdoors()) { if (!act) settlePerson(null); return; } // out in the yard: the same rule, against the yard's furniture and vehicles
     const bl = blocked(),
       c = cellOf();
     if (bl.has(c.join())) {
@@ -936,6 +944,7 @@ export function createRoomScene(container, cb = {}) {
       from = cellOf();
     let to = [cx, cz];
     if (bl.has(to.join())) to = nearestFree(to, bl);
+    if (isOutdoors()) { walkToPoint(...cellWorld(...to)); return; } // out in the yard: the way back is through the front door
     const path = findPath(room, bl, from, to);
     if (!path.length) return;
     me.path = path;
@@ -943,6 +952,90 @@ export function createRoomScene(container, cb = {}) {
     tap.position.x = x;
     tap.position.z = z;
     tapT = 0;
+  }
+
+  // ----- getting into and out of the player's own vehicles -----
+  // Tap a parked vehicle and the character walks to its driver's door (round the other vehicles, the furniture, the house and the hedges: lib3d/compoundWalk.js plans a route that keeps clear
+  // of all of them, and the character only ever follows it), the door opens, they climb in and sit, the door closes, and only then is the vehicle theirs to drive (lib3d/compoundDoor.js has
+  // the timings: the same as the trip flow's). Parking is the same the other way: a safe spot beside the vehicle is found BEFORE anything moves, and if there is none the character stays in
+  // the seat and is told. One of these at a time; a walk can be cancelled (tap elsewhere), the door sequences cannot. Metres are the planner's unit, the scene's is the cell.
+  let act = null, autoYard = false; // act: { kind: "enter" | "exit", id, phase: "walk" | "door", t, slot, geom, dirty, pose }; autoYard: this code (not the player) took the camera to the yard
+  const toMx = (sx) => (sx + W / 2) * CELL_M, toMz = (sz) => (sz + D / 2) * CELL_M;
+  const toScene = (p) => ({ x: p.x / CELL_M - W / 2, z: p.z / CELL_M - D / 2 });
+  const meM = () => ({ x: toMx(me.x), z: toMz(me.z) });
+  const wp = (p) => (Array.isArray(p) ? cellWorld(...p) : [p.x, p.z]); // a step of a walk: a floor cell, or a point of the yard
+  const isOutdoors = () => Math.max(Math.abs(me.x) - W / 2, Math.abs(me.z) - D / 2) > 0.12;
+  /** The height of the ground under a point: the house floor, or the lawn a step below it (a short ramp at the wall, so nobody floats or sinks at the front door). */
+  function groundY(sx, sz) { const d = Math.hypot(Math.max(Math.abs(sx) - W / 2, 0), Math.max(Math.abs(sz) - D / 2, 0)), k = Math.min(1, d / 0.5); return GROUND * k * k * (3 - 2 * k); }
+  const walkEnv = () => { const plan = fleet.plan(); return plan && room ? { room, cw: plan.cw, slots: plan.slots, placed: placedList() } : null; };
+  const tell = (phase, id = null) => cb.onEntry?.({ phase, id });
+  const showYard = () => { if (view === "house") { setView("yard"); autoYard = true; } }; // the vehicles are out in the yard: the camera goes to where the character will be
+  const followRoute = (pts) => { me.path = pts.slice(1).map(toScene); }; // pts[0] is where the character stands now
+  const mark = (p) => { const e = toScene(p); tap.position.set(e.x, groundY(e.x, e.z) + 0.04, e.z); tapT = 0; };
+  const turned = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+
+  /** Walk to a point of the house or the yard (the nearest free spot when it is not free). */
+  function walkToPoint(sx, sz) {
+    const env = room && av && walkEnv(); if (!env) return false;
+    const r = routeFromTo(env, meM(), { x: toMx(sx), z: toMz(sz) }, { snap: true }); if (!r.ok || r.pts.length < 2) return false;
+    followRoute(r.pts); mark(r.pts.at(-1)); return true;
+  }
+  /** Stops what is going on (a walk to a vehicle, or either door sequence), shuts the vehicle's doors, and leaves the character where they stand. */
+  function cancelAct() { if (!act) return; const a = act; act = null; me.path = []; fleet.setDoor(a.id, 1, 0); tell(null); }
+  function abortAct(text) { cancelAct(); cb.onBlocked?.(text); }
+  /** Puts the character on a safe spot if where they stand is not one (inside a vehicle that has been parked again, or under something just put in the yard). */
+  function settlePerson(id) {
+    const env = walkEnv(); if (!env || !isOutdoors() && id == null) return;
+    const p = meM(), world = walkWorld(env.cw, env.slots); if (world.free(p.x, p.z, WALK_R)) return;
+    const slot = id != null ? fleet.slotOf(id) : null, ex = slot && planExit(env, slot), q = ex?.ok ? ex.spot : safeSpotNear(world, p);
+    if (q) { const e = toScene(q); me.x = e.x; me.z = e.z; me.path = []; }
+  }
+
+  /** A tap on a parked vehicle. Returns true when the walk to it (or getting in) is under way. */
+  function enterCar(id) {
+    id = String(id);
+    if (!room || !av || me.sleep || fleet.isDriving()) return false;
+    if (act) { if (act.kind !== "enter" || act.phase !== "walk") return false; if (act.id === id) return true; cancelAct(); } // changing their mind about which vehicle, on the way
+    const env = walkEnv(), slot = env && fleet.canStart(id) ? fleet.slotOf(id) : null;
+    if (!slot) { cb.onBlocked?.("That vehicle is not available right now."); return false; }
+    const r = planEntry(env, meM(), slot);
+    if (!r.ok) { cb.onBlocked?.(r.why === "no-stand" ? "There is no room to stand beside that vehicle. Move the furniture or the other vehicles away from it and try again." : "You cannot get to that vehicle from here."); return false; }
+    act = { kind: "enter", id, phase: "walk", t: 0, slot: { x: slot.x, z: slot.z, yaw: slot.yaw, modelId: slot.modelId }, geom: r.geom, dirty: false, replans: 0, pose: null };
+    me.path = []; followRoute(r.route); me.faceCam = false; mark(r.geom.spot); showYard(); tell("walk", id); return true;
+  }
+  /** Get out of the vehicle being driven (it goes back into its place, as Park always did). Returns { ok } or { ok: false, why }; nothing moves unless a safe spot was found first. */
+  function exitCar() {
+    if (act) return { ok: false, why: "busy" };
+    const d = fleet.driveInfo(), env = d && walkEnv(), slot = d && fleet.slotOf(d.id); if (!slot) return { ok: false, why: "You are not in a vehicle." };
+    const r = planExit(env, slot);
+    if (!r.ok) return { ok: false, why: r.why === "no-stand" ? "There is no room to get out beside this parking place. Move the furniture or the other vehicles away from it, then try again." : "You could not get anywhere from the only place to step out here. Make some room around the vehicle and try again." };
+    fleet.stop({ park: true });
+    const s = toScene(r.geom.seat); me.x = s.x; me.z = s.z; me.yaw = Math.atan2(r.geom.hx, r.geom.hz); me.path = []; me.faceCam = false;
+    act = { kind: "exit", id: String(d.id), phase: "door", t: 0, slot: { x: slot.x, z: slot.z, yaw: slot.yaw, modelId: slot.modelId }, geom: r.geom, dirty: false, replans: 0, pose: exitPose(0, r.geom) };
+    showYard(); tell("exit", act.id); return { ok: true };
+  }
+  /** One frame of whatever is going on. */
+  function stepAct(dt) {
+    const a = act; if (!a) return;
+    const cur = fleet.slotOf(a.id), same = !!cur && cur.modelId === a.slot.modelId && Math.hypot(cur.x - a.slot.x, cur.z - a.slot.z) < 0.01 && turned(cur.yaw, a.slot.yaw) < 0.01;
+    if (a.phase === "walk") {
+      if (!same || fleet.isDriving()) return abortAct("That vehicle is no longer available."); // it moved, was sold or is somebody else's now: stop walking to it
+      if (a.dirty) { a.dirty = false; const env = walkEnv(), r = env && planEntry(env, meM(), cur); if (!r?.ok) return abortAct("The way to that vehicle is blocked now."); a.geom = r.geom; followRoute(r.route); mark(r.geom.spot); }
+      if (me.path.length) return;
+      // arrived beside the door: is it still a good place to stand (nothing has been put there, the door can still swing)? Then the door sequence begins, and from here it cannot be cancelled.
+      const env = walkEnv(); if (!env || !spotStillValid(env, cur, a.geom.spot)) { if (++a.replans > 3) return abortAct("You cannot get into that vehicle from here."); a.dirty = true; return; }
+      a.phase = "door"; a.t = 0; a.pose = enterPose(0, a.geom); tell("enter", a.id); return;
+    }
+    if (!same) { // the vehicle went from under the door sequence (its place was re-planned): do not leave anyone inside it
+      const was = a.kind, id = a.id, g = a.geom; cancelAct(); if (was === "enter") { const e = toScene(g.spot); me.x = e.x; me.z = e.z; } settlePerson(id); return cb.onBlocked?.("That vehicle was moved.");
+    }
+    a.t += dt; const g = a.geom, p = a.kind === "enter" ? enterPose(a.t, g) : exitPose(a.t, g), e = toScene(p);
+    a.speed = Math.hypot(e.x - me.x, e.z - me.z) / Math.max(dt, 1e-3); me.x = e.x; me.z = e.z; a.pose = p; fleet.setDoor(a.id, g.side, p.door);
+    if (Math.hypot(p.fx, p.fz) > 1e-6) me.yaw = lerpAngle(me.yaw, Math.atan2(p.fx, p.fz), 1 - Math.exp(-dt * 11));
+    if (!p.done) return;
+    const id = a.id, kind = a.kind; fleet.setDoor(id, g.side, 0); act = null; me.path = []; a.pose = null; tell(null);
+    if (kind === "enter") { cb.onVehicle?.(id); if (!fleet.isDriving()) { settlePerson(id); cb.onBlocked?.("That vehicle could not be started."); } } // the screen starts the drive; if it did not, nobody stays in the seat
+    else me.faceCam = true;
   }
   // the character walks in through the front door and goes to the middle of the home
   function spawn() {
@@ -1136,7 +1229,9 @@ export function createRoomScene(container, cb = {}) {
     }
     if (d.moved) return;
     if (fleet.isDriving()) return; // at the wheel: a tap on the picture does nothing
-    if (mode === "home" && !me.sleep) { aim(e); const car = fleet.pick(ray); if (car != null) { cb.onVehicle?.(car); return; } } // a tap on a parked vehicle: get in and drive
+    if (act?.phase === "door") return; // getting in or out: nothing the picture does changes it now
+    if (mode === "home" && !me.sleep) { aim(e); const car = fleet.pick(ray); if (car != null) { enterCar(car); return; } } // a tap on a parked vehicle: walk to its door, get in and drive
+    if (act) cancelAct(); // on the way to a vehicle: a tap anywhere else changes their mind (and the walk it asks for follows)
     if (mode === "buy") {
       if (d.id) select(d.id);
       else select(null);
@@ -1155,6 +1250,7 @@ export function createRoomScene(container, cb = {}) {
       return;
     }
     if (cell) walkTo(...cell);
+    else if (mode === "home") { aim(e); const g = hitFloor(yardPlane); if (g) walkToPoint(g.x, g.z); } // a tap on the yard: walk there (through the front door when in the house)
   }
 
   // ----- frame -----
@@ -1227,8 +1323,10 @@ export function createRoomScene(container, cb = {}) {
       let moving = false;
       sleepStep(dt);
       if (me.sleep && me.sleep.stage !== "walk") me.path = []; // lying down, asleep or getting up: no walking
+      if (act) stepAct(dt);
+      if (autoYard && !act && !fleet.isDriving() && view === "yard" && !isOutdoors()) { autoYard = false; setView("house"); } // back indoors: the camera comes back to the house
       if (me.path.length) {
-        const [gx, gz] = cellWorld(...me.path[0]),
+        const [gx, gz] = wp(me.path[0]),
           dx = gx - me.x,
           dz = gz - me.z,
           dist = Math.hypot(dx, dz),
@@ -1245,17 +1343,20 @@ export function createRoomScene(container, cb = {}) {
         }
       }
       if (!moving && me.moving) me.faceCam = true;
+      if (act?.phase === "door") me.faceCam = false; // the door sequence turns the character itself
       if (!moving && me.faceCam) {
         me.yaw = lerpAngle(me.yaw, Math.atan2(cx, cz), 1 - Math.exp(-dt * 5));
       }
       me.moving = moving;
       if (moving) me.faceCam = false;
-      avRoot.position.set(me.x, 0, me.z);
+      const pose = act?.phase === "door" ? act.pose : null;
+      avRoot.visible = !fleet.isDriving() && !pose?.hidden; // inside a shut vehicle there is nothing to see
+      avRoot.position.set(me.x, groundY(me.x, me.z) + (pose ? 0.03 + ((act.geom.seat.y - 0.55) * pose.seat) / CELL_M : 0), me.z);
       avRoot.rotation.y = me.yaw;
       applySleepPose();
-      const want = moving && av.has("walk") ? "walk" : "idle";
+      const stepping = moving || (!!pose && (act.speed ?? 0) > 0.15), want = pose?.seated && av.has("sit") ? "sit" : stepping && av.has("walk") ? "walk" : "idle";
       // busy = walking, a finger/mouse held down, dragging furniture, or shopping/arranging; any of these stops the countdown and a running emote
-      idleEmote.update(dt, moving || !!down || !!drag || mode !== "home" || selectedId != null || !!me.sleep);
+      idleEmote.update(dt, moving || !!down || !!drag || mode !== "home" || selectedId != null || !!me.sleep || !!act);
       if (me.playing !== want && !(want === "idle" && idleEmote.playing)) {
         me.playing = want;
         av.play(want);
@@ -1295,6 +1396,7 @@ export function createRoomScene(container, cb = {}) {
 
   function setMode(m) {
     mode = m;
+    if (m !== "home" && act?.phase === "walk") cancelAct(); // furniture is being arranged: no walk to a vehicle on the side
     if (m !== "buy") {
       select(null);
       marker.visible = false;
@@ -1306,6 +1408,7 @@ export function createRoomScene(container, cb = {}) {
       !room || room.w !== r.w || room.d !== r.d || room.theme !== r.theme || room.layout !== r.layout || (room.grime ?? 0) !== (r.grime ?? 0);
     room = r;
     if (changed) {
+      act = null; autoYard = false; // a different home: no walk or door sequence carries over
       buildRoom();
       cb.onReady?.();
     }
@@ -1318,11 +1421,14 @@ export function createRoomScene(container, cb = {}) {
     select,
     rotateView,
     rotateSelected,
-    setView,
+    setView: (v) => { autoYard = false; return setView(v); }, // the player chose a view: it stays
     getView: () => view,
     setVehicles: (list) => fleet.setVehicles(list),
     startDrive: (id) => fleet.start(id),
-    stopDrive: (o) => fleet.stop(o),
+    stopDrive: (o) => { const d = fleet.driveInfo(); fleet.stop(o); settlePerson(d?.id); }, // the drive ended without getting out (the server refused it): nobody is left inside a parked vehicle
+    exitCar,
+    cancelEntry: () => { if (act?.phase !== "walk") return false; cancelAct(); return true; },
+    isEntering: () => !!act,
     setDriveInput: (i) => fleet.setInput(i),
     isDriving: () => fleet.isDriving(),
     pulse,

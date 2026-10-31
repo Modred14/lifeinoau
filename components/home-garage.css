@@ -27,3 +27,6 @@
 .hg-pad button:active { background: rgba(38,117,78,.88); } .hg-pad button small { font-size: .62rem; font-weight: 700; opacity: .8; } .hg-pad .hg-gas { background: rgba(38,117,78,.8); min-width: 104px; } .hg-pad .hg-brake { background: rgba(138,48,45,.78); }
 @media (max-width: 640px) { .hg-hud { top: 8px; right: 8px; width: min(250px, calc(100% - 16px)); padding: 10px 12px; } .hg-hud > b { font-size: 1.4rem; } .hg-pad button { min-width: 72px; min-height: 72px; border-radius: 18px; } .hg-pad .hg-gas { min-width: 88px; } .hg-pad { bottom: calc(var(--nav-h, 58px) + var(--safe-b, 0px) + 8px); } }
 @media (max-height: 460px) and (orientation: landscape) { .hg-hud { top: 6px; width: 230px; } .hg-hud > span { display: none; } .hg-pad button { min-width: 64px; min-height: 64px; } .hg-pad { bottom: calc(var(--safe-b, 0px) + 8px); } }
+
+.hg-entry { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 16px; border-radius: 999px; background: rgba(36, 51, 43, 0.92); color: #fff; font-weight: 700; z-index: 5; }
+.hg-entry button { min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: #e3ebe5; color: #24332b; font-weight: 750; }
