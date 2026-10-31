@@ -223,7 +223,7 @@ export function createTripFlow(env, o) {
   function startReenter() {
     const hp = heroPose(); doorSide = chooseDoorSide(); S.vehDoorSide = doorSide; reTo = doorStand(hp);
     const r = nav.plan(walker.x, walker.z, reTo.x, reTo.z, { ignore: new Set(["own"]) }); if (!r.ok) { notice("You cannot get to the car door from here."); return; }
-    walker.ignore = new Set(["own"]); walker.follow(r, { goal: reTo, tolerance: 0.4 }); closeAsk = false; go("reenter");
+    walker.follow(r, { goal: reTo, tolerance: 0.4, ignore: new Set(["own"]) }); closeAsk = false; go("reenter");   // follow() sets the ignore list itself, so it is passed here: the car being walked to is not in the way
   }
 
   // ---- the door: it stays shut until the player asks, and never swings into them ----

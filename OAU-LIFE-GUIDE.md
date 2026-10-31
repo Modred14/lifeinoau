@@ -322,7 +322,10 @@ walk from where you get out to the door is at the normal walking pace (2.6 m/s).
   (traffic keeps right), curved turns through junctions, pavements, crossings and routing. Alleys too tight for a car become footpaths.
   The generator's output is kept untouched as `tools/oau/roadgraph.raw.json`; `node tools/oau/refine-roads.mjs` (`lib3d/roadrefine.js`) then classifies every road (express / collector / local),
   straightens it into long runs with gentle fillets, joins broken fragments, prunes redundant stubs, loops and parallel duplicates without isolating any place, and adds the expressway
-  (`lib3d/highway.js`), writing `public/data/oau-roadgraph.json`. Class decides the cross-section (median, lanes each way, shoulder, a strip of pavement kept against buildings).
+  (`lib3d/highway.js`), writing `public/data/oau-roadgraph.json`. A second stage (`lib3d/roadshape.js`) makes the network long, straight and connected: it contracts roundabouts and
+  knots of short links into one junction, merges roads that a pointless node cut in two, carries every dead end straight on to the next road or the map edge (or joins it to the nearest
+  road in a clear line, or drops it when nothing loses its access), puts a junction wherever two roads cross, straightens snaking roads and rounds the corners of the big ones. Every step that moves
+  a road is undone when it would take a place further from its road, or drag a road into a wall; long through roads are promoted one class (local to collector, collector to arterial). Class decides the cross-section (median, lanes each way, shoulder, a strip of pavement kept against buildings).
 - **The expressway** (`lib3d/highway.js`, drawn by `lib3d/highwaymesh.js`) is a 4.2 km elevated dual carriageway across the lake, 10 m up, three lanes each way, a median barrier, shoulders and
   parapets, on T-piers, with a half-diamond interchange at the west end and a full diamond at the campus. Roads carry a level mask (`LV_GROUND`, `LV_DECK`, `LV_RAMP`): people and ambient traffic only
   see the ground; a vehicle sees its own level plus the ramps, and where a ramp runs on to the deck it takes the surface at the height it is at, so the deck stays level. `tests/road-network.test.mjs` covers it.

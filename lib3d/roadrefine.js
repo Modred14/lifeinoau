@@ -13,6 +13,8 @@
 //   4. renumbers    nodes and edges 0..n-1 and recomputes the connected components (0 = the main network).
 // Metres, x east, z south, like the rest of lib3d.
 
+import { reshapeNetwork } from "./roadshape.js";
+
 export const REFINE = {
   /** Douglas-Peucker tolerances tried in turn (metres); the first that keeps the road inside `maxDev` of the original and no closer to a wall is used. */
   eps: [3.2, 2.2, 1.4],
@@ -211,11 +213,33 @@ export function refineRoadNetwork(raw, data, { sdf = null, log = () => {} } = {}
     for (const [, list] of byComp) { for (const e of list) e.__off = true; const after = access(mainOnly()), ok = !worse(after, base);
       if (ok) for (const e of list) report.removed.push({ id: e.id, why: "fragment", len: Math.round(plen(e.pts)) }); else for (const e of list) e.__off = false; } }
 
+  const badClr = (tag) => { if (!process.env.DBGC || !sdf) return; const out = []; for (const e of edges) { if (e.__off) continue; const P = resample(e.pts, 4), L = plen(e.pts), edge = Math.min(10, L * 0.2); let lo = Infinity, s = 0; for (let i = 0; i < P.length; i++) { if (i) s += hyp(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]); if (s < edge || s > L - edge) continue; lo = Math.min(lo, sdf(P[i][0], P[i][1])); } if (lo < 1.0) out.push(e.id + ":" + lo.toFixed(1)); } console.error("CLR", tag, out.join(" ")); };
+  badClr("before reshape");
+  // ---- 3b. long, straight, connected: contract roundabouts, merge split roads, carry dead ends on to another road or the map edge, put a junction where roads cross ----
+  const base0 = access(mainOnly());
+  report.reshape = reshapeNetwork(nodes, edges, { stage: badClr, keepsAccess: () => { const af = access(mainOnly()); const w = worse(af, base0); if (w && process.env.DBGA) { const bad = []; for (let i = 0; i < dests.length; i++) { const [sl, cl] = slackOf(dests[i]); if (af[i] > Math.max(base0[i] + sl, cl)) bad.push(dests[i].what + ":" + Math.round(base0[i]) + "->" + Math.round(af[i])); } console.error("REFUSED", bad.slice(0, 4).join(" ")); } return !w; }, sdf, bounds: data.bounds, straighten: (pts, cls) => straighten(pts, cls, { sdf, eps: [7, 5, 3.2, 2.2], maxDev: 9 }), canDrop: (e) => { e.__off = true; const ok = !worse(access(mainOnly()), base0); e.__off = false; return ok; } });
+
+  badClr("after reshape");
+  // a road that snakes (more than 110 degrees of turning on a short run) is straightened as far as the walls allow, and the change is undone if it takes a place away from its road
+  for (const e of edges) { if (e.__off) continue; const L = plen(e.pts); if (L < 50 || totalTurn(e.pts) * 57.3 < 110) continue;
+    for (const [eps, dev] of [[[8, 6, 4], 12], [[12, 9, 7, 5], 18], [[16, 12, 9], 26]]) { const keep = e.pts, sm = straighten(keep, e.cls, { sdf, eps, maxDev: dev }); if (!sm || totalTurn(sm) >= totalTurn(keep) * 0.7) continue; e.pts = sm; if (worse(access(mainOnly()), base0)) { e.pts = keep; continue; } report.uncurled = (report.uncurled ?? 0) + 1; break; } }
+  // a big road must not have a corner in it: any vertex sharper than 25 degrees gets a gentle arc (when it fits clear of the walls)
+  for (const e of edges) { if (e.__off || e.cls !== "arterial" || plen(e.pts) < 100) continue; let sharp = 0; for (let i = 1; i < e.pts.length - 1; i++) { const a = Math.atan2(e.pts[i][1] - e.pts[i - 1][1], e.pts[i][0] - e.pts[i - 1][0]), b = Math.atan2(e.pts[i + 1][1] - e.pts[i][1], e.pts[i + 1][0] - e.pts[i][0]); let d = Math.abs(b - a); if (d > Math.PI) d = TAU - d; sharp = Math.max(sharp, d); }
+    if (sharp * 57.3 > 25) { const sm = straighten(e.pts, "arterial", { sdf, eps: [10, 7, 5], maxDev: 14 }); if (sm) e.pts = sm; } }
+  // ---- 3c. big roads: a long, straight road that joins junctions at both ends is a through road, and a through road is a proper road (one class up) ----
+  { const live = edges.filter((e) => !e.__off), d = degrees(nodes, live); report.upgraded = 0;
+    for (const e of live) {
+      if (e.a === e.b || d[e.a] < 3 || d[e.b] < 3) continue; const L = plen(e.pts), chord = hyp(e.pts.at(-1)[0] - e.pts[0][0], e.pts.at(-1)[1] - e.pts[0][1]); if (chord / L < 0.9) continue;
+      if (e.cls === "local" && L >= 150) { e.cls = "collector"; report.upgraded++; } else if (e.cls === "collector" && L >= 260 && (e.clr ?? 0) >= 11) { e.cls = "arterial"; report.upgraded++; }
+    } }
+
   // ---- 4. renumber ----
   edges = edges.filter((e) => !e.__off); const deg = degrees(nodes, edges), used = nodes.filter((n, i) => deg[i] > 0), remap = new Map(used.map((n, i) => [n.id, i]));
   const outNodes = used.map((n, i) => ({ id: i, x: n.x, z: n.z, rim: !!n.rim, comp: 0 })), outEdges = edges.map((e, i) => ({ id: i, a: remap.get(e.a), b: remap.get(e.b), pts: e.pts.map((p) => [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100]), w: e.w, clr: e.clr, comp: 0, cls: e.cls }));
   // keep each end of an edge exactly on its node
   for (const e of outEdges) { e.pts[0] = [outNodes[e.a].x, outNodes[e.a].z]; e.pts[e.pts.length - 1] = [outNodes[e.b].x, outNodes[e.b].z]; }
+  // no two points of a road may be on top of each other (a zero-length piece has no heading): a point within a metre of its neighbour is dropped, the ends stay
+  for (const e of outEdges) { const q = [e.pts[0]]; for (let i = 1; i < e.pts.length; i++) { const last = i === e.pts.length - 1; if (hyp(e.pts[i][0] - q.at(-1)[0], e.pts[i][1] - q.at(-1)[1]) < 1) { if (last) q[q.length - 1] = e.pts[i]; continue; } q.push(e.pts[i]); } if (q.length >= 2) e.pts = q; else e.pts = [e.pts[0], e.pts.at(-1)]; }
   const comp = components(outNodes, outEdges); for (const n of outNodes) n.comp = comp.of(n.id); for (const e of outEdges) e.comp = comp.of(e.a);
   for (const e of outEdges) report.classes[e.cls] = (report.classes[e.cls] ?? 0) + 1;
   report.after = { nodes: outNodes.length, edges: outEdges.length, components: comp.count };
