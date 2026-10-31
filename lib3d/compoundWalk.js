@@ -203,7 +203,7 @@ export function doorGeometry(slot, spot) {
 
 /** Is this stand spot still a good one (nothing has been put on it, the door can still swing)? */
 export function spotStillValid(env, slot, spot) {
-  const world = walkWorld(env.cw, env.slots); return standSpots(world, slot).some((s) => s.side === spot.side && Math.hypot(s.x - spot.x, s.z - spot.z) < 0.05);
+  const world = walkWorld(env.cw, env.slots); return standSpots(world, slot).some((s) => (spot.side == null || s.side === spot.side) && Math.hypot(s.x - spot.x, s.z - spot.z) < 0.05); // a spot taken from doorGeometry() has no side of its own: position alone then
 }
 
 /**
