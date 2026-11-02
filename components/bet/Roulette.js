@@ -83,7 +83,7 @@ export default function Roulette({ active }) {
     const loop = (t) => {
       raf = requestAnimationFrame(loop);
       const c = cv.current, b = box.current, s = sim.current; if (!c || !b) return;
-      const size = Math.min(b.clientWidth, 260), dpr = Math.min(2, window.devicePixelRatio || 1), dt = Math.min(0.05, (t - (s.last || t)) / 1000); s.last = t;
+      const size = Math.max(120, Math.min(b.clientWidth, b.clientHeight - 64, 420)), dpr = Math.min(2, window.devicePixelRatio || 1), dt = Math.min(0.05, (t - (s.last || t)) / 1000); s.last = t;
       if (c.width !== Math.round(size * dpr)) { c.width = c.height = Math.round(size * dpr); c.style.width = c.style.height = size + "px"; }
       s.wa += s.wv * dt;
       if (s.mode === "idle") { s.wv += (0.25 - s.wv) * Math.min(1, dt * 1.5); if (s.pocket != null) { s.ba = s.wa + pa(s.pocket); s.br = 0.665; s.show = true; } }
@@ -157,6 +157,7 @@ export default function Roulette({ active }) {
 
   return (
     <div className="bt-scroll rt" aria-hidden={!active}>
+      <div className="rt-view">
       <div className="rt-hist" aria-label="Last numbers">{hist.length === 0 ? <small>Last numbers show up here</small> : hist.slice(0, 16).map((n, i) => <span key={i} className={`rn ${colorOf(n)}`}>{n}</span>)}</div>
       <div className="rt-wheel" ref={box}>
         <canvas ref={cv} aria-label="Roulette wheel" />
@@ -164,7 +165,9 @@ export default function Roulette({ active }) {
           {res && (<><span className={`rn big ${colorOf(res.n)}`}>{res.n}</span><span>{res.paid > 0n ? (res.net > 0n ? <b className="up">+{moneyK(res.net)}</b> : <b>Stake back</b>) : <b className="dn">No win</b>}</span></>)}
         </div>
       </div>
+      </div>
 
+      <div className="rt-play">
       <div className={`rt-table${busy ? " busy" : ""}`} aria-label="Betting table">
         <div className="rt-grid">
           {cell(0)}
@@ -205,6 +208,7 @@ export default function Roulette({ active }) {
         <button type="button" className="bt-primary" onClick={spin} disabled={busy || !bets.length}>{busy ? "Spinning…" : total ? `Spin · ${money(total)}` : "Place a chip to spin"}</button>
       </div>
       <p className="fine">18+ · One zero, so the house keeps 2.7% of everything staked over time. Straight 35:1, split 17:1, street 11:1, corner 8:1, dozen and column 2:1, even money 1:1.</p>
+      </div>
     </div>
   );
 }

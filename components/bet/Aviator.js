@@ -257,6 +257,7 @@ export default function Aviator({ active }) {
 
   return (
     <div className="bt-scroll av" aria-hidden={!active}>
+      <div className="av-main">
       <div className="av-hist" aria-label="Recent flights">
         {hist.length === 0 ? <small>Your flights show up here</small> : hist.slice(0, 14).map((h) => <span key={h.id} className={`hx ${tier(h.crashCenti)}`}>{fmtX(h.crashCenti)}</span>)}
       </div>
@@ -291,9 +292,11 @@ export default function Aviator({ active }) {
           </button>
         )}
       </div>
+      </div>
 
       <section className="av-feed">
         <h4>Players <small>simulated</small></h4>
+        {!(f?.sims?.length) && <p className="av-feed-empty">Other players join when you take off.</p>}
         {(f?.sims ?? makeSims0).map((s) => {
           const limit = f?.crash ? f.crash - 1 : centi, out = f && s.target * 100 <= limit && f && !f.done, lost = f && f.crashShown && !out;
           return (

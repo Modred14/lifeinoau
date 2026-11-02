@@ -130,6 +130,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
     if (!open) return;
     const k = (e) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (document.body.dataset.betFull) return; // a Bet game is open full screen: Escape goes back to its game list (BetApp handles it), not out of the app
       e.stopPropagation();
       app ? setApp(null) : onClose();
     };

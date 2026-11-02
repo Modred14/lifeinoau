@@ -30,4 +30,4 @@
 
 .hg-entry { position: absolute; left: 50%; bottom: calc(var(--nav-h, 64px) + var(--safe-b, 0px) + 24px); transform: translateX(-50%); z-index: 5; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 32px); padding: 6px 6px 6px 16px; border-radius: 999px; background: rgba(16, 22, 20, 0.94); color: #f1f5f2; border: 1px solid rgba(255, 255, 255, 0.14); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); font-weight: 700; font-size: .9rem; white-space: nowrap; }
 .hg-entry button { min-height: 44px; padding: 0 18px; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 999px; background: #26312c; color: #f1f5f2; font-weight: 750; cursor: pointer; }
-.hg-entry button:hover { background: #33423a; } .hg-entry button:focus-visible { outline: 2px solid #7fd3a6; outline-offset: 2px; }
+.hg-entry button:hover { background: #33423a; } .hg-entry button:focus-visible { outline: 2px solid #7fd3a6; outline-offset: 2px; };
