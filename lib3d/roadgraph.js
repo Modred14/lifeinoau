@@ -13,11 +13,11 @@ import { Path } from "./roadnet.js";
 import { buildJunctions, inside } from "./roadjunction.js";
 
 /** Cross-section rules. A road is `half` metres from its centreline to the kerb on each side, then `sw` metres of pavement. */
-export const XS = { minDrivableClearance: 2.7, lane: 3.5, minHalf: 3.0, maxHalf: 7.0, pavement: 2.0, minPavement: 0.7, setback: 0.7, junctionExtra: 1.6, frontage: 1.0, uTurnTrim: 3,
+export const XS = { minDrivableClearance: 2.7, lane: 3.5, minHalf: 3.5, maxHalf: 7.0, pavement: 2.0, minPavement: 0.7, setback: 0.7, junctionExtra: 1.6, frontage: 1.0, uTurnTrim: 3,
   /** a vehicle waits this far (m) beyond the mouth of a junction; the zebra crossing (3.4 m deep) sits between the mouth and the stop line */
   stopGap: 6.2, crossingGap: 1.6 };
 /** The standard half-widths (m) a collector road comes in: it takes the widest that fits, so the network has a few widths, not a different one on every road. */
-const STD_HALF = { collector: [5.0, 4.4, 3.8, 3.2] };
+const STD_HALF = { collector: [5.0, 4.4, 3.8, 3.5] };
 /**
  * What each class of road is made of, centreline outwards: a median strip (`med`, half its width), `lanes` traffic lanes of XS.lane each way, then a paved `shoulder`; the rest of the free space is pavement.
  * arterial = the campus' express roads (two lanes each way and a median); collector = a wide campus road (one lane each way and a shoulder for stopping); local = a lane each way.

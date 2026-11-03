@@ -1,15 +1,24 @@
 // lib3d/traffic.js
 // The life on the road during a trip: a few NPC cars, the odd keke and bus, some people walking, and the real players who are travelling at the same time.
-// It is deliberately sparse (the road is meant to feel lived in, not crowded). What moves and where is decided by lib3d/trafficsim.js (vehicles follow lanes on the road
+// It is busy but budgeted: more on the main roads and most on the expressway, fewer on the small roads, and the budget is lighter on phones (densityFor). What moves and where is decided by lib3d/trafficsim.js (vehicles follow lanes on the road
 // graph, give way at junctions and keep their distance); this file only draws it. Metres, x east, z south, y up; nose towards +z like vehicles.js.
 import * as THREE from "three";
-import { createTrafficSim } from "./trafficsim.js";
+import { createTrafficSim, HOT_KINDS } from "./trafficsim.js";
 import { createNpc, npcSpec } from "./avatar/npc.js";
 import { createAvatar } from "./avatar/loadAvatar.js";
 import { lookKey } from "../lib/look.js";
 import { carBodyGeometry, CAR_WHEELS, CAR_WHEEL_R, CAR_COLORS, makeKeke, makeBus, makeVehicle, rollWheels, trafficWheelGeometry } from "./vehicles.js";
 
-export const DENSITY = { cars: 6, kekes: 2, buses: 1, peds: 10 }; // within about 250 m of the camera
+// Entity budgets, within about 250 m of the camera. `cars`/`kekes`/`buses`/`minibuses` are the most of each kind alive at once (campus roads AND expressway together);
+// `ground` and `hw` are the totals wanted on the campus roads and on the expressway (kept higher per metre than any small road); `peds` is the number of walkers (each is a rigged character).
+// The cars are ONE instanced draw (two with their wheels), so a car costs almost nothing to draw; buses, kekes and walkers are the expensive ones, hence their smaller counts.
+export const DENSITY = { cars: 34, kekes: 5, buses: 5, minibuses: 6, ground: 30, hw: 18, peds: 26 };
+export const DENSITY_LOW = { cars: 18, kekes: 3, buses: 3, minibuses: 3, ground: 16, hw: 10, peds: 14 };   // phones and small machines
+/** Picks the budget for this device: touch screens, 4 GB or less of memory, or 4 or fewer cores get the lighter one. */
+export function densityFor(env = globalThis) {
+  const nav = env.navigator ?? {}, coarse = !!env.matchMedia?.("(pointer: coarse)")?.matches;
+  return coarse || (nav.deviceMemory ?? 8) <= 4 || (nav.hardwareConcurrency ?? 8) <= 4 ? DENSITY_LOW : DENSITY;
+}
 
 
 /** A walking figure made of boxes (for NPCs and for real players seen from a distance). Returns { root, pose(phase, amount) }. */
@@ -28,10 +37,11 @@ const R = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^
  * Returns { update(dt), setTravellers(list), dispose(), sim }. `sim` is the traffic simulation: the trip uses it for the vehicle that carries the player,
  * and tells it where the player is so vehicles give way to them.
  */
-export function createTraffic({ parent, svc, focus, density = DENSITY, seed = 7, tags = null }) {
+export function createTraffic({ parent, svc, focus, density = densityFor(), seed = 7, tags = null }) {
   const rnd = R(seed), group = new THREE.Group(); parent.add(group);
   const disposables = [];
-  const sim = createTrafficSim({ graph: svc.graph, world: svc.world, focus, rnd, density: { vehicles: density.cars + density.kekes + density.buses, peds: density.peds, limits: { car: density.cars, keke: density.kekes, bus: density.buses } } });
+  const hotspots = (svc.data?.places ?? []).filter((p) => p.x != null && HOT_KINDS[p.kind] && !p.offmap).map((p) => ({ x: p.x, z: p.z, w: HOT_KINDS[p.kind] }));   // where people gather: hostels, shops, the library...
+  const sim = createTrafficSim({ graph: svc.graph, world: svc.world, focus, rnd, density: { vehicles: density.ground, hwVehicles: density.hw, peds: density.peds, hotspots, limits: { car: density.cars, keke: density.kekes, bus: density.buses, minibus: density.minibuses } } });
   // ---- cars: one instanced mesh for the paint, glass and lights, one for the wheels ----
   const nCars = density.cars, bodyGeo = carBodyGeometry("#ffffff", false), suvGeo = carBodyGeometry("#ffffff", true);
   const bodies = new THREE.InstancedMesh(bodyGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.2 }), Math.max(1, nCars));
@@ -46,10 +56,12 @@ export function createTraffic({ parent, svc, focus, density = DENSITY, seed = 7,
   const loadNpc = async () => { try { const av = await createNpc(npcSpec(++npcSeq, { role: rnd() < 0.08 ? "staff" : "student" })); if (gone) { av.dispose(); return null; } return av; } catch { return null; } };
   // a pool of characters; the simulation's pedestrians take one each while they are alive
   const pedSlots = Array.from({ length: nPed }, () => ({ id: null, npc: null, cur: null, loading: false }));
-  pedSlots.forEach(async (s) => { const av = await loadNpc(); if (av) addNpc(s, av); }); // the walkers appear as their characters finish loading
+  // the walkers appear as their characters finish loading: one after another (the shared model files are fetched once), so the start of a trip is not one big hitch
+  (async () => { for (const s of pedSlots) { if (gone) return; const av = await loadNpc(); if (av) addNpc(s, av); await new Promise((r) => setTimeout(r, 40)); } })();
   // ---- keke and bus models: a pool, each taken by one simulated vehicle while it is alive ----
-  const pools = { keke: Array.from({ length: density.kekes }, () => ({ id: null, model: makeKeke() })), bus: Array.from({ length: density.buses }, () => ({ id: null, model: makeBus() })) };
-  for (const s of [...pools.keke, ...pools.bus]) { s.model.root.visible = false; s.model.root.traverse((o) => { if (o.isMesh) o.castShadow = true; }); group.add(s.model.root); }
+  const MINI_LEN = 4.7 / 6.08;   // the commercial minibus is the bus body drawn at this fraction of its length (one body model, so no extra assets)
+  const pools = { keke: Array.from({ length: density.kekes }, () => ({ id: null, model: makeKeke() })), bus: Array.from({ length: density.buses }, () => ({ id: null, model: makeBus() })), minibus: Array.from({ length: density.minibuses ?? 0 }, () => { const m = makeBus(); m.root.scale.z = MINI_LEN; return { id: null, model: m }; }) };
+  for (const s of [...pools.keke, ...pools.bus, ...pools.minibus]) { s.model.root.visible = false; s.model.root.traverse((o) => { if (o.isMesh) o.castShadow = true; }); group.add(s.model.root); }
   const carSlots = Array.from({ length: nCars }, () => ({ id: null, phase: 0, color: CAR_COLORS[0] }));
   const tmp = new THREE.Matrix4(), base = new THREE.Matrix4(), loc = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), v3 = new THREE.Vector3(), sc = new THREE.Vector3(1, 1, 1), col = new THREE.Color();
   const hide = new THREE.Matrix4().makeScale(0, 0, 0);
@@ -97,12 +109,12 @@ export function createTraffic({ parent, svc, focus, density = DENSITY, seed = 7,
     assign(carSlots, npcs.filter((v) => v.kind === "car").map((v) => v.id));
     carSlots.forEach((s, i) => { const a = s.id == null ? null : byId.get(s.id);
       if (!a) { bodies.setMatrixAt(i, hide); for (let w = 0; w < 4; w++) wheelsM.setMatrixAt(i * 4 + w, hide); return; }
-      s.phase += (a.v * dt) / CAR_WHEEL_R; q.setFromAxisAngle(up, a.yaw); base.compose(v3.set(a.x, 0.05, a.z), q, sc); bodies.setMatrixAt(i, base); bodies.setColorAt(i, col.set(CAR_COLORS[Math.floor(a.tint * CAR_COLORS.length) % CAR_COLORS.length]));
+      s.phase += (a.v * dt) / CAR_WHEEL_R; q.setFromAxisAngle(up, a.yaw); base.compose(v3.set(a.x, a.y + 0.05, a.z), q, sc); bodies.setMatrixAt(i, base); bodies.setColorAt(i, col.set(CAR_COLORS[Math.floor(a.tint * CAR_COLORS.length) % CAR_COLORS.length]));
       CAR_WHEELS.forEach(([wx, wz], w) => { tmp.makeRotationX(s.phase); loc.makeTranslation(wx, CAR_WHEEL_R, wz).multiply(tmp); wheelsM.setMatrixAt(i * 4 + w, tmp.multiplyMatrices(base, loc)); }); });
     bodies.instanceMatrix.needsUpdate = true; wheelsM.instanceMatrix.needsUpdate = true; if (bodies.instanceColor) bodies.instanceColor.needsUpdate = true;
     // kekes and buses
-    for (const kind of ["keke", "bus"]) { assign(pools[kind], npcs.filter((v) => v.kind === kind).map((v) => v.id));
-      for (const s of pools[kind]) { const a = s.id == null ? null : byId.get(s.id); s.model.root.visible = !!a; if (!a) continue; s.model.root.position.set(a.x, 0.05, a.z); const dy = s.yaw == null || dt <= 0 ? 0 : ((a.yaw - s.yaw + Math.PI * 3) % (Math.PI * 2) - Math.PI) / dt, sp = Math.abs(a.v), want = sp > 0.4 ? Math.max(-0.6, Math.min(0.6, Math.atan((s.model.wheelbase ?? 2) * dy / sp))) : 0;
+    for (const kind of ["keke", "bus", "minibus"]) { assign(pools[kind], npcs.filter((v) => v.kind === kind).map((v) => v.id));
+      for (const s of pools[kind]) { const a = s.id == null ? null : byId.get(s.id); s.model.root.visible = !!a; if (!a) continue; s.model.root.position.set(a.x, a.y + 0.05, a.z); const dy = s.yaw == null || dt <= 0 ? 0 : ((a.yaw - s.yaw + Math.PI * 3) % (Math.PI * 2) - Math.PI) / dt, sp = Math.abs(a.v), want = sp > 0.4 ? Math.max(-0.6, Math.min(0.6, Math.atan((s.model.wheelbase ?? 2) * dy / sp))) : 0;
         s.st = (s.st ?? 0) + (want - (s.st ?? 0)) * Math.min(1, dt * 8); s.model.root.rotation.y = a.yaw; rollWheels(s.model, a.v * dt, s.st); s.model.setBrake?.(s.sp != null && dt > 0 && (sp - s.sp) / dt < -0.9 || sp < 0.15); s.yaw = a.yaw; s.sp = sp; } }
     // people
     const peds = sim.peds, pById = new Map(peds.map((p) => [p.id, p]));
@@ -123,6 +135,6 @@ export function createTraffic({ parent, svc, focus, density = DENSITY, seed = 7,
       else if (e.av) { const v = d / Math.max(dt, 1e-3), want = v > 0.25 ? "walk" : "idle"; if (want !== e.cur && e.av.play(want, { fade: 0.3 })) e.cur = want; if (want === "walk") e.av.setSpeed(Math.max(0.5, Math.min(1.9, v / WALK_V))); e.av.update(clock, dt); e.av.root.position.y = 0.05; }
       else e.walker.pose((e.phase += d * 2.4), Math.min(1, d / dt / 1.2)); }
   }
-  function dispose() { gone = true; for (const [id, e] of live) { tags?.remove(id); e.av?.dispose(); e.model?.dispose?.(); } for (const s of [...pools.keke, ...pools.bus]) s.model.dispose?.(); for (const s of pedSlots) s.npc?.dispose(); sim.dispose?.(); group.traverse((o) => { if (o.userData.npcMesh || o.isSkinnedMesh || o.geometry?.userData?.shared) return; o.geometry?.dispose?.(); }); disposables.forEach((g) => { if (!g.userData?.shared) g.dispose(); }); bodies.dispose(); wheelsM.dispose(); parent.remove(group); }
+  function dispose() { gone = true; for (const [id, e] of live) { tags?.remove(id); e.av?.dispose(); e.model?.dispose?.(); } for (const s of [...pools.keke, ...pools.bus, ...pools.minibus]) s.model.dispose?.(); for (const s of pedSlots) s.npc?.dispose(); sim.dispose?.(); group.traverse((o) => { if (o.userData.npcMesh || o.isSkinnedMesh || o.geometry?.userData?.shared) return; o.geometry?.dispose?.(); }); disposables.forEach((g) => { if (!g.userData?.shared) g.dispose(); }); bodies.dispose(); wheelsM.dispose(); parent.remove(group); }
   return { update, setTravellers, dispose, sim, peds: pedSlots /* read-only, for tests */ };
 }

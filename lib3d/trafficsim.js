@@ -11,12 +11,15 @@
 //   - "hero" vehicles for the player's journey: the same vehicles, with a route, a stopping point and a hold.
 // Metres, x east, z south. A vehicle's position is its centre; `s` is how far along its route that centre is.
 import { boxesOverlap } from "./collide.js";
+import { heightOn } from "./roadgraph.js";
 
 export const KINDS = {
   // doorZ: where the passenger door is along the vehicle (metres from the middle, nose is +); seat: where a passenger sits, in the vehicle's own space
   // (x is +left, -right: traffic keeps right, so the kerb and the door are on the right). driver: the driver's seat (null: the keke model has its own).
   car: { len: 4.5, wid: 1.85, cruise: [8.5, 13], aMax: 2.2, brake: 3.2, weight: 0.72, doorZ: -0.5, doorZL: 0.3, seat: { x: -0.45, y: 0.5, z: -0.5 }, driver: { x: 0.45, y: 0.5, z: 0.35 } },
-  keke: { len: 2.78, wid: 1.3, cruise: [6.5, 9.5], aMax: 1.7, brake: 3.0, weight: 0.18, doorZ: -0.45, seat: { x: 0, y: 0.62, z: -0.72 }, driver: null },
+  keke: { noHw: true, len: 2.78, wid: 1.3, cruise: [6.5, 9.5], aMax: 1.7, brake: 3.0, weight: 0.18, doorZ: -0.45, seat: { x: 0, y: 0.62, z: -0.72 }, driver: null },
+  // a commercial minibus (the yellow danfo-style hire bus): shares the bus body, drawn shorter (see traffic.js); `noHw: false` below, kekes are kept off the expressway
+  minibus: { len: 4.7, wid: 1.88, cruise: [7.5, 11.5], aMax: 1.6, brake: 2.9, weight: 0.12, doorZ: -0.5, doorZL: 0.8, seat: { x: -0.5, y: 0.71, z: -0.4 }, driver: { x: 0.45, y: 0.8, z: 1.0 } },
   bus: { len: 6.08, wid: 1.88, cruise: [7.5, 10.5], aMax: 1.3, brake: 2.8, weight: 0.10, doorZ: -0.6, doorZL: 0.97, seat: { x: -0.5, y: 0.71, z: -0.54 }, driver: { x: 0.45, y: 0.8, z: 1.35 } },
 };
 /** Where a person sits in a vehicle kind (its own space); a kind that has no seat (a trek is on foot: no kind at all) falls back to the car's, so asking never throws. */
@@ -28,7 +31,13 @@ export function doorPoint(v, kind = v.kind, side = -1) {
 }
 /** A point given in a vehicle's own space ({ x: left+, z: forward+ }) as a point in the world. */
 export function toWorld(v, local) { return { x: v.x + v.hx * local.z + v.hz * local.x, z: v.z + v.hz * local.z - v.hx * local.x }; }
-export const DENSITY = { vehicles: 12, peds: 10, spawnMin: 80, spawnMax: 230, despawn: 320 };
+// vehicles: ambient cars on the campus roads; hwVehicles: on the expressway (kept busier than any small road); peds: walkers. farAt: beyond this many metres from the camera an entity is stepped less often.
+export const DENSITY = { vehicles: 30, hwVehicles: 16, peds: 24, spawnMin: 80, spawnMax: 230, despawn: 320, farAt: 150, farPedAt: 110 };
+/** How busy each class of road is, per metre of lane: the main roads carry the most, the small roads a lower but still noticeable flow. */
+export const CLASS_WEIGHT = { local: 0.8, collector: 1.3, arterial: 2.6 };
+/** Where people gather, by kind of place (weights): hostels, shops, the library, the social centre and the town gate are busiest. */
+export const HOT_KINDS = { hostel: 3, shop: 3, social: 3, town: 3, library: 2.5, bank: 2, hall: 2, lecture: 1.5, faculty: 1.5, admin: 1.5, sports: 1.5, hospital: 1, worship: 1 };
+const LANE_W = 3.5;
 const T_HEAD = 1.3, S0 = 2.0, PED_W = 0.6, PED_ACTS = ["phone", "talk", "lookAround"];
 
 /**
@@ -98,37 +107,61 @@ function nearestOnPath(path, x, z, s0, s1) {
  */
 export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z: 0 }), rnd = Math.random, density = {} }) {
   const D = { ...DENSITY, ...density }, vehicles = [], peds = [], external = new Map(), reserved = new Map(); let nextId = 1, time = 0, spawnCool = 0, pedCool = 0;
-  const mainLanes = graph.lanes.filter((l) => l.comp === 0 && l.len > 18 && !l.hw);   // ambient traffic keeps to the campus roads: never the expressway or its ramps
-  const stats = { spawned: 0, despawned: 0, stuckRemoved: 0, maxOverlapFixed: 0 };
+  const edgeOf = (laneId) => graph.byEdge.get(graph.lanes[laneId].edge);
+  const nLanesOf = (laneId) => { const e = edgeOf(laneId); return e.med > 0 ? Math.max(1, e.lanesPerDir) : 1; };   // lanes in this lane's direction that vehicles may share
+  // Spawn pools, weighted by length x how busy that class of road is (the ramps are never used by ambient traffic: they belong to the player's journeys).
+  const makePool = (pred, wf) => { const arr = [], cum = []; let t = 0; for (const l of graph.lanes) { const e = graph.byEdge.get(l.edge); if (e && pred(l, e)) { t += l.len * wf(e); arr.push(l); cum.push(t); } } return { arr, cum, total: t }; };
+  const pickFrom = (pool) => { let lo = 0, hi = pool.arr.length - 1; const r = rnd() * pool.total; while (lo < hi) { const m = (lo + hi) >> 1; if (pool.cum[m] < r) lo = m + 1; else hi = m; } return pool.arr[lo]; };
+  const groundPool = makePool((l, e) => l.comp === 0 && l.len > 18 && !l.hw, (e) => CLASS_WEIGHT[e.cls] ?? 1);   // ambient traffic keeps to the campus roads here
+  const hwPool = makePool((l, e) => l.comp === 0 && l.hw && String(e.kind).startsWith("express") && l.len > 60, () => 1);   // the expressway's own lanes
+  const isHwLane = (id) => { const l = graph.lanes[id]; return l.hw && String(edgeOf(id).kind).startsWith("express"); };
+  const stats = { spawned: 0, despawned: 0, stuckRemoved: 0, maxOverlapFixed: 0, laneChanges: 0 };
+  let tick = 0;
+
+  // ---------- where people gather ----------
+  const hot = [];
+  for (const h of D.hotspots ?? []) hot.push({ x: h.x, z: h.z, w: h.w ?? 1, edges: null });
+  const hotEdges = (h) => h.edges ??= graph.edges.filter((e) => e.comp === 0 && e.sw > 0 && e.len > 8 && !e.hw && (e.path.pts ?? []).some((q) => Math.hypot(q[0] - h.x, q[1] - h.z) < 45));
 
   // ---------- routes ----------
   /** A random drive of at least `minLen` metres starting on `lane` at `s`: at each junction mostly straight on, sometimes a turn, never a U-turn. */
-  function wander(lane, s, minLen = 2200) {
+  function wander(lane, s, minLen = 2200, hw = false) {
     const segs = [{ kind: "lane", id: lane, s0: s, s1: graph.lanes[lane].len }]; let total = graph.lanes[lane].len - s, cur = lane, guard = 0;
     while (total < minLen && guard++ < 80) {
-      const outs = graph.lanes[cur].out.map((c) => graph.conns[c]).filter((c) => c.kind !== "uturn" && graph.lanes[c.to].comp === 0 && !graph.lanes[c.to].hw); if (!outs.length) break;
+      const outs = graph.lanes[cur].out.map((c) => graph.conns[c]).filter((c) => c.kind !== "uturn" && graph.lanes[c.to].comp === 0 && (hw ? isHwLane(c.to) : !graph.lanes[c.to].hw)); if (!outs.length) break;
       const w = outs.map((c) => (c.kind === "straight" ? 0.58 : 0.21)), sum = w.reduce((a, b) => a + b, 0); let r = rnd() * sum, pick = outs[0]; for (let i = 0; i < outs.length; i++) { r -= w[i]; if (r <= 0) { pick = outs[i]; break; } }
       segs.push({ kind: "conn", id: pick.id }); const nl = graph.lanes[pick.to]; segs.push({ kind: "lane", id: nl.id, s0: 0, s1: nl.len }); total += pick.len + nl.len; cur = nl.id;
     }
     return graph.makeRoute(segs);
   }
-  const pickKind = () => {
+  const pickKind = (hw = false) => {
     const have = {}; for (const v of vehicles) if (v.role === "npc" && !v.custom && !v.done) have[v.kind] = (have[v.kind] ?? 0) + 1;
-    const open = Object.entries(KINDS).filter(([k]) => D.limits?.[k] == null || (have[k] ?? 0) < D.limits[k]); if (!open.length) return null;
+    const open = Object.entries(KINDS).filter(([k, d]) => !(hw && d.noHw) && (D.limits?.[k] == null || (have[k] ?? 0) < D.limits[k])); if (!open.length) return null;
     let r = rnd() * open.reduce((s, [, d]) => s + d.weight, 0), k = open[0][0]; for (const [name, def] of open) { r -= def.weight; if (r <= 0) { k = name; break; } } return k;
   };
 
   function make(kind, route, opts = {}) {
     const def = KINDS[kind], a = { id: nextId++, kind, len: opts.len ?? def.len, wid: opts.wid ?? def.wid, aMax: opts.aMax ?? def.aMax, brake: opts.brake ?? def.brake, route, s: opts.s ?? 0, v: opts.v ?? 0, si: 0, role: opts.role ?? "npc",
-      cruise: opts.cruise ?? def.cruise[0] + rnd() * (def.cruise[1] - def.cruise[0]), stopAt: opts.stopAt ?? null, hold: !!opts.hold, res: null, waitSince: null, stillFor: 0, acc: 0, x: 0, z: 0, hx: 0, hz: 1, yaw: 0, laneId: -1, laneS: 0, color: opts.color ?? null, tint: rnd(), done: false, born: time };
+      cruise: opts.cruise ?? def.cruise[0] + rnd() * (def.cruise[1] - def.cruise[0]), stopAt: opts.stopAt ?? null, hold: !!opts.hold, res: null, waitSince: null, stillFor: 0, acc: 0, x: 0, z: 0, hx: 0, hz: 1, yaw: 0, laneId: -1, laneS: 0, color: opts.color ?? null, tint: rnd(), done: false, born: time, hw: !!opts.hw, lvl: 0, y: 0, sub: opts.sub ?? 0, lat: opts.lat ?? 0, lead: null, lcAt: -9 };
     pose(a); vehicles.push(a); stats.spawned++; return a;
   }
   /** Where the vehicle is and which way its body points (from a point behind its centre to one in front, so it swings through a curve like a real one). */
+  /** How far (m) to the LEFT of its lane's own line a vehicle is at route distance sc: it slides to a free lane only along the open stretch, and is back on the lane's line near either end (junctions and ramps are built for the lane's line). */
+  function latAt(a, sc) {
+    if (!a.lat) return 0;
+    const segs = a.route.segs; let sg = segs[a.si]; if (!sg || sc < sg.start || sc > sg.end) { sg = null; for (const q of segs) if (sc <= q.end) { sg = q; break; } sg ??= segs[segs.length - 1]; }
+    if (sg.kind !== "lane") return 0;
+    const L = graph.lanes[sg.id], ls = sg.s0 + (sc - sg.start), k = Math.max(0, Math.min(1, Math.min(ls, L.len - ls) / 30));
+    return Math.min(a.lat, (nLanesOf(sg.id) - 1) * LANE_W) * k * k * (3 - 2 * k);
+  }
+  const shifted = (a, pt, sc) => { const l = latAt(a, sc); if (l) { pt.x += pt.hz * l; pt.z -= pt.hx * l; } return pt; };
+  /** Where the vehicle is and which way its body points (from a point behind its centre to one in front, so it swings through a curve like a real one). */
   function pose(a) {
-    const P = a.route.path, p = P.at(a.s, {}), f = P.at(Math.min(P.len, a.s + a.len * 0.3), {}), r = P.at(Math.max(0, a.s - a.len * 0.3), {});
-    a.x = p.x; a.z = p.z; let hx = f.x - r.x, hz = f.z - r.z; const l = Math.hypot(hx, hz); if (l > 1e-3) { a.hx = hx / l; a.hz = hz / l; } else { a.hx = p.hx; a.hz = p.hz; } a.yaw = Math.atan2(a.hx, a.hz);
     while (a.si < a.route.segs.length - 1 && a.s >= a.route.segs[a.si].end) a.si++;
+    const P = a.route.path, sf = Math.min(P.len, a.s + a.len * 0.3), sr = Math.max(0, a.s - a.len * 0.3), p = shifted(a, P.at(a.s, {}), a.s), f = shifted(a, P.at(sf, {}), sf), r = shifted(a, P.at(sr, {}), sr);
+    a.x = p.x; a.z = p.z; let hx = f.x - r.x, hz = f.z - r.z; const l = Math.hypot(hx, hz); if (l > 1e-3) { a.hx = hx / l; a.hz = hz / l; } else { a.hx = p.hx; a.hz = p.hz; } a.yaw = Math.atan2(a.hx, a.hz);
     const sg = a.route.segs[a.si]; if (sg.kind === "lane") { a.laneId = sg.id; a.laneS = sg.s0 + (a.s - sg.start); } else { a.laneId = graph.conns[sg.id].to; a.laneS = 0; }
+    const e = edgeOf(a.laneId); a.y = e.h0 === e.h1 ? e.h0 : heightOn(e, graph.lanes[a.laneId].dir ? e.len - a.laneS : a.laneS); a.lvl = a.y > 2 ? 1 : 0;   // the deck is a different level: nothing on it can touch anything below
   }
 
   // ---------- obstacles ----------
@@ -140,17 +173,18 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
   function leaderOf(a) {
     const H = Math.min(60, 10 + a.v * 3.4), P = a.route.path; let best = null; probe.hl = a.len / 2; probe.hw = a.wid / 2 + 0.1;
     const consider = (b, bLen, bWid, bv, bhx, bhz) => {
+      if ((b.lvl ?? (b.y > 2 ? 1 : 0)) !== a.lvl) return;   // the deck and the ground never meet
       const dx = b.x - a.x, dz = b.z - a.z; if (dx * dx + dz * dz > (H + a.len + bLen) ** 2) return;
       const behind = dx * a.hx + dz * a.hz < -0.2, B = { x: b.x, z: b.z, hx: bhx, hz: bhz, hl: bLen / 2, hw: bWid / 2 };
       for (let k = 0; k <= H; k += 1.2) {
-        const sc = a.s + k; if (sc > P.len) break; P.at(sc, at); probe.x = at.x; probe.z = at.z; probe.hx = at.hx; probe.hz = at.hz;
+        const sc = a.s + k; if (sc > P.len) break; P.at(sc, at); { const l = latAt(a, sc); probe.x = at.x + at.hz * l; probe.z = at.z - at.hx * l; } probe.hx = at.hx; probe.hz = at.hz;
         // something behind me that I already touch has to give way to me; but something behind me that my body WOULD sweep into (I am turning) counts
         if (boxesOverlap(probe, B, 0.02)) { if (k === 0 && behind) return; const gap = k - 0.6; if (!best || gap < best.gap) best = { gap, v: Math.max(0, bv * (bhx * at.hx + bhz * at.hz)), who: b }; return; }
       }
     };
     for (const b of vehicles) if (b !== a && !b.done) consider(b, b.len, b.wid, b.v, b.hx, b.hz);
     for (const [id, b] of external) { if (a.ignoreExt?.has(id)) continue; consider(b, b.len ?? 1, b.wid ?? 1, b.v ?? 0, b.hx ?? 0, b.hz ?? 1); }
-    for (const p of peds) consider(p, PED_W, PED_W, p.v, p.hx, p.hz);
+    if (a.lvl === 0) for (const p of peds) consider(p, PED_W, PED_W, p.v, p.hx, p.hz);
     return best;
   }
 
@@ -174,7 +208,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     const P = a.route.path; sweepBox.hl = a.len / 2; sweepBox.hw = a.wid / 2;
     for (let sc = Math.max(a.s, nxt.start - 1); sc <= nxt.end + a.len / 2; sc += 1.2) {
       if (sc > P.len) break; P.at(sc, sweepAt); sweepBox.x = sweepAt.x; sweepBox.z = sweepAt.z; sweepBox.hx = sweepAt.hx; sweepBox.hz = sweepAt.hz;
-      for (const b of vehicles) { if (b === a || b.done) continue; if (Math.abs(b.x - sweepBox.x) > 8 || Math.abs(b.z - sweepBox.z) > 8) continue; if (boxesOverlap(sweepBox, { x: b.x, z: b.z, hx: b.hx, hz: b.hz, hl: b.len / 2, hw: b.wid / 2 }, -0.2)) return true; }
+      for (const b of vehicles) { if (b === a || b.done || b.lvl !== a.lvl) continue; if (Math.abs(b.x - sweepBox.x) > 8 || Math.abs(b.z - sweepBox.z) > 8) continue; if (boxesOverlap(sweepBox, { x: b.x, z: b.z, hx: b.hx, hz: b.hz, hl: b.len / 2, hw: b.wid / 2 }, -0.2)) return true; }
       // the player's own car is not under the junction rules, so give way to it: where it is now, and where it will be in a moment at its present speed
       for (const [id, b] of external) { if ((b.len ?? 0) < 2 || a.ignoreExt?.has(id)) continue; const reach = Math.min(40, Math.max(0, b.v ?? 0) * 3.5) + (b.len ?? 4) / 2;
         if (Math.abs(b.x - sweepBox.x) > 9 + reach || Math.abs(b.z - sweepBox.z) > 9 + reach) continue; if (boxesOverlap(sweepBox, { x: b.x + (b.hx ?? 0) * reach / 2, z: b.z + (b.hz ?? 1) * reach / 2, hx: b.hx ?? 0, hz: b.hz ?? 1, hl: reach, hw: (b.wid ?? 1.8) / 2 }, -0.3)) return true; }
@@ -187,7 +221,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     const P = a.route.path; exitBox.hl = a.len / 2 + 0.3; exitBox.hw = a.wid / 2;
     for (let k = a.len / 2 + 0.5; k <= a.len + 6; k += 1.5) {
       const sc = nxt.end + k; if (sc > P.len) break; P.at(sc, exitAt); exitBox.x = exitAt.x; exitBox.z = exitAt.z; exitBox.hx = exitAt.hx; exitBox.hz = exitAt.hz;
-      for (const b of vehicles) { if (b === a || b.done) continue; if (Math.abs(b.x - exitBox.x) > 9 || Math.abs(b.z - exitBox.z) > 9) continue; if (boxesOverlap(exitBox, { x: b.x, z: b.z, hx: b.hx, hz: b.hz, hl: b.len / 2, hw: b.wid / 2 }, 0.1)) return true; }
+      for (const b of vehicles) { if (b === a || b.done || b.lvl !== a.lvl) continue; if (Math.abs(b.x - exitBox.x) > 9 || Math.abs(b.z - exitBox.z) > 9) continue; if (boxesOverlap(exitBox, { x: b.x, z: b.z, hx: b.hx, hz: b.hz, hl: b.len / 2, hw: b.wid / 2 }, 0.1)) return true; }
     }
     return false;
   };
@@ -209,6 +243,26 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     }
   }
 
+  // ---------- lanes: sharing a multi-lane road, overtaking ----------
+  // Is the lane `sub` beside/around `a` free from 14 m behind to 28 m ahead (more behind when the one behind is faster)?
+  function laneFree(a, sub) {
+    for (const b of vehicles) {
+      if (b === a || b.done || b.laneId !== a.laneId || b.lvl !== a.lvl) continue;
+      const lat = Math.max(b.lat, b.sub * LANE_W); if (Math.abs(lat - sub * LANE_W) > 2.4 && Math.abs(b.lat - sub * LANE_W) > 2.4) continue;
+      const d = b.laneS - a.laneS; if (d > -(a.len + 8 + Math.max(0, b.v - a.v) * 2.5) && d < b.len + 24 + Math.max(0, a.v - b.v) * 1.5) return false;
+    }
+    return true;
+  }
+  /** Every so often: stuck behind something slower and a lane to the left is free: pull out and pass; once the road ahead is clear, move back to the right-hand lane. */
+  function considerLaneChange(a) {
+    const sg = a.route.segs[a.si]; if (sg.kind !== "lane" || a.role !== "npc") return;
+    const n = nLanesOf(sg.id); if (n < 2) { a.sub = 0; return; }
+    a.sub = Math.min(a.sub, n - 1); const L = graph.lanes[sg.id]; if (a.laneS < 45 || L.len - a.laneS < 80 || time - a.lcAt < 5) return;
+    const lead = a.lead, slow = lead && lead.gap < 26 && lead.v < a.cruise - 1.5;
+    if (slow && a.sub < n - 1 && laneFree(a, a.sub + 1)) { a.sub++; a.lcAt = time; stats.laneChanges++; }
+    else if (!slow && a.sub > 0 && (!lead || lead.gap > 40) && laneFree(a, a.sub - 1)) { a.sub--; a.lcAt = time; stats.laneChanges++; }
+  }
+
   // ---------- the step ----------
   function stepVehicle(a, dt) {
     if (a.kinematic) { a.stillFor = 0; return; }   // the player's ride is played from a recorded motion (placeAlong): the traffic model does not move it
@@ -217,7 +271,9 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     if (a.hold) v0 = 0;
     // the nearest obstacle: a vehicle or person ahead, a junction I am not allowed into, or the end of my route / my stopping place
     let gap = Infinity, vl = 0, s0 = S0;
-    const lead = leaderOf(a); if (lead) { gap = lead.gap; vl = lead.v; }
+    const lead = leaderOf(a); a.lead = lead; if (lead) { gap = lead.gap; vl = lead.v; }
+    // slide across to the lane it has chosen (only on the open stretch of a lane; see latAt), and think about overtaking a few times a second
+    { const sg = route.segs[a.si]; if (sg.kind === "lane") { const tgt = Math.min(a.sub, nLanesOf(sg.id) - 1) * LANE_W, d = tgt - a.lat, st = 1.4 * dt; a.lat += Math.max(-st, Math.min(st, d)); } if ((tick + a.id) % 12 === 0) considerLaneChange(a); }
     if (a.stopLine != null) { const g = a.stopLine - front - 0.4; if (g < gap) { gap = g; vl = 0; s0 = 0.6; } }
     const endFront = (a.stopAt ?? (a.role === "hero" ? route.len : null)); if (endFront != null) { const g = endFront + a.len / 2 - front; if (g < gap) { gap = g; vl = 0; s0 = 0.25; } }
     let acc = idmAccel(a.v, v0, a.aMax, a.brake, gap, vl, s0);
@@ -230,51 +286,68 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     pose(a);
     if (a.role === "npc" && a.s >= route.len - a.len) a.done = true;
   }
-  function setBodies() { if (!world) return; for (const a of vehicles) world.setBody("veh" + a.id, { x: a.x, z: a.z, hx: a.hx, hz: a.hz, hl: a.len / 2, hw: a.wid / 2, kind: a.kind, vehicle: a }); }
+  function setBodies() { if (!world) return; for (const a of vehicles) if (a.lvl === 0) world.setBody("veh" + a.id, { x: a.x, z: a.z, hx: a.hx, hz: a.hz, hl: a.len / 2, hw: a.wid / 2, kind: a.kind, vehicle: a }); else world.removeBody("veh" + a.id); }   // on the deck: no body on the ground for walkers to bump into
   function guardOverlaps() { // a safety net, not the mechanism: if two boxes ever overlap, the one behind stops dead
     for (let i = 0; i < vehicles.length; i++) for (let j = i + 1; j < vehicles.length; j++) {
-      const a = vehicles[i], b = vehicles[j]; if (a.done || b.done) continue; if (Math.abs(a.x - b.x) > 8 || Math.abs(a.z - b.z) > 8) continue;
+      const a = vehicles[i], b = vehicles[j]; if (a.done || b.done || a.lvl !== b.lvl) continue; if (Math.abs(a.x - b.x) > 8 || Math.abs(a.z - b.z) > 8) continue;
       const A = { x: a.x, z: a.z, hx: a.hx, hz: a.hz, hl: a.len / 2, hw: a.wid / 2 }, B = { x: b.x, z: b.z, hx: b.hx, hz: b.hz, hl: b.len / 2, hw: b.wid / 2 };
       if (boxesOverlap(A, B, 0.05)) { stats.maxOverlapFixed++; const behind = ((b.x - a.x) * a.hx + (b.z - a.z) * a.hz) > 0 ? a : b; behind.v = 0; }
     }
   }
 
   // ---------- spawning ----------
-  const freeSpot = (x, z, r) => { for (const b of vehicles) if (!b.done && Math.hypot(b.x - x, b.z - z) < r) return false; for (const b of external.values()) if (Math.hypot(b.x - x, b.z - z) < r + 6) return false; return true; };
-  function trySpawn() {
-    const f = focus(); if (!mainLanes.length) return false;
-    for (let k = 0; k < 14; k++) {
-      const l = mainLanes[Math.floor(rnd() * mainLanes.length)], s = rnd() * l.len, p = l.path.at(s, {}), d = Math.hypot(p.x - f.x, p.z - f.z);
-      if (d < D.spawnMin || d > D.spawnMax || !freeSpot(p.x, p.z, 28)) continue;
-      const kind = pickKind(); if (!kind) return false; const route = wander(l.id, s); if (!route) continue; make(kind, route, { v: 0 }).v = Math.min(KINDS[kind].cruise[0], 6); return true;
+  const freeSpot = (x, z, r, lvl = 0) => { for (const b of vehicles) if (!b.done && b.lvl === lvl && Math.hypot(b.x - x, b.z - z) < r) return false; if (lvl === 0) { for (const b of external.values()) if (Math.hypot(b.x - x, b.z - z) < r + 6) return false; } return true; };
+  const pedNear = (x, z, r) => { for (const q of peds) if (Math.hypot(q.x - x, q.z - z) < r) return true; return false; };   // ambient spawning only: a pickup vehicle clears its own spot
+  function trySpawn(hw = false) {
+    const f = focus(), pool = hw ? hwPool : groundPool; if (!pool.arr.length) return false;
+    for (let k = 0; k < (hw ? 40 : 14); k++) {
+      const l = pickFrom(pool), s = rnd() * l.len, p = l.path.at(s, {}), d = Math.hypot(p.x - f.x, p.z - f.z), lvl = hw ? 1 : 0;
+      if (d < D.spawnMin || d > D.spawnMax || !freeSpot(p.x, p.z, hw ? 38 : 28, lvl) || (!hw && pedNear(p.x, p.z, 5))) continue;   // never on top of a person
+      const kind = pickKind(hw); if (!kind) return false; const route = wander(l.id, s, hw ? 3000 : 2200, hw); if (!route) continue;
+      const n = nLanesOf(l.id), sub = Math.floor(rnd() * n), a = make(kind, route, { v: 0, hw, sub, lat: sub * LANE_W });
+      a.v = hw ? a.cruise * 0.85 : Math.min(KINDS[kind].cruise[0], 6); return true;   // on the expressway they are already up to speed
     }
     return false;
   }
+  const pickHot = (list) => { let r = rnd() * list.reduce((t, h) => t + h.w, 0); for (const h of list) { r -= h.w; if (r <= 0) return h; } return list[0]; };
   function spawnPed() {
-    const f = focus(), E = graph.edges.filter((e) => e.comp === 0 && e.sw > 0 && e.len > 20); if (!E.length) return false;
-    for (let k = 0; k < 14; k++) {
-      const e = E[Math.floor(rnd() * E.length)], s = rnd() * e.len, p = e.path.at(s, {}), d = Math.hypot(p.x - f.x, p.z - f.z); if (d < 50 || d > D.spawnMax) continue;
-      peds.push({ id: nextId++, edge: e.id, s, dir: rnd() < 0.5 ? 1 : -1, side: rnd() < 0.5 ? 1 : -1, speed: 1.0 + rnd() * 0.6, v: 1, pause: 0, nextPause: 3 + rnd() * 14, act: "idle", x: p.x, z: p.z, hx: 1, hz: 0, phase: rnd() * 6, tint: rnd() }); return true;
+    const f = focus(), near = hot.filter((h) => { const d = Math.hypot(h.x - f.x, h.z - f.z); return d > 20 && d < D.spawnMax + 60; });
+    for (let k = 0; k < 16; k++) {
+      let e, goal = null;
+      if (near.length && rnd() < 0.7) { goal = pickHot(near); const es = hotEdges(goal); if (!es.length) continue; e = es[Math.floor(rnd() * es.length)]; }
+      else { const w = graph.edges; e = w[Math.floor(rnd() * w.length)]; if (e.comp !== 0 || !(e.sw > 0) || e.len <= 20 || e.hw) continue; }
+      const s = rnd() * e.len, p = e.path.at(s, {}), d = Math.hypot(p.x - f.x, p.z - f.z); if (d < 30 || d > D.spawnMax) continue;
+      if (!freeSpot(p.x, p.z, 1.2, 0)) continue;
+      peds.push({ id: nextId++, edge: e.id, s, dir: rnd() < 0.5 ? 1 : -1, side: rnd() < 0.5 ? 1 : -1, lane: 0.2 + rnd() * 0.6, speed: 1.0 + rnd() * 0.6, v: 1, pause: 0, nextPause: 3 + rnd() * 14, act: "idle", x: p.x, z: p.z, hx: 1, hz: 0, phase: rnd() * 6, tint: rnd(), goal: goal ?? (near.length ? pickHot(near) : null), k: 0 }); return true;
     }
     return false;
   }
   function stepPed(p, dt) {
-    if (p.pause > 0) { p.pause -= dt; p.v = 0; if (p.pause <= 0) p.nextPause = 15 + rnd() * 30; return; }
+    if (p.pause > 0) { p.pause -= dt; p.v = 0; if (p.pause <= 0) { p.nextPause = 15 + rnd() * 30; if (p.arrived) { p.arrived = false; const f = focus(), near = hot.filter((h) => Math.hypot(h.x - f.x, h.z - f.z) < D.spawnMax + 60); p.goal = near.length ? pickHot(near) : null; } } return; }
     p.nextPause -= dt; if (p.nextPause <= 0) { p.pause = 4 + rnd() * 9; p.act = PED_ACTS[Math.floor(rnd() * PED_ACTS.length)]; p.v = 0; return; }
+    if (p.goal && Math.hypot(p.x - p.goal.x, p.z - p.goal.z) < 22) { p.pause = 6 + rnd() * 12; p.act = PED_ACTS[Math.floor(rnd() * PED_ACTS.length)]; p.v = 0; p.arrived = true; return; }   // got where they were going: stop and chat, then choose somewhere else
     const e = graph.byEdge.get(p.edge); p.s += p.dir * p.speed * dt;
-    if (p.s < 0 || p.s > e.len) { // reached a junction: carry on along one of the other roads there
-      const nodeId = p.s < 0 ? e.a : e.b, node = graph.nodes[nodeId], opts = node.edges.filter((id) => id !== e.id && graph.byEdge.get(id).sw > 0);
+    if (p.s < 0 || p.s > e.len) { // reached a junction: carry on along one of the other roads there, mostly towards where they are headed
+      const nodeId = p.s < 0 ? e.a : e.b, node = graph.nodes[nodeId], opts = node.edges.filter((id) => id !== e.id && graph.byEdge.get(id).sw > 0 && !graph.byEdge.get(id).hw);
       if (!opts.length) { p.dir = -p.dir; p.s = Math.max(0, Math.min(e.len, p.s)); }
-      else { const n = graph.byEdge.get(opts[Math.floor(rnd() * opts.length)]); p.edge = n.id; p.dir = n.a === nodeId ? 1 : -1; p.s = p.dir === 1 ? 0.01 : n.len - 0.01; p.side = rnd() < 0.5 ? 1 : -1; }
+      else {
+        let pickId = opts[Math.floor(rnd() * opts.length)];
+        if (p.goal && rnd() < 0.6) { let best = Infinity; for (const id of opts) { const o = graph.byEdge.get(id), far = o.a === nodeId ? o.b : o.a, q = graph.nodes[far], d = Math.hypot(q.x - p.goal.x, q.z - p.goal.z); if (d < best) { best = d; pickId = id; } } }
+        const n = graph.byEdge.get(pickId); p.edge = n.id; p.dir = n.a === nodeId ? 1 : -1; p.s = p.dir === 1 ? 0.01 : n.len - 0.01; p.side = rnd() < 0.5 ? 1 : -1; p.lane = 0.2 + rnd() * 0.6;
+      }
     }
-    const ee = graph.byEdge.get(p.edge), q = ee.path.at(p.s, {}), off = p.side * (ee.half + ee.sw * 0.5); p.x = q.x - q.hz * off; p.z = q.z + q.hx * off; p.hx = q.hx * p.dir; p.hz = q.hz * p.dir; p.phase += p.speed * dt * 2.4; p.v = p.speed;
+    const ee = graph.byEdge.get(p.edge), q = ee.path.at(p.s, {}), off = p.side * (ee.half + ee.sw * (p.lane ?? 0.5)); p.x = q.x - q.hz * off; p.z = q.z + q.hx * off; p.hx = q.hx * p.dir; p.hz = q.hz * p.dir; p.phase += p.speed * dt * 2.4; p.v = p.speed;
   }
 
   /** Advances everything by dt seconds (in steps of at most 1/30 s so the maths stays steady at any frame rate). */
   function update(dt) {
-    const n = Math.max(1, Math.ceil(dt / (1 / 30))), h = dt / n;
+    const n = Math.max(1, Math.ceil(dt / (1 / 30))), h = dt / n, f0 = focus(), farV = D.farAt ** 2, farP = D.farPedAt ** 2;
     for (let i = 0; i < n; i++) {
-      time += h; arbitrate(); for (const a of vehicles) if (!a.done) stepVehicle(a, h); guardOverlaps(); for (const p of peds) stepPed(p, h);
+      time += h; tick++; arbitrate();
+      // distant vehicles and people are stepped every other / every fourth tick with the matching longer step: the same motion, a fraction of the work
+      for (const a of vehicles) if (!a.done) { if (a.role === "npc" && !a.kinematic && (a.x - f0.x) ** 2 + (a.z - f0.z) ** 2 > farV) { if ((tick + a.id) % 2 === 0) stepVehicle(a, 2 * h); } else stepVehicle(a, h); }
+      guardOverlaps();
+      for (const p of peds) { if ((p.x - f0.x) ** 2 + (p.z - f0.z) ** 2 > farP) { if ((tick + p.id) % 4 === 0) stepPed(p, 4 * h); } else stepPed(p, h); }
     }
     const f = focus();
     for (const a of vehicles) {
@@ -284,8 +357,15 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     for (let i = vehicles.length - 1; i >= 0; i--) if (vehicles[i].done) { world?.removeBody("veh" + vehicles[i].id); stats.despawned++; vehicles.splice(i, 1); }
     for (let i = peds.length - 1; i >= 0; i--) if (Math.hypot(peds[i].x - f.x, peds[i].z - f.z) > D.despawn) peds.splice(i, 1);
     setBodies();
-    spawnCool -= dt; if (spawnCool <= 0 && vehicles.filter((v) => v.role === "npc").length < D.vehicles) { trySpawn(); spawnCool = 0.4 + rnd() * 0.8; }
-    pedCool -= dt; if (pedCool <= 0 && peds.length < D.peds) { spawnPed(); pedCool = 0.5; }
+    spawnCool -= dt;
+    if (spawnCool <= 0) {
+      let g = 0, w = 0; for (const v of vehicles) if (v.role === "npc" && !v.custom && !v.done) { if (v.hw) w++; else g++; }
+      // fill quickly when the road is empty (the start of a trip), then top up gently; the expressway is topped up first and held at its own, higher, count
+      let tries = Math.min(4, 1 + ((D.vehicles - g) >> 3) + ((D.hwVehicles - w) >> 3));
+      while (tries-- > 0) { if (w < D.hwVehicles && trySpawn(true)) w++; else if (g < D.vehicles && trySpawn(false)) g++; }
+      spawnCool = 0.12 + rnd() * 0.3;
+    }
+    pedCool -= dt; if (pedCool <= 0 && peds.length < D.peds) { let k = Math.min(3, D.peds - peds.length); while (k-- > 0) spawnPed(); pedCool = 0.25; }
   }
 
   return {
