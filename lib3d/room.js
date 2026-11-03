@@ -53,9 +53,10 @@ const mat = (color, o = {}) =>
 
 function dispose(obj) {
   obj.traverse((o) => {
-    o.geometry?.dispose?.();
+    if (!o.geometry?.userData?.shared) o.geometry?.dispose?.(); // geometry from the model cache (lib3d/modelCache.js) stays on the GPU for the next build; the stage frees it when the renderer goes
     for (const m of [].concat(o.material ?? [])) m.dispose?.();
   });
+  obj.userData?.release?.(); // the plot (lib3d/plot3d.js) lets go of the cached geometry it used
 }
 
 // floors of the wet rooms and the hall in a home with several rooms: cool tiles in the kitchen, bathroom and toilet, pale ones in the hall

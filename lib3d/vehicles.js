@@ -8,7 +8,8 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { carById } from "../lib/cars.js";
 import * as K from "./vehicleKit.js";
 import { CAR_SPECS, BUS_SPEC } from "./vehicleSpecs.js";
-import { buildKeke, UTILITY } from "./vehicleUtility.js";
+import { buildKeke, kekeWarmSteps, UTILITY } from "./vehicleUtility.js";
+import { modelCache, createHolder, warmScope, geometryEntry } from "./modelCache.js";
 
 /** A box as geometry with a colour baked in, so many boxes can be merged into one mesh. (w across, h tall, l long, centred at x, y, z.) */
 export function box(w, h, l, x, y, z, color, rx = 0) {
@@ -106,19 +107,26 @@ function carParts(S, { low = false } = {}) {
   return { parts, F, Fc, outline, belt, lowX, upX, doorSkin, hw, c };
 }
 
+/** The geometry of one door: its skin (hinged at the front edge, moved so the hinge is the origin) and the dark opening behind it that shows only when it is ajar.
+ *  Built once per model and paint (lib3d/modelCache.js); every vehicle hangs its OWN pivot and hole groups on it, so doors open independently. */
+function doorGeometry(S, built, name, side, paintHex) {
+  const hw = S.W / 2, [z0, z1] = S.doors[name], d = new K.Parts(), h = new K.Parts();
+  built.doorSkin(z0, z1, side, d); d.translate(-side * hw, 0, -z1);
+  // the opening: dark where the door was
+  const belt = built.belt, c = built.c, low0 = S.doorLow ?? 0.3;
+  h.add("dark", K.sidePatch(rect(z0 + 0.03, z1 - 0.03, low0 + 0.03, belt), { xOf: built.lowX, side, lift: 0.0 }));
+  if (c) h.add("dark", K.sidePatch(clipZ(winPoly(S, z0, z1, 0.02, 0.0), z0 + 0.03, z1 - 0.03), { xOf: built.upX, side, lift: 0.0 }));
+  const out = { skin: d.geometries(paintHex), hole: h.geometries(paintHex) }; d.dispose(); h.dispose(); return out;
+}
 /** The doors that open: a skin hinged at its front edge, and the dark opening behind it that shows only when it is ajar. Returns { left, right, set(side, k) }. */
-function makeDoors(root, S, built, paintHex, mat) {
+function makeDoors(root, S, recipes, paintHex, mat, use) {
   const out = {}, hw = S.W / 2;
   for (const [name, side] of [["left", 1], ["right", -1]]) {
-    const [z0, z1] = S.doors[name], pivot = new THREE.Group(), hole = new THREE.Group(), d = new K.Parts(), h = new K.Parts();
-    built.doorSkin(z0, z1, side, d); d.translate(-side * hw, 0, -z1); pivot.position.set(side * hw, 0, z1);
-    for (const m of d.meshes(paintHex, (k) => K.dbl(mat(k)))) { m.castShadow = true; pivot.add(m); }
-    // the opening: dark where the door was
-    const e = 0.0, belt = built.belt, c = built.c, low0 = S.doorLow ?? 0.3;
-    h.add("dark", K.sidePatch(rect(z0 + 0.03, z1 - 0.03, low0 + 0.03, belt), { xOf: built.lowX, side, lift: 0.0 }));
-    if (c) h.add("dark", K.sidePatch(clipZ(winPoly(S, z0, z1, 0.02, 0.0), z0 + 0.03, z1 - 0.03), { xOf: built.upX, side, lift: 0.0 })); void e;
-    for (const m of h.meshes(paintHex, (k) => mat(k))) hole.add(m); hole.visible = false;
-    root.add(pivot, hole); out[name] = { side, z: (z0 + z1) / 2, len: z1 - z0, pivot, hole, k: 0, parts: [d, h] };
+    const [z0, z1] = S.doors[name], pivot = new THREE.Group(), hole = new THREE.Group(), g = use(recipes.doors[name]);
+    pivot.position.set(side * hw, 0, z1);
+    for (const m of K.meshesFrom(g.skin, (k) => K.dbl(mat(k)))) { m.castShadow = true; pivot.add(m); }
+    for (const m of K.meshesFrom(g.hole, (k) => mat(k))) hole.add(m); hole.visible = false;
+    root.add(pivot, hole); out[name] = { side, z: (z0 + z1) / 2, len: z1 - z0, pivot, hole, k: 0 };
   }
   out.set = (side, k) => { const d = side > 0 ? out.left : out.right, v = Math.max(0, Math.min(1, k)); d.k = v;
     if (S.slide && side < 0) { d.pivot.position.set(side * (hw + 0.07 * v), 0, d.z + d.len / 2 - v * d.len * 0.92); d.hole.visible = v > 0.015; return; }
@@ -127,20 +135,41 @@ function makeDoors(root, S, built, paintHex, mat) {
 }
 export const DOOR_OPEN_ANGLE = 1.15, DOOR_LEN = 1.0, DOOR_Z = { left: 0.3, right: -0.5 };
 
-/** One finished car from a spec. Returns { root, wheels (spinners), front (steering pivots), length, width, height, door, seat, driver, doors, setDoor, setBrake, setHeadlights, dispose, ... }. */
-function buildCar(S, paint) {
-  const root = new THREE.Group(), built = carParts(S), lamps = K.lampMaterials(), hex = paint || S.ref;
-  const accent = S.accent ? K.flat(S.accent, { roughness: 0.5 }) : K.MATS.trim();
+/**
+ * What a car model is made of that can be built once and shared: the unbent parts (the template), the merged body, the two doors, the wheels. Each is { key, build, opt }.
+ * `use(recipe)` returns the cached value (building it on first use); a recipe may use another (the body needs the template), so a vehicle that finds everything cached
+ * never even touches the template. `id` names the model ("bus", or a car's lib/cars.js id), `hex` the paint: only the body and the doors depend on it.
+ */
+function carRecipes(S, id, hex, use) {
+  const R = { doors: {} };
+  R.tpl = { key: `car:${id}:tpl`, build: () => carParts(S), opt: { priority: 0 } };   // the unbent parts: the biggest entry and only needed to make a new body, so the first to go
+  R.wheels = { key: `car:${id}:wheels`, opt: { priority: 2 }, build: () => ({ tyre: K.tyreGeo(S.wr, S.tw), rims: { 1: K.rimGeo(S.wr, S.tw, { style: S.wheel.style, side: 1, caliper: !!S.caliper }), [-1]: K.rimGeo(S.wr, S.tw, { style: S.wheel.style, side: -1, caliper: !!S.caliper }) } }) };
+  R.body = { key: `car:${id}:body:${hex}`, build: () => use(R.tpl).parts.geometries(hex), opt: { priority: 3 } };
+  for (const [name, side] of [["left", 1], ["right", -1]]) R.doors[name] = { key: `car:${id}:door:${name}:${hex}`, build: () => doorGeometry(S, use(R.tpl), name, side, hex), opt: { priority: 3 } };
+  return R;
+}
+/** Builds everything a car model needs into the cache without making a vehicle: the steps (small, in the order a vehicle needs them) for the idle preloader. */
+function carWarmSteps(S, id, paint) {
+  const hex = paint || S.ref, steps = [["tpl"], ["wheels"], ["body"], ["doors", "left"], ["doors", "right"]];
+  return steps.map(([k, sub]) => ({ key: sub ? `car:${id}:${k}:${sub}:${hex}` : k === "body" ? `car:${id}:body:${hex}` : `car:${id}:${k}`, run: () => warmScope((hold) => { const R = carRecipes(S, id, hex, (r) => hold.get(r.key, r.build, r.opt)), r = sub ? R[k][sub] : R[k]; modelCache.warm(r.key, r.build, { ...geometryEntry, ...r.opt }); }) }));
+}
+
+/** One finished car from a spec. Returns { root, wheels (spinners), front (steering pivots), length, width, height, door, seat, driver, doors, setDoor, setBrake, setHeadlights, dispose, ... }.
+ *  The geometry comes from the shared cache (lib3d/modelCache.js) and is never changed here; the meshes, hinges, wheels and lamps are this car's own. dispose() lets the cache go. */
+function buildCar(S, paint, id = S.id) {
+  const root = new THREE.Group(), lamps = K.lampMaterials(), hex = paint || S.ref, hold = createHolder(), use = (r) => hold.get(r.key, r.build, r.opt), R = carRecipes(S, id, hex, use);
+  const accent = S.accent ? K.flat(S.accent, { roughness: 0.5 }) : K.MATS.trim;
   const mats = { paint: K.MATS.paint, trim: K.MATS.trim, glass: K.MATS.glass, chrome: K.MATS.chrome, dark: K.MATS.dark, plate: K.MATS.plate, lampF: () => lamps.head, lampR: () => lamps.tail, amber: () => lamps.amber, accent: () => accent, tyre: K.MATS.tyre, alloy: () => (S.wheel.color ? K.flat(S.wheel.color, { roughness: 0.4, metalness: 0.3 }) : K.MATS.alloy()), seat: K.MATS.seat };
-  const mat = (k) => (mats[k] ?? K.MATS.trim)(); const meshes = built.parts.meshes(hex, mat); for (const m of meshes) root.add(m);
+  const mat = (k) => (mats[k] ?? K.MATS.trim)(); for (const m of K.meshesFrom(use(R.body), mat)) root.add(m);
   // wheels
-  const wx = S.wx ?? S.W / 2 - S.tw / 2 - 0.03, tyre = K.tyreGeo(S.wr, S.tw), rims = { 1: K.rimGeo(S.wr, S.tw, { style: S.wheel.style, side: 1, caliper: !!S.caliper }), [-1]: K.rimGeo(S.wr, S.tw, { style: S.wheel.style, side: -1, caliper: !!S.caliper }) };
+  const wx = S.wx ?? S.W / 2 - S.tw / 2 - 0.03, { tyre, rims } = use(R.wheels);
   const caliperMat = S.caliper ? K.flat(S.caliper, { roughness: 0.5 }) : null, ws = [], pv = [];
   for (const [x, z] of [[-wx, S.zf], [wx, S.zf], [-wx, S.zr], [wx, S.zr]]) { const w = K.mountWheel(root, x, z, S.wr, { tyre, rim: rims[x > 0 ? 1 : -1], mats, accentMat: caliperMat }); ws.push(w.spin); pv.push(w.pivot); }
-  const doors = makeDoors(root, S, built, hex, mat);
+  const doors = makeDoors(root, S, R, hex, mat, use);
   const v = { root, wheels: ws, front: [pv[0], pv[1]], length: S.L, width: S.W, height: S.H, wheelbase: S.zf - S.zr, track: 2 * wx, door: { side: -1, z: -0.5 }, seatZ: 0, seat: S.seat, driver: S.driver, doors, setDoor: doors.set, id: S.id, shape: "car", lamps,
     setBrake(on) { lamps.tail.emissiveIntensity = on ? 2.6 : 0.28; }, setHeadlights(on) { lamps.head.emissiveIntensity = on ? 1.6 : 0.18; },
-    dispose() { root.traverse((o) => { if (o.isMesh) { o.geometry?.dispose?.(); if (o.userData.ownMaterial) o.material.map?.dispose(), o.material.dispose(); } }); lamps.head.dispose(); lamps.tail.dispose(); lamps.amber.dispose(); for (const d of [doors.left, doors.right]) d.parts.forEach((p) => p.dispose()); built.parts.dispose(); } };
+    // geometry that came from the cache is only let go (other cars use it); anything this car made itself (a label, a plate) is freed
+    dispose() { root.traverse((o) => { if (o.isMesh) { if (!hold.owns(o.geometry)) o.geometry?.dispose?.(); if (o.userData.ownMaterial) o.material.map?.dispose(), o.material.dispose(); } }); lamps.head.dispose(); lamps.tail.dispose(); lamps.amber.dispose(); hold.releaseAll(); } };
   return v;
 }
 
@@ -149,12 +178,12 @@ const FAMILY = "corolla-2011", GENERIC = "camry-2014";
 const specById = (id) => { const s = CAR_SPECS[id] ?? CAR_SPECS[FAMILY]; s.id ??= id; return s; };
 const wheelX = (S) => S.wx ?? S.W / 2 - S.tw / 2 - 0.03;
 /** The player's family car (the one that comes with the game): a plain sedan in the paint given. */
-export function makeCar(paint = "#1c1d21") { const v = buildCar(specById(FAMILY), paint); v.id = ""; return v; }
+export function makeCar(paint = "#1c1d21") { const v = buildCar(specById(FAMILY), paint, FAMILY); v.id = ""; return v; }
 /** The car a player bought, by its lib/cars.js id, in the paint they chose (a Cybertruck is bare steel). No id or an unknown id: the family car, as before. */
 export function makeVehicle(modelId, paint) {
   const car = carById(modelId);
   if (!car || !CAR_SPECS[car.id]) return makeCar(paint || undefined);
-  return buildCar(specById(car.id), car.fixedPaint ?? (paint || undefined));
+  return buildCar(specById(car.id), car.fixedPaint ?? (paint || undefined), car.id);
 }
 /** A keke napep: a green Bajaj three-wheeler with a black canopy, open at the sides. */
 export function makeKeke() { return buildKeke(); }
@@ -162,7 +191,7 @@ export function makeKeke() { return buildKeke(); }
 /** The OAU shuttle bus is the reference minibus stretched into a proper shuttle (a longer, wider, taller body on a long wheelbase), so it stands visibly above the cars. */
 export const BUS_SCALE = { x: 1.12, y: 1.15, z: 1.35, wheel: 1.12 };
 export function makeBus() {
-  const v = buildCar(BUS_SPEC, BUS_SPEC.ref), root = v.root, k = BUS_SCALE, shell = new THREE.Group(), pivots = new Set(v.wheels.map((w) => w.parent));
+  const v = buildCar(BUS_SPEC, BUS_SPEC.ref, "bus"), root = v.root, k = BUS_SCALE, shell = new THREE.Group(), pivots = new Set(v.wheels.map((w) => w.parent));
   // "OAU SHUTTLE BUS" on the lower panel between the door and the front wheel, both sides
   for (const side of [1, -1]) { const l = K.labelMesh("OAU SHUTTLE BUS", 0.78, 0.17, { bg: "#f2f3f5", fg: "#14418a" }); l.position.set(side * 0.846, 0.66, 0.72); l.rotation.y = side * Math.PI / 2; root.add(l); }
   for (const c of [...root.children]) if (!pivots.has(c)) shell.add(c);
@@ -179,14 +208,33 @@ export const CAR_WHEELS = [[-wheelX(traffic), traffic.zf], [wheelX(traffic), tra
 export const CAR_WHEEL_R = traffic.wr;
 export const CAR_COLORS = ["#c0392b", "#2c5aa0", "#e8e8e8", "#1f1f23", "#4a4f57", "#d9a441", "#2e7d5b", "#7b3f2a", "#b9bec7", "#8e2d6b"];
 const FLAT = { paint: "#ffffff", trim: "#17191c", glass: "#27374a", chrome: "#c9ced6", dark: "#0c0d0f", lampF: "#fff5c8", lampR: "#c4161c", plate: "#eeeeee", accent: "#c9ced6" };
-/** A sedan or SUV body (paint colour + dark glass + lights) as one merged geometry with colours baked in, drawn instanced for the traffic. */
+/** Shapes that never change and that every map visit needs: kept for the whole session (a few small geometries), so the traffic that appears when the map opens costs nothing to build the second time. */
+const forever = createHolder();
+const sessionGeo = (key, build) => forever.get(key, build, { priority: 5 });
+/** A sedan or SUV body (paint colour + dark glass + lights) as one merged geometry with colours baked in, drawn instanced for the traffic. Shared: callers must not change it. */
 export function carBodyGeometry(paint = "#c0392b", suv = false) {
-  const S = CAR_SPECS[suv ? "gle-2018" : GENERIC] ?? traffic, { parts } = carParts(S, { low: true }), g = parts.colored({ ...FLAT, paint }); parts.dispose(); return g;
+  return sessionGeo(`traffic:body:${suv ? "suv" : "sedan"}:${paint}`, () => {
+    const S = CAR_SPECS[suv ? "gle-2018" : GENERIC] ?? traffic, { parts } = carParts(S, { low: true }), g = parts.colored({ ...FLAT, paint }); parts.dispose(); return g;
+  });
 }
-/** One wheel (tyre and rim) with colours baked in, for the instanced traffic wheels. */
+/** One wheel (tyre and rim) with colours baked in, for the instanced traffic wheels. Shared: callers must not change it. */
 export function trafficWheelGeometry() {
-  const r = CAR_WHEEL_R, w = traffic.tw, t = K.finish(K.tyreGeo(r, w, 14), "#121315"), rim = K.rimGeo(r, w, { style: "disc", side: 1, seg: 12 }), a = rim.alloy ? K.finish(rim.alloy, "#aeb3bb") : null, b = rim.dark ? K.finish(rim.dark, "#2a2d31") : null;
-  const out = mergeGeometries([t, a, b].filter(Boolean)); [t, a, b].forEach((g) => g?.dispose()); return out;
+  return sessionGeo("traffic:wheel", () => {
+    const r = CAR_WHEEL_R, w = traffic.tw, t = K.finish(K.tyreGeo(r, w, 14), "#121315"), rim = K.rimGeo(r, w, { style: "disc", side: 1, seg: 12 }), a = rim.alloy ? K.finish(rim.alloy, "#aeb3bb") : null, b = rim.dark ? K.finish(rim.dark, "#2a2d31") : null;
+    const out = mergeGeometries([t, a, b].filter(Boolean)); [t, a, b].forEach((g) => g?.dispose()); return out;
+  });
+}
+
+/**
+ * The build steps that make a vehicle ready before anyone asks for it: [{ key, run }], small and in the order a vehicle needs them, for the idle preloader (lib3d/preload.js).
+ * `what` is a car's lib/cars.js id ("" or unknown: the family car), "bus" or "keke". Running a step whose result is already cached costs nothing, and a vehicle made afterwards
+ * finds it ready. Nothing is held: a warmed model stays in the cache until the memory budget needs the room.
+ */
+export function vehicleWarmSteps(what, paint) {
+  if (what === "keke") return kekeWarmSteps(paint);
+  if (what === "bus") return carWarmSteps(BUS_SPEC, "bus", BUS_SPEC.ref);
+  const car = carById(what), id = car && CAR_SPECS[car.id] ? car.id : FAMILY;
+  return carWarmSteps(specById(id), id, car?.fixedPaint ?? (paint || undefined));
 }
 
 /**

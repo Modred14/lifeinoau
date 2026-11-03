@@ -134,6 +134,6 @@ export function createHomeGarage(container, vehicles, options = {}) {
     layout, select(id) { selected = id; }, startDrive, stopDrive, isDriving: () => !!drive,
     setInput({ throttle, steer } = {}) { if (throttle != null) pad.throttle = Math.max(-1, Math.min(1, throttle)); if (steer != null) pad.steer = Math.max(-1, Math.min(1, steer)); },
     carState: () => (drive ? { ...drive.driver.state } : null),
-    dispose() { alive = false; canvas.removeEventListener("pointerdown", pointerDown); canvas.removeEventListener("pointerup", pointerUp); window.removeEventListener("keydown", keydown); window.removeEventListener("keyup", keyup); window.removeEventListener("blur", clearInput); document.removeEventListener("visibilitychange", clearInput); avatar?.dispose(); stage.dispose(); for (const m of disposed) m.dispose(); group.traverse((o) => { if (o.isMesh) o.geometry?.dispose(); }); },
+    dispose() { alive = false; canvas.removeEventListener("pointerdown", pointerDown); canvas.removeEventListener("pointerup", pointerUp); window.removeEventListener("keydown", keydown); window.removeEventListener("keyup", keyup); window.removeEventListener("blur", clearInput); document.removeEventListener("visibilitychange", clearInput); avatar?.dispose(); stage.dispose(); for (const m of disposed) m.dispose(); for (const m of carMeshes.values()) m.vehicle.dispose(); group.traverse((o) => { if (o.isMesh && !o.geometry?.userData?.shared) o.geometry?.dispose(); }); },
   };
 }

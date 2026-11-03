@@ -112,6 +112,14 @@ export default function GameHome({
     const t = setInterval(() => setClock(serverTime()), 250);
     return () => clearInterval(t);
   }, [sleeping]);
+  // Build the 3D models this player will need (their own vehicles, their plot, what the map shows) in idle moments, so entering the garage or the map finds them ready.
+  const roomKeyForPreload = rd?.room ? `${rd.room.w}x${rd.room.d}:${rd.room.layout ?? ""}` : "";
+  useEffect(() => {
+    if (!vehicles && !roomKeyForPreload) return;
+    let live = true;
+    import("../lib3d/worldPreload.js").then((w) => { if (!live) return; if (vehicles) w.preloadOwnVehicles(vehicles, c.activeCar ?? null); if (rd?.room) w.preloadHome(rd.room); w.preloadMapBasics(); }).catch(() => {});
+    return () => { live = false; };
+  }, [vehicles, roomKeyForPreload]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (sleeping) setGoing(null); // the server's answer (or the optimistic state) has arrived
   }, [sleeping]);

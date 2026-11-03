@@ -20,6 +20,7 @@ export default {
       { source: "/models/:path*", headers: keep },
       { source: "/campus/:path*", headers: keep },
       { source: "/data/:path*", headers: keep },
+      { source: "/audio/:path*", headers: keep },
       {
         source: "/:file(logo\\.png|logo\\.svg|icon\\.png|favicon\\.ico)",
         headers: keep,

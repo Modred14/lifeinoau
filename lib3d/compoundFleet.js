@@ -25,7 +25,7 @@ export function createCompoundFleet({ scene, camera, stage, cb = {} }) {
   let room = null, items = [], vehicles = [], plan = null, half = [0, 0], timer = 0, dirty = false, drive = null, alive = true, steerShown = 0, lastReport = "", saved = null, builtKey = "";
 
   function clear() {
-    for (const m of meshes.values()) { root.remove(m.vehicle.root); root.remove(m.pad); m.vehicle.root.traverse((o) => { o.geometry?.dispose?.(); }); m.pad.geometry.dispose(); }
+    for (const m of meshes.values()) { root.remove(m.vehicle.root); root.remove(m.pad); m.vehicle.dispose(); m.pad.geometry.dispose(); }
     meshes.clear();
   }
   // Everything the parking depends on: the size and plan of the home, the vehicles (and their paint), and the outdoor furniture. Moving a sofa indoors changes none of it, so it

@@ -67,18 +67,25 @@ export class Parts {
   add(name, ...gs) { for (const g of gs) if (g) { let a = this.b.get(name); if (!a) this.b.set(name, (a = [])); a.push(g); } return this; }
   /** One merged, vertex-coloured geometry for the whole thing (the cheap instanced traffic cars). colours: bucket -> hex. */
   colored(colors) { const list = []; for (const [k, gs] of this.b) for (const g of gs) list.push(finish(g.clone(), colors[k] ?? "#888888")); return list.length ? mergeGeometries(list) : null; }
-  /** Meshes per bucket. `paint` hex colours the paint bucket (vertex colours); `mat(name)` gives the material of any other bucket. */
-  meshes(paintHex, mat) {
+  /** One merged geometry per bucket: [{ name, geometry }]. `paintHex` colours the paint bucket (vertex colours). This is the expensive step and the result never changes,
+   *  so the vehicle builders cache it (lib3d/modelCache.js) and make fresh meshes from it with meshesFrom(). */
+  geometries(paintHex) {
     const out = [];
     for (const [k, gs] of this.b) {
       const geo = mergeGeometries(gs.map((g) => finish(g.clone(), k === "paint" ? paintHex : undefined))); if (!geo) continue;
       if (k === "paint") shadeByHeight(geo);
-      const m = new THREE.Mesh(geo, mat(k)); m.name = k; m.castShadow = k !== "glass" || true; m.receiveShadow = k === "paint"; out.push(m);
+      out.push({ name: k, geometry: geo });
     }
     return out;
   }
+  /** Meshes per bucket. `paint` hex colours the paint bucket (vertex colours); `mat(name)` gives the material of any other bucket. */
+  meshes(paintHex, mat) { return meshesFrom(this.geometries(paintHex), mat); }
   translate(x, y, z) { for (const gs of this.b.values()) gs.forEach((g) => g.translate(x, y, z)); return this; }
   dispose() { for (const gs of this.b.values()) gs.forEach((g) => g.dispose()); this.b.clear(); }
+}
+/** Fresh meshes (own transform, own material choice) over geometry from Parts.geometries(): the geometry may be shared with other vehicles, the meshes never are. */
+export function meshesFrom(geos, mat) {
+  return geos.map(({ name, geometry }) => { const m = new THREE.Mesh(geometry, mat(name)); m.name = name; m.castShadow = true; m.receiveShadow = name === "paint"; return m; });
 }
 /** Bakes a little ambient shade into the vertex colours: the lower body is darker (it reflects the road and sits in the wheel arches), the top a touch lighter. */
 export function shadeByHeight(g) {

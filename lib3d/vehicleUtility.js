@@ -4,6 +4,7 @@
 // (The OAU shuttle bus is a spec like the cars: see BUS_SPEC in vehicleSpecs.js and makeBus in vehicles.js.)
 import * as THREE from "three";
 import * as K from "./vehicleKit.js";
+import { modelCache, createHolder, warmScope, geometryEntry } from "./modelCache.js";
 
 /** The real sizes the game uses for the keke (traffic, trip and garage all read these). */
 export const UTILITY = {
@@ -13,13 +14,10 @@ const KEKE_GREEN = "#2f8f3a";
 
 const slabAt = (pts, hw, bevel = 0.03) => K.slab(pts, hw, bevel, 2);
 
-export function buildKeke(paint) {
-  const D = UTILITY.keke, root = new THREE.Group(), parts = new K.Parts(), lamps = K.lampMaterials(), hex = paint || KEKE_GREEN;
-  const flatCache = {}, f = (c, o) => (flatCache[c] ??= K.flat(c, o));
-  const mats = { paint: K.MATS.paint, trim: K.MATS.trim, glass: K.MATS.glass, chrome: K.MATS.chrome, dark: K.MATS.dark, plate: K.MATS.plate, tyre: K.MATS.tyre, alloy: K.MATS.alloy, seat: () => f("#1d1d20", { roughness: 0.9 }),
-    lampF: () => lamps.head, lampR: () => lamps.tail, amber: () => lamps.amber, shirt: () => f("#c9a227", { roughness: 0.9 }), skin: () => f("#6b4a35", { roughness: 0.8 }), pants: () => f("#2c3340", { roughness: 0.9 }), canopy: () => f("#16171a", { roughness: 0.85 }), steel: () => f("#8b9096", { roughness: 0.45, metalness: 0.3 }) };
-  const mat = (k) => (mats[k] ?? K.MATS.trim)();
-  const sm = (g) => K.smooth(g, 0.9);
+/** The keke's geometry, built once per paint and shared by every keke (lib3d/modelCache.js): the body and canopy, the driver on his bench, the fork of the front wheel.
+ *  Each keke still makes its own meshes, wheel pivots and lamps, so it steers, brakes and is disposed on its own. */
+function kekeBodyGeometry(hex) {
+  const parts = new K.Parts(), sm = (g) => K.smooth(g, 0.9);
 
   // ---- green body: the nose cowl over the front wheel, the floor, the rear engine body with its mudguards
   parts.add("paint", sm(slabAt([[0.42, 0.56], [1.22, 0.56], [1.24, 0.3], [1.38, 0.3], [1.42, 0.64], [1.34, 0.99], [1.02, 1.07], [0.42, 1.07]], 0.34, 0.05)));
@@ -53,17 +51,36 @@ export function buildKeke(paint) {
   const drv = new K.Parts();
   drv.add("pants", K.box(0.36, 0.14, 0.44, 0, 0.58, 0.12)); drv.add("shirt", K.box(0.4, 0.52, 0.24, 0, 0.88, -0.02)); drv.add("skin", K.box(0.17, 0.17, 0.17, 0, 1.23, -0.02));
   drv.add("shirt", K.strut([-0.22, 1.0, 0.0], [-0.18, 0.98, 0.5], 0.09), K.strut([0.22, 1.0, 0.0], [0.18, 0.98, 0.5], 0.09)); drv.add("pants", K.strut([-0.1, 0.56, 0.3], [-0.1, 0.34, 0.5], 0.12), K.strut([0.1, 0.56, 0.3], [0.1, 0.34, 0.5], 0.12));
-  for (const m of drv.meshes(undefined, mat)) { m.castShadow = true; root.add(m); }
-  for (const m of parts.meshes(hex, mat)) { m.castShadow = true; m.receiveShadow = m.name === "paint"; root.add(m); }
-  // ---- wheels: one steering at the front (with its fork), two at the back
-  const tyre = K.tyreGeo(D.wr, D.tw), rim = (s) => K.rimGeo(D.wr, D.tw, { style: "steel", side: s }), ws = [], pv = [], rimMats = { tyre: mats.tyre, alloy: () => f("#d4d7dc", { roughness: 0.4, metalness: 0.3 }), dark: mats.dark, trim: mats.trim };
-  const front = K.mountWheel(root, 0, 1.0, D.wr, { tyre, rim: rim(1), mats: rimMats });
   const fork = new K.Parts(); for (const s of [1, -1]) fork.add("steel", K.box(0.03, 0.46, 0.04, s * 0.085, 0.2, 0)); fork.add("steel", K.box(0.2, 0.03, 0.04, 0, 0.44, 0));
-  for (const m of fork.meshes(undefined, mat)) { m.castShadow = true; front.pivot.add(m); }
+  const out = { drv: drv.geometries(undefined), body: parts.geometries(hex), fork: fork.geometries(undefined) }; parts.dispose(); drv.dispose(); fork.dispose(); return out;
+}
+/** The cacheable pieces of a keke: { body (per paint), wheels }. Each is { key, build, opt }. */
+function kekeRecipes(hex) {
+  const D = UTILITY.keke, rim = (s) => K.rimGeo(D.wr, D.tw, { style: "steel", side: s });
+  return { body: { key: `keke:body:${hex}`, build: () => kekeBodyGeometry(hex), opt: { priority: 3 } }, wheels: { key: "keke:wheels", build: () => ({ tyre: K.tyreGeo(D.wr, D.tw), rims: { 1: rim(1), [-1]: rim(-1) } }), opt: { priority: 2 } } };
+}
+/** Build steps that make a keke ready before it is needed ([{ key, run }], see vehicleWarmSteps in vehicles.js). */
+export function kekeWarmSteps(paint) {
+  const hex = paint || KEKE_GREEN, R = kekeRecipes(hex);
+  return ["wheels", "body"].map((k) => ({ key: R[k].key, run: () => warmScope(() => modelCache.warm(R[k].key, R[k].build, { ...geometryEntry, ...R[k].opt })) }));
+}
+
+export function buildKeke(paint) {
+  const D = UTILITY.keke, root = new THREE.Group(), lamps = K.lampMaterials(), hex = paint || KEKE_GREEN, hold = createHolder(), R = kekeRecipes(hex), G = hold.get(R.body.key, R.body.build, R.body.opt);
+  const flatCache = {}, f = (c, o) => (flatCache[c] ??= K.flat(c, o));
+  const mats = { paint: K.MATS.paint, trim: K.MATS.trim, glass: K.MATS.glass, chrome: K.MATS.chrome, dark: K.MATS.dark, plate: K.MATS.plate, tyre: K.MATS.tyre, alloy: K.MATS.alloy, seat: () => f("#1d1d20", { roughness: 0.9 }),
+    lampF: () => lamps.head, lampR: () => lamps.tail, amber: () => lamps.amber, shirt: () => f("#c9a227", { roughness: 0.9 }), skin: () => f("#6b4a35", { roughness: 0.8 }), pants: () => f("#2c3340", { roughness: 0.9 }), canopy: () => f("#16171a", { roughness: 0.85 }), steel: () => f("#8b9096", { roughness: 0.45, metalness: 0.3 }) };
+  const mat = (k) => (mats[k] ?? K.MATS.trim)();
+  for (const m of K.meshesFrom(G.drv, mat)) { m.castShadow = true; root.add(m); }
+  for (const m of K.meshesFrom(G.body, mat)) { m.castShadow = true; m.receiveShadow = m.name === "paint"; root.add(m); }
+  // ---- wheels: one steering at the front (with its fork), two at the back
+  const { tyre, rims } = hold.get(R.wheels.key, R.wheels.build, R.wheels.opt), rim = (s) => rims[s], ws = [], pv = [], rimMats = { tyre: mats.tyre, alloy: () => f("#d4d7dc", { roughness: 0.4, metalness: 0.3 }), dark: mats.dark, trim: mats.trim };
+  const front = K.mountWheel(root, 0, 1.0, D.wr, { tyre, rim: rim(1), mats: rimMats });
+  for (const m of K.meshesFrom(G.fork, mat)) { m.castShadow = true; front.pivot.add(m); }
   ws.push(front.spin); pv.push(front.pivot);
   for (const x of [-D.track / 2, D.track / 2]) { const w = K.mountWheel(root, x, 1.0 - D.wheelbase, D.wr, { tyre, rim: rim(x > 0 ? 1 : -1), mats: rimMats }); ws.push(w.spin); }
   const keke = { root, wheels: ws, front: pv, length: D.len, width: D.wid, height: D.height, wheelbase: D.wheelbase, track: D.track, door: { side: -1, z: D.doorZ }, seatZ: D.seat.z, seat: D.seat, driver: null, doors: null, id: "keke", shape: "keke", lamps,
     setDoor() {}, setBrake(on) { lamps.tail.emissiveIntensity = on ? 2.6 : 0.28; }, setHeadlights(on) { lamps.head.emissiveIntensity = on ? 1.6 : 0.18; },
-    dispose() { root.traverse((o) => { if (o.isMesh) { o.geometry?.dispose?.(); if (o.userData.ownMaterial) o.material.dispose(); } }); lamps.head.dispose(); lamps.tail.dispose(); lamps.amber.dispose(); parts.dispose(); drv.dispose(); fork.dispose(); tyre.dispose(); } };
+    dispose() { root.traverse((o) => { if (o.isMesh) { if (!hold.owns(o.geometry)) o.geometry?.dispose?.(); if (o.userData.ownMaterial) o.material.dispose(); } }); lamps.head.dispose(); lamps.tail.dispose(); lamps.amber.dispose(); hold.releaseAll(); } };
   return keke;
 }

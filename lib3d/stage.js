@@ -3,6 +3,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createGovernor } from "./perfGovernor.js";
+import { freeGpuCopies } from "./modelCache.js";
 
 export function createStage(container, opts = {}) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: !!opts.alpha, powerPreference: "high-performance" });
@@ -38,6 +39,7 @@ export function createStage(container, opts = {}) {
       // free everything this stage put on the GPU: geometries, materials AND their textures (before, only geometries were freed, so every map / room / garage visit left textures behind)
       const seen = new Set(), free = (m) => { if (!m || seen.has(m)) return; seen.add(m); for (const k in m) { const v = m[k]; if (v && v.isTexture) v.dispose(); } m.dispose?.(); };
       scene.traverse((o) => { o.geometry?.dispose?.(); Array.isArray(o.material) ? o.material.forEach(free) : free(o.material); });
+      freeGpuCopies(); /* cached geometry outlives this renderer: drop its GPU copies and the listeners they hold on it */
       renderer.dispose(); renderer.forceContextLoss?.(); /* browsers allow only a handful of live WebGL contexts: give this one back at once so moving between screens never starves the next */ el.remove(); },
     get pixelRatio() { return gov.ratio; } };
 }

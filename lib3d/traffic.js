@@ -63,7 +63,7 @@ export function createTraffic({ parent, svc, focus, density = DENSITY, seed = 7,
       const key = lookKey(t.look, t.gender);
       const kind = t.mode === "keke" || t.mode === "bus" || t.mode === "car" ? t.mode : "walk";
       // they changed their look, or got into / out of a vehicle: draw the right body, not the old one
-      if (e && ((e.walker && e.key !== key) || e.kind !== kind || (kind === "car" && (e.car !== (t.car ?? "") || e.carColor !== (t.carColor ?? ""))))) { group.remove(e.root); tags?.remove(t.id); if (e.av) e.av.dispose(); e.root.traverse((o) => { if (!e.av || !e.av.root.getObjectById(o.id)) o.geometry?.dispose?.(); }); live.delete(t.id); e = undefined; }
+      if (e && ((e.walker && e.key !== key) || e.kind !== kind || (kind === "car" && (e.car !== (t.car ?? "") || e.carColor !== (t.carColor ?? ""))))) { group.remove(e.root); tags?.remove(t.id); if (e.av) e.av.dispose(); if (e.model?.dispose) e.model.dispose(); else e.root.traverse((o) => { if (!e.av || !e.av.root.getObjectById(o.id)) o.geometry?.dispose?.(); }); live.delete(t.id); e = undefined; }
       if (!e) { const model = t.mode === "keke" ? makeKeke() : t.mode === "bus" ? makeBus() : t.mode === "car" ? makeVehicle(t.car || "", t.carColor || undefined) : null, walker = model ? null : makeWalker("#8d5a3b", "#2f62c4", "#1f2f55"), root = model ? model.root : new THREE.Group(), tag = new THREE.Object3D();
         if (walker) { // on foot: the player's own look, drawn like everyone else, replaces the stand-in as soon as it has loaded
           e = { root, model, walker, tag, key, kind, x: t.x, z: t.z, h: t.h, tx: t.x, tz: t.z, th: t.h, vx: 0, vz: 0, phase: 0, at: now };
@@ -82,7 +82,7 @@ export function createTraffic({ parent, svc, focus, density = DENSITY, seed = 7,
       Object.assign(e, { tx: t.x, tz: t.z, th: t.h, at: now, mode: t.mode });
       tags?.set(t.id, { name: t.name, anchor: e.tag }); // a no-op for the same player; refuses anyone who may not carry a tag
     }
-    for (const [id, e] of live) if (!seen.has(id)) { group.remove(e.root); tags?.remove(id); if (e.av) e.av.dispose(); e.root.traverse((o) => { if (!e.av || !e.av.root.getObjectById(o.id)) o.geometry?.dispose?.(); }); live.delete(id); }
+    for (const [id, e] of live) if (!seen.has(id)) { group.remove(e.root); tags?.remove(id); if (e.av) e.av.dispose(); if (e.model?.dispose) e.model.dispose(); else e.root.traverse((o) => { if (!e.av || !e.av.root.getObjectById(o.id)) o.geometry?.dispose?.(); }); live.delete(id); }
   }
 
   let clock = 0;
@@ -123,6 +123,6 @@ export function createTraffic({ parent, svc, focus, density = DENSITY, seed = 7,
       else if (e.av) { const v = d / Math.max(dt, 1e-3), want = v > 0.25 ? "walk" : "idle"; if (want !== e.cur && e.av.play(want, { fade: 0.3 })) e.cur = want; if (want === "walk") e.av.setSpeed(Math.max(0.5, Math.min(1.9, v / WALK_V))); e.av.update(clock, dt); e.av.root.position.y = 0.05; }
       else e.walker.pose((e.phase += d * 2.4), Math.min(1, d / dt / 1.2)); }
   }
-  function dispose() { gone = true; for (const [id, e] of live) { tags?.remove(id); e.av?.dispose(); } for (const s of pedSlots) s.npc?.dispose(); sim.dispose?.(); group.traverse((o) => { if (o.userData.npcMesh || o.isSkinnedMesh) return; o.geometry?.dispose?.(); }); disposables.forEach((g) => g.dispose()); bodies.dispose(); wheelsM.dispose(); parent.remove(group); }
+  function dispose() { gone = true; for (const [id, e] of live) { tags?.remove(id); e.av?.dispose(); e.model?.dispose?.(); } for (const s of [...pools.keke, ...pools.bus]) s.model.dispose?.(); for (const s of pedSlots) s.npc?.dispose(); sim.dispose?.(); group.traverse((o) => { if (o.userData.npcMesh || o.isSkinnedMesh || o.geometry?.userData?.shared) return; o.geometry?.dispose?.(); }); disposables.forEach((g) => { if (!g.userData?.shared) g.dispose(); }); bodies.dispose(); wheelsM.dispose(); parent.remove(group); }
   return { update, setTravellers, dispose, sim, peds: pedSlots /* read-only, for tests */ };
 }

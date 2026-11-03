@@ -3,7 +3,7 @@
 // Cars show a "Driver" choice when one is hired in the Hire app. Prices come from lib/travel.js; the server charges them again when you arrive.
 // Each choice shows how long the trip will take: the road distance divided by the speed of what carries you, plus the walk to and from it (lib3d/tripplan.js).
 "use client";
-import { useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Icon } from "./Icon";
 import { naira } from "@/lib/client";
 import { MODES, MODE_INFO, fareKobo } from "@/lib/travel.js";
@@ -15,6 +15,12 @@ import "./travel.css";
 export default function TravelSheet({ place, here, hasCar, driver, people, distanceM = null, character = null, balanceKobo = null, jailed = false, highlight = null, eta = {}, onGo, onClose }) {
   // `place.blurb` is the short description of the building; it shows under the title so the sheet can replace the info card.
   const [mode, setMode] = useState("trek"), [withDriver, setWithDriver] = useState(true), [picked, setPicked] = useState(null);
+  // the vehicle for the chosen mode is built in the next idle moment, so setting off finds it ready
+  useEffect(() => {
+    if (mode === "trek") return; let live = true;
+    import("../lib3d/worldPreload.js").then((w) => { if (live) w.preloadSoon(mode === "car" ? (character?.activeCar ?? "") : mode, mode === "car" ? character?.activeCarColor : undefined); }).catch(() => {});
+    return () => { live = false; };
+  }, [mode, character?.activeCar, character?.activeCarColor]);
   // the sheet docks on the bottom bar like the activities panel: the two read as one surface (components/bottom-nav.css)
   useLayoutEffect(() => { document.body.dataset.dock = "on"; return () => { delete document.body.dataset.dock; }; }, []);
   const fare = fareKobo(mode), poor = fare > 0n && !canAfford(fare), useDriver = mode === "car" && !!driver && withDriver;

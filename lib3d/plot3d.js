@@ -5,13 +5,22 @@
 // World coordinates: x = cell - w/2, z = cell - d/2 (the room is centred on the origin); the lawn's top is at y = GROUND.
 import * as THREE from "three";
 import { plotFor, PLOT_RULES } from "../lib/plot.js";
+import { createHolder } from "./modelCache.js";
 
 export const GROUND = -0.36;
 const hits = (r, x, z, w, d) => x < r.x1 && x + w > r.x0 && z < r.z1 && z + d > r.z0;
 
-/** Returns { group, trees } where trees are the palms and bushes that the room fades out when they stand between you and the house. */
+/**
+ * Returns { group, trees, plot, release } where trees are the palms and bushes that the room fades out when they stand between you and the house.
+ * A plot is a few hundred boxes and hedges, and most of them share one of a few dozen sizes (every wall run, pillar, paving joint and bush), so the geometry is shared through
+ * lib3d/modelCache.js: building the plot again (re-entering the home, resizing it) makes new meshes and materials over geometry that is already built. Each mesh keeps its own
+ * position, material and shadow flags. Call release() (or dispose the group with room.js's dispose(), which does) when the plot goes.
+ */
 export function buildPlot(room, { mat, tree }) {
-  const P = plotFor(room), W = room.w, D = room.d, g = new THREE.Group(), trees = [], R = PLOT_RULES;
+  const P = plotFor(room), W = room.w, D = room.d, g = new THREE.Group(), trees = [], R = PLOT_RULES, hold = createHolder();
+  const boxGeo = (w, h, d) => hold.get(`plot:box:${w}|${h}|${d}`, () => new THREE.BoxGeometry(w, h, d), { priority: 1 });
+  const icoGeo = (r, detail) => hold.get(`plot:ico:${r}|${detail}`, () => new THREE.IcosahedronGeometry(r, detail), { priority: 1 });
+  g.userData.release = hold.releaseAll;
   const wx = (x) => x - W / 2, wz = (z) => z - D / 2;
   const M = {
     grass: mat("#8fb592", { roughness: 1 }), lawn: mat("#a3c9a3", { roughness: 1 }), lawn2: mat("#98c09a", { roughness: 1 }),
@@ -22,7 +31,7 @@ export function buildPlot(room, { mat, tree }) {
     nWall: mat("#d9cfc0"), nRoof: mat("#7b6a5a"), nGlass: mat("#8fb2c4", { roughness: 0.3 }),
   };
   // a box covering the rectangle r (cells), its bottom at y0 and height h
-  const slab = (r, y0, h, m, cast = false) => { const w = r.x1 - r.x0, d = r.z1 - r.z0, mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); mesh.position.set(wx((r.x0 + r.x1) / 2), y0 + h / 2, wz((r.z0 + r.z1) / 2)); mesh.receiveShadow = true; mesh.castShadow = cast; g.add(mesh); return mesh; };
+  const slab = (r, y0, h, m, cast = false) => { const w = r.x1 - r.x0, d = r.z1 - r.z0, mesh = new THREE.Mesh(boxGeo(w, h, d), m); mesh.position.set(wx((r.x0 + r.x1) / 2), y0 + h / 2, wz((r.z0 + r.z1) / 2)); mesh.receiveShadow = true; mesh.castShadow = cast; g.add(mesh); return mesh; };
   const at = (mesh, x, z) => { mesh.position.x = wx(x); mesh.position.z = wz(z); return mesh; };
   const pl = P.plot, T = 0.025; // paving lies this proud of the lawn
 
@@ -74,7 +83,7 @@ export function buildPlot(room, { mat, tree }) {
 
   // ---- hedges inside the wall (never across a gate or the driveway), and the trees ----
   const gate = (x, z) => [P.gate, P.footGate].some((gp) => x > gp.x0 - 0.9 && x < gp.x1 + 0.9 && z > pl.z1 - 1.6);
-  const bush = (x, z, k, i) => { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.34 * k, 1), i % 2 ? M.hedge : M.hedge2); m.position.set(wx(x), GROUND + 0.28 * k, wz(z)); m.scale.set(1.2, 0.9, 1.2); m.castShadow = true; g.add(m); };
+  const bush = (x, z, k, i) => { const m = new THREE.Mesh(icoGeo(0.34 * k, 1), i % 2 ? M.hedge : M.hedge2); m.position.set(wx(x), GROUND + 0.28 * k, wz(z)); m.scale.set(1.2, 0.9, 1.2); m.castShadow = true; g.add(m); };
   let n = 0;
   for (let x = pl.x0 + 1.2; x < pl.x1 - 0.8; x += 1.1) { if (!gate(x, pl.z1)) bush(x, pl.z1 - 0.62, 0.9, n++); bush(x, pl.z0 + 0.7, 1, n++); }
   for (let z = pl.z0 + 1.8; z < pl.z1 - 1.5; z += 1.1) { bush(pl.x0 + 0.7, z, 1, n++); bush(pl.x1 - 0.7, z, 1, n++); }
@@ -92,5 +101,12 @@ export function buildPlot(room, { mat, tree }) {
   };
   side(pl.x0 - 13, pl.x0 - 0.5, -1); side(pl.x1 + 0.5, pl.x1 + 13, 1);
   void at; void R;
-  return { group: g, trees, plot: P };
+  return { group: g, trees, plot: P, release: hold.releaseAll };
+}
+
+/** Builds a home's plot geometry into the shared cache without keeping anything (for the idle preloader): the next buildPlot() of a home this size finds every box and hedge ready. */
+export function warmPlot(room) {
+  const mats = new Map(), mat = (c, o = {}) => { const k = c + JSON.stringify(o); if (!mats.has(k)) mats.set(k, new THREE.MeshBasicMaterial()); return mats.get(k); };
+  const built = buildPlot(room, { mat, tree: () => new THREE.Group() });
+  built.release(); for (const m of mats.values()) m.dispose(); // the geometry stays cached, nothing else is kept
 }
