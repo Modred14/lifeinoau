@@ -153,27 +153,27 @@
 /* Notifications are NOT held back while the phone is open: .tt-region (components/toaster.css) is a top-level layer above the phone,
    its apps and every sheet or dialog. (An old rule here dropped it to z-index 55, under the phone's 60: that was the bug.) */
 /* ---------- the Bet app is a dark, full-height app that scrolls inside itself ---------- */
-.ph[data-app="bet"] .ph-status { color: #fff; }
+.ph[data-app="bet"] .ph-status, .ph[data-app="games"] .ph-status { color: #fff; } /* dark apps: the shell default is dark navy, which vanishes on them */
 .ph[data-app="bet"] .ph-home i { background: rgba(255, 255, 255, 0.9); }
 .ph[data-app="bet"] .pa { --bg: #0b0e13; --spin: #27c46f; --spin-track: #232c38; color-scheme: dark; }
 .ph[data-app="bet"] .pa-body { overflow: hidden; padding-bottom: 0; }
-/* ---------- the Bet app, while a game is open: the handset becomes the whole window ----------
-   BetApp marks <body data-bet-full> for as long as a game (Sports, Aviator, Roulette, My bets) is open, and removes the mark on every way out. While it is set:
+/* ---------- an app with a game open (Bet, Games): the handset becomes the whole window ----------
+   BetApp (Sports, Aviator, Roulette, My bets) and GamesApp (a match, or Whot practice) mark <body data-phone-full> for as long as a game is open, and remove the mark on every way out. While it is set:
    - the LifeinOAU top bar and bottom bar are put away (visibility, not display: they stay mounted, keep their place and come straight back, but cannot be seen,
      tapped or tabbed to);
    - the scrim, handset and screen lose their bezel, rounding, padding, blur and status bar, and fill the window (fixed + the dynamic viewport height, so a mobile
      browser's collapsing address bar never leaves a gap or hides the bottom of the game); the device's safe areas are handled inside the game (bet.css);
    - the layer rises above the bottom bar (--z-nav). An incoming call (.cx-scrim, 88 normally) rises above the game, and toasts (1000) stay on top of everything.
    The game list stays in the phone: with no game open none of this applies and the handset looks exactly as before. */
-body[data-bet-full] :is(.nav, .hud) { visibility: hidden; pointer-events: none; }
-body[data-bet-full] .ph-scrim:has(> .ph[data-app="bet"]) {
+body[data-phone-full] :is(.nav, .hud) { visibility: hidden; pointer-events: none; }
+body[data-phone-full] .ph-scrim:has(> .ph[data-app]) {
   z-index: calc(var(--z-nav, 500) + 20); display: block; padding: 0; background: #0b0e13;
   backdrop-filter: none; -webkit-backdrop-filter: none; animation: none; height: 100%; height: 100dvh; bottom: auto;
 }
-body[data-bet-full] .ph[data-app="bet"] { width: 100%; max-width: none; height: 100%; padding: 0; border-radius: 0; background: #0b0e13; box-shadow: none; animation: none; }
-body[data-bet-full] .ph[data-app="bet"] .ph-screen { --pad-t: 0px; border-radius: 0; background: #0b0e13; }
-body[data-bet-full] .ph[data-app="bet"] :is(.ph-status, .ph-home, .ph-close) { display: none; }
-body[data-bet-full] .cx-scrim.ph-scrim { z-index: calc(var(--z-nav, 500) + 40); }
+body[data-phone-full] .ph[data-app] { width: 100%; max-width: none; height: 100%; padding: 0; border-radius: 0; background: #0b0e13; box-shadow: none; animation: none; }
+body[data-phone-full] .ph[data-app] .ph-screen { --pad-t: 0px; border-radius: 0; background: #0b0e13; }
+body[data-phone-full] .ph[data-app] :is(.ph-status, .ph-home, .ph-close) { display: none; }
+body[data-phone-full] .cx-scrim.ph-scrim { z-index: calc(var(--z-nav, 500) + 40); }
 /* The Games app owns a dark surface inside its page; keep that surface during its initial load too. */
 .ph[data-app="games"] .pa { --bg: #0d1016; --blue: #2fcf79; --spin: #2fcf79; --spin-track: #2a3342; color-scheme: dark; background: #0d1016; }
 /* the leaderboards app (FORBES OAU, see components/apps/forbes.css): light page with OAU green accents */

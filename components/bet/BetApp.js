@@ -1,6 +1,6 @@
 // components/bet/BetApp.js: the Bet app, lives inside the phone (see components/Phone.js)
 // It opens on a list of games (the lobby), inside the handset. Picking a game (Sports, Aviator, Roulette) or My Bets opens it FULL SCREEN:
-// while a game is open this marks <body data-bet-full>, and the phone shell (phone.css) turns the handset into the whole window and puts the
+// while a game is open this marks <body data-phone-full>, and the phone shell (phone.css) turns the handset into the whole window and puts the
 // LifeinOAU bars away. Back goes to the list; the back arrow on the list goes to the phone's home screen. Leaving the app (or closing the phone)
 // removes the mark again, so the normal interface always comes back.
 // Every game stays mounted, so a plane in the air keeps flying while you look at your slips.
@@ -47,8 +47,8 @@ export default function BetApp({ onHome }) {
   useLayoutEffect(() => {
     if (!full) return;
     const body = document.body;
-    body.dataset.betFull = "1";
-    return () => { delete body.dataset.betFull; };
+    body.dataset.phoneFull = "1";
+    return () => { delete body.dataset.phoneFull; };
   }, [full]);
 
   const toLobby = useCallback(() => { builder.open(false); setView(LOBBY); }, []);

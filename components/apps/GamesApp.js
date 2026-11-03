@@ -2,7 +2,7 @@
 // Pick a game, then challenge a friend by character name or look for a random opponent, agree a wager (or play for fun), play, and rematch. Everything that matters is decided by
 // the server (lib/games/matchService.js): this screen only asks, shows and sends moves.
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "../Icon";
 import { Spinner } from "../Loader";
 import { call, notifyError } from "@/lib/client";
@@ -76,8 +76,29 @@ export default function GamesApp({ onHome }) {
   const openMatch = useCallback((id) => { setSetup(null); setMatchId(String(id)); load(); }, [load]);
   const leave = useCallback(() => { setMatchId(null); load(); }, [load]);
 
-  if (practice) return <div className="gm"><WhotPractice onExit={() => setPractice(false)} /></div>;
-  if (matchId) return <div className="gm"><MatchScreen id={matchId} onExit={leave} onOpen={openMatch} balanceKobo={lobby?.balanceKobo} /></div>;
+  // Playing (a match, or Whot practice) is full screen: tell the shell, which turns the handset into the whole window and puts the LifeinOAU bars away (phone.css).
+  // The game list, the challenge set-up and the inbox stay inside the phone. useLayoutEffect, so the small phone never flashes; the cleanup runs on every way out.
+  const full = practice || !!matchId;
+  useLayoutEffect(() => {
+    if (!full) return;
+    const body = document.body;
+    body.dataset.phoneFull = "1";
+    return () => { delete body.dataset.phoneFull; };
+  }, [full]);
+  // Escape goes back to the game list (the phone's own Escape steps aside while a game is open)
+  useEffect(() => {
+    if (!full) return;
+    const k = (e) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      e.preventDefault(); e.stopPropagation();
+      if (practice) setPractice(false); else leave();
+    };
+    document.addEventListener("keydown", k, true);
+    return () => document.removeEventListener("keydown", k, true);
+  }, [full, practice, leave]);
+
+  if (practice) return <div className="gm" data-full="1"><WhotPractice onExit={() => setPractice(false)} /></div>;
+  if (matchId) return <div className="gm" data-full="1"><MatchScreen id={matchId} onExit={leave} onOpen={openMatch} balanceKobo={lobby?.balanceKobo} /></div>;
 
   return (
     <div className="gm">

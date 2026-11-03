@@ -67,7 +67,7 @@ export default function MatchScreen({ id, onExit, onOpen, balanceKobo }) {
   useEffect(() => { if (m?.rematch?.nextId) onOpen?.(m.rematch.nextId); }, [m?.rematch?.nextId, onOpen]);
 
   if (gone) return <div className="gm-pad"><p className="gm-note">{gone}</p><button type="button" className="gm-btn" onClick={onExit}>Back to games</button></div>;
-  if (!m) return <div className="gm-pad gm-center"><i className="gm-spin" aria-hidden="true" /><p className="gm-note">Opening the match…</p></div>;
+  if (!m) return <div className="gm-pad gm-center"><i className="gm-spin" aria-hidden="true" /><p className="gm-note">Opening the match…</p><button type="button" className="gm-btn gm-btn-sm" onClick={onExit}>Back to games</button></div>;
   const Board = BOARDS[m.game], left = m.deadline ? m.deadline - (Date.now() + skew.current) : null, warn = left != null && left < 10_000;
   void tick;
   return (

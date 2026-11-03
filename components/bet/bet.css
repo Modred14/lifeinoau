@@ -265,7 +265,7 @@
 .bt .rt-act button:disabled { opacity: 0.4; }
 
 /* ================================================================================================================================
-   FULL SCREEN. While a game is open (BetApp sets data-full here and <body data-bet-full>, and phone.css turns the handset into the whole window)
+   FULL SCREEN. While a game is open (BetApp sets data-full here and <body data-phone-full>, and phone.css turns the handset into the whole window)
    the app is laid out for the window it actually has, not for a 392px handset.
    - Device safe areas (notch, rounded corners, home indicator, landscape sides) are the padding of .bt itself, so every game sits inside them.
    - The height is the window's dynamic height (phone.css), so a collapsing mobile address bar never hides the bottom controls.
