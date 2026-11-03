@@ -72,7 +72,8 @@ ok("nobody teleported during the whole sequence", maxStep < 3.2);
 
 // 4. on foot: the car's controls are dead; walking works
 for (let i = 0; i < 30; i++) tick({ gas: 1, steer: 1, brake: 1 }); ok("gas, brake and wheel do nothing out of the car", car.x === carAt.x && car.z === carAt.z && car.v === 0);
-const wx = w.x, wz = w.z; for (let i = 0; i < 30; i++) tick({ dx: -box.hz, dz: box.hx, mag: 1 }); ok("you can walk", Math.hypot(w.x - wx, w.z - wz) > 0.8);
+const wx = w.x, wz = w.z, ax = wx - box.x, az = wz - box.z, al = Math.hypot(ax, az) || 1;   // walk AWAY from the car (which side you got out on depends on the road where it stopped)
+for (let i = 0; i < 30; i++) tick({ dx: ax / al, dz: az / al, mag: 1 }); ok("you can walk", Math.hypot(w.x - wx, w.z - wz) > 0.8);
 until(() => S.canEnter, 10, { dx: wx - w.x, dz: wz - w.z, mag: 1 }); ok("beside the car you can get back in", S.canEnter); ok("an open door can be closed", S.canClose);
 tick({ close: true }); until(() => S.vehDoorK === 0, 3); ok("closing the door takes a moment and ends shut", S.vehDoorK === 0 && !S.canClose);
 

@@ -10,9 +10,14 @@
 //     sees the levels it asks for (the default is the ground), so people, ambient traffic and pick-ups never meet the deck, while a car on it asks for the deck. heightAt() gives the height.
 // Metres, x east, z south, like the rest of lib3d. Heading (hx, hz); the right-hand side of a heading is (-hz, hx).
 import { Path } from "./roadnet.js";
+import { buildJunctions, inside } from "./roadjunction.js";
 
 /** Cross-section rules. A road is `half` metres from its centreline to the kerb on each side, then `sw` metres of pavement. */
-export const XS = { minDrivableClearance: 2.7, lane: 3.5, minHalf: 2.6, maxHalf: 7.0, pavement: 2.0, minPavement: 0.7, setback: 0.7, junctionExtra: 1.6, frontage: 1.0, uTurnTrim: 3 };
+export const XS = { minDrivableClearance: 2.7, lane: 3.5, minHalf: 3.0, maxHalf: 7.0, pavement: 2.0, minPavement: 0.7, setback: 0.7, junctionExtra: 1.6, frontage: 1.0, uTurnTrim: 3,
+  /** a vehicle waits this far (m) beyond the mouth of a junction; the zebra crossing (3.4 m deep) sits between the mouth and the stop line */
+  stopGap: 6.2, crossingGap: 1.6 };
+/** The standard half-widths (m) a collector road comes in: it takes the widest that fits, so the network has a few widths, not a different one on every road. */
+const STD_HALF = { collector: [5.0, 4.4, 3.8, 3.2] };
 /**
  * What each class of road is made of, centreline outwards: a median strip (`med`, half its width), `lanes` traffic lanes of XS.lane each way, then a paved `shoulder`; the rest of the free space is pavement.
  * arterial = the campus' express roads (two lanes each way and a median); collector = a wide campus road (one lane each way and a shoulder for stopping); local = a lane each way.
@@ -30,7 +35,8 @@ export function crossSection(cls, avail, rawHalf = 0) {
   const C = CLASSES[cls] ?? CLASSES.local;
   if (cls === "arterial") for (let lanes = rawHalf >= 16 ? 3 : 2; lanes >= 2; lanes--) for (const sh of [C.shoulder, 0.8, 0.3, 0]) { const h = C.med + lanes * XS.lane + sh; if (h <= avail + 1e-6) return { half: h, med: C.med, lanes, shoulder: sh }; }
   // not an express road (or no room for one): as wide as the polygon was, between one lane and the class' cap, and no wider than the free space
-  const want = Math.min(C.cap, Math.max(XS.lane, rawHalf)), half = Math.max(XS.minHalf, Math.min(want, avail));
+  const want = Math.min(C.cap, Math.max(XS.lane, rawHalf)); let half = Math.max(XS.minHalf, Math.min(want, avail));
+  const std = STD_HALF[cls]; if (std) half = std.find((h) => h <= half + 0.05) ?? Math.max(XS.minHalf, half);
   return { half, med: 0, lanes: 1, shoulder: Math.max(0, half - XS.lane) };
 }
 /** Two surfaces that are more than this many metres apart in height are not the same place (a ramp over a road). */
@@ -45,6 +51,8 @@ export const carMask = (lv) => (lv ? LV_DECK : LV_GROUND) | LV_RAMP;
 const ease5 = (t) => { t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * t * (t * (t * 6 - 15) + 10); };   // smootherstep: a ramp starts and ends level, so a car never meets a kink
 export const heightOn = (e, s) => (e.h0 === e.h1 ? e.h0 : e.h0 + (e.h1 - e.h0) * ease5(s / (e.len || 1)));
 const CELL = 24;
+/** Is (x, z) inside the polygon, or within `r` metres of its outline? */
+const nearPoly = (P, x, z, r) => { if (inside(P, x, z)) return true; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const ax = P[j][0], az = P[j][1], dx = P[i][0] - ax, dz = P[i][1] - az, l2 = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)); if (Math.hypot(x - ax - dx * t, z - az - dz * t) < r) return true; } return false; };
 const TAU = Math.PI * 2;
 const angDiff = (a, b) => ((b - a + Math.PI * 3) % TAU) - Math.PI;
 const bez = (p0, p1, p2, p3, t) => { const u = 1 - t, a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t; return [a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0], a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1]]; };
@@ -130,6 +138,8 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
     nodes[e.a].mask |= e.mask; nodes[e.b].mask |= e.mask; nodes[e.a].h = Math.max(nodes[e.a].h, e.h0); nodes[e.b].h = Math.max(nodes[e.b].h, e.h1);
   }
   for (const n of nodes) n.deg = n.edges.length;
+  // ---- junction polygons (lib3d/roadjunction.js): where the roads meet, one polygon per layer; the road ribbons start where it ends ----
+  const jstat = buildJunctions(nodes, byId);
 
   // ---- lanes: forward (a -> b) is dir 0, backward is dir 1. Lane centre is half/2 to the right of travel. ----
   const lanes = [];
@@ -141,7 +151,9 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
     arms.sort((p, q) => p.ang - q.ang); const k = arms.length;
     arms.forEach((a, i) => { const gp = (arms[(i + 1) % k].ang - a.ang + TAU) % TAU, gm = (a.ang - arms[(i + k - 1) % k].ang + TAU) % TAU, th = Math.max(0.25, Math.min(gp, gm)); armTrim.set(a.e.id * 2 + a.end, Math.min(24, (2.6 + a.e.half * Math.cos(th / 2)) / (2 * Math.sin(th / 2)))); });
   }
-  const trimAt = (e, node) => (node.deg <= 1 ? XS.uTurnTrim : Math.min(0.42 * e.len, Math.max(node.radius + XS.junctionExtra, armTrim.get(e.id * 2 + (node.id === e.a ? 0 : 1)) ?? 0)));
+  // a vehicle stops beyond the junction's mouth (and the zebra crossing in front of it), not in the middle of the junction
+  const mouth = (e, node) => (node.deg >= 3 && !e.hw ? node.J?.asph.cut.get(e.id * 2 + (node.id === e.a ? 0 : 1)) ?? 0 : 0);
+  const trimAt = (e, node) => (node.deg <= 1 ? XS.uTurnTrim : Math.min(0.42 * e.len, Math.max(node.radius + XS.junctionExtra, armTrim.get(e.id * 2 + (node.id === e.a ? 0 : 1)) ?? 0, mouth(e, node) ? mouth(e, node) + XS.stopGap : 0)));
   // where a lane runs, measured from the centreline: the middle of the road's own lane (the right-hand one on an express road, so traffic keeps to the outer lane), or the centreline of a one-way carriageway
   const laneOffset = (e) => (e.oneWay ? 0 : e.laneOff ?? (e.med > 0 ? Math.min(e.half - 1.0, e.med + XS.lane * (e.lanesPerDir - 0.5)) : e.half / 2));
   for (const e of edges) {
@@ -220,18 +232,20 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
   const patches = [];
   for (const c of conns) {
     const ef = byId.get(lanes[c.from].edge), et = byId.get(lanes[c.to].edge), half = (ef.hw || et.hw ? Math.min(ef.half, et.half) : Math.max(ef.half, et.half)) + 0.4, P = c.path.pts, mk = lanes[c.from].mask | lanes[c.to].mask, pe = { id: -(c.id + 1), half, sw: 0, med: 0, mask: mk, h0: nodes[c.node].h, h1: nodes[c.node].h, comp: lanes[c.from].comp, conn: c.id, path: c.path }; byId.set(pe.id, pe); patches.push(pe);
+    // the whole turn is swept, from the stop line to the next lane: a driver cuts corners, and must never meet an invisible edge
     for (let i = 0; i < P.length - 1; i += 2) {
-      const j = Math.min(P.length - 1, i + 2), sg = { e: pe.id, ax: P[i][0], az: P[i][1], bx: P[j][0], bz: P[j][1], s0: 0, reach: half };
+      const j = Math.min(P.length - 1, i + 2); 
+      const sg = { e: pe.id, ax: P[i][0], az: P[i][1], bx: P[j][0], bz: P[j][1], s0: 0, reach: half };
       const i0 = Math.floor((Math.min(sg.ax, sg.bx) - half) / CELL), i1 = Math.floor((Math.max(sg.ax, sg.bx) + half) / CELL), j0 = Math.floor((Math.min(sg.az, sg.bz) - half) / CELL), j1 = Math.floor((Math.max(sg.az, sg.bz) + half) / CELL);
       for (let a = i0; a <= i1; a++) for (let b = j0; b <= j1; b++) { const k = key(a, b); if (!hash.has(k)) hash.set(k, []); hash.get(k).push(sg); }
     }
   }
-  const nhash = new Map(); for (const n of nodes) { if (!n.deg || n.fixedOnly) continue;   /* a junction on the expressway has no disc: the carriageways meet end to end, and a disc would cover the median */ const r = n.radius + XS.pavement; for (let a = Math.floor((n.x - r) / CELL); a <= Math.floor((n.x + r) / CELL); a++) for (let b = Math.floor((n.z - r) / CELL); b <= Math.floor((n.z + r) / CELL); b++) { const k = key(a, b); if (!nhash.has(k)) nhash.set(k, []); nhash.get(k).push(n); } }
+  const nhash = new Map(); for (const n of nodes) { if (!n.deg || n.fixedOnly) continue;   /* a junction on the expressway has no disc: the carriageways meet end to end, and a disc would cover the median */ const r = (n.J ? n.J.pave.rmax : n.radius + XS.pavement) + 1; for (let a = Math.floor((n.x - r) / CELL); a <= Math.floor((n.x + r) / CELL); a++) for (let b = Math.floor((n.z - r) / CELL); b <= Math.floor((n.z + r) / CELL); b++) { const k = key(a, b); if (!nhash.has(k)) nhash.set(k, []); nhash.get(k).push(n); } }
 
   const segDist = (sg, x, z) => { const dx = sg.bx - sg.ax, dz = sg.bz - sg.az, l2 = dx * dx + dz * dz || 1; let t = ((x - sg.ax) * dx + (z - sg.az) * dz) / l2; t = Math.max(0, Math.min(1, t)); const px = sg.ax + dx * t, pz = sg.az + dz * t; return { d: Math.hypot(x - px, z - pz), t, px, pz }; };
 
   const G = {
-    nodes, edges, foots, lanes, conns, patches, byEdge: byId, segs, expressway: raw.expressway ?? null, comps: Math.max(0, ...edges.map((e) => e.comp)) + 1, bounds: raw.bounds ?? null,
+    sdf, nodes, edges, foots, lanes, conns, patches, junctions: jstat, byEdge: byId, segs, expressway: raw.expressway ?? null, comps: Math.max(0, ...edges.map((e) => e.comp)) + 1, bounds: raw.bounds ?? null,
     laneOf: (edge, dir) => byId.get(edge)?.lanes[dir] ?? null,
 
     /**
@@ -254,7 +268,9 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
       }
       if (bestSeg && (bestSeg.e.h0 || bestSeg.e.h1)) out.h = heightOn(bestSeg.e, bestSeg.sg.s0 + bestSeg.t * Math.hypot(bestSeg.sg.bx - bestSeg.sg.ax, bestSeg.sg.bz - bestSeg.sg.az));
       const nl = nhash.get(key(Math.floor(x / CELL), Math.floor(z / CELL)));
-      if (nl) for (const n of nl) { if (!(n.mask & mask) || (hRef === hRef && Math.abs(n.h - hRef) > LEVEL_GAP)) continue; const d = Math.hypot(x - n.x, z - n.z); if (d <= n.radius) { out.cls = 1; if (out.edge < 0) out.edge = n.edges[0]; out.d = Math.min(out.d, d); if (!bestSeg) out.h = n.h; } else if (out.cls !== 1 && d <= n.radius + XS.pavement && !bestPav) bestPav = { d, e: byId.get(n.edges[0]) }; }
+      if (nl) for (const n of nl) { if (!(n.mask & mask) || (hRef === hRef && Math.abs(n.h - hRef) > LEVEL_GAP)) continue; const d = Math.hypot(x - n.x, z - n.z), J = n.J;
+        // the junction's own polygon (the same one that is drawn): carriageway inside the asphalt, pavement inside the pavement polygon
+        if (d <= n.radius || (J && inside(J.asph.poly, x, z))) { out.cls = 1; if (out.edge < 0) out.edge = n.edges[0]; out.d = Math.min(out.d, d); if (!bestSeg) out.h = n.h; } else if (out.cls !== 1 && !bestPav && (J ? inside(J.pave.poly, x, z) : d <= n.radius + XS.pavement)) bestPav = { d, e: byId.get(n.edges[0]) }; }
       if (out.cls === 0 && bestPav) { out.cls = 2; out.edge = bestPav.e.id; out.d = bestPav.d; out.half = bestPav.e.half; out.sw = bestPav.e.sw; }
       return out;
     },
@@ -271,7 +287,7 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
       const list = hash.get(key(Math.floor(x / CELL), Math.floor(z / CELL)));
       if (list) for (const sg of list) { const e = byId.get(sg.e), { d, t } = segDist(sg, x, z); if (d <= e.half && d >= (e.med ?? 0) && !(hRef === hRef && Math.abs(segH(e, sg, t) - hRef) > LEVEL_GAP)) see(e.mask); }
       const nl = nhash.get(key(Math.floor(x / CELL), Math.floor(z / CELL)));
-      if (nl) for (const n of nl) if (Math.hypot(x - n.x, z - n.z) <= n.radius && !(hRef === hRef && Math.abs(n.h - hRef) > LEVEL_GAP)) see(n.mask);
+      if (nl) for (const n of nl) if ((Math.hypot(x - n.x, z - n.z) <= n.radius || (n.J && inside(n.J.asph.poly, x, z))) && !(hRef === hRef && Math.abs(n.h - hRef) > LEVEL_GAP)) see(n.mask);
       const lv = deck && !ground ? 1 : ground && !deck ? 0 : prev;
       return { lv, ramp, deck, ground };
     },
@@ -379,7 +395,7 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
     if (e.sw <= 0) continue;
     const add = (s) => { const p = e.path.at(s, {}); crossings.push({ x: p.x, z: p.z, hx: p.hx, hz: p.hz, half: e.half, sw: e.sw, edge: e.id, along: 1.7 }); };
     for (const [node, sFromA] of [[nodes[e.a], true], [nodes[e.b], false]]) {
-      if (node.deg < 3 || e.len < 38) continue; const c = Math.min(0.42 * e.len, node.radius + XS.junctionExtra) + 3.2; add(sFromA ? c : e.len - c);
+      if (node.deg < 3 || e.len < 38) continue; const c = Math.min(0.42 * e.len - 2, mouth(e, node) + XS.crossingGap + 1.7); add(sFromA ? c : e.len - c);
     }
     if (e.len > 150) add(e.len / 2);
   }

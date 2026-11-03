@@ -14,6 +14,7 @@
 // Metres, x east, z south, like the rest of lib3d.
 
 import { reshapeNetwork } from "./roadshape.js";
+import { alignRoads } from "./roadalign.js";
 
 export const REFINE = {
   /** Douglas-Peucker tolerances tried in turn (metres); the first that keeps the road inside `maxDev` of the original and no closer to a wall is used. */
@@ -215,6 +216,9 @@ export function refineRoadNetwork(raw, data, { sdf = null, log = () => {} } = {}
 
   const badClr = (tag) => { if (!process.env.DBGC || !sdf) return; const out = []; for (const e of edges) { if (e.__off) continue; const P = resample(e.pts, 4), L = plen(e.pts), edge = Math.min(10, L * 0.2); let lo = Infinity, s = 0; for (let i = 0; i < P.length; i++) { if (i) s += hyp(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]); if (s < edge || s > L - edge) continue; lo = Math.min(lo, sdf(P[i][0], P[i][1])); } if (lo < 1.0) out.push(e.id + ":" + lo.toFixed(1)); } console.error("CLR", tag, out.join(" ")); };
   badClr("before reshape");
+  // ---- 3a. hairpins and wavy roads: a road that doubles back becomes a straight link (or goes), and an S-bending road is re-laid as a few long straight runs ----
+  const baseA = access(mainOnly()), alignCtx = { sdf, rdp, fillet, resample, radius: REFINE.radius, accessOK: () => !worse(access(mainOnly()), baseA), canDrop: (e) => { e.__off = true; const ok = !worse(access(mainOnly()), baseA); e.__off = false; return ok; } };
+  report.align = alignRoads(nodes, edges, alignCtx, ["hairpins", "refit"]);
   // ---- 3b. long, straight, connected: contract roundabouts, merge split roads, carry dead ends on to another road or the map edge, put a junction where roads cross ----
   const base0 = access(mainOnly());
   report.reshape = reshapeNetwork(nodes, edges, { stage: badClr, keepsAccess: () => { const af = access(mainOnly()); const w = worse(af, base0); if (w && process.env.DBGA) { const bad = []; for (let i = 0; i < dests.length; i++) { const [sl, cl] = slackOf(dests[i]); if (af[i] > Math.max(base0[i] + sl, cl)) bad.push(dests[i].what + ":" + Math.round(base0[i]) + "->" + Math.round(af[i])); } console.error("REFUSED", bad.slice(0, 4).join(" ")); } return !w; }, sdf, bounds: data.bounds, straighten: (pts, cls) => straighten(pts, cls, { sdf, eps: [7, 5, 3.2, 2.2], maxDev: 9 }), canDrop: (e) => { e.__off = true; const ok = !worse(access(mainOnly()), base0); e.__off = false; return ok; } });
@@ -226,6 +230,8 @@ export function refineRoadNetwork(raw, data, { sdf = null, log = () => {} } = {}
   // a big road must not have a corner in it: any vertex sharper than 25 degrees gets a gentle arc (when it fits clear of the walls)
   for (const e of edges) { if (e.__off || e.cls !== "arterial" || plen(e.pts) < 100) continue; let sharp = 0; for (let i = 1; i < e.pts.length - 1; i++) { const a = Math.atan2(e.pts[i][1] - e.pts[i - 1][1], e.pts[i][0] - e.pts[i - 1][0]), b = Math.atan2(e.pts[i + 1][1] - e.pts[i][1], e.pts[i + 1][0] - e.pts[i][0]); let d = Math.abs(b - a); if (d > Math.PI) d = TAU - d; sharp = Math.max(sharp, d); }
     if (sharp * 57.3 > 25) { const sm = straighten(e.pts, "arterial", { sdf, eps: [10, 7, 5], maxDev: 14 }); if (sm) e.pts = sm; } }
+  // ---- 3b2. square the tees: a side road meets a through road at a right angle ----
+  { const baseS = access(mainOnly()), ctxS = { ...alignCtx, accessOK: () => !worse(access(mainOnly()), baseS), canDrop: (e) => { e.__off = true; const ok = !worse(access(mainOnly()), baseS); e.__off = false; return ok; } }; report.align2 = alignRoads(nodes, edges, ctxS, ["hairpins", "refit", "square"]); }
   // ---- 3c. big roads: a long, straight road that joins junctions at both ends is a through road, and a through road is a proper road (one class up) ----
   { const live = edges.filter((e) => !e.__off), d = degrees(nodes, live); report.upgraded = 0;
     for (const e of live) {
