@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { call } from "@/lib/client";
+import { homeUrl, pendingEvent } from "@/lib/eventLink";
 import AuthModal from "@/components/AuthModal";
 import Loader from "@/components/Loader";
 import Logo from "@/components/Logo";
@@ -30,16 +31,19 @@ export default function Home() {
   }, []);
   useEffect(() => {
     let on = true;
+    const ev = pendingEvent(); // an event link opened (or sent here after a 401): remembered, so it survives the log in form and a refresh
+    if (ev) setMode((m) => m ?? "login"); // the log in form is already open, so the visitor only has to sign in
     call("/api/session").then((r) => {
       if (!on) return;
       if (r.authenticated) {
         try { localStorage.setItem("oau.in", "1"); } catch { /* ignore */ }
         setWelcome(r.name ? `Welcome back, ${r.name}` : "Welcome back");
         setChecking(true); // keep the loader up until the game page takes over
-        router.replace("/home");
+        router.replace(homeUrl(ev)); // straight to the shared event if there is one
       } else {
         try { localStorage.removeItem("oau.in"); } catch { /* ignore */ }
         setChecking(false);
+        if (ev) setMode((m) => m ?? "login");
       }
     });
     return () => {

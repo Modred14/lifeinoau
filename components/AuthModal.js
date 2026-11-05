@@ -5,6 +5,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { call, notifyError } from "@/lib/client";
 import { toast } from "@/lib/toast";
+import { homeUrl, pendingEvent } from "@/lib/eventLink";
 import { Icon } from "@/components/Icon";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/; // same rule the server applies
@@ -367,7 +368,7 @@ export default function AuthModal({ initialMode = "signup", onClose }) {
         ? "Account created successfully."
         : "Welcome back. You're logged in.",
     );
-    router.push("/home");
+    router.push(homeUrl(pendingEvent())); // straight to the shared event when the player came from an event link
   }
 
   return (

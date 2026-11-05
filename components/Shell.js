@@ -16,6 +16,7 @@ import BottomNav from "./BottomNav";
 import { useChat } from "@/lib/chat";
 import SoundToggle from "./SoundToggle";
 import { toast } from "@/lib/toast";
+import { EVENT_PARAM, pendingEvent, takeEvent, requestFocus } from "@/lib/eventLink";
 import { game, useGame } from "@/lib/gameStore";
 import { serverDate, serverTime } from "@/lib/serverClock";
 import { initPrefs, syncPrefsFrom } from "@/lib/prefs";
@@ -99,6 +100,7 @@ export default function Shell({ children }) {
     // open the phone on that app, then tidy the address bar
     const params = new URLSearchParams(window.location.search);
     const app = params.get("app");
+    if (path === "/home") pendingEvent(); // a shared event link: remembered now, so tidying the address bar below can never lose it
     if (path === "/home" && app) {
       setPhoneApp(app);
       setPhoneWith(app === "messages" ? params.get("with") : null);
@@ -150,6 +152,21 @@ export default function Shell({ children }) {
       window.removeEventListener("oau:message", message);
     };
   }, []);
+  // A shared event link (/home?event=<slug>): once the game is ready (after log in, or after the character is made), open the phone on Parties
+  // and ask it to show that event. takeEvent() uses the link up, so however often this runs the phone opens only once for it.
+  const gameReady = path === "/home" && !!st;
+  useEffect(() => {
+    if (!gameReady) return;
+    const slug = takeEvent();
+    if (!slug) return;
+    const u = new URL(window.location.href);
+    if (u.searchParams.has(EVENT_PARAM)) { u.searchParams.delete(EVENT_PARAM); window.history.replaceState(null, "", u.pathname + u.search + u.hash); }
+    requestFocus(slug);
+    void game.refresh();
+    setPhoneApp("parties");
+    setPhoneWith(null);
+    setPhone(true);
+  }, [gameReady]);
   // The phone is a layer on top of whatever screen you are on (a building's interior, the map, a trip): opening or closing it never changes that screen.
   // What it does tell the screen underneath: <body data-phone="open"> plus "oau:phone-state" (true/false), so a 3D room can stop reading keys and touches while it is up.
   const phoneShown = phone && !!st;

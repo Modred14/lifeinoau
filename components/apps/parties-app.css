@@ -62,6 +62,26 @@
 }
 .ph[data-app="parties"] .pty-tile small { font: 800 0.66rem/1 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--pty-violet); }
 .ph[data-app="parties"] .pty-tile b { font: 800 1.45rem/1 var(--font-head); letter-spacing: -0.02em; color: var(--pty-ink); }
+/* the copy-link icon: small, bottom-right of the flyer, the same frosted white as the date tile */
+.ph[data-app="parties"] .pty-copy {
+  position: absolute; z-index: 2; right: 12px; bottom: 12px; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 12px; cursor: pointer;
+  color: var(--pty-violet); background: rgba(255, 255, 255, 0.94); box-shadow: 0 8px 18px -8px rgba(20, 8, 50, 0.6);
+  transition: transform 160ms var(--ease), background 160ms var(--ease), color 160ms var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.ph[data-app="parties"] .pty-copy::after { content: ""; position: absolute; inset: -6px; } /* a bigger touch area than the icon looks */
+.ph[data-app="parties"] .pty-copy:hover { transform: translateY(-1px); background: #fff; }
+.ph[data-app="parties"] .pty-copy:active { transform: scale(0.92); }
+.ph[data-app="parties"] .pty-copy[data-done] { background: var(--pty-violet); color: #fff; }
+.ph[data-app="parties"] .pty-copy:focus-visible { outline: 3px solid rgba(109, 59, 224, 0.5); outline-offset: 2px; }
+
+/* the event a shared link pointed to: a violet ring that glows twice, then fades */
+.ph[data-app="parties"] .pty-card-spot { animation: pty-rise 480ms cubic-bezier(0.22, 1, 0.36, 1) both, pty-spot 3.2s ease-out both; animation-delay: calc(var(--i, 0) * 70ms), 0s; }
+@keyframes pty-spot {
+  0%, 36%, 72% { box-shadow: 0 0 0 3px var(--pty-violet), 0 0 0 9px rgba(109, 59, 224, 0.28), 0 14px 30px -16px rgba(76, 29, 149, 0.7); }
+  18%, 54% { box-shadow: 0 0 0 3px var(--pty-violet), 0 0 0 4px rgba(109, 59, 224, 0.12), 0 12px 28px -20px rgba(76, 29, 149, 0.55); }
+  100% { box-shadow: 0 0 0 0 rgba(109, 59, 224, 0), 0 10px 24px -20px rgba(50, 20, 110, 0.45); }
+}
 .ph[data-app="parties"] .pty-tag {
   position: absolute; z-index: 1; top: 12px; right: 12px; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px;
   font: 800 0.76rem/1 var(--font-ui); letter-spacing: 0.01em; color: #fff; box-shadow: 0 8px 18px -8px rgba(20, 8, 50, 0.65);
@@ -124,5 +144,6 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .ph[data-app="parties"] .pty-card, .ph[data-app="parties"] .pty-tag i { animation: none; }
+  .ph[data-app="parties"] .pty-card-spot { animation: none; box-shadow: 0 0 0 3px var(--pty-violet), 0 0 0 9px rgba(109, 59, 224, 0.28); }
   .ph[data-app="parties"] .pty-buy { transition: none; }
 }
