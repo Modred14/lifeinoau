@@ -220,7 +220,7 @@ export default function Shell({ children }) {
             onClick={() => setPlayMode("home")}
           >
             <span className="crown" aria-hidden="true">
-              <Logo size={22} />
+              <Logo size={20} />
             </span>
             <span>
               life<i>in</i>oau
@@ -230,8 +230,8 @@ export default function Shell({ children }) {
           {st && clock && <span className="hud-time num">{stamp(clock)}</span>}
           {st && (
             <span className="cash num" role="status" aria-label={`Cash: ${exactKobo(st.balanceKobo)}`}>
-              <Icon name="coins" size={16} weight="fill" />
-              {naira(st.balanceKobo)}
+              <Icon name="coins" size={15} weight="fill" />
+              <span className="cash-v" key={naira(st.balanceKobo)}>{naira(st.balanceKobo)}</span>
             </span>
           )}
         </header>

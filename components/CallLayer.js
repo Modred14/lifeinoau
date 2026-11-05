@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Phone, PhoneDisconnect, PhoneIncoming, Check, X, Lock } from "@phosphor-icons/react";
 import { naira } from "@/lib/client";
+import { compactMoney } from "@/lib/money.js";
 import { useStore } from "@/lib/optimistic";
 import { useGame } from "@/lib/gameStore";
 import { serverTime } from "@/lib/serverClock";
@@ -100,7 +101,7 @@ function Connected({ c, busy, act, balanceKobo }) {
           <label className="cx-lab" htmlFor="cx-amt">How much do you want to ask for?</label>
           <div className="cx-money"><span aria-hidden="true">₦</span>
             <input id="cx-amt" inputMode="numeric" autoComplete="off" placeholder="0" value={amt ? Number(amt).toLocaleString("en-NG") : ""} onChange={(e) => setAmt(e.target.value.replace(/\D/g, "").slice(0, 7))} aria-describedby="cx-hint" /></div>
-          <div className="cx-chips">{[1000, 5000, 10000, 20000].map((v) => <button key={v} type="button" className="cx-chip" onClick={() => setAmt(String(v))}>₦{v.toLocaleString("en-NG")}</button>)}</div>
+          <div className="cx-chips">{[1000, 5000, 10000, 20000].map((v) => <button key={v} type="button" className="cx-chip" onClick={() => setAmt(String(v))}>{compactMoney(v)}</button>)}</div>
           <p id="cx-hint" className="cx-hint"><Lock size={13} weight="fill" /> Nothing is taken from {c.peer}. They see the amount and must approve it.</p>
           <button type="button" className="cx-btn cx-wide cx-yes" disabled={busy || !valid} onClick={() => act({ action: "ask", amountNaira: n })}>{valid ? `Ask for ₦${n.toLocaleString("en-NG")}` : "Enter an amount"}</button>
         </div>

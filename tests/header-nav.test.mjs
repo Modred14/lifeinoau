@@ -1,0 +1,20 @@
+// The slim header (no Week / Level / Happiness), the smaller bottom bar, and money shown through the one formatter.
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { compactMoney, compactKobo } from "../lib/money.js";
+const rd = (p) => readFileSync(new URL("../" + p, import.meta.url), "utf8");
+const shell = rd("components/Shell.js");
+const header = shell.slice(shell.indexOf('<header className="hud">'), shell.indexOf("</header>"));
+for (const word of [/week/i, /level/i, /happ/i, /mood/i]) assert.ok(!word.test(header), `header must not show ${word}`);
+assert.ok(header.includes("naira(st.balanceKobo)"), "cash stays in the header");
+const css = rd("src/app/globals.css"), nav = rd("components/bottom-nav.css");
+assert.match(css, /height: var\(--hud-bar-h, 36px\)/, "header is 36px");
+assert.match(nav, /--nav-bar-h: 52px/, "bar is 52px");
+assert.match(nav, /min-height: 44px/, "tap targets stay 44px");
+assert.match(nav, /prefers-reduced-motion: reduce/, "nav respects reduced motion");
+const bet = rd("lib/bet/betClient.js"), games = rd("lib/games/gamesClient.js");
+assert.ok(bet.includes("compactMoney(n)") && bet.includes("compactKobo(kobo)"), "bet app uses the shared formatter");
+assert.ok(games.includes("compactKobo(k)"), "games use the shared formatter");
+assert.equal(compactMoney(1200), "₦1.20k");
+assert.equal(compactKobo(1250000000n * 100n), "₦1.25B");
+console.log("header-nav.test ok");

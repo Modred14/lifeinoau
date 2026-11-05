@@ -165,7 +165,7 @@
      browser's collapsing address bar never leaves a gap or hides the bottom of the game); the device's safe areas are handled inside the game (bet.css);
    - the layer rises above the bottom bar (--z-nav). An incoming call (.cx-scrim, 88 normally) rises above the game, and toasts (1000) stay on top of everything.
    The game list stays in the phone: with no game open none of this applies and the handset looks exactly as before. */
-body[data-phone-full] :is(.nav, .hud) { visibility: hidden; pointer-events: none; }
+body[data-phone-full] :is(.nav, .hud) { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 160ms var(--ease), visibility 0s linear 160ms; }
 body[data-phone-full] .ph-scrim:has(> .ph[data-app]) {
   z-index: calc(var(--z-nav, 500) + 20); display: block; padding: 0; background: #0b0e13;
   backdrop-filter: none; -webkit-backdrop-filter: none; animation: none; height: 100%; height: 100dvh; bottom: auto;

@@ -43,7 +43,7 @@
   --safe-b: env(safe-area-inset-bottom, 0px);
   --nav-h: var(--nav-band, 88px); /* the bottom bar's footprint, defined in components/bottom-nav.css */
   --edge: clamp(24px, 3vw, 56px); /* breathing room between the site and the window edge */
-  --hud-h: 52px;
+  --hud-h: 44px;
 }
 * {
   box-sizing: border-box;
@@ -349,28 +349,31 @@ input[type="checkbox"] {
   }
 }
 
-/* HUD (shell): one slim bar: brand on the left, game clock, cash on the right. The full-width bar is 44px; --hud-h is its footprint. */
+/* HUD (shell): one slim bar: brand on the left, game clock, cash on the right. The bar is 36px tall; --hud-h is its footprint (gap + bar). */
 .hud {
-  position: fixed; z-index: 30; top: calc(var(--safe-t) + 8px); left: 50%; transform: translateX(-50%); width: min(calc(100% - 2 * var(--edge)), 1240px);
-  height: 44px; display: flex; align-items: center; gap: var(--s3); padding: 0 6px 0 12px;
+  position: fixed; z-index: 30; top: calc(var(--safe-t) + 6px); left: 50%; transform: translateX(-50%); width: min(calc(100% - 2 * var(--edge)), 1240px);
+  height: var(--hud-bar-h, 36px); display: flex; align-items: center; gap: var(--s3); padding: 0 4px 0 10px;
   background: rgba(13, 19, 33, 0.8); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
-  border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px;
+  transition: opacity 160ms var(--ease), visibility 0s linear 0s;
   animation: hud-in 220ms var(--ease) both;
 }
 @keyframes hud-in { from { opacity: 0; transform: translate(-50%, -8px); } }
-.hud .brand { display: inline-flex; align-items: center; gap: 7px; font: 700 1rem var(--font-head); letter-spacing: -0.015em; min-height: 44px; }
+.hud .brand { display: inline-flex; align-items: center; gap: 7px; font: 700 0.94rem var(--font-head); letter-spacing: -0.015em; min-height: 36px; }
 .hud .brand .crown { display: grid; place-items: center; line-height: 0; }
 .hud .brand i { color: var(--green-text); font-style: normal; }
 .hud .grow { flex: 1; }
-.hud-time { color: var(--muted); font-size: 0.82rem; white-space: nowrap; }
+.hud-time { color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
 .hud .cash {
-  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 10px; flex: none;
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 9px; flex: none;
   background: rgba(242, 184, 75, 0.12); border: 1px solid rgba(242, 184, 75, 0.28); color: var(--text);
-  font-size: 0.95rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap;
+  font-size: 0.9rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
+.hud .cash .cash-v { display: inline-block; animation: cash-tick 220ms var(--ease) both; }
+@keyframes cash-tick { from { opacity: 0.45; transform: translateY(2px); } }
 .hud .cash svg { color: #f2b84b; }
 @media (max-width: 380px) { .hud-time { display: none; } .hud .brand span:last-child { font-size: 0.92rem; } }
-@media (prefers-reduced-motion: reduce) { .hud { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .hud { animation: none; transition: none; } .hud .cash .cash-v { animation: none; } }
 .sheet-scrim {
   position: fixed;
   inset: 0;
@@ -768,7 +771,7 @@ input[type="checkbox"] {
 @media (max-width: 700px) {
   .hud-mid .hud-mood { display: none; }
   .hud .meta { display: none; }
-  .hud .cash { padding: 0 12px; font-size: 0.98rem; }
+  .hud .cash { padding: 0 10px; font-size: 0.92rem; }
 }
 @media (max-width: 480px) { .hud-mid { display: none; } }
 /* the 3D map's controls: a column down the right edge so eight buttons never overflow a phone */

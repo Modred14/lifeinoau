@@ -10,8 +10,8 @@
       their sheets, footers and joysticks) as "device inset + the bar", so their bottom controls stop above the bar instead of under it. */
 :root {
   --z-nav: 500;
-  --nav-gap: 10px; /* between the bar and the bottom edge (the device's own inset comes on top) */
-  --nav-bar-h: 58px; /* 48px buttons (a comfortable touch target) + 2 x 4px padding + 2px border */
+  --nav-gap: 8px; /* between the bar and the bottom edge (the device's own inset comes on top) */
+  --nav-bar-h: 52px; /* 44px buttons (the minimum comfortable touch target) + 2 x 3px padding + 2px border */
   --nav-band: calc(var(--nav-gap) + var(--nav-bar-h));
   --bp-bg: rgba(13, 19, 33, 0.94); /* the one surface the activities panel and the bar share (components/building-panel.css) */
   --bp-line: rgba(255, 255, 255, 0.12);
@@ -23,32 +23,36 @@
 
 .nav {
   position: fixed; z-index: var(--z-nav); bottom: calc(var(--safe-b) + var(--nav-gap)); left: 50%; transform: translateX(-50%);
-  width: min(420px, calc(100% - 2 * var(--edge))); display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; padding: 4px;
+  width: min(420px, calc(100% - 2 * var(--edge))); display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; padding: 3px;
   background: rgba(13, 19, 33, 0.86); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
-  border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px;
+  transition: opacity 160ms var(--ease), visibility 0s linear 0s;
   animation: nav-in 220ms var(--ease) both;
 }
 @keyframes nav-in { from { opacity: 0; transform: translate(-50%, 10px); } }
 .nav a, .nav button:not(:where(.campus-world *)) {
-  position: relative; min-height: 48px; flex-direction: column; gap: 2px; font-size: 0.7rem; font-weight: 500; letter-spacing: 0.01em; line-height: 1;
-  border-radius: 14px; border: 0; background: transparent; color: var(--muted); padding: 5px 2px;
+  position: relative; min-height: 44px; flex-direction: column; gap: 2px; font-size: 0.66rem; font-weight: 500; letter-spacing: 0.02em; line-height: 1;
+  border-radius: 13px; border: 0; background: transparent; color: var(--muted); padding: 4px 2px;
   -webkit-tap-highlight-color: transparent; touch-action: manipulation;
   transition: background-color 160ms var(--ease), color 160ms var(--ease), transform 120ms var(--ease);
 }
 .nav a { display: inline-flex; align-items: center; justify-content: center; }
-.nav svg { width: 22px; height: 22px; flex: none; transition: transform 180ms var(--ease); }
-.nav [data-active="1"] { background: rgba(255, 255, 255, 0.12); color: #fff; font-weight: 600; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
-.nav [data-active="1"] svg { transform: translateY(-1px) scale(1.08); }
+.nav svg { width: 20px; height: 20px; flex: none; transition: transform 180ms var(--ease); }
+.nav [data-active="1"] { background: rgba(255, 255, 255, 0.1); color: #fff; font-weight: 600; }
+/* the active mark: a short green bar on the top edge that grows in, so a tab switch reads at once without moving anything */
+.nav a::after, .nav button:not(:where(.campus-world *))::after { content: ""; position: absolute; top: 0; left: 50%; width: 16px; height: 2px; margin-left: -8px; border-radius: 0 0 2px 2px; background: var(--green-text, #6ee7a8); opacity: 0; transform: scaleX(0.3); transition: opacity 160ms var(--ease), transform 200ms var(--ease); pointer-events: none; }
+.nav [data-active="1"]::after { opacity: 1; transform: none; }
+.nav [data-active="1"] svg { transform: scale(1.06); }
 .nav a:hover:not([data-active="1"]), .nav button:not(:where(.campus-world *)):hover:not(:disabled):not([data-active="1"]) { color: var(--text); background-color: rgba(255, 255, 255, 0.07); }
 .nav a:active, .nav button:not(:where(.campus-world *)):active:not(:disabled) { transform: scale(0.95); }
 .nav a:focus-visible, .nav button:focus-visible { outline: 2px solid var(--green-text, #6ee7a8); outline-offset: -2px; }
 @media (max-height: 480px) {
   .nav a, .nav button:not(:where(.campus-world *)) { min-height: 44px; padding: 3px; gap: 1px; }
-  .nav svg { width: 20px; height: 20px; }
+  .nav svg { width: 19px; height: 19px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .nav { animation: none; }
-  .nav a, .nav button, .nav svg { transition: none !important; }
+  .nav, .nav a, .nav button, .nav svg, .nav a::after, .nav button::after { transition: none !important; }
   .nav [data-active="1"] svg, .nav a:active, .nav button:active { transform: none; }
 }
 
@@ -92,7 +96,7 @@ body[data-nav="on"] .sx-toast { bottom: calc(20px + var(--safe-b)); }
    layer above it: same background, side and bottom borders only, square top corners and no top edge (the panel / card draws the single top border). */
 body[data-dock="on"] .nav {
   box-sizing: border-box; background: var(--bp-bg); border: 0 solid var(--bp-line); border-width: 0 1px 1px;
-  border-radius: 0 0 18px 18px; box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.75);
+  border-radius: 0 0 16px 16px; box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.75);
 }
 /* the unread badge on the Phone tab: pinned to the icon, so it never moves the label */
 .nav .nav-ico { position: relative; display: inline-grid; place-items: center; line-height: 0; }

@@ -5,6 +5,7 @@
 "use client";
 import { useRef, useState } from "react";
 import { call, naira } from "@/lib/client";
+import { compactNumber } from "@/lib/money.js";
 import { Icon } from "../Icon";
 import { toast } from "@/lib/toast";
 import { game, run, cash, canAfford, useResource } from "@/lib/gameStore";
@@ -43,7 +44,7 @@ export default function Invest() {
   const m = useMarket();
   const [amt, setAmt] = useState({});
   const lastDir = useRef({}), lastPrice = useRef({}); // which way each price last moved (the arrow next to it)
-  const NGN = (k) => (k / 100n).toLocaleString("en-NG");
+  const NGN = (k) => compactNumber(k / 100n);
 
   function go(body, seenKobo) {
     const P = d.products.find((p) => p.key === body.product), fee = BigInt(d.feePercent);
