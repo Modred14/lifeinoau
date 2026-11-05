@@ -17,6 +17,7 @@
 import * as THREE from "three";
 import { XS } from "./roadgraph.js";
 import { triangulate } from "./roadjunction.js";
+import { ROAD_LAYER_Y } from "./roadsurface.js";
 
 export const ROAD_COLORS = { pavement: "#b9bcc2", kerb: "#d3d5d8", asphalt: "#3a3f48", shoulder: "#4b5059", median: "#a9aca8", marking: "#f1efe6", centre: "#e8c22e", medY: "#f0c419", medK: "#1d1f23", apron: "#454c57" };
 const DISC = 14;
@@ -92,7 +93,7 @@ function arrow(soup, x, z, hx, hz, turn = 0) {
  * graph: from buildRoadGraph. S: scene units per metre (0.1). `y` is the base height (scene units) of the asphalt layer; the others sit a hair below/above it.
  * Returns a Group (names: road-pavement, road-kerb, road-asphalt, road-shoulder, road-median, road-medstripe-*, road-marks, road-centre) with a dispose().
  */
-export function buildRoadMeshes(graph, S, y = 0.08) {
+export function buildRoadMeshes(graph, S, y = ROAD_LAYER_Y) {
   const pav = new Soup(S), kerb = new Soup(S), asp = new Soup(S), sho = new Soup(S), med = new Soup(S), mk = new Soup(S), yel = new Soup(S), mY = new Soup(S), mK = new Soup(S);
   const cutOf = (n, e, end, layer) => n.J?.[layer].cut.get(e.id * 2 + end) ?? 0;
   for (const e of [...graph.edges, ...graph.foots]) {

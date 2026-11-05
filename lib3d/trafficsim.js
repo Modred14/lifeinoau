@@ -161,7 +161,9 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     const P = a.route.path, sf = Math.min(P.len, a.s + a.len * 0.3), sr = Math.max(0, a.s - a.len * 0.3), p = shifted(a, P.at(a.s, {}), a.s), f = shifted(a, P.at(sf, {}), sf), r = shifted(a, P.at(sr, {}), sr);
     a.x = p.x; a.z = p.z; let hx = f.x - r.x, hz = f.z - r.z; const l = Math.hypot(hx, hz); if (l > 1e-3) { a.hx = hx / l; a.hz = hz / l; } else { a.hx = p.hx; a.hz = p.hz; } a.yaw = Math.atan2(a.hx, a.hz);
     const sg = a.route.segs[a.si]; if (sg.kind === "lane") { a.laneId = sg.id; a.laneS = sg.s0 + (a.s - sg.start); } else { a.laneId = graph.conns[sg.id].to; a.laneS = 0; }
-    const e = edgeOf(a.laneId); a.y = e.h0 === e.h1 ? e.h0 : heightOn(e, graph.lanes[a.laneId].dir ? e.len - a.laneS : a.laneS); a.lvl = a.y > 2 ? 1 : 0;   // the deck is a different level: nothing on it can touch anything below
+    const e = edgeOf(a.laneId); a.y = e.h0 === e.h1 ? e.h0 : heightOn(e, graph.lanes[a.laneId].dir ? e.len - a.laneS : a.laneS); a.lvl = a.y > 2 ? 1 : 0;
+    // the pitch of a vehicle on a slope: its axles (about 0.29 of its length either side of the middle) both on the road, so its tyres touch it instead of floating at one end and sinking at the other
+    if (e.h0 === e.h1) a.pitch = 0; else { const dir = graph.lanes[a.laneId].dir, hAt = (s) => heightOn(e, dir ? e.len - Math.max(0, Math.min(e.len, s)) : Math.max(0, Math.min(e.len, s))), L = a.len * 0.29; a.pitch = Math.atan2(hAt(a.laneS + L) - hAt(a.laneS - L), 2 * L); a.y = (hAt(a.laneS + L) + hAt(a.laneS - L)) / 2; }   // the deck is a different level: nothing on it can touch anything below
   }
 
   // ---------- obstacles ----------

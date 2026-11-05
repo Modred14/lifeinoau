@@ -12,6 +12,7 @@
 import { Path } from "./roadnet.js";
 import { dataUrl } from "./dataUrl.js";
 import { buildJunctions, inside } from "./roadjunction.js";
+import { DECK } from "./roadsurface.js";
 
 /** Cross-section rules. A road is `half` metres from its centreline to the kerb on each side, then `sw` metres of pavement. */
 export const XS = { minDrivableClearance: 2.7, lane: 3.5, minHalf: 3.5, maxHalf: 7.0, pavement: 2.0, minPavement: 0.7, setback: 0.7, junctionExtra: 1.6, frontage: 1.0, uTurnTrim: 3,
@@ -49,8 +50,25 @@ export const LV_GROUND = 1, LV_DECK = 2, LV_RAMP = 4;
 const maskOfLv = (lv) => (lv === 1 ? LV_DECK : lv === 2 ? LV_RAMP : LV_GROUND);
 /** The surface mask for a vehicle on level `lv` (0 ground, 1 deck): its own level plus the ramps between them. */
 export const carMask = (lv) => (lv ? LV_DECK : LV_GROUND) | LV_RAMP;
+/**
+ * The same, for a vehicle at height h: it also sees the deck when it is high enough to be on it (a car on a ramp, or crossing from a ramp on to the deck, has its nose over the deck before its middle is), and the
+ * ground when it is low. Surfaces more than LEVEL_GAP from the vehicle's height are never seen anyway (surfaceAt's hRef), so this only stops the level, which is decided at the middle of the car, from hiding a surface
+ * that a corner of it is already over.
+ */
+export const carMaskAt = (lv, h) => carMask(lv) | (h > LEVEL_GAP ? LV_DECK : 0) | (h < LEVEL_GAP ? LV_GROUND : 0);
 const ease5 = (t) => { t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * t * (t * (t * 6 - 15) + 10); };   // smootherstep: a ramp starts and ends level, so a car never meets a kink
-export const heightOn = (e, s) => (e.h0 === e.h1 ? e.h0 : e.h0 + (e.h1 - e.h0) * ease5(s / (e.len || 1)));
+/**
+ * The fraction (0..1) of its climb a ramp has made at distance s along its climbing stretch [a, b]: a steady grade with eased ends (the slope builds up over `te` metres, holds, and eases off), so a car never meets a kink and
+ * the grade is as gentle as the stretch allows. Below a it is 0, above b it is 1.
+ */
+export const RAMP_EASE = 40;
+export function climbFrac(s, a, b) {
+  if (s <= a) return 0; if (s >= b) return 1;
+  const L = b - a, te = Math.min(RAMP_EASE, L * 0.25), k = 1 / (L - te), x = s - a;
+  return x < te ? (k * x * x) / (2 * te) : x > L - te ? 1 - (k * (L - x) * (L - x)) / (2 * te) : k * (te / 2 + (x - te));
+}
+/** Height of a road at distance s along it. A ramp climbs over [ha, hb] (see shapeRamps); an edge without them (a flat one, or a plain ramp description) eases over its whole length. */
+export const heightOn = (e, s) => (e.h0 === e.h1 ? e.h0 : e.h0 + (e.h1 - e.h0) * (e.ha === undefined ? ease5(s / (e.len || 1)) : climbFrac(s, e.ha, e.hb)));
 const CELL = 24;
 /** Is (x, z) inside the polygon, or within `r` metres of its outline? */
 const nearPoly = (P, x, z, r) => { if (inside(P, x, z)) return true; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const ax = P[j][0], az = P[j][1], dx = P[i][0] - ax, dz = P[i][1] - az, l2 = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)); if (Math.hypot(x - ax - dx * t, z - az - dz * t) < r) return true; } return false; };
@@ -101,6 +119,30 @@ function relaxCentreline(pts, need, sdf) {
 }
 
 /**
+ * Makes each ramp meet the deck FLUSH. A ramp is laid out to leave (or join) the deck tangentially, at the deck's own centreline, so for its last stretch it runs under the deck's footprint. The old
+ * profile climbed to the deck height only at that centreline, so over that stretch the ramp was 0.5 to 2.8 m below the deck surface, inside its girder: a car on the ramp drove into the side of the bridge.
+ * Here the climb is finished where the ramp's inner edge reaches the deck's outer edge (the road layout is unchanged), and from there the ramp runs at deck height, level with the deck it merges into.
+ * Sets ha / hb (the climbing stretch, metres along the edge from its first point) on each ramp edge, and on the matching entries of the expressway description that the meshes are built from;
+ * the heights of the ramp piers follow the new profile.
+ */
+export function shapeRamps(ex, edges) {
+  if (!ex?.deck) return;
+  const D = ex.deck, seg = (px, pz, ax, az, bx, bz) => { const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz || 1; let t = ((px - ax) * dx + (pz - az) * dz) / l2; t = t < 0 ? 0 : t > 1 ? 1 : t; return Math.hypot(px - ax - dx * t, pz - az - dz * t); };
+  const lat = (x, z) => { let d = Infinity; for (let i = 0; i < D.length - 1; i++) d = Math.min(d, seg(x, z, D[i][0], D[i][1], D[i + 1][0], D[i + 1][1])); return d; };
+  // where a ramp leaves or joins, the deck's parapet has a gap (the mesh leaves it open): the drivable width is open there too
+  for (const e of edges) if (e.hw && e.rail > 0 && e.kind !== "ramp" && e.ds1 > e.ds0) { const g = (ex.ramps ?? []).filter((r) => r.gap && r.gap[1] >= e.ds0 && r.gap[0] <= e.ds1).map((r) => ({ s0: r.gap[0], s1: r.gap[1], side: r.gap[2] })); if (g.length) e.gaps = g; }
+  for (const e of edges) {
+    if (e.kind !== "ramp" || e.h0 === e.h1) continue;
+    const r = ex.ramps?.find((q) => q.id === e.id), lim = ex.half + (r?.half ?? e.half) + 1.0, up = e.h1 > e.h0, at = {};
+    // the first point along the edge, from the deck end, that is clear of the deck's footprint: the climb must be done there (rising ramp: its last such point is where it ends)
+    let u0 = up ? 0 : e.len; if (up) { for (let u = 0; u <= e.len; u += 0.5) { e.path.at(u, at); if (lat(at.x, at.z) <= lim) { u0 = u; break; } u0 = e.len; } } else { for (let u = e.len; u >= 0; u -= 0.5) { e.path.at(u, at); if (lat(at.x, at.z) <= lim) { u0 = u; break; } u0 = 0; } }
+    e.ha = up ? 0 : u0; e.hb = up ? u0 : e.len;
+    if (r) { r.ha = e.ha; r.hb = e.hb; r.grade = Math.abs(e.h1 - e.h0) / Math.max(1, e.hb - e.ha); }
+    for (const p of ex.rampPiers ?? []) if (p.ramp === e.id) p.h = Math.round(heightOn(e, p.u) * 100) / 100;
+  }
+}
+
+/**
  * Builds everything from the generated JSON. `raw` is { nodes: [{id,x,z,rim,comp}], edges: [{id,a,b,pts,w,clr,comp}] }.
  * `sdf` (optional) is (x, z) => signed distance to the nearest building or water (CollisionWorld.sdf). With it the centrelines are nudged away from
  * buildings that crowd them, and each road is sized from the clearance that is really left, so lanes never clip a wall.
@@ -113,7 +155,8 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
     // an edge with `fixed` is designed, not found (the expressway and its ramps): its geometry and cross-section are exactly as given and are never nudged or measured against buildings
     if (e.fixed) {
       const path = new Path(pts), F = e.fixed, lv = e.lv ?? 0;
-      edges.push({ id: e.id, a: e.a, b: e.b, path, len: path.len, half: F.half, sw: F.sw ?? 0, med: F.med ?? 0, lanesPerDir: F.lanes ?? 1, shoulder: F.shoulder ?? 0, laneOff: F.laneOff ?? null, oneWay: !!e.oneWay, cls: e.kind ?? "express", kind: e.kind ?? "express", hw: !!e.hw, lv, mask: maskOfLv(lv), h0: e.h0 ?? 0, h1: e.h1 ?? e.h0 ?? 0, comp: e.comp ?? 0, lanes: [null, null], rawHalf: F.half, clr: Infinity, foot: false, struct: e.struct ?? null });
+      edges.push({ id: e.id, a: e.a, b: e.b, path, len: path.len, half: F.half, sw: F.sw ?? 0, med: F.med ?? 0, lanesPerDir: F.lanes ?? 1, shoulder: F.shoulder ?? 0, laneOff: F.laneOff ?? null, oneWay: !!e.oneWay, cls: e.kind ?? "express", kind: e.kind ?? "express", hw: !!e.hw, lv, mask: maskOfLv(lv), h0: e.h0 ?? 0, h1: e.h1 ?? e.h0 ?? 0, comp: e.comp ?? 0, lanes: [null, null], rawHalf: F.half, clr: Infinity, foot: false, struct: e.struct ?? null,
+        ds0: e.s0 ?? 0, ds1: e.s1 ?? 0, rail: F.rail ?? (e.kind === "ramp" ? DECK.rampParapet : e.hw ? DECK.parapet : 0), endInset: F.endInset ?? (e.kind === "express-end" ? DECK.endStop : 0) });   // rail: the parapet (not drivable); endInset: where the drivable surface stops short of a dead end (the end barrier)
       continue;
     }
     if (sdf) {
@@ -141,6 +184,15 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
   for (const n of nodes) n.deg = n.edges.length;
   // ---- junction polygons (lib3d/roadjunction.js): where the roads meet, one polygon per layer; the road ribbons start where it ends ----
   const jstat = buildJunctions(nodes, byId);
+  shapeRamps(raw.expressway, edges);
+  // The END of a designed road that leads nowhere (the deck's two ends) is a flat cut across the road, `endInset` metres short of the last point, where the end barrier stands: not a half-circle
+  // (every segment of a road is measured as a capsule, which would carry the road on past the barrier for a whole carriageway's width). Stored as planes: a point on the outer side of one is not road.
+  for (const e of edges) {
+    if (!(e.hw && e.endInset > 0)) continue; const P = e.path.pts, n = P.length, cuts = [];
+    const plane = (end, step) => { let q = end + step; while (q + step >= 0 && q + step < n && Math.hypot(P[q][0] - P[end][0], P[q][1] - P[end][1]) < 5) q += step; const l = Math.hypot(P[end][0] - P[q][0], P[end][1] - P[q][1]) || 1; return { x: P[end][0], z: P[end][1], ox: (P[end][0] - P[q][0]) / l, oz: (P[end][1] - P[q][1]) / l }; };   // the outward direction at the end, taken over about 5 m
+    if (nodes[e.a].deg === 1) cuts.push(plane(0, 1)); if (nodes[e.b].deg === 1) cuts.push(plane(n - 1, -1));
+    if (cuts.length) e.cuts = cuts;
+  }
 
   // ---- lanes: forward (a -> b) is dir 0, backward is dir 1. Lane centre is half/2 to the right of travel. ----
   const lanes = [];
@@ -224,7 +276,8 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
   for (const e of [...edges, ...foots]) {
     const P = e.path.pts;
     for (let i = 0; i < P.length - 1; i++) {
-      const sg = { e: e.id, ax: P[i][0], az: P[i][1], bx: P[i + 1][0], bz: P[i + 1][1], s0: e.path.cum[i], reach: e.half + e.sw }; segs.push(sg);
+      const sg = { e: e.id, ax: P[i][0], az: P[i][1], bx: P[i + 1][0], bz: P[i + 1][1], s0: e.path.cum[i], reach: e.half + e.sw, len: Math.hypot(P[i + 1][0] - P[i][0], P[i + 1][1] - P[i][1]) || 1 };
+      segs.push(sg);
       const i0 = Math.floor((Math.min(sg.ax, sg.bx) - sg.reach) / CELL), i1 = Math.floor((Math.max(sg.ax, sg.bx) + sg.reach) / CELL), j0 = Math.floor((Math.min(sg.az, sg.bz) - sg.reach) / CELL), j1 = Math.floor((Math.max(sg.az, sg.bz) + sg.reach) / CELL);
       for (let a = i0; a <= i1; a++) for (let b = j0; b <= j1; b++) { const k = key(a, b); if (!hash.has(k)) hash.set(k, []); hash.get(k).push(sg); }
     }
@@ -232,6 +285,7 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
   // junction patches: the corner a vehicle sweeps through while it turns is road too (otherwise the inside of every turn would be "off the road")
   const patches = [];
   for (const c of conns) {
+    if (nodes[c.node].fixedOnly && nodes[c.node].deg === 1) continue;   // the dead end of the deck: the deck covers the turning area, and the U-turn's patch would reach past the end barrier
     const ef = byId.get(lanes[c.from].edge), et = byId.get(lanes[c.to].edge), half = (ef.hw || et.hw ? Math.min(ef.half, et.half) : Math.max(ef.half, et.half)) + 0.4, P = c.path.pts, mk = lanes[c.from].mask | lanes[c.to].mask, pe = { id: -(c.id + 1), half, sw: 0, med: 0, mask: mk, h0: nodes[c.node].h, h1: nodes[c.node].h, comp: lanes[c.from].comp, conn: c.id, path: c.path }; byId.set(pe.id, pe); patches.push(pe);
     // the whole turn is swept, from the stop line to the next lane: a driver cuts corners, and must never meet an invisible edge
     for (let i = 0; i < P.length - 1; i += 2) {
@@ -245,6 +299,17 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
 
   const segDist = (sg, x, z) => { const dx = sg.bx - sg.ax, dz = sg.bz - sg.az, l2 = dx * dx + dz * dz || 1; let t = ((x - sg.ax) * dx + (z - sg.az) * dz) / l2; t = Math.max(0, Math.min(1, t)); const px = sg.ax + dx * t, pz = sg.az + dz * t; return { d: Math.hypot(x - px, z - pz), t, px, pz }; };
 
+  /** How far from the centreline (m) a vehicle may drive on edge e at (x, z), whose nearest segment is sg (fraction t, distance d): up to the parapet, or to the edge of the deck where the parapet has a gap. */
+  const driveHalf = (e, sg, t, x, z, d) => {
+    const base = e.half - (e.rail ?? 0); if (!e.gaps || d <= base || d > e.half) return base;
+    const sd = e.ds0 + (sg.s0 + t * sg.len) * ((e.ds1 - e.ds0) / (e.len || 1)), side = (sg.bx - sg.ax) * (z - sg.az) - (sg.bz - sg.az) * (x - sg.ax) >= 0 ? 1 : -1;
+    for (const q of e.gaps) if (q.side === side && sd >= q.s0 && sd <= q.s1) return e.half; return base;
+  };
+  /** Is (x, z) beyond the flat end of a designed dead-end road (past its end barrier)? A plane, so it holds however far past the end the point is, and at any speed a car might skip it. */
+  const beyondEnd = (e, x, z) => { for (const c of e.cuts) if ((x - c.x) * c.ox + (z - c.z) * c.oz > -e.endInset) return true; return false; };
+  /** Scratch for surfaceAt: the nearest segment of each road around the point (reused, so a query allocates nothing). */
+  const CAND = Array.from({ length: 256 }, () => ({ e: null, sg: null, t: 0, d: 0 }));   // a busy junction cell holds a road or two and a patch for every turn through it: tens of them
+
   const G = {
     sdf, nodes, edges, foots, lanes, conns, patches, junctions: jstat, byEdge: byId, segs, expressway: raw.expressway ?? null, comps: Math.max(0, ...edges.map((e) => e.comp)) + 1, bounds: raw.bounds ?? null,
     laneOf: (edge, dir) => byId.get(edge)?.lanes[dir] ?? null,
@@ -255,29 +320,53 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
      * A median (the strip down the middle of an express road) is neither carriageway nor pavement: nobody drives over it, and it is no place to wait.
      */
     surfaceAt(x, z, out = {}, mask = LV_GROUND, hRef = NaN) {
-      out.cls = 0; out.edge = -1; out.d = Infinity; out.half = 0; out.sw = 0; out.h = 0; let bestPav = null, bestSeg = null, bestDh = 0;
+      out.cls = 0; out.edge = -1; out.d = Infinity; out.half = 0; out.sw = 0; out.h = 0; let bestPav = null, nc = 0;
       const list = hash.get(key(Math.floor(x / CELL), Math.floor(z / CELL)));
+      // 1. for each road under the point, the NEAREST of its segments (a road is one surface: its height at a point is the height of the part of it that is nearest, never of a farther part that
+      //    merely happens to be at the height the car was at a moment ago: that made the height cling to its old value on a slope and then jump)
       if (list) for (const sg of list) {
         const e = byId.get(sg.e); if (!(e.mask & mask)) continue; const { d, t } = segDist(sg, x, z); if (hRef === hRef && Math.abs(segH(e, sg, t) - hRef) > LEVEL_GAP) continue;
-        if (d <= e.half) {
-          if (d < (e.med ?? 0)) continue;
-          // where a ramp runs on to the deck both are under the car: take the one at the height the car is at (so the deck stays level to its edge), otherwise the nearer
-          const dh = hRef === hRef ? Math.abs(segH(e, sg, t) - hRef) : 0, better = out.cls !== 1 || (Math.abs(dh - bestDh) > 0.02 ? dh < bestDh : d < out.d);
-          if (better) { out.cls = 1; out.edge = e.id; out.d = d; out.half = e.half; out.sw = e.sw; bestSeg = { sg, t, e }; bestDh = dh; }
-        }
-        else if (out.cls !== 1 && d <= e.half + e.sw && (!bestPav || d < bestPav.d)) bestPav = { d, e };
+        if (e.cuts && beyondEnd(e, x, z)) continue;
+        let k = 0; while (k < nc && CAND[k].e !== e) k++;
+        if (k < nc) { const c = CAND[k]; if (d < c.d) { c.sg = sg; c.t = t; c.d = d; } continue; }
+        if (nc < CAND.length) { const c = CAND[nc++]; c.e = e; c.sg = sg; c.t = t; c.d = d; }
       }
-      if (bestSeg && (bestSeg.e.h0 || bestSeg.e.h1)) out.h = heightOn(bestSeg.e, bestSeg.sg.s0 + bestSeg.t * Math.hypot(bestSeg.sg.bx - bestSeg.sg.ax, bestSeg.sg.bz - bestSeg.sg.az));
+      // 2. between DIFFERENT roads at the same place (a ramp where it runs on to the deck, a ramp over a road): the one at the height the car is at, otherwise the nearer
+      //    Two roads whose surfaces are within 10 cm of each other are drawn on top of one another (a ramp's last metres lie just under the deck): what is seen, and what a tyre must sit on, is the higher.
+      let best = null, bestDh = 0, bestH = 0;
+      for (let k = 0; k < nc; k++) {
+        const c = CAND[k], e = c.e;
+        if (c.d <= driveHalf(e, c.sg, c.t, x, z, c.d)) {   // the carriageway (the parapet along the edge of a deck is not drivable, except in its gaps)
+          if (c.d < (e.med ?? 0)) continue;           // the median
+          const ch = segH(e, c.sg, c.t), dh = hRef === hRef ? Math.abs(ch - hRef) : 0, gap = best ? Math.abs(ch - bestH) : 0;
+          if (!best || (gap > 0.002 && gap <= 0.1 ? ch > bestH : Math.abs(dh - bestDh) > 0.02 ? dh < bestDh : c.d < best.d)) { best = c; bestDh = dh; bestH = ch; }
+        } else if (c.d > e.half && c.d <= e.half + e.sw && (!bestPav || c.d < bestPav.d)) bestPav = { d: c.d, e };
+      }
+      if (best) {
+        const e = best.e; out.cls = 1; out.edge = e.id; out.d = best.d; out.half = e.half; out.sw = e.sw;
+        if (e.h0 || e.h1) out.h = heightOn(e, best.sg.s0 + best.t * best.sg.len);
+      }
       const nl = nhash.get(key(Math.floor(x / CELL), Math.floor(z / CELL)));
       if (nl) for (const n of nl) { if (!(n.mask & mask) || (hRef === hRef && Math.abs(n.h - hRef) > LEVEL_GAP)) continue; const d = Math.hypot(x - n.x, z - n.z), J = n.J;
         // the junction's own polygon (the same one that is drawn): carriageway inside the asphalt, pavement inside the pavement polygon
-        if (d <= n.radius || (J && inside(J.asph.poly, x, z))) { out.cls = 1; if (out.edge < 0) out.edge = n.edges[0]; out.d = Math.min(out.d, d); if (!bestSeg) out.h = n.h; } else if (out.cls !== 1 && !bestPav && (J ? inside(J.pave.poly, x, z) : d <= n.radius + XS.pavement)) bestPav = { d, e: byId.get(n.edges[0]) }; }
+        if (d <= n.radius || (J && inside(J.asph.poly, x, z))) { out.cls = 1; if (out.edge < 0) out.edge = n.edges[0]; out.d = Math.min(out.d, d); if (!best) out.h = n.h; } else if (out.cls !== 1 && !bestPav && (J ? inside(J.pave.poly, x, z) : d <= n.radius + XS.pavement)) bestPav = { d, e: byId.get(n.edges[0]) }; }
       if (out.cls === 0 && bestPav) { out.cls = 2; out.edge = bestPav.e.id; out.d = bestPav.d; out.half = bestPav.e.half; out.sw = bestPav.e.sw; }
       return out;
     },
     onCarriageway(x, z, mask = LV_GROUND, hRef = NaN) { return G.surfaceAt(x, z, G._s ??= {}, mask, hRef).cls === 1; },
     /** The height (m) of the road surface a vehicle on level `mask` stands on at (x, z): 0 on the ground, the deck's or ramp's height above it. */
     heightAt(x, z, mask = LV_DECK | LV_GROUND | LV_RAMP, hRef = NaN) { const s = G.surfaceAt(x, z, G._h ??= {}, mask, hRef); return s.cls === 1 ? s.h : 0; },
+    /**
+     * The height of the road under (x, z) for a point that may not be exactly on it (a tyre a hair over the kerb, a corner just past the end of the deck). On the carriageway it is the road's height; off it,
+     * the profile of the nearest road of the right height, carried on. It never drops to 0 (heightAt does, which is right for "is there a road" but makes a body jump 10 m when a wheel crosses an edge);
+     * with nothing near it gives `hRef`, i.e. stays where it is.
+     */
+    heightNear(x, z, mask = LV_DECK | LV_GROUND | LV_RAMP, hRef = NaN, max = 8) {
+      const s = G.surfaceAt(x, z, G._n ??= {}, mask, hRef); if (s.cls === 1) return s.h;
+      let best = max, h = hRef === hRef ? hRef : 0; const list = hash.get(key(Math.floor(x / CELL), Math.floor(z / CELL)));
+      if (list) for (const sg of list) { const e = byId.get(sg.e); if (!(e.mask & mask)) continue; const { d, t } = segDist(sg, x, z); if (d >= best) continue; const hh = segH(e, sg, t); if (hRef === hRef && Math.abs(hh - hRef) > LEVEL_GAP) continue; best = d; h = hh; }
+      return h;
+    },
     /**
      * Which level is a vehicle at (x, z) on? 1 = the deck (or a ramp's upper part), 0 = the ground. `prev` is where it was a moment ago: it only changes when the point is on one level and not the other
      * (under the deck, or where a ramp meets it, both are there, so the vehicle stays where it was). Also says whether it is on a ramp (`ramp`).
@@ -286,7 +375,7 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
       let ground = false, deck = false, ramp = false;
       const see = (m) => { if (m & LV_GROUND) ground = true; if (m & LV_DECK) deck = true; if (m & LV_RAMP) ramp = true; };
       const list = hash.get(key(Math.floor(x / CELL), Math.floor(z / CELL)));
-      if (list) for (const sg of list) { const e = byId.get(sg.e), { d, t } = segDist(sg, x, z); if (d <= e.half && d >= (e.med ?? 0) && !(hRef === hRef && Math.abs(segH(e, sg, t) - hRef) > LEVEL_GAP)) see(e.mask); }
+      if (list) for (const sg of list) { const e = byId.get(sg.e), { d, t } = segDist(sg, x, z); if (d <= driveHalf(e, sg, t, x, z, d) && d >= (e.med ?? 0) && !(hRef === hRef && Math.abs(segH(e, sg, t) - hRef) > LEVEL_GAP) && !(e.cuts && beyondEnd(e, x, z))) see(e.mask); }
       const nl = nhash.get(key(Math.floor(x / CELL), Math.floor(z / CELL)));
       if (nl) for (const n of nl) if ((Math.hypot(x - n.x, z - n.z) <= n.radius || (n.J && inside(n.J.asph.poly, x, z))) && !(hRef === hRef && Math.abs(n.h - hRef) > LEVEL_GAP)) see(n.mask);
       const lv = deck && !ground ? 1 : ground && !deck ? 0 : prev;

@@ -1,10 +1,11 @@
 // lib3d/highwaymesh.js
 // Draws the elevated expressway (graph.expressway, built by lib3d/highway.js): deck, median barrier, lane markings, parapets, the girder under
 // the deck, T-piers down to the ground, lamp posts, end barriers, and the entry/exit ramps. It draws what roadgraph.js drives on: the deck
-// surface is at graph.expressway.H metres, the ramps climb with the same smootherstep (heightOn) the physics uses.
+// surface is at graph.expressway.H metres, the ramps climb with the same profile (heightOn, ramp.ha / hb) the physics uses.
 // Built in scene units (metres * S), with real heights. Not touched by the trip "layerY" lowering: the deck is a structure, not paint.
 import * as THREE from "three";
 import { heightOn } from "./roadgraph.js";
+import { ROAD_TOP, DECK } from "./roadsurface.js";
 
 const COL = { deck: "#3a3f47", shoulder: "#4a4f56", concrete: "#a9aca8", mark: "#ece9dd", edge: "#e6c34a", under: "#7d8083", rail: "#b9bcc0", lamp: "#8a8e93" };
 
@@ -58,7 +59,7 @@ function box(T, x, z, hx, hz, across, along, y0, y1) {
 }
 
 export function buildHighwayMeshes(ex, S) {
-  const g = new THREE.Group(); g.name = "expressway";
+  const g = new THREE.Group(); g.name = "expressway"; g.position.y = ROAD_TOP * S;   // the whole structure stands on the asphalt of a trip (lib3d/roadsurface.js): a ramp starts exactly on the road, and the deck is at ROAD_TOP + H, which is where the car's tyres are
   const H = ex.H, half = ex.half, med = ex.med, L = ex.len;
   const line = new Line(ex.deck), scale = line.len / L || 1;      // the polyline is a hair different from the arc the descriptor was measured on
   const hD = () => H, ds = (s) => Math.min(line.len, s * scale);
@@ -101,12 +102,13 @@ export function buildHighwayMeshes(ex, S) {
   // ---- girder under the deck: side faces and a flat soffit, with the parapet outer face continued down
   sweep(under, line, 0, line.len, [[-half, 0], [-half + 1.2, -gird], [half - 1.2, -gird], [half, 0]], hD, step);
   // end barriers across the two ends
-  for (const [s, f] of [[0, 1], [line.len, -1]]) { const q = line.at(s), a = off(q, -half), b = off(q, half); const t = [q.hx * f * 0.8, q.hz * f * 0.8]; conc.quad([a[0], H, a[1]], [b[0], H, b[1]], [b[0], H + 1.1, b[1]], [a[0], H + 1.1, a[1]]); void t; }
+  // (a solid block DECK.endStop thick, as the drivable surface in lib3d/roadgraph.js stops at its inner face: a car stops against it)
+  for (const [s, f] of [[0, 1], [line.len, -1]]) { const q = line.at(s); box(conc, q.x + q.hx * f * DECK.endStop / 2, q.z + q.hz * f * DECK.endStop / 2, q.hx, q.hz, half * 2, DECK.endStop, H, H + 1.1); }
 
   // ---- T-piers: a column and a cross-head under the girder; wider spans over the lake are the same shape with a taller column
   const colW = ex.pierSpec.col[0], colD = ex.pierSpec.col[1], headW = ex.pierSpec.head[0], headD = ex.pierSpec.head[1], headBottom = H - gird - 1.6;
   const piers = new Tris(S);
-  for (const p of ex.piers) { box(piers, p.x, p.z, p.hx, p.hz, colW, colD, 0, headBottom); box(piers, p.x, p.z, p.hx, p.hz, headW, headD, headBottom, H - gird); }
+  for (const p of ex.piers) { box(piers, p.x, p.z, p.hx, p.hz, colW, colD, -ROAD_TOP, headBottom); box(piers, p.x, p.z, p.hx, p.hz, headW, headD, headBottom, H - gird); }
 
   // ---- lamp posts in the median: pole and a double arm, every ~40 m
   const lamps = new Tris(S);
@@ -119,16 +121,16 @@ export function buildHighwayMeshes(ex, S) {
   // ---- ramps
   const ramp = new Tris(S), rampS = new Tris(S), rampC = new Tris(S), rampU = new Tris(S), rampM = new Tris(S), rampPi = new Tris(S);
   for (const r of ex.ramps) {
-    const rl = new Line(r.pts), hOf = (s) => heightOn({ h0: r.h0, h1: r.h1, len: rl.len }, s), hw = r.half;
+    const rl = new Line(r.pts), hOf = (s) => heightOn({ h0: r.h0, h1: r.h1, len: rl.len, ha: r.ha, hb: r.hb }, s), hw = r.half;
     // the visible range: the part that lies on the deck itself is covered by the deck, so it starts where the ramp leaves the deck
     const sv0 = rl.s[r.vis[0]], sv1 = rl.s[r.vis[1]];
     sweep(ramp, rl, sv0, sv1, [[-hw + 0.4, 0], [hw - 0.4, 0]], hOf, 5);
     sweep(rampS, rl, sv0, sv1, [[-hw, 0], [-hw + 0.4, 0]], hOf, 5); sweep(rampS, rl, sv0, sv1, [[hw - 0.4, 0], [hw, 0]], hOf, 5);
     sweep(rampM, rl, sv0, sv1, [[-hw + 0.4 - 0.08, 0.03], [-hw + 0.4 + 0.08, 0.03]], hOf, 5); sweep(rampM, rl, sv0, sv1, [[hw - 0.4 - 0.08, 0.03], [hw - 0.4 + 0.08, 0.03]], hOf, 5);
-    for (const sg of [-1, 1]) sweep(rampC, rl, sv0, sv1, [[sg * hw, -0.2], [sg * hw, 0.95], [sg * (hw - 0.45), 0.95], [sg * (hw - 0.45), 0]], hOf, 5);
+    for (const sg of [-1, 1]) sweep(rampC, rl, sv0, sv1, [[sg * hw, -0.2], [sg * hw, 0.95], [sg * (hw - DECK.rampParapet), 0.95], [sg * (hw - DECK.rampParapet), 0]], hOf, 5);
     sweep(rampU, rl, sv0, sv1, [[-hw, 0], [-hw + 0.8, -1.4], [hw - 0.8, -1.4], [hw, 0]], hOf, 5);
   }
-  for (const p of ex.rampPiers) box(rampPi, p.x, p.z, p.hx, p.hz, 2.4, 1.8, 0, Math.max(0.5, p.h - 1.6));
+  for (const p of ex.rampPiers) box(rampPi, p.x, p.z, p.hx, p.hz, 2.4, 1.8, -ROAD_TOP, Math.max(0.5, p.h - 1.6));
 
   const add = (t, c, o) => { const m = t.mesh(c, o); if (m) g.add(m); };
   add(deckA, COL.deck, { rough: 0.95, offset: 1 }); add(deckS, COL.shoulder, { rough: 0.95, offset: 1 });

@@ -21,7 +21,8 @@ import { remainingSecs } from "./tripplan.js";
 import { INTRO_SECONDS, BOARD_SECONDS, ALIGHT_SECONDS, CAR_BOARD_SECONDS, CAR_ALIGHT_SECONDS, EXIT_STOP_SPEED, EXIT_REFUSE_SPEED } from "../lib/travel.js";
 import { boxesOverlap } from "./collide.js";
 import { createCar, stepCar, gentleStop, carProfile, CAR } from "./carphysics.js";
-import { carMask } from "./roadgraph.js";
+import { carMaskAt } from "./roadgraph.js";
+import { createRoadFollower, defaultContacts } from "./vehiclepose.js";
 import { exitSpots, pickDoorSide } from "./carexit.js";
 import { SWING, BACK_SPEED, LEAF_ID, canOpenAt, atThreshold, doorLocal, planDoorOpening, inSwing, swingBlocked, leafBody } from "./doorway.js";
 import { RETARGET_WHY } from "./tripretarget.js";
@@ -36,6 +37,8 @@ const clamp01 = (x) => Math.max(0, Math.min(1, x)), smooth = (x) => { x = clamp0
  */
 export function createTripFlow(env, o) {
   const { svc, sim } = env, { world, nav, graph } = svc, mode = o.plan.mode, dims = o.dims ?? null;
+  // how your own vehicle sits on the road: its height, pitch and roll from where its tyres touch (the model's real wheel positions when the page gives them, otherwise two axles from its size)
+  const follower = createRoadFollower(graph, dims?.wheels?.length ? dims.wheels : defaultContacts(dims?.len, dims?.wid));
   let plan = o.plan, B = plan.B, enterable = o.enterable !== false;   // enterable: the place has a door to open (an open-air place, a statue or a gate has none: you simply stop there)   // dims: { len, wid, id (the car model, for its handling), seat, driver } of the model, when it is not the standard size (a purchased car)
   const driven = !!plan.driven, ownCar = mode === "car" && !plan.driven, vehicleTrip = mode !== "trek", kind = plan.kind;
   const walker = new Walker(world, nav, { x: plan.start.x, z: plan.start.z, hx: 0, hz: 1 });
@@ -75,7 +78,7 @@ export function createTripFlow(env, o) {
     if (own.h > ELEVATED) { world.removeBody("own"); sim.removeExternal("own"); return; }
     world.setBody("own", { x: own.x, z: own.z, hx: own.hx, hz: own.hz, hl: own.len / 2, hw: own.wid / 2 }); sim.setExternal("own", { x: own.x, z: own.z, hx: own.hx, hz: own.hz, len: own.len, wid: own.wid, v: own.v });
   }
-  function makeOwn() { const h = hero; own = Object.assign(createCar({ x: h.x, z: h.z, ang: Math.atan2(h.hx, h.hz) }), { len: h.len, wid: h.wid, kind, P: carProfile(dims?.id), lv: 0, h: 0, slope: 0 }); sim.remove(h); hero = null; own.pen = ownProbe(own.x, own.z, own.hx, own.hz)?.pen ?? 0; publishOwn(); }
+  function makeOwn() { const h = hero; own = Object.assign(createCar({ x: h.x, z: h.z, ang: Math.atan2(h.hx, h.hz) }), { len: h.len, wid: h.wid, kind, P: carProfile(dims?.id), lv: 0, h: 0, slope: 0 }); sim.remove(h); hero = null; own.pen = ownProbe(own.x, own.z, own.hx, own.hz)?.pen ?? 0; follower.reset(own); publishOwn(); }
   const onRoad = (x, z) => graph.surfaceAt(x, z, onRoad.s ??= {}).cls === 1;      // the ground: people, door checks, kerbside exits
   const carSurf = {};
   /** Is (x, z) road for your own car, on the level it is on (the ground, or the expressway deck) and, where roads cross, at the height it is at? */
@@ -86,7 +89,7 @@ export function createTripFlow(env, o) {
    */
   function ownProbe(x, z, hx, hz) {
     const hl = own.len / 2, hw = own.wid / 2, rx = -hz, rz = hx; let pen = 0, why = null;
-    const mask = carMask(graph.levelAt(x, z, own.lv, own.h).lv), high = own.h > ELEVATED;      // high up, the ground below (buildings, the lake, other traffic) is not in the way
+    const mask = carMaskAt(graph.levelAt(x, z, own.lv, own.h).lv, own.h), high = own.h > ELEVATED;      // high up, the ground below (buildings, the lake, other traffic) is not in the way
     for (const u of [-hl, 0, hl]) for (const w of [-hw, 0, hw]) if (!onRoadOwn(x + hx * u + rx * w, z + hz * u + rz * w, mask)) { pen++; why = "road"; }
     if (!high && world.boxBlocked(x, z, hx, hz, hl, hw, 0.05)) { pen += 100; why = "building"; }
     const me = { x, z, hx, hz, hl, hw };
@@ -101,10 +104,9 @@ export function createTripFlow(env, o) {
    * Which level the car is on (the ground, or the expressway deck: they are different roads at the same place) and how high the road is under it. Done after every move; the probe asks
    * levelAt itself for a position it has not reached yet. `slope` is the climb of the road ahead (radians, + uphill) so the body can lean with a ramp.
    */
-  function updateLevel() {
-    own.lv = graph.levelAt(own.x, own.z, own.lv, own.h).lv; const mask = carMask(own.lv);
-    own.h = graph.heightAt(own.x, own.z, mask, own.h);
-    const a = graph.heightAt(own.x + own.hx * 2, own.z + own.hz * 2, mask, own.h), b = graph.heightAt(own.x - own.hx * 2, own.z - own.hz * 2, mask, own.h); own.slope = Math.atan2(a - b, 4);
+  function updateLevel(dt = 1 / 60) {
+    own.lv = graph.levelAt(own.x, own.z, own.lv, own.h).lv;
+    follower.update(own, dt);      // own.h (the road under the middle of the car), own.slope (its pitch) and own.road { y, pitch, roll } for the drawing: from the wheels' contacts, lib3d/vehiclepose.js
   }
   /** Asking to get out: the car brakes itself to a stop (not at once, and not at all if it is going far too fast), then the door opens. */
   function requestExit() {
@@ -121,7 +123,7 @@ export function createTripFlow(env, o) {
     if (exitAsk && drv.gas > 0.3) { exitAsk = false; S.exiting = false; }     // you changed your mind: you pressed the gas
     if (exitAsk) drv = gentleStop(own, Math.min(4.5, own.P.brake * 0.6), own.P);
     else if (near && own.v > 0.3 && own.v < PARK_ASSIST_BELOW && !drv.gas) drv.brake = Math.max(drv.brake, 0.4);   // by the drop-off the car helps you park: it eases to a stop if you let go of the gas
-    stepCar(own, drv, dt, ownProbe, own.P); updateLevel(); publishOwn();
+    stepCar(own, drv, dt, ownProbe, own.P); updateLevel(dt); publishOwn();
     return { near, drv };
   }
   /** Where a stopped car's door and the way out are, with the cars and the world as they are now. */

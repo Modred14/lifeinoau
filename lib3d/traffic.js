@@ -8,6 +8,8 @@ import { createNpc, npcSpec } from "./avatar/npc.js";
 import { createAvatar } from "./avatar/loadAvatar.js";
 import { lookKey } from "../lib/look.js";
 import { carBodyGeometry, CAR_WHEELS, CAR_WHEEL_R, CAR_COLORS, makeKeke, makeBus, makeVehicle, rollWheels, trafficWheelGeometry } from "./vehicles.js";
+import { ROAD_TOP } from "./roadsurface.js";
+import { createRoadFollower, wheelContacts } from "./vehiclepose.js";
 
 // Entity budgets, within about 250 m of the camera. `cars`/`kekes`/`buses`/`minibuses` are the most of each kind alive at once (campus roads AND expressway together);
 // `ground` and `hw` are the totals wanted on the campus roads and on the expressway (kept higher per metre than any small road); `peds` is the number of walkers (each is a rigged character).
@@ -63,7 +65,7 @@ export function createTraffic({ parent, svc, focus, density = densityFor(), seed
   const pools = { keke: Array.from({ length: density.kekes }, () => ({ id: null, model: makeKeke() })), bus: Array.from({ length: density.buses }, () => ({ id: null, model: makeBus() })), minibus: Array.from({ length: density.minibuses ?? 0 }, () => { const m = makeBus(); m.root.scale.z = MINI_LEN; return { id: null, model: m }; }) };
   for (const s of [...pools.keke, ...pools.bus, ...pools.minibus]) { s.model.root.visible = false; s.model.root.traverse((o) => { if (o.isMesh) o.castShadow = true; }); group.add(s.model.root); }
   const carSlots = Array.from({ length: nCars }, () => ({ id: null, phase: 0, color: CAR_COLORS[0] }));
-  const tmp = new THREE.Matrix4(), base = new THREE.Matrix4(), loc = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), v3 = new THREE.Vector3(), sc = new THREE.Vector3(1, 1, 1), col = new THREE.Color();
+  const tmp = new THREE.Matrix4(), base = new THREE.Matrix4(), loc = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), eul = new THREE.Euler(), v3 = new THREE.Vector3(), sc = new THREE.Vector3(1, 1, 1), col = new THREE.Color();
   const hide = new THREE.Matrix4().makeScale(0, 0, 0);
 
   // ---- real players on the road, drawn at the spot they last reported and eased towards each new one ----
@@ -97,6 +99,14 @@ export function createTraffic({ parent, svc, focus, density = densityFor(), seed
     for (const [id, e] of live) if (!seen.has(id)) { group.remove(e.root); tags?.remove(id); if (e.av) e.av.dispose(); if (e.model?.dispose) e.model.dispose(); else e.root.traverse((o) => { if (!e.av || !e.av.root.getObjectById(o.id)) o.geometry?.dispose?.(); }); live.delete(id); }
   }
 
+  // A real player's vehicle: the server reports where it is on the map (x, z), not how high, so the height is worked out here from the same road the driver drives on (lib3d/vehiclepose.js): on the
+  // deck or a ramp when that is where it is, tyres on the surface, tilted with the slope. The level is followed from where it was a moment ago, so it never flips under the deck.
+  const graph = svc.graph;
+  function poseRemote(e) {
+    const c = (e.pose ??= { x: 0, z: 0, hx: 0, hz: 1, lv: 0, h: 0, v: 0, road: null }); e.follow ??= createRoadFollower(graph, wheelContacts(e.model));
+    c.x = e.x; c.z = e.z; c.hx = Math.sin(e.h); c.hz = Math.cos(e.h); c.v = e.sp ?? 0; c.lv = graph.levelAt(c.x, c.z, c.lv, c.h).lv;
+    const r = e.follow.update(c, 1 / 30); e.root.rotation.order = "YXZ"; e.root.position.set(e.x, ROAD_TOP + r.y, e.z); e.root.rotation.set(-r.pitch, e.h, r.roll);
+  }
   let clock = 0;
   /** Gives each live id a slot in `slots` (and frees the slots of ids that have gone). */
   function assign(slots, ids) { const live = new Set(ids); for (const s of slots) if (s.id != null && !live.has(s.id)) s.id = null; for (const id of ids) if (!slots.some((s) => s.id === id)) { const s = slots.find((x) => x.id == null); if (s) { s.id = id; s.fresh = true; } } }
@@ -109,13 +119,13 @@ export function createTraffic({ parent, svc, focus, density = densityFor(), seed
     assign(carSlots, npcs.filter((v) => v.kind === "car").map((v) => v.id));
     carSlots.forEach((s, i) => { const a = s.id == null ? null : byId.get(s.id);
       if (!a) { bodies.setMatrixAt(i, hide); for (let w = 0; w < 4; w++) wheelsM.setMatrixAt(i * 4 + w, hide); return; }
-      s.phase += (a.v * dt) / CAR_WHEEL_R; q.setFromAxisAngle(up, a.yaw); base.compose(v3.set(a.x, a.y + 0.05, a.z), q, sc); bodies.setMatrixAt(i, base); bodies.setColorAt(i, col.set(CAR_COLORS[Math.floor(a.tint * CAR_COLORS.length) % CAR_COLORS.length]));
+      s.phase += (a.v * dt) / CAR_WHEEL_R; q.setFromEuler(eul.set(-(a.pitch ?? 0), a.yaw, 0, "YXZ")); base.compose(v3.set(a.x, a.y + ROAD_TOP, a.z), q, sc); bodies.setMatrixAt(i, base); bodies.setColorAt(i, col.set(CAR_COLORS[Math.floor(a.tint * CAR_COLORS.length) % CAR_COLORS.length]));
       CAR_WHEELS.forEach(([wx, wz], w) => { tmp.makeRotationX(s.phase); loc.makeTranslation(wx, CAR_WHEEL_R, wz).multiply(tmp); wheelsM.setMatrixAt(i * 4 + w, tmp.multiplyMatrices(base, loc)); }); });
     bodies.instanceMatrix.needsUpdate = true; wheelsM.instanceMatrix.needsUpdate = true; if (bodies.instanceColor) bodies.instanceColor.needsUpdate = true;
     // kekes and buses
     for (const kind of ["keke", "bus", "minibus"]) { assign(pools[kind], npcs.filter((v) => v.kind === kind).map((v) => v.id));
-      for (const s of pools[kind]) { const a = s.id == null ? null : byId.get(s.id); s.model.root.visible = !!a; if (!a) continue; s.model.root.position.set(a.x, a.y + 0.05, a.z); const dy = s.yaw == null || dt <= 0 ? 0 : ((a.yaw - s.yaw + Math.PI * 3) % (Math.PI * 2) - Math.PI) / dt, sp = Math.abs(a.v), want = sp > 0.4 ? Math.max(-0.6, Math.min(0.6, Math.atan((s.model.wheelbase ?? 2) * dy / sp))) : 0;
-        s.st = (s.st ?? 0) + (want - (s.st ?? 0)) * Math.min(1, dt * 8); s.model.root.rotation.y = a.yaw; rollWheels(s.model, a.v * dt, s.st); s.model.setBrake?.(s.sp != null && dt > 0 && (sp - s.sp) / dt < -0.9 || sp < 0.15); s.yaw = a.yaw; s.sp = sp; } }
+      for (const s of pools[kind]) { const a = s.id == null ? null : byId.get(s.id); s.model.root.visible = !!a; if (!a) continue; s.model.root.position.set(a.x, a.y + ROAD_TOP, a.z); const dy = s.yaw == null || dt <= 0 ? 0 : ((a.yaw - s.yaw + Math.PI * 3) % (Math.PI * 2) - Math.PI) / dt, sp = Math.abs(a.v), want = sp > 0.4 ? Math.max(-0.6, Math.min(0.6, Math.atan((s.model.wheelbase ?? 2) * dy / sp))) : 0;
+        s.st = (s.st ?? 0) + (want - (s.st ?? 0)) * Math.min(1, dt * 8); s.model.root.rotation.order = "YXZ"; s.model.root.rotation.set(-(a.pitch ?? 0), a.yaw, 0); rollWheels(s.model, a.v * dt, s.st); s.model.setBrake?.(s.sp != null && dt > 0 && (sp - s.sp) / dt < -0.9 || sp < 0.15); s.yaw = a.yaw; s.sp = sp; } }
     // people
     const peds = sim.peds, pById = new Map(peds.map((p) => [p.id, p]));
     for (const s of pedSlots) if (s.id != null && !pById.has(s.id)) s.id = null;
@@ -130,7 +140,7 @@ export function createTraffic({ parent, svc, focus, density = densityFor(), seed
       if (moving && s.cur === "walk") av.setSpeed(Math.max(0.5, Math.min(1.7, p.v / WALK_V)));
       av.tick(clock, dt, dist); }
     // real players: slide towards the latest reported spot (they report about every two seconds)
-    for (const e of live.values()) { const k = Math.min(1, dt * 4), px = e.x, pz = e.z, age = Math.min(2.2, (performance.now() - (e.chAt ?? e.at)) / 1000), ex = e.tx + e.vx * age, ez = e.tz + e.vz * age; e.x += (ex - e.x) * k; e.z += (ez - e.z) * k; let dh = ((e.th - e.h + Math.PI * 3) % (Math.PI * 2)) - Math.PI; e.h += dh * k; e.root.position.set(e.x, 0.05, e.z); e.root.rotation.y = e.h; const d = Math.hypot(e.x - px, e.z - pz);
+    for (const e of live.values()) { const k = Math.min(1, dt * 4), px = e.x, pz = e.z, age = Math.min(2.2, (performance.now() - (e.chAt ?? e.at)) / 1000), ex = e.tx + e.vx * age, ez = e.tz + e.vz * age; e.x += (ex - e.x) * k; e.z += (ez - e.z) * k; let dh = ((e.th - e.h + Math.PI * 3) % (Math.PI * 2)) - Math.PI; e.h += dh * k; if (e.model) poseRemote(e); else { e.root.position.set(e.x, 0.05, e.z); e.root.rotation.y = e.h; } const d = Math.hypot(e.x - px, e.z - pz);
       if (e.model) { const spd = d / Math.max(dt, 1e-3), want = spd > 0.4 ? Math.max(-0.6, Math.min(0.6, Math.atan((e.model.wheelbase ?? 2.7) * (dh * k / Math.max(dt, 1e-3)) / spd))) : 0; e.st = (e.st ?? 0) + (want - (e.st ?? 0)) * Math.min(1, dt * 8); rollWheels(e.model, d, e.st); e.model.setBrake?.(e.sp != null && (spd - e.sp) / Math.max(dt, 1e-3) < -1.5 || spd < 0.15); e.sp = spd; }
       else if (e.av) { const v = d / Math.max(dt, 1e-3), want = v > 0.25 ? "walk" : "idle"; if (want !== e.cur && e.av.play(want, { fade: 0.3 })) e.cur = want; if (want === "walk") e.av.setSpeed(Math.max(0.5, Math.min(1.9, v / WALK_V))); e.av.update(clock, dt); e.av.root.position.y = 0.05; }
       else e.walker.pose((e.phase += d * 2.4), Math.min(1, d / dt / 1.2)); }

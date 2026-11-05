@@ -6,13 +6,14 @@ import * as THREE from "three";
 import { ROAD_COLORS } from "./roadmesh.js";
 import { acquireRoadScene } from "./roadAssets.js";
 import { corridorKeepOut } from "./highway.js";
+import { SCENE_S, TRIP_LOWER, ROAD_LAYER_Y } from "./roadsurface.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { buildGround } from "./ground.js";
 import { buildEdges } from "./edges.js";
 import { buildBillboards } from "./billboards3d.js";
 import { buildGrounds } from "./grounds.js";
 
-export const S = 0.1;   // metres -> scene units
+export const S = SCENE_S;   // metres -> scene units
 export const EX = 2;    // visual height exaggeration (buildings only)
 export const MAP_BG = "#a9cbe8"; // sky and horizon (and what shows past the faded rim of the ground). The ground itself is grass and sand (ground.js). Keep .mapwrap .stage in globals.css the same.
 const WALLS = ["#d9ceb4", "#c6b08a", "#d8d8d0", "#aab7c4", "#d3c3a6", "#b98b73", "#e2dccb"];
@@ -109,7 +110,7 @@ export function buildRealCampus(data, meta = {}) {
   let hereId = null; const setYou = (id) => { hereId = id; const L = resolve(id); if (!L) { here.visible = false; return; } here.visible = true; here.position.set(L.x, 0, L.z); hring.position.y = 0.22; hring.scale.setScalar(L.radius * 1.1); harrow.position.y = (L.pos?.y ?? 3) + 0.6; };
   const update = (t, dt = 0.016) => { bb.update(dt); const k = 0.35 + 0.65 * Math.max(0, Math.sin(t * 5)); glow.forEach((m) => m.color.setRGB(k, k * 0.23, k * 0.19)); if (sel.visible) { sel.material.opacity = 0.65 + Math.sin(t * 3) * 0.25; sel.rotation.z = t * 0.4; } if (here.visible) { harrow.position.y += Math.sin(t * 4) * 0.004; hring.rotation.z = t * 0.3; } };
   /** While a trip runs, the flat ground layers sit almost on the ground so cars and people do not look like they stand on slabs, and the map's labels get out of the way. */
-  const tripMode = (on) => { tripOn = on; root.traverse((o) => { if (o.userData?.layerY != null) o.position.y = on ? o.userData.layerY * 0.12 : o.userData.layerY; }); edges.group.traverse((o) => { if (o.name === "road-stubs") { o.userData.layerY ??= o.position.y; o.position.y = on ? o.userData.layerY * 0.12 : o.userData.layerY; } }); };
+  const tripMode = (on) => { tripOn = on; root.traverse((o) => { if (o.userData?.layerY != null) o.position.y = on ? o.userData.layerY * TRIP_LOWER : o.userData.layerY; }); edges.group.traverse((o) => { if (o.name === "road-stubs") { o.userData.layerY ??= o.position.y; o.position.y = on ? o.userData.layerY * TRIP_LOWER : o.userData.layerY; } }); };
 
   /** Which place is under a raycaster? Returns a place id, "bld_<n>" for a building with no name, or null. */
   const pick = (ray) => { const bh = ray.intersectObjects(bb.meshes, false)[0], h0 = ray.intersectObjects([wallMesh, capMesh].filter(Boolean), false)[0]; if (bh && (!h0 || bh.distance <= h0.distance)) return bh.object.userData.placeId; const hit = ray.intersectObjects([wallMesh, capMesh].filter(Boolean), false)[0]; if (!hit) return null; const isW = hit.object === wallMesh, v = hit.face.a;
@@ -135,8 +136,8 @@ export function buildRealCampus(data, meta = {}) {
   };
   const setRoadGraph = (graph) => {
     dropRoads();
-    if (!graph) { clearForest(null); if (roadFlat) { roadFlat.visible = true; roadFlat.material.color.set("#343b46"); roadFlat.userData.layerY = 0.08; } tripMode(tripOn); return; }
-    roadScene = acquireRoadScene(graph, S, 0.08); ({ surface: roadSurface, highway, furniture } = roadScene);   // built once per graph, reused by every later map
+    if (!graph) { clearForest(null); if (roadFlat) { roadFlat.visible = true; roadFlat.material.color.set("#343b46"); roadFlat.userData.layerY = ROAD_LAYER_Y; } tripMode(tripOn); return; }
+    roadScene = acquireRoadScene(graph, S, ROAD_LAYER_Y); ({ surface: roadSurface, highway, furniture } = roadScene);   // built once per graph, reused by every later map
     root.add(roadSurface); if (highway) root.add(highway);
     root.add(furniture);   // street lights, trees and stop signs, placed from the graph
     clearForest(graph);

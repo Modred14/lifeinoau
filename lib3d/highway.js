@@ -15,12 +15,13 @@
 import { Path } from "./roadnet.js";
 import { fillet, resample } from "./roadrefine.js";
 import { heightOn } from "./roadgraph.js";
+import { DECK } from "./roadsurface.js";
 
 export const HW = {
   H: 10,                      // deck height above the ground (m)
   lanes: 3, lane: 3.5, med: 1.5, shoulder: 2.5,
   get half() { return this.med + this.lanes * this.lane + this.shoulder; },   // 14.5: the carriageway, from the middle to the parapet
-  parapet: 0.55,              // concrete parapet: thickness (m)
+  parapet: DECK.parapet,      // concrete parapet: thickness (m); the drivable half-width is this much less (lib3d/roadsurface.js)
   girder: 2.2,                // depth of the box girder under the deck
   apron: 80,                  // an end apron with no median (m)
   extend: 480,                // how far the road runs on past the edge of the map at each end (m)
