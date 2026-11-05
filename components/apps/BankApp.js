@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PiggyBank, Target, ArrowUpRight, ArrowDownLeft, ArrowsLeftRight, Receipt, Gift, Plus, Lock, Wallet } from "@phosphor-icons/react";
 import { call, naira } from "@/lib/client";
+import { exactKobo } from "@/lib/money.js";
 import { game, run, cash, canAfford, useResource } from "@/lib/gameStore";
 import { toast } from "@/lib/toast";
 import { confirmAction } from "@/lib/confirm";
@@ -81,7 +82,7 @@ function Sheet({ d, store, kind, goal, onDone, onCancel }) {
       : kind === "fund" ? { action: "goal.fund", goalId: goal.id, amountNaira, requestId } : { action: "goal.create", name, targetNaira: amountNaira, requestId };
     const spend = kind === "save" ? BigInt(amountNaira) * 100n : 0n;
     if (spend > 0n && !canAfford(spend)) { setBusy(false); return toast.error("You do not have enough money for that."); }
-    const msg = { save: `Saved ${naira(BigInt(amountNaira) * 100n)}.`, withdraw: `Withdrew ${naira(BigInt(amountNaira) * 100n)}.`, fund: "Set aside for your goal.", goal: "Savings goal created." }[kind];
+    const msg = { save: `Saved ${exactKobo(BigInt(amountNaira) * 100n)}.`, withdraw: `Withdrew ${exactKobo(BigInt(amountNaira) * 100n)}.`, fund: "Set aside for your goal.", goal: "Savings goal created." }[kind];
     // The bank screen is registered as changed too (a no-op patch): that is how the store knows a read that started BEFORE this change is stale and must be asked again,
     // and it schedules the fresh read itself once the server has answered.
     const effects = [{ store, patch: (x) => x }, ...(kind === "save" ? [{ store: game, patch: cash(-spend) }] : kind === "withdraw" ? [{ store: game, patch: cash(BigInt(amountNaira) * 100n) }] : [])];

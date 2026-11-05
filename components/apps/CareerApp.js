@@ -11,8 +11,9 @@ import { SHIFT_TYPES } from "@/lib/jobs.js";
 import { waitText } from "@/lib/engine";
 import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
+import { compactMoney } from "@/lib/money.js";
 
-const k = (n) => "₦" + n.toLocaleString("en-NG");
+const k = (n) => compactMoney(n);
 // the minutes of the game day at which a shift window opens or closes (and midnight, when the day's shift is available again)
 const EDGES = new Set([0, ...Object.values(SHIFT_TYPES).flatMap((t) => [t.from, t.to])]);
 const SHIFT_ICON = { morning: "☀", night: "☾" };

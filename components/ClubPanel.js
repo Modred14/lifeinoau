@@ -11,8 +11,9 @@ import { game, useGame, run, cash } from "@/lib/gameStore";
 import { toast } from "@/lib/toast";
 import { DRINKS, PACKAGES, EXPERIENCES, BUYOUT_TIERS, BUYOUT_TERMS, SPRAY_AMOUNTS, VIP_PERKS, MIN_SPEND, MAX_SPEND, SPEND_STEP, validSpend, tierOf, fxLevel, buyoutPrice, drinkById } from "@/lib/clubs.js";
 import "./club.css";
+import { compactMoney } from "@/lib/money.js";
 
-const N = (n) => "₦" + Number(n).toLocaleString("en-NG");
+const N = (n) => compactMoney(n);
 const CONFIRM_FROM = 100_000; // anything from here up (and every gift and buyout) asks "are you sure?" first
 const TABS = [["bottles", "Bottles", "gift"], ["spray", "Spray", "coins"], ["packages", "Packages", "forbes"], ["more", "Experiences", "sparkle"], ["buyout", "Buyout", "club"]];
 

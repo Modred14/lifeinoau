@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { call, naira, notifyError } from "@/lib/client";
+import { exactKobo } from "@/lib/money.js";
 import { setPlayMode, usePlayMode, useBare, resetBoot } from "@/lib/ui";
 import { Icon } from "./Icon";
 import Phone from "./Phone";
@@ -21,14 +22,6 @@ import { initPrefs, syncPrefsFrom } from "@/lib/prefs";
 import "./prefs.css";
 
 
-const moodOf = (h) =>
-  h >= 80
-    ? ["Very happy", "happy"]
-    : h >= 60
-      ? ["Happy", "happy"]
-      : h >= 40
-        ? ["Okay", "meh"]
-        : ["Low", "sad"];
 const stamp = (d) =>
   `${d.toLocaleDateString("en-NG", { weekday: "short", timeZone: GAME_TIME_ZONE })} ${gameDayOfMonth(+d)} · ${d.toLocaleTimeString("en-NG", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: GAME_TIME_ZONE }).replace(/\s?(am|pm)/i, (m) => " " + m.trim().toUpperCase())}`;
 
@@ -191,7 +184,6 @@ export default function Shell({ children }) {
   const creating = path === "/home" && !st,
     onPlay = path === "/home" && !!st,
     buying = onPlay && mode === "buy",
-    mood = st ? moodOf(st.character.happiness) : null,
     held = !!st?.floorZero && +new Date(st.floorZero.releaseAt) > serverTime(); // serving a sentence in Floor O (N-QRS Custody): no shop; the phone still works (the apps follow their own rules)
   // The bar stays on screen above every panel, so each tab first puts away whatever panel is open over the game (the phone, with Settings inside it).
   const closePanels = () => {
@@ -228,34 +220,17 @@ export default function Shell({ children }) {
             onClick={() => setPlayMode("home")}
           >
             <span className="crown" aria-hidden="true">
-              <Logo size={28} />
+              <Logo size={22} />
             </span>
             <span>
               life<i>in</i>oau
             </span>
           </Link>
-          {st && (
-            <>
-              <span className="sep" aria-hidden="true" />
-              <span className="meta num">
-                Week {st.week} · {st.character.level}L
-              </span>
-            </>
-          )}
           <span className="grow" />
-          {st && clock && (
-            <span className="hud-mid">
-              <span className="hud-time num">{stamp(clock)}</span>
-              <span className="hud-mood">
-                <Icon name={mood[1]} size={18} weight="fill" />
-                {mood[0]}
-              </span>
-            </span>
-          )}
-          <span className="grow" />
+          {st && clock && <span className="hud-time num">{stamp(clock)}</span>}
           {st && (
-            <span className="cash num" aria-label="Cash">
-              <Icon name="coins" size={18} weight="fill" />
+            <span className="cash num" role="status" aria-label={`Cash: ${exactKobo(st.balanceKobo)}`}>
+              <Icon name="coins" size={16} weight="fill" />
               {naira(st.balanceKobo)}
             </span>
           )}

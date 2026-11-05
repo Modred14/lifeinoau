@@ -19,9 +19,10 @@ import { Spinner } from "../Loader";
 import PlayerAvatar from "../PlayerAvatar";
 import LoadError from "@/components/LoadError";
 import "./relationship-app.css";
+import { compactMoney } from "@/lib/money.js";
 
 const first = (n = "") => n.split(/\s+/)[0];
-const money = (n) => "₦" + Number(n).toLocaleString("en-NG");
+const money = (n) => compactMoney(n);
 const brief = (why) => String(why ?? "").split(". ")[0].replace(/\.$/, "");
 const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 const post = (body) => call("/api/relationship", { ...body, requestId: crypto.randomUUID() });

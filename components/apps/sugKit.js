@@ -1,6 +1,7 @@
 // components/apps/sugKit.js: small shared pieces for the SUG app screens (see components/apps/SugApp.js).
 // Nothing here decides anything: every rule is enforced by the server. These only make the screens easy to build and consistent.
 "use client";
+import { compactMoney } from "@/lib/money.js";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { call } from "@/lib/client";
@@ -69,7 +70,7 @@ export function Countdown({ at, label }) {
 // notifications all name the same moment: "Sun, 25 Oct, 11:59 PM".
 const fmt = new Intl.DateTimeFormat("en-NG", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: GAME_TIME_ZONE });
 export const when = (t) => (t ? fmt.format(new Date(t)).replace(/\s?(am|pm)/i, (m) => " " + m.trim().toUpperCase()) : "–");
-export const nairaN = (n) => "₦" + Number(n).toLocaleString("en-NG");
+export const nairaN = (n) => compactMoney(n);
 
 /** A message box that is always readable (not a tiny red line): used for "why you can't" and for hints. */
 export function Note({ tone = "info", title, children }) {

@@ -11,6 +11,7 @@ import { ACTIVITIES, MAP, activitiesFor } from "../lib/activities.js";
 import { allFeatures, featuresAt, activitiesAt, validateRegistry, FEATURES, APP_FEATURES, CATEGORIES, blockedFor, isOffered, DISABLED_ACTIVITIES } from "../lib/features.js";
 import { HUSTLE } from "../lib/engine.js";
 import { MAP_GROUPS } from "../lib3d/landmarks.js";
+import { compactMoney } from "../lib/money.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 let bad = 0; const chk = (l, c) => { if (!c) bad++; console.log((c ? "OK  " : "FAIL") + " " + l); };
@@ -35,7 +36,7 @@ chk(`every enclosed building (${places}) lists at least one activity in its pane
 chk("outdoor places (billboard, gate, statue) list no invented activities", ["bb_1", "gate", "moremi_statue", "main_bowl"].every((id) => featuresAt(id, "").activities.length === 0));
 chk("an unnamed campus building (bld_) gets the plain generic activities", activitiesAt("bld_12", "building").length === activitiesFor({ t: "generic" }).length && activitiesAt("bld_12", "building").length > 0);
 const sub = activitiesAt("sub", "social"), odu = activitiesAt("oduduwa", "hall");
-chk("SUB offers the risky Back-Room Deal, marked risky, with the real pay and the jail risk", sub.some((a) => a.act === "back_room_deal" && a.risk === "risky" && a.gives[0].includes(HUSTLE.risky.max.toLocaleString("en-NG")) && a.costs.join(" ").includes("Floor O")));
+chk("SUB offers the risky Back-Room Deal, marked risky, with the real pay and the jail risk", sub.some((a) => a.act === "back_room_deal" && a.risk === "risky" && a.gives[0].includes(compactMoney(HUSTLE.risky.max)) && a.costs.join(" ").includes("Floor O")));
 chk("Oduduwa Hall offers the safe Event Gig, marked safe and not guaranteed in amount", odu.some((a) => a.act === "event_gig" && a.risk === "safe" && a.certainty === "variable"));
 chk("every activity shows a name, an explanation and a button's worth of info", [...placeIds].every((id) => activitiesAt(id, "").every((a) => a.label && a.explain.length > 10 && a.summary)));
 chk("no building lists the same activity under the same name twice", [...placeIds].every((id) => { const l = activitiesAt(id, "").map((a) => a.act + a.label); return new Set(l).size === l.length; }));
@@ -49,7 +50,7 @@ chk("a tired player is told they lack energy for a hustle", /tired/i.test(blocke
 chk("a rested player is not blocked on stats", blockedFor(act("sub", "back_room_deal"), rested, {}) === null);
 chk("a player in custody cannot be offered ordinary activities, but may use the cells", /custody/.test(blockedFor(act("sub", "back_room_deal"), rested, { jailed: true }) ?? "") && blockedFor(act("floor0", "cell_bunk"), { ...rested, energy: 50 }, { jailed: true }) === null);
 chk("someone who is not jailed is told the cells are not for them", /serving a sentence/.test(blockedFor(act("floor0", "cell_bunk"), { ...rested, energy: 50 }, {}) ?? ""));
-chk("a player who cannot afford the fee is told so", /₦1,500/.test(blockedFor(act("new_bukateria", "eat_meal"), rested, { balanceKobo: "100" }) ?? ""));
+chk("a player who cannot afford the fee is told so", /₦1\.50k/.test(blockedFor(act("new_bukateria", "eat_meal"), rested, { balanceKobo: "100" }) ?? ""));
 chk("a well player is not offered the doctor", /good health/.test(blockedFor(act("health_centre", "health_checkup"), rested, {}) ?? ""));
 
 // ---- disabled, deprecated and partial features are handled ----

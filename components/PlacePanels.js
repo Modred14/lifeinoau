@@ -14,9 +14,10 @@ import { confirmAction } from "@/lib/confirm";
 import { serverTime } from "@/lib/serverClock";
 import { waitText } from "@/lib/engine";
 import { Icon } from "./Icon";
+import { compactMoney } from "@/lib/money.js";
 
 const rid = () => crypto.randomUUID();
-const k = (n) => "₦" + Number(n).toLocaleString("en-NG");
+const k = (n) => compactMoney(n);
 
 /** A small shell shared by every panel: title, a close button, and a place for the server's answer. */
 function Sheet({ icon, title, sub, onClose, children }) {

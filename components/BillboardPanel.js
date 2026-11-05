@@ -9,8 +9,9 @@ import { call, loggedOut, notifyError } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { BILLBOARD } from "@/lib3d/mapExtras.js";
 import "./billboard-panel.css";
+import { compactKobo } from "@/lib/money.js";
 
-const N = (kobo) => "₦" + (kobo / 100).toLocaleString("en-NG");
+const N = (kobo) => compactKobo(kobo);
 
 /** Shrinks a picked picture to a JPEG data URL that fits the upload limit. */
 async function prepare(file) {

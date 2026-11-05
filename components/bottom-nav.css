@@ -10,30 +10,46 @@
       their sheets, footers and joysticks) as "device inset + the bar", so their bottom controls stop above the bar instead of under it. */
 :root {
   --z-nav: 500;
-  --nav-gap: 16px; /* between the bar and the bottom edge (the device's own inset comes on top) */
-  --nav-bar-h: 72px; /* 58px buttons + 2 x 6px padding + 2px border */
+  --nav-gap: 10px; /* between the bar and the bottom edge (the device's own inset comes on top) */
+  --nav-bar-h: 58px; /* 48px buttons (a comfortable touch target) + 2 x 4px padding + 2px border */
   --nav-band: calc(var(--nav-gap) + var(--nav-bar-h));
   --bp-bg: rgba(13, 19, 33, 0.94); /* the one surface the activities panel and the bar share (components/building-panel.css) */
   --bp-line: rgba(255, 255, 255, 0.12);
 }
 /* a phone held sideways has little height to give: the bar gets slimmer */
 @media (max-height: 480px) {
-  :root { --nav-gap: 8px; --nav-bar-h: 58px; }
+  :root { --nav-gap: 6px; --nav-bar-h: 46px; }
 }
 
 .nav {
   position: fixed; z-index: var(--z-nav); bottom: calc(var(--safe-b) + var(--nav-gap)); left: 50%; transform: translateX(-50%);
-  width: min(520px, calc(100% - 2 * var(--edge))); display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 6px;
-  background: rgba(13, 19, 33, 0.8); backdrop-filter: blur(20px) saturate(1.3); -webkit-backdrop-filter: blur(20px) saturate(1.3);
-  border: 1px solid rgba(255, 255, 255, 0.12); border-radius: var(--r-pill); box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.75);
+  width: min(420px, calc(100% - 2 * var(--edge))); display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; padding: 4px;
+  background: rgba(13, 19, 33, 0.86); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 18px;
+  animation: nav-in 220ms var(--ease) both;
 }
-.nav a, .nav button:not(:where(.campus-world *)) { min-height: 58px; flex-direction: column; gap: 3px; font-size: 0.76rem; font-weight: 500; border-radius: var(--r-pill); border: 0; background: transparent; color: var(--muted); padding: 6px 4px; transition: background-color var(--t-base) var(--ease), color var(--t-base) var(--ease), transform var(--t-fast) var(--ease); }
+@keyframes nav-in { from { opacity: 0; transform: translate(-50%, 10px); } }
+.nav a, .nav button:not(:where(.campus-world *)) {
+  position: relative; min-height: 48px; flex-direction: column; gap: 2px; font-size: 0.7rem; font-weight: 500; letter-spacing: 0.01em; line-height: 1;
+  border-radius: 14px; border: 0; background: transparent; color: var(--muted); padding: 5px 2px;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  transition: background-color 160ms var(--ease), color 160ms var(--ease), transform 120ms var(--ease);
+}
 .nav a { display: inline-flex; align-items: center; justify-content: center; }
-.nav [data-active="1"] { background: #fff; color: #0d1321; font-weight: 600; }
-.nav a:hover:not([data-active="1"]), .nav button:not(:where(.campus-world *)):hover:not(:disabled):not([data-active="1"]) { color: var(--text); background-color: rgba(255, 255, 255, 0.09); }
-.nav [data-active="1"]:hover { background-color: #fff; }
+.nav svg { width: 22px; height: 22px; flex: none; transition: transform 180ms var(--ease); }
+.nav [data-active="1"] { background: rgba(255, 255, 255, 0.12); color: #fff; font-weight: 600; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
+.nav [data-active="1"] svg { transform: translateY(-1px) scale(1.08); }
+.nav a:hover:not([data-active="1"]), .nav button:not(:where(.campus-world *)):hover:not(:disabled):not([data-active="1"]) { color: var(--text); background-color: rgba(255, 255, 255, 0.07); }
+.nav a:active, .nav button:not(:where(.campus-world *)):active:not(:disabled) { transform: scale(0.95); }
+.nav a:focus-visible, .nav button:focus-visible { outline: 2px solid var(--green-text, #6ee7a8); outline-offset: -2px; }
 @media (max-height: 480px) {
-  .nav a, .nav button:not(:where(.campus-world *)) { min-height: 44px; padding: 4px; gap: 1px; }
+  .nav a, .nav button:not(:where(.campus-world *)) { min-height: 44px; padding: 3px; gap: 1px; }
+  .nav svg { width: 20px; height: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav { animation: none; }
+  .nav a, .nav button, .nav svg { transition: none !important; }
+  .nav [data-active="1"] svg, .nav a:active, .nav button:active { transform: none; }
 }
 
 /* ---- the layers that must leave room for the bar ---- */
@@ -76,5 +92,12 @@ body[data-nav="on"] .sx-toast { bottom: calc(20px + var(--safe-b)); }
    layer above it: same background, side and bottom borders only, square top corners and no top edge (the panel / card draws the single top border). */
 body[data-dock="on"] .nav {
   box-sizing: border-box; background: var(--bp-bg); border: 0 solid var(--bp-line); border-width: 0 1px 1px;
-  border-radius: 0 0 calc(var(--nav-bar-h) / 2) calc(var(--nav-bar-h) / 2); box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.75);
+  border-radius: 0 0 18px 18px; box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.75);
+}
+/* the unread badge on the Phone tab: pinned to the icon, so it never moves the label */
+.nav .nav-ico { position: relative; display: inline-grid; place-items: center; line-height: 0; }
+.nav .nav-badge {
+  position: absolute; top: -4px; right: -9px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; box-sizing: border-box;
+  display: grid; place-items: center; background: #ef4444; color: #fff; font: 700 0.62rem/1 var(--font-ui); font-style: normal;
+  border: 1.5px solid rgb(13, 19, 33);
 }
