@@ -5,5 +5,5 @@
 import "./road-transition.css";
 
 export default function RoadTransition({ on }) {
-  return <div className="rt" data-on={on ? "1" : undefined} role="status" aria-live="polite" aria-hidden={on ? undefined : "true"}><b>Entering Main Road…</b><i aria-hidden="true" /></div>;
+  return <div className="road-tr" data-on={on ? "1" : undefined} role="status" aria-live="polite" aria-hidden={on ? undefined : "true"}><b>Entering Main Road…</b><i aria-hidden="true" /></div>;
 }
