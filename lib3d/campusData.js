@@ -2,10 +2,11 @@
 // Loads the real-map data and joins it with the game's own place details (blurbs and actions in landmarks.js). Pure helpers: no 3D library.
 import { LANDMARKS, KIND_LABEL } from "./landmarks.js";
 import { withExtras, EXTRA_META } from "./mapExtras.js";
+import { dataUrl } from "./dataUrl.js";
 
 let cache;
 /** Fetches /data/oau-campus.json once and adds the game-only places (Ojaja, Floor O, clubs, billboards). A failed load is not cached, so a retry can succeed. */
-export const loadCampusData = () => (cache ??= fetch("/data/oau-campus.json").then((r) => { if (!r.ok) throw new Error("map data " + r.status); return r.json(); }).then(withExtras).catch((e) => { cache = undefined; throw e; }));
+export const loadCampusData = () => (cache ??= fetch(dataUrl("oau-campus.json")).then((r) => { if (!r.ok) throw new Error("map data " + r.status); return r.json(); }).then(withExtras).catch((e) => { cache = undefined; throw e; }));
 
 /** Game details by place id: { blurb, actions, verified }. New real-map places get a plain default blurb. */
 export function placeMeta(data) {

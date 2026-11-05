@@ -18,7 +18,7 @@ export default function TravelSheet({ place, here, hasCar, driver, people, dista
   // the vehicle for the chosen mode is built in the next idle moment, so setting off finds it ready
   useEffect(() => {
     if (mode === "trek") return; let live = true;
-    import("../lib3d/worldPreload.js").then((w) => { if (live) w.preloadSoon(mode === "car" ? (character?.activeCar ?? "") : mode, mode === "car" ? character?.activeCarColor : undefined); }).catch(() => {});
+    import("../lib3d/worldPreload.js").then((w) => { if (live) { w.preloadRoadNow(); w.preloadSoon(mode === "car" ? (character?.activeCar ?? "") : mode, mode === "car" ? character?.activeCarColor : undefined); } }).catch(() => {});
     return () => { live = false; };
   }, [mode, character?.activeCar, character?.activeCarColor]);
   // the sheet docks on the bottom bar like the activities panel: the two read as one surface (components/bottom-nav.css)

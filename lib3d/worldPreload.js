@@ -30,5 +30,9 @@ export function preloadMapBasics() {
   preloader.enqueue({ key: "traffic:shapes", priority: 2, run: () => { carBodyGeometry("#ffffff", false); carBodyGeometry("#ffffff", true); trafficWheelGeometry(); } });
   preloadVehicle("keke", undefined, 2); preloadVehicle("bus", undefined, 2);
 }
+/** Prepares the main road (data, collision world, drawing) in idle time while the world loads. Loaded on demand: it is the only part of the game that needs the road code. Safe to call any number of times. */
+export function preloadRoad() { return import("./roadPreload.js").then((m) => m.preloadMainRoadWhenIdle()).catch(() => null); }
+/** The player is heading for the road (picked a travel mode): whatever is still waiting for an idle moment runs now. */
+export function preloadRoadNow() { return import("./roadPreload.js").then((m) => m.preloadMainRoad({ urgent: true })).catch(() => null); }
 /** The player is heading for something (tapped a vehicle, picked a travel mode): build it first. */
 export function preloadSoon(what, paint) { preloadVehicle(what, paint, 0); }

@@ -6,6 +6,7 @@ import { buildRoadGraph } from "./roadgraph.js";
 import { buildWorldCollision } from "./collide.js";
 import { createNav } from "./walker.js";
 import { buildRoadNet } from "./roadnet.js";
+import { dataUrl } from "./dataUrl.js";
 
 /**
  * The columns of the expressway are solid on the ground (people and ground vehicles cannot walk or drive through one); the deck itself is 10 m up and is not. Columns standing in the lake need
@@ -26,10 +27,22 @@ export function buildServices(data, rawGraph) {
   return { data, world, graph, nav, net };
 }
 
-let cache = null;
-/** The shared services for this map data (browser). Fetches the road graph the first time; later calls return the same promise. */
+let cache = null, rawFetch = null;
+/**
+ * The generated road graph JSON, fetched ONCE per page (the fetch does not need the map data, so it can start the moment the world starts loading, long before the map opens).
+ * A failed fetch is not remembered, so a retry can succeed.
+ */
+export function fetchRoadGraphRaw() {
+  return (rawFetch ??= fetch(dataUrl("oau-roadgraph.json")).then((r) => { if (!r.ok) throw new Error("road graph " + r.status); return r.json(); }).catch((e) => { rawFetch = null; throw e; }));
+}
+
+/** The shared services for this map data (browser). Fetches the road graph the first time (or uses the one already on its way); later calls return the same promise. */
 export function loadServices(data) {
   if (cache?.data === data) return cache.promise;
-  const promise = fetch("/data/oau-roadgraph.json").then((r) => { if (!r.ok) throw new Error("road graph " + r.status); return r.json(); }).then((raw) => buildServices(data, raw)).catch((e) => { if (cache?.data === data) cache = null; throw e; });
-  cache = { data, promise }; return promise;
+  const entry = { data, promise: null, svc: null };
+  entry.promise = fetchRoadGraphRaw().then((raw) => (entry.svc = buildServices(data, raw))).catch((e) => { if (cache === entry) cache = null; throw e; });
+  cache = entry; return entry.promise;
 }
+
+/** The services for this map data if they are already built (no waiting, no building), else null. The map uses it to draw the roads in the very first frame. */
+export const peekServices = (data) => (cache?.data === data ? cache.svc : null);

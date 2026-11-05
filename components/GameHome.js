@@ -113,6 +113,7 @@ export default function GameHome({
     return () => clearInterval(t);
   }, [sleeping]);
   // Build the 3D models this player will need (their own vehicles, their plot, what the map shows) in idle moments, so entering the garage or the map finds them ready.
+  useEffect(() => { let live = true; import("../lib3d/worldPreload.js").then((w) => { if (live) w.preloadRoad(); }).catch(() => {}); return () => { live = false; }; }, []); // the main road is prepared in idle time from the moment the world opens, so it is ready before anyone heads for it
   const roomKeyForPreload = rd?.room ? `${rd.room.w}x${rd.room.d}:${rd.room.layout ?? ""}` : "";
   useEffect(() => {
     if (!vehicles && !roomKeyForPreload) return;

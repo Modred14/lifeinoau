@@ -3,9 +3,8 @@
 // 1 scene unit = 10 m. Building heights are exaggerated by EX for readability; the true height of every building stays in the data.
 // Layout, footprints and road shapes come from the supplied OpenStreetMap render. Facades and roofs are generic, NOT photo-verified.
 import * as THREE from "three";
-import { buildRoadMeshes, ROAD_COLORS } from "./roadmesh.js";
-import { buildHighwayMeshes } from "./highwaymesh.js";
-import { buildRoadFurniture } from "./roadfurniture.js";
+import { ROAD_COLORS } from "./roadmesh.js";
+import { acquireRoadScene } from "./roadAssets.js";
 import { corridorKeepOut } from "./highway.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { buildGround } from "./ground.js";
@@ -46,7 +45,7 @@ export function buildRealCampus(data, meta = {}) {
   // ---- ground: patchy grass and sand that fades into the sky-blue at its rim, so the map ends softly (ground.js). Water stays blue. ----
   const ground = buildGround(data, S); root.add(ground);
   const rimKeep = data.places.filter((p) => p.x < b.x0 + 60 || p.x > b.x1 - 60 || p.z < b.z0 + 60 || p.z > b.z1 - 160).map((p) => [p.x, p.z, 60]).concat(corridorKeepOut());
-  let roadFlat = null, roadSurface = null, highway = null, furniture = null, tripOn = false;
+  let roadFlat = null, roadSurface = null, highway = null, furniture = null, roadScene = null, tripOn = false;
   const edges = buildEdges(data, S, { keepOut: rimKeep }); root.add(edges.group); // roads that run off the map, and a belt of trees along its rim
   for (const m of [flat(data.areas.park, "#5aa064", 0.03, { layer: 2 }), flat(data.areas.sports, "#4c9a68", 0.035, { layer: 2 }), flat(data.areas.wood, "#2f6b3b", 0.04, { layer: 2 }),
     flat(data.areas.pitch, "#2fb98a", 0.06, { layer: 3 }), flat(data.areas.water, "#2f6f95", 0.05, { layer: 3, rough: 0.15, metal: 0.2 }), flat(data.areas.parking, "#46505c", 0.06, { layer: 3 }), (roadFlat = flat(data.roads, "#343b46", 0.08, { layer: 4 }))]) if (m) root.add(m);
@@ -115,7 +114,7 @@ export function buildRealCampus(data, meta = {}) {
   /** Which place is under a raycaster? Returns a place id, "bld_<n>" for a building with no name, or null. */
   const pick = (ray) => { const bh = ray.intersectObjects(bb.meshes, false)[0], h0 = ray.intersectObjects([wallMesh, capMesh].filter(Boolean), false)[0]; if (bh && (!h0 || bh.distance <= h0.distance)) return bh.object.userData.placeId; const hit = ray.intersectObjects([wallMesh, capMesh].filter(Boolean), false)[0]; if (!hit) return null; const isW = hit.object === wallMesh, v = hit.face.a;
     const r = ranges.find((q) => (isW ? v >= q.s0 && v < q.s1 : v >= q.c0 && v < q.c1)); return r ? placeAt.get(r.bid)?.id ?? "bld_" + r.bid : null; };
-  const extent = Math.max(x1 - x0, z1 - z0) / 2, dispose = () => { bb.dispose(); edges.dispose(); root.traverse((o) => { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : m ? [m] : []).forEach((q) => q.dispose()); }); win.map.dispose(); win.emis.dispose(); };
+  const extent = Math.max(x1 - x0, z1 - z0) / 2, dispose = () => { dropRoads(); bb.dispose(); edges.dispose(); root.traverse((o) => { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : m ? [m] : []).forEach((q) => q.dispose()); }); win.map.dispose(); win.emis.dispose(); };
   const setBillboards = (list) => bb.setBoards(list);
   /**
    * Gives the roads their proper shape: carriageways of the real width with a pavement each side, kerbs, centre dashes, stop lines and crossings, all drawn
@@ -130,14 +129,16 @@ export function buildRealCampus(data, meta = {}) {
       const kk = blocked ? 0.0001 : k; d.rotation.set(0, 0, 0); d.scale.setScalar(kk); d.position.set(x * S, 0.5 * kk, z * S); d.updateMatrix(); tk.setMatrixAt(i, d.matrix); d.position.set(x * S, 1.5 * kk, z * S); d.updateMatrix(); cr.setMatrixAt(i, d.matrix);
     }); void c; tk.instanceMatrix.needsUpdate = cr.instanceMatrix.needsUpdate = true;
   };
+  const dropRoads = () => {
+    for (const g of [roadSurface, highway, furniture]) if (g) root.remove(g);   // the groups are this map's own; the geometry, materials and textures inside belong to the road cache (lib3d/roadAssets.js)
+    roadSurface = highway = furniture = null; roadScene?.release(); roadScene = null;
+  };
   const setRoadGraph = (graph) => {
-    if (roadSurface) { root.remove(roadSurface); roadSurface.userData.dispose?.(); roadSurface = null; }
-    if (highway) { root.remove(highway); highway.userData.dispose?.(); highway = null; }
-    if (furniture) { root.remove(furniture); furniture.userData.dispose?.(); furniture = null; }
+    dropRoads();
     if (!graph) { clearForest(null); if (roadFlat) { roadFlat.visible = true; roadFlat.material.color.set("#343b46"); roadFlat.userData.layerY = 0.08; } tripMode(tripOn); return; }
-    roadSurface = buildRoadMeshes(graph, S, 0.08); root.add(roadSurface);
-    if (graph.expressway) { highway = buildHighwayMeshes(graph.expressway, S); root.add(highway); }
-    furniture = buildRoadFurniture(graph, S); root.add(furniture);   // street lights, trees and stop signs, placed from the graph
+    roadScene = acquireRoadScene(graph, S, 0.08); ({ surface: roadSurface, highway, furniture } = roadScene);   // built once per graph, reused by every later map
+    root.add(roadSurface); if (highway) root.add(highway);
+    root.add(furniture);   // street lights, trees and stop signs, placed from the graph
     clearForest(graph);
     if (roadFlat) roadFlat.visible = false;   // the old polygons include roads that were pruned or straightened: the graph is the road now
     tripMode(tripOn);

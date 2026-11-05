@@ -52,7 +52,10 @@ export function createHolder(cache = modelCache) {
  * Frees the GPU copy of every cached geometry (the CPU copy stays cached and uploads again when next drawn). Call it when a renderer is torn down: a geometry that was drawn
  * keeps a "dispose" listener pointing at that renderer, and cached geometry outlives any one renderer, so without this an old renderer could be kept alive by the cache.
  */
-export function freeGpuCopies(cache = modelCache) { cache.each((value) => geometryEntry.dispose(value)); }
+export function freeGpuCopies(cache = modelCache) { cache.each((value) => geometryEntry.dispose(value)); for (const f of gpuFreers) { try { f(); } catch { /* freeing must never throw into the game */ } } }
+const gpuFreers = new Set();
+/** Other caches of three.js objects (the road cache) add their own "drop the GPU copies" step here, so one renderer teardown frees everything cached. */
+export function registerGpuFree(fn) { gpuFreers.add(fn); return () => gpuFreers.delete(fn); }
 
 /** Runs a build step for the preloader: whatever it needs from the cache is held until the step ends (so nothing it just built can be evicted half-way), then let go. */
 export function warmScope(fn, cache = modelCache) {

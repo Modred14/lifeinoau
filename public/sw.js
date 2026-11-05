@@ -1,4 +1,4 @@
-const CACHE = "oau-campus-v5";
+const CACHE = "oau-campus-v6";
 const SHELL = ["/", "/home", "/offline.html"]; // /home is the installed app's start_url (see src/app/manifest.js); /play only redirects to it
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
@@ -21,6 +21,8 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/data/") || url.pathname.startsWith("/models/")) {
     event.respondWith(caches.open(CACHE).then(async (cache) => {
       const saved = await cache.match(request);
+      // a URL with ?v=<hash of the file> (see lib3d/dataUrl.js) can never change: serve the saved copy without asking the network again
+      if (saved && url.searchParams.has("v")) return saved;
       const fresh = fetch(request).then((response) => { if (response.status === 200 && response.type === "basic") cache.put(request, response.clone()).catch(() => {}); return response; });
       if (saved) { event.waitUntil(fresh.catch(() => {})); return saved; }
       return fresh;
