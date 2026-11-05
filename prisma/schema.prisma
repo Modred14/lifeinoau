@@ -506,6 +506,24 @@ model PartyTicket {
   @@index([characterId])
 }
 
+// Real parties and events added by administrators (lib/adminEvents.js) and listed in the Parties app (lib/partyEvents.js).
+// Matches prisma/migrations/20261105000000_party_events. The flyer picture is stored in the row.
+model PartyEvent {
+  id        Int      @id @default(autoincrement())
+  name      String
+  host      String
+  priceKobo BigInt   @default(0)
+  eventDate DateTime
+  ticketUrl String
+  flyer     Bytes
+  flyerMime String
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([eventDate])
+}
+
 enum RelStatus {
   ACTIVE
   ENDED
