@@ -3,14 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { SquaresFour, Broadcast, UsersThree, Crown, Coins, ShieldWarning, GameController, Megaphone, ClipboardText, List, ArrowLeft } from "@phosphor-icons/react";
+import { SquaresFour, Broadcast, UsersThree, Crown, Coins, ShieldWarning, GameController, Megaphone, ClipboardText, List, ArrowLeft, Ticket } from "@phosphor-icons/react";
 import NotFound from "@/components/NotFound";
 import { get, useApi, Skeleton } from "./kit";
 import "./admin.css";
 
 const NAV = [
   ["/admin", "Overview", SquaresFour], ["/admin/online", "Online players", Broadcast], ["/admin/players", "All players", UsersThree], ["/admin/forbes", "Forbes OAU", Crown],
-  ["/admin/economy", "Economy", Coins], ["/admin/moderation", "Moderation", ShieldWarning], ["/admin/game", "Game systems", GameController], ["/admin/notices", "Announcements", Megaphone], ["/admin/audit", "Audit log", ClipboardText],
+  ["/admin/economy", "Economy", Coins], ["/admin/moderation", "Moderation", ShieldWarning], ["/admin/game", "Game systems", GameController], ["/admin/notices", "Announcements", Megaphone], ["/admin/events", "Events", Ticket], ["/admin/audit", "Audit log", ClipboardText],
 ];
 
 export default function Frame({ children }) {

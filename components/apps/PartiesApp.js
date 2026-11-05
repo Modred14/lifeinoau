@@ -1,51 +1,27 @@
 // components/apps/PartiesApp.js: lives inside the phone (see components/Phone.js)
+// Real events added by administrators. Each one is a card: the flyer, then name / price / host / date, then a Buy ticket button that opens the event's own ticket page.
 "use client";
 import { useEffect } from "react";
-import { call, naira } from "@/lib/client";
-import { toast } from "@/lib/toast";
-import { game, run, cash, canAfford, useResource } from "@/lib/gameStore";
+import { useResource } from "@/lib/gameStore";
 import Loader from "@/components/Loader";
 
+// A ticket price is shown exactly (₦2,500 or ₦2,500.50), never in the compact 2.50k form the rest of the game uses for balances.
+const price = (kobo) => {
+  const k = BigInt(kobo);
+  if (k === 0n) return "Free";
+  const w = (k / 100n).toLocaleString("en-NG"), c = k % 100n;
+  return "₦" + w + (c ? "." + String(c).padStart(2, "0") : "");
+};
+const when = (iso) => new Date(iso).toLocaleString("en-NG", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+
 export default function Parties() {
-  const { d, store, router } = useResource("/api/parties");
+  const { d, store } = useResource("/api/parties");
   useEffect(() => {
-    // attendance changes as others buy tickets: look again every 20 seconds, but only while the tab is on screen
-    const t = setInterval(() => !document.hidden && store.refresh(), 20000);
+    // new events appear as administrators add them: look again every minute, but only while the tab is on screen
+    const t = setInterval(() => !document.hidden && store.refresh(), 60000);
     return () => clearInterval(t);
   }, [store]);
 
-  // Buying a ticket shows at once (the card flips to "You're going", attendance goes up, your cash drops) and is undone if refused,
-  // for example when the last ticket was sold a moment earlier. What happens on the night is random, so that part shows when the server answers.
-  function go(venue) {
-    const p = d.parties.find((x) => x.venue === venue);
-    if (!canAfford(p.priceKobo)) return toast.error("You cannot afford the ticket.");
-    return run({
-      key: "party:" + venue,
-      router,
-      sensitive: true, // the last ticket may have just gone: "ticket bought" is only said once the server has confirmed it
-      pending: `Buying your ticket to ${venue}…`,
-      ok: `Ticket bought. You're going to ${venue}.`,
-      request: () =>
-        call("/api/parties", { venue, requestId: crypto.randomUUID() }),
-      effects: [
-        {
-          store,
-          patch: (x) => ({
-            ...x,
-            wentOut: true,
-            parties: x.parties.map((q) =>
-              q.venue === venue ? { ...q, going: true, attendees: q.attendees + 1 } : q,
-            ),
-          }),
-        },
-        { store: game, patch: cash(-BigInt(p.priceKobo)) },
-      ],
-      then: (r) =>
-        toast.success(
-          `${r.title}${r.note ? " " + r.note : ""}${BigInt(r.extraKobo) > 0n ? ` It cost you ${naira(r.extraKobo)} extra.` : ""}`,
-        ),
-    });
-  }
   return (
     <>
       <div className="top">
@@ -54,55 +30,26 @@ export default function Parties() {
           <button>Back to game</button>
         </a>
       </div>
-      <p className="mut">
-        Week {d?.week}. One night out per week. New lineups every week.
-      </p>
+      <p className="mut">Upcoming parties and events. Go to as many as you like.</p>
       {!d && <Loader label="Loading parties" />}
-      {d?.parties.map((p) => {
-        const full = p.attendees >= p.capacity,
-          pct = Math.min(100, Math.round((p.attendees / p.capacity) * 100));
-        return (
-          <div className="card" key={p.venue}>
-            <div className="top">
-              <h2>{p.venue}</h2>
-              <span className="cash">{naira(p.priceKobo)}</span>
-            </div>
-            <p>
-              {p.theme} · {p.headliner}
-              <br />
-              <span className="mut">{p.night}</span>
-            </p>
-            <div className="top">
-              <span className="mut">
-                {p.attendees} of {p.capacity} students attending
-              </span>
-              <span className="mut">{pct}%</span>
-            </div>
-            <div className="bar" aria-hidden="true">
-              <i
-                style={{
-                  width: pct + "%",
-                  background: full ? "var(--bad)" : "var(--ok)",
-                }}
-              />
-            </div>
-            <button
-              className="go"
-              style={{ width: "100%", marginTop: 10 }}
-              disabled={d.wentOut || full}
-              onClick={() => go(p.venue)}
-            >
-              {p.going
-                ? "You're going"
-                : full
-                  ? "Sold out"
-                  : d.wentOut
-                    ? "You already went out this week"
-                    : "Buy ticket and go"}
-            </button>
+      {d && d.events.length === 0 && <p className="mut">No events listed right now. Check back soon.</p>}
+      {d?.events.map((e) => (
+        <article className="card ev-card" key={e.id}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="ev-flyer" src={e.flyer} alt={`${e.name} flyer`} loading="lazy" />
+          <div className="ev-info">
+            <b className="ev-name">{e.name}</b>
+            <span className="cash ev-price">{price(e.priceKobo)}</span>
+            <span className="mut ev-host">Hosted by {e.host}</span>
+            <span className="mut ev-date">{when(e.date)}</span>
           </div>
-        );
-      })}
+          <a className="ev-buy" href={e.ticketUrl} target="_blank" rel="noopener noreferrer">
+            <button className="go" style={{ width: "100%" }}>
+              Buy ticket
+            </button>
+          </a>
+        </article>
+      ))}
     </>
   );
 }
