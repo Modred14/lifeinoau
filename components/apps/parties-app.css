@@ -1,0 +1,128 @@
+/* components/apps/parties-app.css: the Parties app (the violet app on the home screen).
+   Hierarchy on every event card, loudest first:  1. the event NAME   2. the flyer   3. date + time   4. price + Get ticket   5. host.
+   A light lavender page, white ticket cards, one flat violet accent for the things you can act on. */
+
+.ph[data-app="parties"] .pa {
+  --pty-bg: #f6f4fc;
+  --pty-card: #fff;
+  --pty-ink: #1b1136;
+  --pty-sub: #5b5474;
+  --pty-line: rgba(60, 30, 120, 0.14);
+  --pty-violet: #6d3be0;
+    --pty-hot: #c2255c;
+  --pty-orange: #d9480f;
+  --pty-free: #0d7a3f;
+  --blue: var(--pty-violet);
+  --ring: var(--pty-violet);
+  color: var(--pty-ink);
+  color-scheme: light;
+  background: var(--pty-bg);
+}
+.ph[data-app="parties"] .pa-bar h2 { color: var(--pty-ink); font-weight: 800; }
+.ph[data-app="parties"] .pa-back { color: var(--pty-violet); }
+.ph[data-app="parties"] .pa-back:hover:not(:disabled) { background: rgba(109, 59, 224, 0.1); }
+.ph[data-app="parties"] .pa-content { padding: 2px 16px 28px; }
+.ph[data-app="parties"] .ph-home i { background: rgba(27, 17, 54, 0.78); }
+
+.pty { display: grid; gap: 18px; }
+
+/* ---------- the header strip: how many events, nothing louder than the cards below ---------- */
+.ph[data-app="parties"] .pty-hero {
+  position: relative; overflow: hidden; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 18px 18px 18px 20px; border-radius: 24px; color: #fff;
+  background: var(--pty-violet);
+}
+.ph[data-app="parties"] .pty-hero-copy { position: relative; min-width: 0; display: grid; gap: 3px; }
+.ph[data-app="parties"] .pty-eyebrow { font: 700 0.7rem/1 var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255, 255, 255, 0.82); }
+.ph[data-app="parties"] .pty-hero h2 { margin: 4px 0 0; font: 800 1.4rem/1.15 var(--font-head); letter-spacing: -0.02em; color: #fff; text-wrap: balance; }
+.ph[data-app="parties"] .pty-hero p { margin: 0; font-size: 0.86rem; color: rgba(255, 255, 255, 0.86); }
+.ph[data-app="parties"] .pty-hero-ico {
+  position: relative; flex: none; display: grid; place-items: center; width: 60px; height: 60px; border-radius: 20px; color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* ---------- an event: a ticket ---------- */
+.ph[data-app="parties"] .pty-card {
+  position: relative; overflow: hidden; border-radius: 26px; background: var(--pty-card);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 0 0 1px rgba(60, 30, 120, 0.06), 0 10px 24px -20px rgba(50, 20, 110, 0.45);
+  animation: pty-rise 480ms cubic-bezier(0.22, 1, 0.36, 1) both; animation-delay: calc(var(--i, 0) * 70ms);
+}
+.ph[data-app="parties"] .pty-card-next {
+  box-shadow: 0 0 0 2px rgba(109, 59, 224, 0.7), 0 12px 28px -20px rgba(76, 29, 149, 0.55);
+}
+@keyframes pty-rise { from { opacity: 0; transform: translateY(16px); } }
+
+/* the flyer, with the date and the "how soon" tag laid on it */
+.ph[data-app="parties"] .pty-media { position: relative; aspect-ratio: 4 / 5; background: #ece6fb; }
+.ph[data-app="parties"] .pty-flyer { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
+.ph[data-app="parties"] .pty-flyer-missing { display: grid; place-items: center; color: rgba(109, 59, 224, 0.55); }
+.ph[data-app="parties"] .pty-tile {
+  position: absolute; z-index: 1; top: 12px; left: 12px; display: grid; justify-items: center; gap: 1px; min-width: 52px; padding: 7px 10px 8px; border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96); box-shadow: 0 8px 18px -8px rgba(20, 8, 50, 0.6); text-align: center;
+}
+.ph[data-app="parties"] .pty-tile small { font: 800 0.66rem/1 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--pty-violet); }
+.ph[data-app="parties"] .pty-tile b { font: 800 1.45rem/1 var(--font-head); letter-spacing: -0.02em; color: var(--pty-ink); }
+.ph[data-app="parties"] .pty-tag {
+  position: absolute; z-index: 1; top: 12px; right: 12px; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px;
+  font: 800 0.76rem/1 var(--font-ui); letter-spacing: 0.01em; color: #fff; box-shadow: 0 8px 18px -8px rgba(20, 8, 50, 0.65);
+}
+.ph[data-app="parties"] .pty-tag[data-tone="hot"] { background: var(--pty-hot); }
+.ph[data-app="parties"] .pty-tag[data-tone="live"] { background: #a3123a; }
+.ph[data-app="parties"] .pty-tag[data-tone="soon"] { background: rgba(255, 255, 255, 0.96); color: var(--pty-ink); }
+.ph[data-app="parties"] .pty-tag i { width: 8px; height: 8px; border-radius: 50%; background: #fff; animation: pty-pulse 1.4s ease-in-out infinite; }
+@keyframes pty-pulse { 50% { transform: scale(0.55); opacity: 0.55; } }
+
+/* the words: the name leads */
+.ph[data-app="parties"] .pty-body { display: grid; gap: 10px; padding: 18px 20px 4px; }
+.ph[data-app="parties"] .pty-kicker { justify-self: start; padding: 5px 10px; border-radius: 999px; background: rgba(109, 59, 224, 0.1); color: var(--pty-violet); font: 800 0.68rem/1 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; }
+.ph[data-app="parties"] .pty-name { margin: 0; font: 800 1.65rem/1.08 var(--font-head); letter-spacing: -0.03em; color: var(--pty-ink); overflow-wrap: anywhere; text-wrap: balance; }
+.ph[data-app="parties"] .pty-card-next .pty-name { font-size: 1.95rem; line-height: 1.04; }
+.ph[data-app="parties"] .pty-host { display: flex; align-items: center; gap: 9px; margin: 0; min-width: 0; font-size: 0.9rem; color: var(--pty-sub); }
+.ph[data-app="parties"] .pty-host b { color: var(--pty-ink); font-weight: 700; overflow-wrap: anywhere; }
+.ph[data-app="parties"] .pty-host-av { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: #fff; font: 800 0.78rem/1 var(--font-head); background: var(--pty-violet); }
+.ph[data-app="parties"] .pty-when { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 0.95rem; line-height: 1.35; color: var(--pty-sub); }
+.ph[data-app="parties"] .pty-when svg { flex: none; margin-top: 1px; color: var(--pty-violet); }
+.ph[data-app="parties"] .pty-when b { color: var(--pty-ink); font-weight: 700; white-space: nowrap; }
+.ph[data-app="parties"] .pty-when i { font-style: normal; opacity: 0.5; margin: 0 2px; }
+
+/* the stub: a perforated line with a notch each side, then the price and the button */
+.ph[data-app="parties"] .pty-foot {
+  position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; padding: 16px 20px 20px;
+  border-top: 2px dashed var(--pty-line);
+}
+.ph[data-app="parties"] .pty-foot::before,
+.ph[data-app="parties"] .pty-foot::after { content: ""; position: absolute; top: -11px; width: 20px; height: 20px; border-radius: 50%; background: var(--pty-bg); box-shadow: inset 0 0 0 1px rgba(60, 30, 120, 0.06); }
+.ph[data-app="parties"] .pty-foot::before { left: -10px; }
+.ph[data-app="parties"] .pty-foot::after { right: -10px; }
+.ph[data-app="parties"] .pty-price { display: grid; gap: 3px; min-width: 0; }
+.ph[data-app="parties"] .pty-price small { font: 700 0.68rem/1 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--pty-sub); }
+.ph[data-app="parties"] .pty-price b { font: 800 1.45rem/1.05 var(--font-head); letter-spacing: -0.02em; color: var(--pty-ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ph[data-app="parties"] .pty-price[data-free] b { color: var(--pty-free); }
+.ph[data-app="parties"] .pty-buy {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; padding: 0 16px; border-radius: 17px; text-decoration: none; white-space: nowrap;
+  font: 800 1rem/1 var(--font-ui); color: #fff; background: var(--pty-violet);
+  transition: transform 160ms var(--ease), filter 160ms var(--ease), box-shadow 160ms var(--ease);
+}
+.ph[data-app="parties"] .pty-buy:hover { filter: brightness(1.07); transform: translateY(-1px); }
+.ph[data-app="parties"] .pty-buy:active { transform: scale(0.96); filter: none; }
+.ph[data-app="parties"] .pty-buy:focus-visible { outline: 3px solid rgba(109, 59, 224, 0.4); outline-offset: 3px; }
+
+/* ---------- nothing listed ---------- */
+.ph[data-app="parties"] .pty-empty { display: grid; justify-items: center; gap: 8px; padding: 34px 24px 38px; border-radius: 26px; background: var(--pty-card); text-align: center; box-shadow: 0 0 0 1px rgba(60, 30, 120, 0.06); }
+.ph[data-app="parties"] .pty-empty-ico { display: grid; place-items: center; width: 84px; height: 84px; margin-bottom: 6px; border-radius: 28px; color: var(--pty-violet); background: #efe8ff; }
+.ph[data-app="parties"] .pty-empty h3 { margin: 0; font: 800 1.35rem/1.15 var(--font-head); letter-spacing: -0.02em; color: var(--pty-ink); }
+.ph[data-app="parties"] .pty-empty p { margin: 0; max-width: 26ch; color: var(--pty-sub); font-size: 0.92rem; }
+
+/* a failed load keeps the app's own look */
+.ph[data-app="parties"] .pa-content .le { background: var(--pty-card); }
+
+@media (max-height: 700px) { .ph[data-app="parties"] .pty-name { font-size: 1.5rem; } .ph[data-app="parties"] .pty-card-next .pty-name { font-size: 1.75rem; } }
+@media (max-width: 360px) {
+  .ph[data-app="parties"] .pty-foot { flex-wrap: wrap; }
+  .ph[data-app="parties"] .pty-price { flex: 1 1 100%; }
+  .ph[data-app="parties"] .pty-buy { flex: 1 1 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ph[data-app="parties"] .pty-card, .ph[data-app="parties"] .pty-tag i { animation: none; }
+  .ph[data-app="parties"] .pty-buy { transition: none; }
+}
