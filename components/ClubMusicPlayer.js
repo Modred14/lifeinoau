@@ -10,7 +10,7 @@ import { useClubDj, startClubMusic, stopClubMusic, setClubVolume, setClubMuted, 
 import { setOf } from "@/lib/clubMusic.js";
 import "./club-music.css";
 
-const NOTES = { "needs-tap": "Tap to start the club music", off: "Music is off in Settings", unsupported: "This browser can't play the club mix", starting: "The DJ is warming up" };
+const NOTES = { "needs-tap": "Tap to start the club music", off: "Tap to play the club music", unsupported: "This browser can't play the club mix", starting: "The DJ is warming up" };
 
 export default function ClubMusicPlayer({ club, live = true }) {
   const dj = useClubDj(), { music } = useSoundSettings(), [open, setOpen] = useState(false), glow = useRef(null);
@@ -42,7 +42,7 @@ export default function ClubMusicPlayer({ club, live = true }) {
             <p className="cm-set">{setOf(club.id).dj} · {setOf(club.id).note}</p>
             {now && <p className="cm-tag">{now.genre} · {now.source}{dj.mixing ? " · mixing" : ""}</p>}
             <div className="cm-ctl">
-              <button type="button" data-sound="none" onClick={() => (playing ? pauseClubMusic() : dj.status === "paused" ? resumeClubMusic() : tapToStart())} aria-label={playing ? "Pause the music" : "Play the music"}><Icon name={playing ? "pause" : "play"} size={20} weight="fill" /></button>
+              <button type="button" data-sound="none" onClick={() => (playing ? pauseClubMusic() : dj.status === "paused" ? resumeClubMusic() : dj.status === "off" ? startClubMusic(club.id, { force: true }) : tapToStart())} aria-label={playing ? "Pause the music" : "Play the music"}><Icon name={playing ? "pause" : "play"} size={20} weight="fill" /></button>
               <button type="button" data-sound="none" onClick={skipClubTrack} disabled={!playing || dj.mixing} aria-label="Next track"><Icon name="skip" size={20} weight="fill" /></button>
               <button type="button" data-sound="none" onClick={() => setClubMuted(!dj.muted)} aria-pressed={dj.muted} aria-label={dj.muted ? "Unmute the music" : "Mute the music"}><Icon name={dj.muted ? "mute" : "sound"} size={20} weight="fill" /></button>
               <input type="range" min="0" max="100" value={vol} onChange={(e) => { setClubVolume(+e.target.value); if (dj.muted && +e.target.value > 0) setClubMuted(false); }} aria-label="Music volume" />
@@ -51,7 +51,7 @@ export default function ClubMusicPlayer({ club, live = true }) {
             {dj.next && <p className="cm-next">Next: {dj.next.title}</p>}
           </div>
         )}
-        <button type="button" className="cm-pill" data-sound="none" data-tap={dj.status === "needs-tap" ? "1" : undefined} aria-expanded={open} onClick={() => (dj.status === "needs-tap" ? tapToStart() : setOpen(!open))}>
+        <button type="button" className="cm-pill" data-sound="none" data-tap={dj.status === "needs-tap" ? "1" : undefined} aria-expanded={open} onClick={() => (dj.status === "needs-tap" ? tapToStart() : dj.status === "off" ? (startClubMusic(club.id, { force: true }), setOpen(true)) : setOpen(!open))}>
           <span className="cm-eq" data-on={playing && !dj.muted ? "1" : undefined} aria-hidden="true"><i /><i /><i /><i /></span>
           <span className="cm-now"><b>{now && playing ? now.title : note ?? (dj.status === "paused" ? "Music paused" : "Club music")}</b>{now && playing && <small>{now.artist}</small>}</span>
           <Icon name={open ? "down" : "up"} size={16} weight="bold" />

@@ -10,12 +10,13 @@ import { call, naira } from "@/lib/client";
 import { game, useGame, run, cash } from "@/lib/gameStore";
 import { toast } from "@/lib/toast";
 import { DRINKS, PACKAGES, EXPERIENCES, BUYOUT_TIERS, BUYOUT_TERMS, SPRAY_AMOUNTS, VIP_PERKS, MIN_SPEND, MAX_SPEND, SPEND_STEP, validSpend, tierOf, fxLevel, buyoutPrice, drinkById } from "@/lib/clubs.js";
+import { activitiesFor, ACTIVITIES, labelOf, summaryOf } from "@/lib/activities.js";
 import "./club.css";
 import { compactMoney } from "@/lib/money.js";
 
 const N = (n) => compactMoney(n);
 const CONFIRM_FROM = 100_000; // anything from here up (and every gift and buyout) asks "are you sure?" first
-const TABS = [["bottles", "Bottles", "gift"], ["spray", "Spray", "coins"], ["packages", "Packages", "forbes"], ["more", "Experiences", "sparkle"], ["buyout", "Buyout", "club"]];
+const TABS = [["do", "Activities", "users"], ["bottles", "Bottles", "gift"], ["spray", "Spray", "coins"], ["packages", "Packages", "forbes"], ["more", "Experiences", "sparkle"], ["buyout", "Buyout", "club"]];
 
 /** One bottle drawn for each drink: its own shape and colours (original artwork, not a maker's label). */
 export function BottleArt({ drink, size = 84 }) {
@@ -40,18 +41,25 @@ export function BottleArt({ drink, size = 84 }) {
   );
 }
 
-export default function ClubPanel({ club, state, people = [], selfName = "", onClose, onBought }) {
-  const [tab, setTab] = useState("bottles"), [pick, setPick] = useState(null), [busy, setBusy] = useState(false), [custom, setCustom] = useState(""), [amount, setAmount] = useState(SPRAY_AMOUNTS[2]), [to, setTo] = useState(null);
+export default function ClubPanel({ club, state, people = [], selfName = "", getPos, onClose, onBought }) {
+  const [tab, setTab] = useState("do"), [pick, setPick] = useState(null), [busy, setBusy] = useState(false), [custom, setCustom] = useState(""), [amount, setAmount] = useState(SPRAY_AMOUNTS[2]), [to, setTo] = useState(null);
   const g = useGame(), router = useRouter(), rid = useRef(null);
   const open = !!state?.status?.open, balance = g?.balanceKobo != null ? BigInt(g.balanceKobo) : null, can = (n) => balance == null || balance >= BigInt(n) * 100n;
   const friends = people.filter((p) => p.name && p.name.toLowerCase() !== selfName.toLowerCase());
   const buyout = state?.buyout, vip = state?.vip;
 
+  /** Tell the server where you stand right now (the same report the room sends every 4 s). A failed report is not an error here: the purchase answers for itself. */
+  const report = async () => { const at = getPos?.(); if (at) await call("/api/activity", { op: "report", ...at }); };
   /** Ask for a purchase. `p`: { kind, itemId, amount?, to?, naira, label }. Nothing is shown as bought until the server says so. */
   async function pay(p) {
     if (busy) return; setBusy(true); rid.current ??= crypto.randomUUID(); // the same id is kept while the answer is unknown, so a retry can never charge twice
     const res = await run({ key: "club:buy", router, sensitive: true, pending: `Paying for ${p.label}…`, ok: `${p.label}: paid.`, sound: "coin",
-      request: () => call("/api/club", { kind: p.kind, itemId: p.itemId, amount: p.amount, to: p.to, requestId: rid.current }),
+      request: async () => { // the server only sells to someone it has seen inside the room in the last 45 s: say where you stand first, and if it still says "step inside", say it once more and retry the SAME request (same id: it can never charge twice)
+        const body = { kind: p.kind, itemId: p.itemId, amount: p.amount, to: p.to, requestId: rid.current };
+        await report(); let r = await call("/api/club", body);
+        if (r.failed && /step inside the club/i.test(r.error ?? "")) { await report(); r = await call("/api/club", body); }
+        return r;
+      },
       effects: [{ store: game, patch: cash(-BigInt(p.naira) * 100n) }] });
     if (!res.unknown) rid.current = null; // a clear answer (yes or no): the next purchase is a new request
     if (!res.failed && !res.skipped) { setPick(null); game.refresh(); onBought?.(res); } else if (res.skipped) { /* a tap on a purchase already running */ }
@@ -78,6 +86,8 @@ export default function ClubPanel({ club, state, people = [], selfName = "", onC
         <nav className="cl-tabs" aria-label="Sections">{TABS.map(([id, name, icon]) => <button key={id} type="button" className="cl-tab" aria-pressed={tab === id} onClick={() => setTab(id)}><Icon name={icon} size={16} /> {name}</button>)}</nav>
 
         <div className="cl-body">
+          {tab === "do" && <Activities club={club} open={open} setTab={setTab} onClose={onClose} />}
+
           {tab === "bottles" && (<>
             <div className="cl-for" role="group" aria-label="Who is the drink for?">
               <button type="button" aria-pressed={!to} onClick={() => setTo(null)}>For me</button>
@@ -146,4 +156,34 @@ export default function ClubPanel({ club, state, people = [], selfName = "", onC
       </div>
     </div>
   );
+}
+
+/** Everything you can do in this club on one screen. Each row is wired to the real thing: the music screen, the real ring activity (the character walks to it, as from the activities panel),
+ *  a tab of this menu, or the Courses app. Ring activities and their prices come from lib/activities.js: nothing is listed here that the server would not run. */
+function Activities({ club, open, setTab, onClose }) {
+  const ring = activitiesFor({ t: "club", v: club.id.replace(/^club_/, "") });
+  const cost = (act) => (ACTIVITIES[act].cost ? N(ACTIVITIES[act].cost) : "Free");
+  const doRing = (e) => { onClose(); window.dispatchEvent(new CustomEvent("oau:club-act", { detail: { acts: [e.act], label: labelOf(e) } })); };
+  const Row = ({ icon, name, text, price, go, label, off }) => (
+    <article className="cl-row"><span className="cl-ico"><Icon name={icon} size={20} /></span><div><h3>{name}</h3><p>{text}</p></div>
+      <div className="cl-end"><b className="cl-price">{price}</b><button type="button" className="cl-buy" disabled={off} onClick={go}>{label}</button></div></article>
+  );
+  const bar = ring.find((e) => e.act === "club_drink"), others = ring.filter((e) => e.act !== "club_drink");
+  return (<>
+    <h4 className="cl-sec">Entertainment</h4>
+    <div className="cl-rows">
+      <Row icon="sound" name="Club music" text="The DJ is playing. Play, pause, skip and set the volume." price="Free" label="Open" go={() => { onClose(); window.dispatchEvent(new CustomEvent("oau:club-ui", { detail: { panel: "dj" } })); }} />
+      {others.map((e) => <Row key={e.act} icon={ACTIVITIES[e.act].icon} name={labelOf(e)} text={summaryOf(ACTIVITIES[e.act])} price={cost(e.act)} label="Go" go={() => doRing(e)} />)}
+      <Row icon="courses" name="Fight a lecturer" text="Your lecturers stand in their lecture rooms, not in the club. Open Courses to see where yours is, then go and confront them there." price="Costs energy" label="Find them" go={() => { onClose(); window.dispatchEvent(new CustomEvent("oau:phone-app", { detail: { app: "courses" } })); }} />
+    </div>
+    <h4 className="cl-sec">Spending</h4>
+    <div className="cl-rows">
+      {bar && <Row icon={ACTIVITIES[bar.act].icon} name="Drink at the bar" text={summaryOf(ACTIVITIES[bar.act])} price={cost(bar.act)} label="Go to bar" off={!open} go={() => doRing(bar)} />}
+      <Row icon="gift" name="Bottles" text="Order a bottle for yourself or a friend in the club." price="" label="See bottles" go={() => setTab("bottles")} />
+      <Row icon="coins" name="Spray money" text="Make it rain. Everyone sees your name and the amount." price="" label="Spray" go={() => setTab("spray")} />
+      <Row icon="forbes" name="Packages" text="Bottle service with a table and VIP." price="" label="See packages" go={() => setTab("packages")} />
+      <Row icon="sparkle" name="Experiences" text="Shout-outs, spotlight, luxury entrance and more." price="" label="See list" go={() => setTab("more")} />
+      <Row icon="club" name="Buyout" text="Take over the whole club for a few minutes." price="" label="See tiers" go={() => setTab("buyout")} />
+    </div>
+  </>);
 }

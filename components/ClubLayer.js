@@ -75,10 +75,10 @@ export default function ClubLayer({ place, api, ready, selfName = "", people = [
         {buyout && <em><Icon name="timer" size={12} /> {buyout.host}: {buyout.name} {mmss(buyout.endsAt - now)}</em>}
         {guests.length > 0 && <small title="Gold VIP badge in the guest list">VIP here: {guests.slice(0, 3).map((v) => v.name).join(", ")}{guests.length > 3 ? ` +${guests.length - 3}` : ""}</small>}
       </div>
-      <button type="button" className="cl-open" onClick={() => (open ? setMenu(true) : toast.error(closedMessage(club)))} data-sound="none" aria-label="Open the club menu"><Icon name="sparkle" size={18} weight="fill" /> VIP menu</button>
+      <button type="button" className="cl-open" onClick={() => (open ? setMenu(true) : toast.error(closedMessage(club)))} data-sound="none" aria-label="Open the club menu: activities, music and spending"><Icon name="sparkle" size={18} weight="fill" /> Club</button>
       <ClubMusicPlayer club={club} live={isOpen} />
       <div className="cl-banners" aria-live="polite">{banners.map((b) => <div key={b.id} className="cl-banner" data-lv={b.level}>{b.text}</div>)}</div>
-      {menu && st && <ClubPanel club={{ ...club, ...(st.club ?? {}) }} state={st} people={people} selfName={selfName} onClose={() => setMenu(false)} onBought={() => load()} />}
+      {menu && st && <ClubPanel club={{ ...club, ...(st.club ?? {}) }} state={st} people={people} selfName={selfName} getPos={() => { const p = api.current?.state; return p ? { x: p.x, z: p.z, floor: p.floor } : null; }} onClose={() => setMenu(false)} onBought={() => load()} />}
     </>
   );
 }

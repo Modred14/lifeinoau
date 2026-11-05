@@ -145,6 +145,10 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
     if (t.kind === "activity") { if (!panelCtl.current) toast.info("The room is still getting ready. Try again in a moment."); else panelCtl.current.goAct(t.acts, h.label); return; }
     const a = place.actions?.[h.action]; if (a?.href) router.push(a.href); else setInfo(true);
   };
+  useEffect(() => { // the club menu's Activities tab asks the activities panel to walk the character to a real ring (Dance, the bar, the patio...)
+    const h = (e) => { const d = e.detail; if (d?.acts && panelCtl.current) panelCtl.current.goAct(d.acts, d.label); else toast.info("The room is still getting ready. Try again in a moment."); };
+    window.addEventListener("oau:club-act", h); return () => window.removeEventListener("oau:club-act", h);
+  }, []);
   useEffect(() => { if (!desk) return; const t = setInterval(() => setTick((n) => n + 1), 1000); return () => clearInterval(t); }, [desk]);
   const heldUntil = gs?.floorZero?.releaseAt ?? gs?.character?.jailedUntil ?? null, stillHeld = !!heldUntil && +new Date(heldUntil) > serverTime();
   useEffect(() => { if (desk && gs && !stillHeld) { setDesk(false); game.refresh(); } }, [desk, gs, stillHeld]); // the sentence ended while the panel was open
