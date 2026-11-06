@@ -30,3 +30,5 @@
 .vc-panel { display: grid; justify-items: center; gap: 4px; width: 100%; margin-top: 8px; }
 .vc-ctl-sm { margin-top: 6px; gap: 22px; }
 .vc-ctl-sm .vc-b span { width: 48px; height: 48px; }
+/* the name must always be readable: the global h2 colour is dark */
+.vc h2 { color: #fff; }
