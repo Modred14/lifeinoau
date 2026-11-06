@@ -44,13 +44,14 @@
 .nav-pill > a, .nav-pill > button:not(:where(.campus-world *)) {
   position: relative; flex: 1 1 0; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0;
   font-size: 0.8rem; font-weight: 600; letter-spacing: 0.01em; line-height: 1; white-space: nowrap;
-  border-radius: 999px; border: 0; background: transparent; color: rgba(234, 240, 248, 0.72); padding: 0 10px;
+  border-radius: 999px; border: 0; background: transparent; color: rgba(234, 240, 248, 0.72); padding: 0 10px; box-shadow: inset 0 0 0 1px rgba(110, 231, 168, 0);
   -webkit-tap-highlight-color: transparent; touch-action: manipulation;
-  transition: background-color 200ms var(--ease), color 160ms var(--ease), transform 120ms var(--ease), flex-grow 240ms var(--ease);
+  /* Every tab has the same flex-basis (0) and only its flex-GROW changes, so the widths interpolate smoothly: the tab you leave closes while the new one opens, in one motion. */
+  transition: background-color 280ms var(--ease), color 220ms var(--ease), box-shadow 280ms var(--ease), transform 120ms var(--ease), flex-grow 340ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 /* the name is there for everyone (screen readers read it, a hover shows it as a tooltip) but only the tab you are on shows it: it opens out beside the icon */
-.nav-pill > * > span { max-width: 0; margin-left: 0; opacity: 0; overflow: hidden; transition: max-width 240ms var(--ease), margin-left 240ms var(--ease), opacity 180ms var(--ease); }
-.nav-pill [data-active="1"] { flex: 0 0 auto; padding: 0 14px 0 12px; background: rgba(110, 231, 168, 0.18); color: var(--nav-on); box-shadow: inset 0 0 0 1px rgba(110, 231, 168, 0.22); }
+.nav-pill > * > span { max-width: 0; margin-left: 0; opacity: 0; overflow: hidden; transition: max-width 340ms cubic-bezier(0.32, 0.72, 0, 1), margin-left 340ms cubic-bezier(0.32, 0.72, 0, 1), opacity 240ms var(--ease); }
+.nav-pill [data-active="1"] { flex-grow: 2; background: rgba(110, 231, 168, 0.18); color: var(--nav-on); box-shadow: inset 0 0 0 1px rgba(110, 231, 168, 0.22); }
 .nav-pill [data-active="1"] > span { max-width: 4.6rem; margin-left: 7px; opacity: 1; }
 .nav svg { width: 22px; height: 22px; flex: none; transition: transform 200ms var(--ease); }
 .nav-pill > a:hover:not([data-active="1"]), .nav-pill > button:not(:where(.campus-world *)):hover:not(:disabled):not([data-active="1"]), .nav-phone:not(:where(.campus-world *)):hover { color: #fff; background-color: rgba(255, 255, 255, 0.1); }

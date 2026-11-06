@@ -1,6 +1,6 @@
 // components/BottomNav.js
 "use client";
-import { useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import Link from "next/link";
 import { Icon } from "./Icon";
 import "./bottom-nav.css";
@@ -21,27 +21,45 @@ export default function BottomNav({ path, onPlay, buying, held, phoneOpen, unrea
       delete document.body.dataset.nav;
     };
   }, []);
-  const home = onPlay && !buying,
-    map = path === "/map";
+  const nowOn = onPlay && !buying ? "home" : buying ? "buy" : path === "/map" ? "map" : null;
+  // The tab lights up the moment it is tapped, not when the next screen has finished loading: going to another page can take a moment, and the bar should not wait for it
+  // (waiting is what made the move between tabs look late and jumpy). It settles on the real tab as soon as that matches, or after a short while if the trip never happens.
+  const [tapped, setTapped] = useState(null);
+  useEffect(() => {
+    if (tapped && nowOn === tapped) setTapped(null);
+  }, [nowOn, tapped]);
+  useEffect(() => {
+    if (!tapped) return;
+    const t = setTimeout(() => setTapped(null), 2500);
+    return () => clearTimeout(t);
+  }, [tapped]);
+  const shown = tapped ?? nowOn,
+    home = shown === "home",
+    map = shown === "map",
+    buy = shown === "buy",
+    tap = (id, fn) => (e) => {
+      setTapped(id);
+      fn?.(e);
+    };
   return (
     <nav className="nav" aria-label="Main" inert={phoneOpen || undefined}>
       <div className="nav-pill">
-        <Link href="/home" aria-current={home ? "page" : undefined} data-active={home ? "1" : undefined} title="Home" onClick={onHome}>
+        <Link href="/home" aria-current={home ? "page" : undefined} data-active={home ? "1" : undefined} title="Home" onClick={tap("home", onHome)}>
           <Icon name="home" weight={home ? "fill" : "regular"} />
           <span>Home</span>
         </Link>
         <button
           type="button"
-          data-active={buying ? "1" : undefined}
-          aria-current={buying ? "page" : undefined}
+          data-active={buy ? "1" : undefined}
+          aria-current={buy ? "page" : undefined}
           disabled={held}
           title={held ? "Not while you are in Floor O (N-QRS Custody)" : "Buy"}
-          onClick={onBuy}
+          onClick={tap("buy", onBuy)}
         >
-          <Icon name="bag" weight={buying ? "fill" : "regular"} />
+          <Icon name="bag" weight={buy ? "fill" : "regular"} />
           <span>Buy</span>
         </button>
-        <Link href="/map" aria-current={map ? "page" : undefined} data-active={map ? "1" : undefined} title="Map" onClick={onMap}>
+        <Link href="/map" aria-current={map ? "page" : undefined} data-active={map ? "1" : undefined} title="Map" onClick={tap("map", onMap)}>
           <Icon name="map" weight={map ? "fill" : "regular"} />
           <span>Map</span>
         </Link>

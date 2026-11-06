@@ -1,6 +1,6 @@
 // components/apps/PartiesApp.js: lives inside the phone (see components/Phone.js)
 // Real events added by administrators. Each one is a ticket-style card: the flyer (with the date and a "Tonight / Tomorrow" tag on it),
-// then the BIG event name, the host and the time, then a stub with the price and a Get ticket button that opens the event's own ticket page.
+// then the BIG event name, the host and the time, then a stub with the price and, for paid events only, a Get ticket button that opens the event's own ticket page (free events show "Free" and no button).
 // A small copy icon on each flyer copies that event's own link (/home?event=<slug>). Opening such a link lands here: the phone opens on this app,
 // scrolls to the event and lights it up for a moment (lib/eventLink.js carries the event from the address bar, through log in, to this screen).
 "use client";
@@ -124,16 +124,19 @@ function EventCard({ e, now, index, spot }) {
         </p>
       </div>
 
-      <div className="pty-foot">
+      <div className="pty-foot" data-free={free || undefined}>
         <div className="pty-price" data-free={free || undefined}>
           <small>{free ? "Entry" : "Ticket"}</small>
           <b>{price(e.priceKobo)}</b>
         </div>
-        <a className="pty-buy" href={e.ticketUrl} target="_blank" rel="noopener noreferrer" aria-label={`Get ticket for ${e.name} (opens in a new tab)`}>
-          <Icon name="ticket" size={20} weight="fill" />
-          Get ticket
-          <Icon name="next" size={17} weight="bold" />
-        </a>
+        {/* a free event has nothing to buy, so it has no ticket button at all */}
+        {!free && (
+          <a className="pty-buy" href={e.ticketUrl} target="_blank" rel="noopener noreferrer" aria-label={`Get ticket for ${e.name} (opens in a new tab)`}>
+            <Icon name="ticket" size={20} weight="fill" />
+            Get ticket
+            <Icon name="next" size={17} weight="bold" />
+          </a>
+        )}
       </div>
     </article>
   );

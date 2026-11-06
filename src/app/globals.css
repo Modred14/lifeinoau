@@ -372,7 +372,7 @@ input[type="checkbox"] {
 .hud .brand .crown { display: grid; place-items: center; line-height: 0; }
 .hud .brand i { color: var(--green-text); font-style: normal; }
 .hud .grow { flex: 1; }
-.hud-time { color: rgba(234, 240, 248, 0.78); font-size: 0.78rem; white-space: nowrap; }
+.hud-time { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: rgba(234, 240, 248, 0.78); font-size: 0.78rem; white-space: nowrap; pointer-events: none; text-align: center; } /* dead centre of the bar, whatever the brand and the cash widths are */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .hud { background: var(--glass-bg-strong); } }
 .hud .cash {
   display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 9px; flex: none;

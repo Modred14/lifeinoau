@@ -102,17 +102,33 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
   const [appLoading, setAppLoading] = useState(false);
   const loadingSpinners = useRef(new Set());
   const wasOpen = useRef(false);
-  // closing: the handset stays mounted for a moment so it can drop away instead of vanishing (phone.css, [data-leaving]); with reduced motion it just goes
-  const [leaving, setLeaving] = useState(false), wasUp = useRef(false);
+  // The handset's life: closed -> enter (mounted, still hidden) -> open -> leave (sliding away, still mounted) -> closed. phone.css animates it with CSS *transitions* between
+  // these states, so closing and reopening in the middle of a move simply reverses from wherever it is: no restart, no jump. The state is adjusted while rendering (not in an
+  // effect), so the very first painted frame already has the right app and the right state.
+  const reduced = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const [phase, setPhase] = useState(open ? "open" : "closed");
+  const [wasShown, setWasShown] = useState(open);
+  const [fresh, setFresh] = useState(true); // the app was asked for when the phone opened (not tapped): it is just there, it does not slide in on top of the handset
+  if (open !== wasShown) {
+    setWasShown(open);
+    if (open) {
+      setApp(APPS[initialApp] && (!held || !CUSTODY_HIDDEN.includes(initialApp)) ? initialApp : null);
+      setPeer(null);
+      setFresh(true);
+      setPhase(phase === "leave" || reduced() ? "open" : "enter");
+    } else if (phase !== "closed") setPhase(reduced() || phase === "enter" ? "closed" : "leave"); // closed before it ever showed: nothing to animate
+  }
   useEffect(() => {
-    if (open) { wasUp.current = true; setLeaving(false); return; }
-    if (!wasUp.current) return;
-    wasUp.current = false;
-    if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    setLeaving(true);
-    const t = setTimeout(() => setLeaving(false), 200);
+    if (phase !== "enter") return;
+    let b; const a = requestAnimationFrame(() => { b = requestAnimationFrame(() => setPhase((p) => (p === "enter" ? "open" : p))); }); // two frames: the hidden state is painted first
+    return () => { cancelAnimationFrame(a); cancelAnimationFrame(b); };
+  }, [phase]);
+  const finishLeave = useCallback(() => setPhase((p) => (p === "leave" ? "closed" : p)), []);
+  useEffect(() => {
+    if (phase !== "leave") return;
+    const t = setTimeout(finishLeave, 340); // safety net: the handset normally unmounts from its own transitionend
     return () => clearTimeout(t);
-  }, [open]);
+  }, [phase, finishLeave]);
 
   const reportAppLoading = useCallback((id, active) => {
     if (active) loadingSpinners.current.add(id);
@@ -148,17 +164,17 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
     document.addEventListener("keydown", k, true);
     return () => document.removeEventListener("keydown", k, true);
   }, [open, app, onClose]);
-  const home = useCallback(() => setApp(null), []);
-  const openApp = useCallback((id, who = null) => { setPeer(typeof who === "string" ? who : null); setApp(id); }, []); // `who` is only ever a player name from the server
-  if (!open && !leaving) return null;
+  const home = useCallback(() => { setFresh(false); setApp(null); }, []);
+  const openApp = useCallback((id, who = null) => { setPeer(typeof who === "string" ? who : null); setFresh(false); setApp(id); }, []); // `who` is only ever a player name from the server
+  if (phase === "closed") return null;
   const c = st?.character, a = st?.academics, info = c && CLASS_INFO[c.class];
   const cur = app && APPS[app];
   const Cur = cur?.C;
   return (
     <InPhone.Provider value={true}>
     <PhoneLoading.Provider value={reportAppLoading}>
-    <div className="ph-scrim" data-over={initialWith ? "1" : undefined} data-leaving={open ? undefined : "1"} onClick={open ? onClose : undefined}>
-      <div className="ph" role="dialog" aria-modal="true" aria-label="Phone" data-app={app ?? undefined} data-loading={appLoading ? "true" : undefined} onClick={(e) => e.stopPropagation()}>
+    <div className="ph-scrim" data-state={phase} data-fresh={fresh ? "1" : undefined} data-over={initialWith ? "1" : undefined} onClick={open ? onClose : undefined}>
+      <div className="ph" onTransitionEnd={(e) => { if (e.target === e.currentTarget && e.propertyName === "transform" && phase === "leave") finishLeave(); }} role="dialog" aria-modal="true" aria-label="Phone" data-app={app ?? undefined} data-loading={appLoading ? "true" : undefined} onClick={(e) => e.stopPropagation()}>
         <div className="ph-screen">
           <div className="ph-status">
             <b className="num">{clock(now, true)}</b>

@@ -6,11 +6,18 @@
    The screen behind stays mounted and visible, dimmed and softly blurred. The scrim catches every touch: nothing reaches the room behind it, and a swipe on it cannot scroll or pull the page. */
 .ph-scrim { --z-phone: 510; /* = --z-nav (500, bottom-nav.css) + 10: tests/phone-overlay.test.mjs keeps the two in step */ position: fixed; inset: 0; z-index: var(--z-phone); display: grid; place-items: center; background: rgba(8, 12, 22, 0.5); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); animation: ph-fade 220ms var(--ease); touch-action: none; overscroll-behavior: contain; padding: calc(16px + var(--safe-t)) max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); }
 @keyframes ph-fade { from { opacity: 0; } }
-/* closing: the handset drops away and the scrim fades (Phone.js keeps it mounted for the 200ms), and it takes no touches meanwhile */
-.ph-scrim[data-leaving] { animation: ph-fade-out 200ms var(--ease) both; pointer-events: none; }
-.ph-scrim[data-leaving] .ph { animation: ph-down 200ms cubic-bezier(0.4, 0, 1, 1) both; }
-@keyframes ph-fade-out { to { opacity: 0; } }
-@keyframes ph-down { to { transform: translateY(40px) scale(0.97); opacity: 0; } }
+/* The handset's open and close. Phone.js walks data-state through enter -> open -> leave and these are CSS TRANSITIONS, not keyframes, so closing (or reopening) halfway through a move
+   reverses smoothly from wherever it is instead of restarting. The dim is a background-colour and blur transition: no opacity on the scrim, so the blur never flickers and the
+   handset is never faded twice. The destination state owns the timing: opening is a soft spring, closing is quick. Calls (call-layer.css) reuse .ph-scrim / .ph without data-state and keep their own. */
+.ph-scrim[data-state] { animation: none; background-color: rgba(8, 12, 22, 0); backdrop-filter: blur(0); -webkit-backdrop-filter: blur(0); transition: background-color 200ms ease-in, backdrop-filter 200ms ease-in, -webkit-backdrop-filter 200ms ease-in; }
+.ph-scrim[data-state] .ph { animation: none; opacity: 0; transform: translate3d(0, 48px, 0) scale(0.96); transition: transform 220ms cubic-bezier(0.4, 0, 1, 1), opacity 180ms linear; }
+.ph-scrim[data-state="enter"] .ph, .ph-scrim[data-state="leave"] .ph { will-change: transform, opacity; }
+.ph-scrim[data-state="open"] { background-color: rgba(8, 12, 22, 0.5); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); transition: background-color 260ms var(--ease), backdrop-filter 260ms var(--ease), -webkit-backdrop-filter 260ms var(--ease); }
+.ph-scrim[data-state="open"] .ph { opacity: 1; transform: none; transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1), opacity 260ms ease-out; }
+.ph-scrim[data-state="leave"], .ph-scrim[data-state="enter"] { pointer-events: none; } /* no touches while it is moving away or has not shown yet */
+body[data-phone-full] .ph-scrim[data-state="leave"]:has(> .ph[data-app]) { background: transparent; } /* a game still marked full screen when the phone is closed: the dark window fades with the handset */
+/* an app asked for when the phone opened is simply there: it does not also slide in on top of the handset's own slide */
+.ph-scrim[data-fresh] .pa { animation: none; }
 /* Layers that were above the phone before it rose over the bar stay above it, while it is open: confirm dialogs, settings, a lecture fight and an incoming call (which is the
    topmost). With the bar behind the phone they need not leave room for it either. */
 body[data-phone="open"][data-nav] :is(.cd-scrim, .sx, .lf) { z-index: calc(var(--z-nav, 500) + 30); --safe-b: env(safe-area-inset-bottom, 0px); }
@@ -159,7 +166,7 @@ body[data-phone="open"][data-nav] .cx-scrim.ph-scrim { z-index: calc(var(--z-nav
 @media (max-height: 520px) and (min-width: 641px) { .ph { border-radius: 38px; padding: 6px; } .ph-screen { --pad-t: 38px; border-radius: 32px; } .ph-status { padding: 8px 20px 0; font-size: 0.8rem; } .ph-notch { width: 84px; height: 22px; margin-top: 2px; } .ph-close { top: 8px; } }
 @media (max-height: 760px) { .ph-ico { width: 58px; height: 58px; border-radius: 19px; } .ph-grid { gap: 14px 4px; } .ph-time { font-size: 3.8rem; } .ph-wallet { margin: 14px 0 18px; } }
 @media (max-height: 640px) { .ph-ico { width: 52px; height: 52px; border-radius: 17px; } .ph-time { font-size: 3.1rem; } .ph-date { margin-bottom: 10px; } .ph-mode { display: none; } .ph-wallet { margin: 12px 0 14px; } }
-@media (prefers-reduced-motion: reduce) { .pa, .ph, .ph-scrim, .ph-sheet { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .pa, .ph, .ph-scrim, .ph-sheet { animation: none !important; } .ph-scrim[data-state], .ph-scrim[data-state] .ph { transition: none !important; } }
 /* Notifications are NOT held back while the phone is open: .tt-region (components/toaster.css) is a top-level layer above the phone,
    its apps and every sheet or dialog. (An old rule here dropped it to z-index 55, under the phone's 60: that was the bug.) */
 /* ---------- the Bet app is a dark, full-height app that scrolls inside itself ---------- */
