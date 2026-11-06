@@ -32,7 +32,7 @@ export default function Game() {
 }
 
 function System({ sys }) {
-  const [, title, views] = sys, [view, setView] = useState(views[0][0]), [text, setText] = useState(""), [page, setPage] = useState(1), q = useDebounced(text), data = useApi("game/list", { view, q, page }), d = data.data, [form, setForm] = useState(null);
+  const [, title, views] = sys, [view, setView] = useState(views[0][0]), [text, setText] = useState(""), [page, setPage] = useState(1), q = useDebounced(text), data = useApi("game/list", { view, q, page }, { scope: view }), d = data.data, [form, setForm] = useState(null);
   const pick = (v) => { setView(v); setPage(1); setText(""); };
   return <><Card title={title} right={view === "inventory.items" || view === "inventory.cars" ? <Btn size="sm" tone="pri" onClick={() => setForm({ kind: view === "inventory.cars" ? "car.grant" : "item.grant" })}>{view === "inventory.cars" ? "Give a car" : "Give an item"}</Btn> : null}>
     {views.length > 1 && <Tabs value={view} onChange={pick} options={views} />}
@@ -78,7 +78,7 @@ function GameForm({ form, view, onClose, onDone }) {
   const need = (kind === "item.grant" ? x.key.trim() && Number(x.quantity) >= 1 && pl : kind === "car.grant" ? x.modelId && pl : true) && reason.trim().length >= 10;
   async function go(e) { e?.preventDefault(); if (busy || !need) return; setBusy(true); const r = await act("game/action", body(), { pending: "Applying…", success: "Done." }); setBusy(false); if (!r.failed) { onDone(); onClose(); } }
   const cars = view?.catalog;
-  return <Modal title={T[0]} sub={T[1]} onClose={onClose} footer={<><Btn onClick={onClose}>Cancel</Btn><Btn tone={/remove|close|end|void|hide/.test(kind) ? "solid-danger" : "pri"} busy={busy} disabled={!need} onClick={go}>{T[0]}</Btn></>}>
+  return <Modal busy={busy} title={T[0]} sub={T[1]} onClose={onClose} footer={<><Btn onClick={onClose}>Cancel</Btn><Btn tone={/remove|close|end|void|hide/.test(kind) ? "solid-danger" : "pri"} busy={busy} disabled={!need} onClick={go}>{T[0]}</Btn></>}>
     <form onSubmit={go} style={{ display: "grid", gap: 14 }}>
       {kind === "faculty.update" && <><Input label="Difficulty (0.50 to 2.00)" value={x.difficulty} onChange={(e) => setX({ ...x, difficulty: e.target.value })} /><Select label="Verified" value={x.verified} onChange={(v) => setX({ ...x, verified: v })} options={[["true", "Verified"], ["false", "Not verified"]]} /></>}
       {(kind === "item.grant" || kind === "car.grant") && <PlayerPicker value={pl} onPick={setPl} />}
@@ -97,15 +97,16 @@ function Rules() {
 function Elections() {
   const q = useApi("sug", {}, { every: 30000 }), d = q.data, [busy, setBusy] = useState("");
   async function run(action, body, ask) {
+    if (busy) return;
     const reason = ask ? await import("@/lib/confirm").then((c) => c.askText({ title: ask.title, message: ask.message, label: "Reason for the audit log (10+ characters)", multiline: true, confirmLabel: ask.label, tone: "danger" })) : "ok";
     if (reason == null) return; if (ask && reason.length < 10) return import("@/lib/toast").then((t) => t.toast.error("A reason of 10+ characters is required."));
     setBusy(action); const r = await act("sug", { action, ...body, reason }, { pending: "Working…", success: "Done." }); setBusy(""); if (!r.failed) q.reload();
   }
-  return <Card title="SUG elections" right={<Btn tone="pri" size="sm" busy={busy === "start"} onClick={async () => { if (await confirmAction({ title: "Start a new election?", message: "Announces a new election cycle with the standard calendar.", confirmLabel: "Start election" })) run("start", {}); }}>Start election</Btn>}>
+  return <Card title="SUG elections" right={<Btn tone="pri" size="sm" busy={busy === "start"} disabled={!!busy} onClick={async () => { if (await confirmAction({ title: "Start a new election?", message: "Announces a new election cycle with the standard calendar.", confirmLabel: "Start election" })) run("start", {}); }}>Start election</Btn>}>
     <Async q={q} rows={4}>{d && <div className="stack">
       <Table cards={false} rows={d.cycles} rowKey={(r) => r.id} empty={<Empty title="No elections yet" />} columns={[{ key: "n", label: "Cycle", render: (r) => `#${r.number ?? r.id}` }, { key: "s", label: "Status", render: (r) => <Badge tone={r.status === "LIVE" ? "ok" : ""}>{r.status}{r.stage ? ` · ${r.stage}` : ""}</Badge> }, { key: "c", label: "Candidates", n: true, render: (r) => r.candidates }, { key: "b", label: "Ballots", n: true, render: (r) => r.ballots },
         { key: "a", label: "", render: (r) => r.status === "LIVE" ? <Btn size="sm" tone="danger" onClick={() => run("cancel", { id: r.id }, { title: "Cancel this election?", message: "Candidates keep their fee. No results exist yet, so nothing is lost.", label: "Cancel election" })}>Cancel</Btn> : null }]} />
-      <Btn busy={busy === "run"} onClick={() => run("run", {})}>Run the count / advance now</Btn>
+      <Btn busy={busy === "run"} disabled={!!busy} onClick={() => run("run", {})}>Run the count / advance now</Btn>
       {d.standing.length > 0 && <Card title="Candidates standing (disqualify before voting opens)"><Table cards={false} rows={d.standing} rowKey={(r) => r.id} columns={[{ key: "n", label: "Candidate", render: (r) => r.name }, { key: "p", label: "Post", render: (r) => r.title }, { key: "a", label: "", render: (r) => <Btn size="sm" tone="danger" onClick={() => run("disqualify", { candidateId: r.id }, { title: `Disqualify ${r.name}?`, message: "Only possible before voting opens. Recorded in the audit log.", label: "Disqualify" })}>Disqualify</Btn> }]} /></Card>}
       <p className="mut">Administrators can run the calendar and disqualify candidates. They cannot change a ballot, a vote total, a result or an appointment.</p>
     </div>}</Async></Card>;

@@ -8,7 +8,7 @@ export default function Notices() {
   const [aud, setAud] = useState({ type: "all" }), [kind, setKind] = useState("ANNOUNCEMENT"), [msg, setMsg] = useState(""), [pv, setPv] = useState(null), [busy, setBusy] = useState(false), [typed, setTyped] = useState(""), [page, setPage] = useState(1), hist = useApi("notify/history", { page });
   async function preview() { setBusy(true); const r = await post("notify/preview", { audience: aud }); setBusy(false); setPv(r.failed ? { error: r.error } : r); setTyped(""); }
   async function send() {
-    setBusy(true); const content = { aud, kind, msg: msg.trim(), count: pv.count }, requestId = opId(content); let offset = 0, r;
+    if (busy || !ready) return; setBusy(true); const content = { aud, kind, msg: msg.trim(), count: pv.count }, requestId = opId(content); let offset = 0, r;
     do { r = await act("notify/send", { audience: aud, message: msg.trim(), kind, requestId, confirm: typed.trim(), expectedCount: pv.count, offset }, { pending: "Sending…", success: "Sent." }); if (r.failed) break; offset = r.nextOffset ?? 0; } while (r.nextOffset != null && !r.done);
     setBusy(false); if (!r.failed) { opDone(content); setMsg(""); setPv(null); hist.reload(); }
   }
@@ -18,10 +18,10 @@ export default function Notices() {
       <Seg value={kind} onChange={setKind} label="Type" options={[["ANNOUNCEMENT", "Announcement"], ["ADMIN", "Notice from an administrator"]]} />
       <AudiencePicker aud={aud} setAud={(x) => { setAud(x); setPv(null); }} />
       <Area label="Message" value={msg} onChange={(e) => { setMsg(e.target.value); }} maxLength={300} hint={`${msg.length}/300 · Written for players to read.`} />
-      <div><Btn tone="pri" busy={busy && !pv} disabled={!ready} onClick={preview}>Preview recipients</Btn></div>
+      <div><Btn tone="pri" busy={busy && !pv} disabled={busy || !ready} onClick={preview}>Preview recipients</Btn></div>
       {pv?.error && <Note tone="bad">{pv.error}</Note>}
       {pv && !pv.error && <div className="preview"><span className="mut">{pv.label}</span><span className="big num">{int(pv.count)} recipient{pv.count === 1 ? "" : "s"}</span>{pv.missing?.length > 0 && <Note tone="warn">No player found for: {pv.missing.join(", ")}</Note>}{pv.sample?.length > 0 && <span className="mut">e.g. {pv.sample.slice(0, 6).join(", ")}</span>}
-        {pv.count === 0 ? <Note tone="warn">Nobody matches.</Note> : <>{pv.confirmText && <Input label={`Type ${pv.confirmText} to confirm`} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />}<Btn tone="pri" busy={busy} disabled={pv.confirmText && typed.trim() !== pv.confirmText} onClick={send}>Send to {int(pv.count)}</Btn></>}</div>}
+        {pv.count === 0 ? <Note tone="warn">Nobody matches.</Note> : <>{pv.confirmText && <Input label={`Type ${pv.confirmText} to confirm`} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />}<Btn tone="pri" busy={busy} disabled={!ready || (pv.confirmText && typed.trim() !== pv.confirmText)} onClick={send}>Send to {int(pv.count)}</Btn></>}</div>}
     </div></Card>
       <Card title="Good to know"><ul className="mut" style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}><li>Only accounts in good standing receive notices.</li><li>A repeat of the same send never delivers twice.</li><li>Sending is recorded in the audit log.</li></ul></Card></div>
     <h2 style={{ margin: "26px 0 12px" }}>Sent</h2>

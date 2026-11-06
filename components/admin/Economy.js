@@ -1,8 +1,9 @@
 // components/admin/Economy.js — money: exact balance changes, group rewards, the transaction ledger, suspicious activity and distribution.
 "use client";
 import { Fragment, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { opId, opDone, useApi, useDebounced, useQueryState, PageHead, Card, Async, Table, Pager, Search, Select, Input, Tabs, Seg, Stat, Note, Badge, Btn, Empty, PlayerPicker, Person, Area, kobo, koboShort, ago, when, int, act } from "./kit";
+import { post, opId, opDone, useApi, useDebounced, useQueryState, PageHead, Card, Async, Table, Pager, Search, Select, Input, Tabs, Seg, Stat, Note, Badge, Btn, Empty, PlayerPicker, Person, Area, kobo, koboShort, ago, when, int, act } from "./kit";
 import { HBars } from "./charts";
 import { MoneyForm, parseNaira } from "./Actions";
 
@@ -30,7 +31,7 @@ function Stats() {
 }
 
 function Adjust() {
-  const [pl, setPl] = useState(null), [done, setDone] = useState(0), [open, setOpen] = useState(false), look = useApi("player", { ref: pl?.characterId }, { skip: !pl, every: 0 });
+  const [pl, setPl] = useState(null), [done, setDone] = useState(0), [open, setOpen] = useState(false), look = useApi("player", { ref: pl?.characterId }, { skip: !pl, scope: pl?.characterId });
   return <div className="grid g-main"><div className="stack"><Card title="1. Choose the player">
     <PlayerPicker value={pl} onPick={(p) => { setPl(p); setOpen(false); }} />
     {pl && look.data && <><dl className="kv" style={{ marginTop: 12 }}><dt>Current balance</dt><dd className="num"><b>{kobo(look.data.balance)}</b></dd><dt>Account</dt><dd>{look.data.account.status}</dd></dl>
@@ -56,13 +57,13 @@ export function AudiencePicker({ aud, setAud }) {
 function Bulk() {
   const [aud, setAud] = useState({ type: "class", class: "" }), [amt, setAmt] = useState(""), [reason, setReason] = useState(""), [msg, setMsg] = useState(""), [pv, setPv] = useState(null), [busy, setBusy] = useState(false), [typed, setTyped] = useState(""), [result, setResult] = useState(null);
   const a = parseNaira(amt);
-  async function preview() { setBusy(true); const r = await import("./kit").then((k) => k.post("economy/bulk-preview", { audience: aud, amount: amt })); setBusy(false); if (r.failed) return setPv({ error: r.error }); setPv(r); setTyped(""); setResult(null); }
+  async function preview() { setBusy(true); const r = await post("economy/bulk-preview", { audience: aud, amount: amt }); setBusy(false); if (r.failed) return setPv({ error: r.error }); setPv(r); setTyped(""); setResult(null); }
   async function send() {
-    setBusy(true); let offset = 0, r, total = { granted: 0, repeated: 0, failed: 0 };
+    if (busy) return; setBusy(true); let offset = 0, r, total = { granted: 0, repeated: 0, failed: 0 };
     const content = { aud, amt: String(amt).trim(), reason: reason.trim(), msg: msg.trim(), count: pv.count }, requestId = opId(content); // one id for the whole run: resuming never repeats a payment
     do {
       r = await act("economy/bulk-grant", { audience: aud, amount: String(amt).trim(), reason: reason.trim(), message: msg.trim() || undefined, confirm: typed.trim(), expectedCount: pv.count, offset, requestId }, { pending: "Paying recipients…", success: r?.done === false ? "Paying…" : "Group reward paid." });
-      if (r.failed) break; total = { granted: total.granted + (r.granted ?? 0), repeated: total.repeated + (r.repeated ?? 0), failed: total.failed + (Array.isArray(r.failed) ? r.failed.length : Number(r.failed) || 0) }; offset = r.nextOffset ?? 0;
+      if (r.failed) break; total = { granted: total.granted + (r.granted ?? 0), repeated: total.repeated + (r.repeated ?? 0), failed: total.failed + (Array.isArray(r.failures) ? r.failures.length : 0) }; offset = r.nextOffset ?? 0;
     } while (r.nextOffset != null && !r.done);
     setBusy(false); if (!r.failed) { opDone(content); setResult(total); setPv(null); }
   }
@@ -71,7 +72,7 @@ function Bulk() {
     <Input label="Amount for each player (₦)" inputMode="decimal" value={amt} onChange={(e) => { setAmt(e.target.value); setPv(null); }} error={a.error} hint="Same amount to everyone in the group. No upper limit." />
     <Input label="Message to recipients (optional)" value={msg} onChange={(e) => setMsg(e.target.value)} maxLength={200} />
     <Area label="Reason (audit log)" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} hint="At least 10 characters." />
-    <div><Btn tone="pri" busy={busy && !pv} disabled={a.kobo == null || reason.trim().length < 10} onClick={preview}>Preview recipients</Btn></div>
+    <div><Btn tone="pri" busy={busy && !pv} disabled={busy || a.kobo == null || reason.trim().length < 10} onClick={preview}>Preview recipients</Btn></div>
     {pv?.error && <Note tone="bad">{pv.error}</Note>}
     {pv && !pv.error && <div className="preview"><span className="mut">{pv.label}</span><span className="big num">{int(pv.count)} players × {kobo(pv.eachKobo)} = {kobo(pv.totalKobo)}</span>
       {pv.missing?.length > 0 && <Note tone="warn">Not found: {pv.missing.join(", ")}</Note>}{pv.sample?.length > 0 && <span className="mut">e.g. {pv.sample.slice(0, 5).join(", ")}</span>}
@@ -100,7 +101,7 @@ function Suspicious() {
   return <><div className="toolbar"><Seg value={days} onChange={setDays} label="Window" options={[["1", "24 hours"], ["7", "7 days"], ["30", "30 days"]]} /></div>
     <Async q={q} rows={6}>{d && <div className="stack">
       <Note><b>How entries are flagged.</b> <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{d.rules.map((r) => <li key={r}>{r}</li>)}</ul>Median balance now {kobo(d.medianKobo)}; the "large" threshold is {kobo(d.thresholdKobo)}.</Note>
-      <Card title={`Flagged transactions (${d.entries.length})`}>{d.entries.length ? <Table cards={false} rows={d.entries} rowKey={(r) => r.id} columns={[{ key: "at", label: "Time", render: (r) => ago(r.at) }, { key: "p", label: "From → to", render: (r) => <span>{r.from} → {r.toId ? <a href={`/admin/players/${r.toId}`}>{r.to}</a> : r.to}</span> }, { key: "a", label: "Amount", n: true, render: (r) => <span title={kobo(r.amountKobo)}>{koboShort(r.amountKobo)}</span> }, { key: "r", label: "Why flagged", wrap: true, render: (r) => <span className="chips">{r.reasons.map((x) => <Badge key={x} tone="warn" plain>{x}</Badge>)}</span> }]} /> : <Empty title="Nothing unusual">No transaction in this window matches the rules above.</Empty>}</Card>
-      <Card title="Bursts">{d.bursts.length ? <Table cards={false} rows={d.bursts} columns={[{ key: "n", label: "Player", render: (r) => <a href={`/admin/players/${r.characterId}`}>{r.name}</a> }, { key: "c", label: "Entries in the hour", n: true, render: (r) => r.entries }, { key: "v", label: "Volume", n: true, render: (r) => <span title={kobo(r.volume)}>{koboShort(r.volume)}</span> }, { key: "w", label: "Hour", render: (r) => when(r.hour) }]} /> : <Empty title="No bursts" />}</Card>
+      <Card title={`Flagged transactions (${d.entries.length})`}>{d.entries.length ? <Table cards={false} rows={d.entries} rowKey={(r) => r.id} columns={[{ key: "at", label: "Time", render: (r) => ago(r.at) }, { key: "p", label: "From → to", render: (r) => <span>{r.from} → {r.toId ? <Link href={`/admin/players/${r.toId}`}>{r.to}</Link> : r.to}</span> }, { key: "a", label: "Amount", n: true, render: (r) => <span title={kobo(r.amountKobo)}>{koboShort(r.amountKobo)}</span> }, { key: "r", label: "Why flagged", wrap: true, render: (r) => <span className="chips">{r.reasons.map((x) => <Badge key={x} tone="warn" plain>{x}</Badge>)}</span> }]} /> : <Empty title="Nothing unusual">No transaction in this window matches the rules above.</Empty>}</Card>
+      <Card title="Bursts">{d.bursts.length ? <Table cards={false} rows={d.bursts} columns={[{ key: "n", label: "Player", render: (r) => <Link href={`/admin/players/${r.characterId}`}>{r.name}</Link> }, { key: "c", label: "Entries in the hour", n: true, render: (r) => r.entries }, { key: "v", label: "Volume", n: true, render: (r) => <span title={kobo(r.volume)}>{koboShort(r.volume)}</span> }, { key: "w", label: "Hour", render: (r) => when(r.hour) }]} /> : <Empty title="No bursts" />}</Card>
     </div>}</Async></>;
 }

@@ -23,7 +23,7 @@ export default function Audit() {
     {open && <Entry id={open} onClose={() => setOpen(null)} onOpen={setOpen} />}</>);
 }
 function Entry({ id, onClose, onOpen }) {
-  const q = useApi("audit/entry", { id }), e = q.data?.entry;
+  const q = useApi("audit/entry", { id }, { scope: String(id) }), e = q.data?.entry;
   return <Modal wide title={e ? e.action : "Log entry"} sub={e && `${when(e.at)} · ${e.actor ?? e.actorId}${e.targetName ? " → " + e.targetName : ""}`} onClose={onClose}>
     <Async q={q} rows={4}>{e && <>
       {e.status === "FAILED" && <Note tone="bad"><b>This action failed.</b> {e.error}. Nothing was changed. Retrying with the same request id is safe.</Note>}

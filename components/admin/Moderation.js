@@ -22,14 +22,14 @@ function Reports() {
     {open && <ReportModal r={open} onClose={() => setOpen(null)} onDone={() => q.reload()} />}</>;
 }
 function ReportModal({ r, onClose, onDone }) {
-  const m = useApi("moderation/report-messages", { id: r.id }), [note, setNote] = useState(""), [busy, setBusy] = useState(""), router = useRouter();
+  const m = useApi("moderation/report-messages", { id: r.id }, { scope: String(r.id) }), [note, setNote] = useState(""), [busy, setBusy] = useState(""), router = useRouter();
   async function decide(action) {
-    setBusy(action); const x = await act("moderation/resolve-report", { id: r.id, action, note: note.trim() }, { pending: "Saving decision…", success: "Report handled." }); setBusy("");
+    if (busy) return; setBusy(action); const x = await act("moderation/resolve-report", { id: r.id, action, note: note.trim() }, { pending: "Saving decision…", success: "Report handled." }); setBusy("");
     if (!x.failed) { onDone(); onClose(); }
   }
-  return <Modal wide title={`Report against ${r.target}`} sub={`Filed by ${r.reporter} · ${when(r.createdAt)}`} onClose={onClose} footer={r.status === "OPEN" ? <>
-    <Btn onClick={() => router.push(`/admin/players/${r.targetId}`)}>Open player file</Btn><Btn busy={busy === "dismiss"} disabled={note.trim().length < 5} onClick={() => decide("dismiss")}>Dismiss</Btn>
-    <Btn busy={busy === "actioned"} disabled={note.trim().length < 5} onClick={() => decide("actioned")}>Mark as warned</Btn><Btn tone="solid-danger" busy={busy === "suspend"} disabled={note.trim().length < 5} onClick={() => decide("suspend")}>Suspend 2 hours</Btn></> : null}>
+  return <Modal wide busy={!!busy} title={`Report against ${r.target}`} sub={`Filed by ${r.reporter} · ${when(r.createdAt)}`} onClose={onClose} footer={r.status === "OPEN" ? <>
+    <Btn disabled={!!busy} onClick={() => router.push(`/admin/players/${r.targetId}`)}>Open player file</Btn><Btn busy={busy === "dismiss"} disabled={!!busy || note.trim().length < 5} onClick={() => decide("dismiss")}>Dismiss</Btn>
+    <Btn busy={busy === "actioned"} disabled={!!busy || note.trim().length < 5} onClick={() => decide("actioned")}>Mark as warned</Btn><Btn tone="solid-danger" busy={busy === "suspend"} disabled={!!busy || note.trim().length < 5} onClick={() => decide("suspend")}>Suspend 2 hours</Btn></> : null}>
     <p><b>Reason given:</b> {r.reason}</p>
     <Card title="Conversation evidence (last 20 messages, opening this is logged)"><Async q={m} rows={4}>{m.data && (m.data.messages.length ? <div style={{ display: "grid", gap: 6 }}>{m.data.messages.map((x, i) => <div key={i} style={{ display: "flex", gap: 10 }}><b style={{ minWidth: 80 }} className={x.fromReporter ? "mut" : "warn"}>{x.fromReporter ? r.reporter : r.target}</b><span style={{ overflowWrap: "anywhere" }}>{x.body}</span></div>)}</div> : <Empty title="No messages saved" />)}</Async></Card>
     {r.status === "OPEN" && <Area label="Decision note" value={note} onChange={(e) => setNote(e.target.value)} hint="Recorded in the audit log. At least 5 characters." maxLength={300} data-autofocus />}
@@ -54,7 +54,7 @@ function History() {
 }
 
 function ActOn() {
-  const [pl, setPl] = useState(null), q = useApi("player", { ref: pl?.userId }, { skip: !pl }), d = q.data;
+  const [pl, setPl] = useState(null), q = useApi("player", { ref: pl?.userId }, { skip: !pl, scope: pl?.userId }), d = q.data;
   return <Card title="Choose a player"><div className="stack"><PlayerPicker value={pl} onPick={setPl} hint="Search by username. Opening a player file is recorded in the audit log." />
     {pl && <Async q={q} rows={3}>{d && <><dl className="kv"><dt>Account</dt><dd><StatusBadge v={d.account.status} /></dd><dt>Balance</dt><dd>{kobo(d.balance)}</dd><dt>Level</dt><dd>{d.character?.level}L {d.character?.class}</dd></dl><PlayerActions p={actionPlayer(d)} onChange={q.reload} /></>}</Async>}</div></Card>;
 }

@@ -27,7 +27,7 @@ function Form({ title, sub, onClose, onDone, children, canSubmit = true, submit,
     try { const r = await submit(); if (r && !r.failed) { onDone?.(r); onClose(); } } finally { setBusy(false); }
   }
   return (
-    <Modal title={title} sub={sub} onClose={onClose} wide={wide} footer={<><Btn onClick={onClose} disabled={busy}>Cancel</Btn><Btn tone={tone} busy={busy} disabled={!canSubmit} onClick={go}>{label}</Btn></>}>
+    <Modal title={title} sub={sub} onClose={onClose} wide={wide} busy={busy} footer={<><Btn onClick={onClose} disabled={busy}>Cancel</Btn><Btn tone={tone} busy={busy} disabled={!canSubmit} onClick={go}>{label}</Btn></>}>
       <form onSubmit={go} style={{ display: "grid", gap: 14 }}>{children}<button hidden /></form>
     </Modal>
   );
