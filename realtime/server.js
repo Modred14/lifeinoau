@@ -14,6 +14,7 @@ import { verifyChatPass, bodyIsSigned } from "../lib/chatAuth.js";
 import * as core from "../lib/chatCore.js";
 import { gateOf } from "../lib/accountGate.js";
 import { sendChatPush } from "../lib/chatPush.js";
+import { routeRtc, rtcLimiter } from "../lib/voice/rtcRelay.js";
 import { marketFor, snapshot as marketSnapshot, refreshHoldingValues } from "../lib/marketLive.js";
 
 const GRACE_MS = 4000; // a reload or a network blip reconnects within this time, so nobody flickers to "offline"
@@ -184,6 +185,18 @@ export function createRealtime({ db, secret, origins = [], log = console, graceM
       } catch (e) { fail(ack, e); }
     });
     socket.on("market:unsub", (_msg, ack) => { socket.leave(MARKET_ROOM); ack?.({ ok: true }); });
+
+    // ---- voice between two players: only the small set-up messages pass through here (the audio goes directly between the two phones) ----
+    const rtcOk = rtcLimiter();
+    socket.on("rtc", async (msg, ack) => {
+      try {
+        if (!rtcOk()) return ack?.({ ok: false, error: "slow down" });
+        const r = await routeRtc(me, msg, (id) => db.phoneCall.findUnique({ where: { id } }));
+        if (r.error) return ack?.({ ok: false, error: r.error });
+        io.to(room(r.to)).emit("rtc", r.msg);
+        ack?.({ ok: true });
+      } catch (e) { fail(ack, e); }
+    });
 
     socket.on("disconnect", () => {
       const n = (live.get(me.id) ?? 1) - 1;

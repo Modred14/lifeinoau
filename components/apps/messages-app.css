@@ -222,3 +222,4 @@
   .ms-menu, .ms-send, .ms-pay, .ms-tick.read svg { animation: none; }
   .ms-bub { transition: none; }
 }
+.ms .ms-call { color: #16a34a; } .ms .ms-call:disabled { opacity: 0.4; }

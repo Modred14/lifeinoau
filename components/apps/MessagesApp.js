@@ -15,6 +15,7 @@ import {
 import { useRouter } from "next/navigation";
 import { call, naira as nairaOf, notifyError, loggedOut } from "@/lib/client";
 import { toast } from "@/lib/toast";
+import { dialPlayer } from "@/lib/callsClient";
 import { confirmAction } from "@/lib/confirm";
 import {
   game,
@@ -475,6 +476,7 @@ function ChatView({ who, onBack }) {
     [deletingId, setDeletingId] = useState(null),
     [sheet, setSheet] = useState(null),
     [menu, setMenu] = useState(false),
+    [dialing, setDialing] = useState(false),
     [below, setBelow] = useState(0),
     [dividerId, setDividerId] = useState(null),
     [reportDraft, setReportDraft] = useState({
@@ -708,6 +710,16 @@ function ChatView({ who, onBack }) {
     toast.success("Report sent. Thank you.");
   }
 
+  /** Ring this player from the chat. The call itself (ringing, answer, voice) is the same one as in the Calls app: components/CallLayer.js shows it. */
+  async function startCall() {
+    if (dialing || blockedNow()) return;
+    setDialing(true);
+    const r = await dialPlayer(name);
+    setDialing(false);
+    if (r.unavailable) { toast.info(r.message); return; } // offline or busy: the chat is right here to leave a message instead
+    if (r.failed || r.ok === false) toast.error(r.error || r.message || "The call did not go through.");
+  }
+
   const presence = st.presence[k],
     typing = st.typing[k],
     blocked = !!t?.blockedByMe;
@@ -768,6 +780,16 @@ function ChatView({ who, onBack }) {
               {status}
             </small>
           </span>
+        </button>
+        <button
+          type="button"
+          className="ms-icon ms-call"
+          onClick={startCall}
+          disabled={dialing || blocked}
+          aria-label={`Call ${name}`}
+          title={`Call ${name}`}
+        >
+          <Icon name="call" size={22} weight="fill" />
         </button>
         <button
           type="button"

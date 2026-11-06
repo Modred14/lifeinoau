@@ -7,8 +7,9 @@ import { Phone, PhoneIncoming, PhoneOutgoing, PhoneX, MagnifyingGlass, ChatCircl
 import { call, naira } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { useResource } from "@/lib/gameStore";
-import { callsDo, parentCall, useParentCall } from "@/lib/callsClient";
+import { dialPlayer, parentCall, useParentCall } from "@/lib/callsClient";
 import { waitLabel } from "@/lib/callRules";
+import { voiceStatus } from "@/lib/voice/client";
 import { outcomeOf } from "../CallLayer";
 import LoadError from "@/components/LoadError";
 import Loader from "@/components/Loader";
@@ -35,6 +36,7 @@ export default function CallsApp({ onOpenApp }) {
   const { d, store, load, loadFailed } = useResource("/api/calls?view=home");
   const ui = useParentCall(), [tab, setTab] = useState("people"), [q, setQ] = useState(""), [found, setFound] = useState(null), [recents, setRecents] = useState(null), [busy, setBusy] = useState(null), [away, setAway] = useState(null);
   const [, tick] = useState(0), seq = useRef(0), was = useRef(null);
+  useEffect(() => { voiceStatus(); }, []); // learn now whether this server has the voice call, so the tap on "Call" can unlock sound at once
   const loadedAt = useMemo(() => Date.now(), [d]); // eslint-disable-line react-hooks/exhaustive-deps -- when this answer arrived: the wait counts down from then, by the real clock
   useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 5000); return () => clearInterval(t); }, []); // redraw the countdown
   useEffect(() => { if (was.current && !ui) { store.pushDone((x) => x); load(); } was.current = ui; }, [ui, load, store]); // when the call home ends, the cooldown and the weekly counts change
@@ -48,7 +50,7 @@ export default function CallsApp({ onOpenApp }) {
 
   async function dial(name) {
     if (busy) return; setBusy(name);
-    const r = await callsDo({ action: "dial", to: name }, { quiet: true });
+    const r = await dialPlayer(name);
     setBusy(null);
     if (r.unavailable) { setAway(r); return; }
     if (r.failed || r.ok === false) { toast.error(r.error || r.message || "The call did not go through."); return; }

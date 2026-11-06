@@ -19,6 +19,9 @@ import { PLAYER_CALL } from "@/lib/callRules";
 import { GAME_TIME_ZONE } from "@/lib/campus-clock.js";
 import { serverDate } from "@/lib/serverClock";
 import { Icon } from "./Icon";
+import VoiceCall, { PlayerVoicePanel } from "./VoiceCall"; // the live voice call with Mummy / Daddy, and the voice of a call between players
+import { rtcLink } from "@/lib/chat";
+import * as playerVoice from "@/lib/voice/playerVoice";
 import "./phone.css"; // the call is drawn inside the same handset as the phone (frame, status bar, notch, home bar), so it reuses those rules
 import "./call-layer.css";
 
@@ -94,6 +97,7 @@ function Connected({ c, busy, act, balanceKobo }) {
       <Avatar name={c.peer} />
       <p className="cx-kind cx-live"><span className="cx-dot" aria-hidden="true" /> Connected · {clock(talking)}</p>
       <h2>{c.peer}</h2>
+      {c.kind === "PLAYER" && <PlayerVoicePanel peer={c.peer} />}
 
       {caller && !pending && (
         <div className="cx-ask">
@@ -189,6 +193,8 @@ export default function CallLayer() {
   busyRef.current = !!active;
   useEffect(() => (ready ? startCallPolling(() => busyRef.current) : undefined), [ready]);
   useTick(!!(active || ui), 250);
+  useEffect(() => playerVoice.wire(rtcLink), []); // the voice of calls between players rides on the chat connection
+  useEffect(() => { playerVoice.sync(active); }, [active?.id, active?.status, active?.role]); // starts when the call is answered, stops the moment it is not
   const id = active?.id ?? null;
   useEffect(() => { setBusy(false); }, [id, active?.status, active?.askStatus]);
   const showLast = last && !active && last.id !== seen;
@@ -198,13 +204,15 @@ export default function CallLayer() {
   async function act(body) {
     if (busy || !active) return;
     setBusy(true);
+    if (body.action === "answer") await playerVoice.prepare(); // asked in the tap that answers, so the voice can start at once (a refused microphone does not stop the call)
+    if (body.action === "end") playerVoice.stop(true);
     const r = await callsDo({ ...body, callId: active.id }, { quiet: false });
     if (body.action === "approve" && r.ok) syncGame();
     setBusy(false);
   }
   let body = null;
   if (active?.role === "callee" && active.status === "RINGING") body = <Ringing c={active} busy={busy} act={act} />;
-  else if (ui) body = <HomeCall ui={ui} />;
+  else if (ui) body = ui.phase === "voice" || ui.phase === "voice-ended" || ui.phase === "error" ? <VoiceCall ui={ui} /> : <HomeCall ui={ui} />;
   else if (active?.status === "RINGING") body = <Outgoing c={active} busy={busy} act={act} />;
   else if (active?.status === "ANSWERED") body = <Connected c={active} busy={busy} act={act} balanceKobo={g?.balanceKobo} />;
   else if (showLast) body = <Result c={last} onDone={() => setSeen(last.id)} />;

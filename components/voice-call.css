@@ -1,0 +1,32 @@
+/* components/voice-call.css: the live voice call screen (components/VoiceCall.js). Reuses the call layer's handset, colours and .cx-* rules; only what a voice call adds is here. */
+.vc { gap: 4px; }
+.vc .cx-av.vc-av { width: 104px; height: 104px; font-size: 2.7rem; transition: box-shadow 160ms; }
+.vc-lvl { display: none; }
+/* who has the floor: a ring that follows her loudness while she speaks, and a steady one while the player does */
+.vc-av[data-who="her"] { box-shadow: 0 0 0 calc(4px + var(--lvl, 0) * 14px) rgba(63, 208, 138, 0.32), 0 10px 30px -10px rgba(67, 80, 216, 0.8); }
+.vc-av[data-who="you"] { box-shadow: 0 0 0 6px rgba(127, 140, 255, 0.35), 0 10px 30px -10px rgba(67, 80, 216, 0.8); }
+.vc-status { margin-top: 6px; font-variant-numeric: tabular-nums; }
+.vc-status .cx-dot { background: rgba(255, 255, 255, 0.4); animation: none; }
+.vc-status.cx-live .cx-dot { background: #3fd08a; animation: cx-blink 1.4s ease-in-out infinite; }
+.vc-wave { display: block; max-width: 100%; margin: 16px auto 4px; }
+.vc-note { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; }
+.vc-sound { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; margin-top: 10px; padding: 0 18px; border: 0; border-radius: 999px; font: 600 0.92rem/1 inherit; color: #0a0f1c; background: #fff; cursor: pointer; }
+.vc-ctl { display: flex; align-items: flex-start; justify-content: center; gap: 26px; width: 100%; margin-top: 22px; }
+.vc-b { display: grid; justify-items: center; gap: 7px; min-width: 64px; padding: 0; border: 0; background: none; color: #fff; cursor: pointer; }
+.vc-b span { display: grid; place-items: center; width: 60px; height: 60px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); transition: background 120ms, transform 120ms; }
+.vc-b small { font-size: 0.76rem; font-weight: 600; color: rgba(255, 255, 255, 0.75); }
+.vc-b[aria-pressed="true"] span { background: #fff; color: #0a0f1c; }
+.vc-b:hover span { background: rgba(255, 255, 255, 0.24); }
+.vc-b[aria-pressed="true"]:hover span { background: #fff; }
+.vc-b:active span { transform: scale(0.95); }
+.vc-end { display: grid; place-items: center; width: 64px; height: 64px; border: 0; border-radius: 50%; color: #fff; background: #dc2626; box-shadow: 0 10px 24px -8px rgba(220, 38, 38, 0.8); cursor: pointer; }
+.vc-end:active { transform: scale(0.95); }
+.vc-b:focus-visible, .vc-end:focus-visible, .vc-sound:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.vc-why { margin-top: 8px; }
+.vc-bad { padding: 10px 12px; border-radius: 12px; color: #ffb4b4; background: rgba(220, 38, 38, 0.18); }
+.vc-money { color: #3fd08a; font-weight: 600; }
+@media (max-height: 700px) { .vc .cx-av.vc-av { width: 76px; height: 76px; font-size: 2rem; } .vc-wave { margin-top: 8px; } .vc-ctl { margin-top: 12px; } }
+@media (prefers-reduced-motion: reduce) { .vc-av, .vc-b span { transition: none; } }
+.vc-panel { display: grid; justify-items: center; gap: 4px; width: 100%; margin-top: 8px; }
+.vc-ctl-sm { margin-top: 6px; gap: 22px; }
+.vc-ctl-sm .vc-b span { width: 48px; height: 48px; }
