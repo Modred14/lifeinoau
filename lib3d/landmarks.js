@@ -61,7 +61,7 @@ export const LANDMARKS = [
     25,
     -4,
     "OAU's central library provides books, journals, electronic resources and research facilities.",
-    
+    [],
     "relative",
     ["oluwasanmi library"],
   ),
@@ -72,7 +72,7 @@ export const LANDMARKS = [
     0,
     19,
     "A university administrative building associated with institutional governance and academic affairs.",
-    
+    [],
     "schematic",
   ),
   L(
@@ -133,7 +133,7 @@ export const LANDMARKS = [
     -6,
     -50,
     "The academic home of legal education, where students study law, legislation and justice.",
-    
+    [],
     "relative",
   ),
   L(
@@ -197,7 +197,7 @@ export const LANDMARKS = [
     -34,
     30,
     "A faculty covering the built environment, architecture, planning and design.",
-    
+    [],
     "relative",
     ["architecture"],
   ),
