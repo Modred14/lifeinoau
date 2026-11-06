@@ -14,8 +14,8 @@ import { createRoadFollower, wheelContacts } from "./vehiclepose.js";
 // Entity budgets, within about 250 m of the camera. `cars`/`kekes`/`buses`/`minibuses` are the most of each kind alive at once (campus roads AND expressway together);
 // `ground` and `hw` are the totals wanted on the campus roads and on the expressway (kept higher per metre than any small road); `peds` is the number of walkers (each is a rigged character).
 // The cars are ONE instanced draw (two with their wheels), so a car costs almost nothing to draw; buses, kekes and walkers are the expensive ones, hence their smaller counts.
-export const DENSITY = { cars: 34, kekes: 5, buses: 5, minibuses: 6, ground: 30, hw: 18, peds: 26 };
-export const DENSITY_LOW = { cars: 18, kekes: 3, buses: 3, minibuses: 3, ground: 16, hw: 10, peds: 14 };   // phones and small machines
+export const DENSITY = { cars: 80, kekes: 10, buses: 8, minibuses: 12, ground: 70, hw: 44, peds: 60 };
+export const DENSITY_LOW = { cars: 40, kekes: 6, buses: 4, minibuses: 6, ground: 36, hw: 22, peds: 28 };   // phones and small machines
 /** Picks the budget for this device: touch screens, 4 GB or less of memory, or 4 or fewer cores get the lighter one. */
 export function densityFor(env = globalThis) {
   const nav = env.navigator ?? {}, coarse = !!env.matchMedia?.("(pointer: coarse)")?.matches;

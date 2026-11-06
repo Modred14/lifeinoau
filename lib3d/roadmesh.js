@@ -110,24 +110,20 @@ export function buildRoadMeshes(graph, S, y = ROAD_LAYER_Y) {
     if (e.med > 0) { strip(med, e.path, m0, m1, 0, e.med * 2, 3); if (m1 - m0 > 3) for (const sgn of [-1, 1]) bars(mY, mK, e.path, m0, m1, sgn * e.med, 0.34); }
     if (e.shoulder >= 0.8) for (const sgn of [-1, 1]) strip(sho, e.path, m0, m1, sgn * (e.half - e.shoulder / 2), e.shoulder, 3);
     if (s1 - s0 > 8) {
-      if (e.cls === "arterial") {
-        for (const sgn of [-1, 1]) {
-          strip(mk, e.path, s0, s1, sgn * (e.half - e.shoulder), 0.16, 3);                     // the edge line, where the shoulder starts
-          for (let k = 1; k < e.lanesPerDir; k++) dashes(mk, e.path, s0, s1, sgn * (e.med + k * XS.lane), W);   // lane lines
-        }
-      } else {
-        if (e.shoulder >= 0.8) for (const sgn of [-1, 1]) strip(mk, e.path, s0, s1, sgn * (e.half - e.shoulder), 0.14, 3);   // the edge line of a collector
-        if (e.half >= 3.0) dashes(yel, e.path, s0, s1, 0, 0.14, 4, 8);                            // the yellow centre line of a two-way road
+      for (const sgn of [-1, 1]) {
+        strip(mk, e.path, s0, s1, sgn * (e.half - e.shoulder), e.cls === "arterial" ? 0.16 : 0.14, 3);   // the edge line, where the shoulder starts (the kerb side on a small road)
+        for (let k = 1; k < e.lanesPerDir; k++) dashes(mk, e.path, s0, s1, sgn * (e.med + k * e.lw), W);   // lane lines: the two lanes of one direction are told apart by a dashed line
       }
+      if (e.cls !== "arterial") for (const sgn of [-1, 1]) strip(yel, e.path, s0, s1, sgn * 0.13, 0.1, 3);   // a double yellow centre line separates the two directions
     }
     // lane arrows, one on the outer lane of each direction just before the stop line (a turn arrow where every way on is a turn)
     if (e.cls !== "local" && e.len > 45) for (const dir of [0, 1]) {
       const lane = e.lanes[dir], node = dir ? na : nb, c = dir ? ca : cb; if (!lane || node.deg < 3 || node.J?.asph.disc) continue;
       const kinds = lane.out.map((id) => graph.conns[id].kind).filter((k) => k !== "uturn"), allL = kinds.length && kinds.every((k) => k === "left"), allR = kinds.length && kinds.every((k) => k === "right");
       const sArrow = dir ? c.asph + XS.stopGap + 9 : e.len - (c.asph + XS.stopGap + 9); if (sArrow < s0 + 4 || sArrow > s1 - 4) continue;
-      const lanes = e.cls === "arterial" ? e.lanesPerDir : 1;
+      const lanes = e.lanesPerDir;
       for (let k = 0; k < lanes; k++) {
-        const off = (e.med > 0 ? e.med + XS.lane * (k + 0.5) : e.half / 2) * (dir ? -1 : 1), q = side(e.path, sArrow, off, {}), hx = dir ? -q.hx : q.hx, hz = dir ? -q.hz : q.hz, outer = k === lanes - 1 && lanes > 1 ? true : lanes === 1;
+        const off = (e.lanesPerDir > 1 ? e.med + e.lw * (k + 0.5) : e.half / 2) * (dir ? -1 : 1), q = side(e.path, sArrow, off, {}), hx = dir ? -q.hx : q.hx, hz = dir ? -q.hz : q.hz, outer = k === lanes - 1 && lanes > 1 ? true : lanes === 1;
         arrow(mk, q.x, q.z, hx, hz, outer && allR ? 0.75 : outer && allL ? -0.75 : 0);
       }
     }

@@ -108,7 +108,8 @@ function nearestOnPath(path, x, z, s0, s1) {
 export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z: 0 }), rnd = Math.random, density = {} }) {
   const D = { ...DENSITY, ...density }, vehicles = [], peds = [], external = new Map(), reserved = new Map(); let nextId = 1, time = 0, spawnCool = 0, pedCool = 0;
   const edgeOf = (laneId) => graph.byEdge.get(graph.lanes[laneId].edge);
-  const nLanesOf = (laneId) => { const e = edgeOf(laneId); return e.med > 0 ? Math.max(1, e.lanesPerDir) : 1; };   // lanes in this lane's direction that vehicles may share
+  const nLanesOf = (laneId) => Math.max(1, edgeOf(laneId).lanesPerDir);
+  const laneWOf = (laneId) => { const e = edgeOf(laneId), n = e.lanesPerDir; return n > 1 ? Math.max(0, (graph.lanes[laneId].off - e.med - e.lw / 2) / (n - 1)) : e.lw ?? LANE_W; };   // lanes in this lane's direction that vehicles may share
   // Spawn pools, weighted by length x how busy that class of road is (the ramps are never used by ambient traffic: they belong to the player's journeys).
   const makePool = (pred, wf) => { const arr = [], cum = []; let t = 0; for (const l of graph.lanes) { const e = graph.byEdge.get(l.edge); if (e && pred(l, e)) { t += l.len * wf(e); arr.push(l); cum.push(t); } } return { arr, cum, total: t }; };
   const pickFrom = (pool) => { let lo = 0, hi = pool.arr.length - 1; const r = rnd() * pool.total; while (lo < hi) { const m = (lo + hi) >> 1; if (pool.cum[m] < r) lo = m + 1; else hi = m; } return pool.arr[lo]; };
@@ -152,7 +153,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     const segs = a.route.segs; let sg = segs[a.si]; if (!sg || sc < sg.start || sc > sg.end) { sg = null; for (const q of segs) if (sc <= q.end) { sg = q; break; } sg ??= segs[segs.length - 1]; }
     if (sg.kind !== "lane") return 0;
     const L = graph.lanes[sg.id], ls = sg.s0 + (sc - sg.start), k = Math.max(0, Math.min(1, Math.min(ls, L.len - ls) / 30));
-    return Math.min(a.lat, (nLanesOf(sg.id) - 1) * LANE_W) * k * k * (3 - 2 * k);
+    return Math.min(a.lat, (nLanesOf(sg.id) - 1) * laneWOf(sg.id)) * k * k * (3 - 2 * k);
   }
   const shifted = (a, pt, sc) => { const l = latAt(a, sc); if (l) { pt.x += pt.hz * l; pt.z -= pt.hx * l; } return pt; };
   /** Where the vehicle is and which way its body points (from a point behind its centre to one in front, so it swings through a curve like a real one). */
@@ -250,7 +251,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
   function laneFree(a, sub) {
     for (const b of vehicles) {
       if (b === a || b.done || b.laneId !== a.laneId || b.lvl !== a.lvl) continue;
-      const lat = Math.max(b.lat, b.sub * LANE_W); if (Math.abs(lat - sub * LANE_W) > 2.4 && Math.abs(b.lat - sub * LANE_W) > 2.4) continue;
+      const lw = laneWOf(a.laneId), lat = Math.max(b.lat, b.sub * lw); if (Math.abs(lat - sub * lw) > 2.4 && Math.abs(b.lat - sub * lw) > 2.4) continue;
       const d = b.laneS - a.laneS; if (d > -(a.len + 8 + Math.max(0, b.v - a.v) * 2.5) && d < b.len + 24 + Math.max(0, a.v - b.v) * 1.5) return false;
     }
     return true;
@@ -275,7 +276,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     let gap = Infinity, vl = 0, s0 = S0;
     const lead = leaderOf(a); a.lead = lead; if (lead) { gap = lead.gap; vl = lead.v; }
     // slide across to the lane it has chosen (only on the open stretch of a lane; see latAt), and think about overtaking a few times a second
-    { const sg = route.segs[a.si]; if (sg.kind === "lane") { const tgt = Math.min(a.sub, nLanesOf(sg.id) - 1) * LANE_W, d = tgt - a.lat, st = 1.4 * dt; a.lat += Math.max(-st, Math.min(st, d)); } if ((tick + a.id) % 12 === 0) considerLaneChange(a); }
+    { const sg = route.segs[a.si]; if (sg.kind === "lane") { const tgt = Math.min(a.sub, nLanesOf(sg.id) - 1) * laneWOf(sg.id), d = tgt - a.lat, st = 1.4 * dt; a.lat += Math.max(-st, Math.min(st, d)); } if ((tick + a.id) % 12 === 0) considerLaneChange(a); }
     if (a.stopLine != null) { const g = a.stopLine - front - 0.4; if (g < gap) { gap = g; vl = 0; s0 = 0.6; } }
     const endFront = (a.stopAt ?? (a.role === "hero" ? route.len : null)); if (endFront != null) { const g = endFront + a.len / 2 - front; if (g < gap) { gap = g; vl = 0; s0 = 0.25; } }
     let acc = idmAccel(a.v, v0, a.aMax, a.brake, gap, vl, s0);
@@ -306,7 +307,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
       const l = pickFrom(pool), s = rnd() * l.len, p = l.path.at(s, {}), d = Math.hypot(p.x - f.x, p.z - f.z), lvl = hw ? 1 : 0;
       if (d < D.spawnMin || d > D.spawnMax || !freeSpot(p.x, p.z, hw ? 38 : 28, lvl) || (!hw && pedNear(p.x, p.z, 5))) continue;   // never on top of a person
       const kind = pickKind(hw); if (!kind) return false; const route = wander(l.id, s, hw ? 3000 : 2200, hw); if (!route) continue;
-      const n = nLanesOf(l.id), sub = Math.floor(rnd() * n), a = make(kind, route, { v: 0, hw, sub, lat: sub * LANE_W });
+      const n = nLanesOf(l.id), sub = Math.floor(rnd() * n), a = make(kind, route, { v: 0, hw, sub, lat: sub * laneWOf(l.id) });
       a.v = hw ? a.cruise * 0.85 : Math.min(KINDS[kind].cruise[0], 6); return true;   // on the expressway they are already up to speed
     }
     return false;

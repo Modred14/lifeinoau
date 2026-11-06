@@ -15,19 +15,20 @@ import { buildJunctions, inside } from "./roadjunction.js";
 import { DECK } from "./roadsurface.js";
 
 /** Cross-section rules. A road is `half` metres from its centreline to the kerb on each side, then `sw` metres of pavement. */
-export const XS = { minDrivableClearance: 2.7, lane: 3.5, minHalf: 3.5, maxHalf: 7.0, pavement: 2.0, minPavement: 0.7, setback: 0.7, junctionExtra: 1.6, frontage: 1.0, uTurnTrim: 3,
+export const XS = { minDrivableClearance: 2.7, lane: 3.5, minHalf: 4.4, maxHalf: 8.0, laneMin: 2.2, pavement: 2.0, minPavement: 0.7, setback: 0.7, junctionExtra: 1.6, frontage: 1.0, uTurnTrim: 3,
   /** a vehicle waits this far (m) beyond the mouth of a junction; the zebra crossing (3.4 m deep) sits between the mouth and the stop line */
   stopGap: 6.2, crossingGap: 1.6 };
 /** The standard half-widths (m) a collector road comes in: it takes the widest that fits, so the network has a few widths, not a different one on every road. */
-const STD_HALF = { collector: [5.0, 4.4, 3.8, 3.5] };
+const STD_HALF = { collector: [8.0, 7.0, 6.0, 5.5, 5.0, 4.4] };
 /**
  * What each class of road is made of, centreline outwards: a median strip (`med`, half its width), `lanes` traffic lanes of XS.lane each way, then a paved `shoulder`; the rest of the free space is pavement.
  * arterial = the campus' express roads (two lanes each way and a median); collector = a wide campus road (one lane each way and a shoulder for stopping); local = a lane each way.
  */
 export const CLASSES = {
-  arterial: { lanes: 2, med: 1.0, shoulder: 1.5, cap: 9.5 },
-  collector: { lanes: 1, med: 0, shoulder: 1.5, cap: 5.5 },
-  local: { lanes: 1, med: 0, shoulder: 0.5, cap: 4.0 },
+  // EVERY road is at least two lanes each way (four in all). Small roads use narrower lanes (the width of a real neighbourhood street) so four fit without moving a building.
+  arterial: { lanes: 2, lane: 3.5, med: 1.0, shoulder: 1.5, cap: 9.5 },
+  collector: { lanes: 2, lane: 3.0, med: 0, shoulder: 1.5, cap: 8.0 },
+  local: { lanes: 2, lane: 2.75, med: 0, shoulder: 0.5, cap: 6.0 },
 };
 /**
  * The cross-section of a class when `avail` metres are free beside the centreline: gives up the shoulder first, then lanes. Returns { half, med, lanes (per direction), shoulder }.
@@ -35,11 +36,13 @@ export const CLASSES = {
  */
 export function crossSection(cls, avail, rawHalf = 0) {
   const C = CLASSES[cls] ?? CLASSES.local;
-  if (cls === "arterial") for (let lanes = rawHalf >= 16 ? 3 : 2; lanes >= 2; lanes--) for (const sh of [C.shoulder, 0.8, 0.3, 0]) { const h = C.med + lanes * XS.lane + sh; if (h <= avail + 1e-6) return { half: h, med: C.med, lanes, shoulder: sh }; }
-  // not an express road (or no room for one): as wide as the polygon was, between one lane and the class' cap, and no wider than the free space
-  const want = Math.min(C.cap, Math.max(XS.lane, rawHalf)); let half = Math.max(XS.minHalf, Math.min(want, avail));
+  if (cls === "arterial") for (let lanes = rawHalf >= 16 ? 3 : 2; lanes >= 2; lanes--) for (const sh of [C.shoulder, 0.8, 0.3, 0]) { const h = C.med + lanes * XS.lane + sh; if (h <= avail + 1e-6) return { half: h, med: C.med, lanes, shoulder: sh, laneW: XS.lane }; }
+  // not an express road (or no room for one): two lanes each way, as wide as the polygon was between the class' minimum and its cap, and no wider than the free space;
+  // when the space is short the lanes narrow (never below XS.laneMin) rather than a lane being dropped
+  const want = Math.min(C.cap, Math.max(2 * C.lane, rawHalf)); let half = Math.max(XS.minHalf, Math.min(want, avail));
   const std = STD_HALF[cls]; if (std) half = std.find((h) => h <= half + 0.05) ?? Math.max(XS.minHalf, half);
-  return { half, med: 0, lanes: 1, shoulder: Math.max(0, half - XS.lane) };
+  const laneW = Math.max(XS.laneMin, Math.min(C.lane, half / 2)), shoulder = Math.max(0, half - 2 * laneW);
+  return { half, med: 0, lanes: 2, shoulder, laneW };
 }
 /** Two surfaces that are more than this many metres apart in height are not the same place (a ramp over a road). */
 const LEVEL_GAP = 3.0;
@@ -155,13 +158,13 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
     // an edge with `fixed` is designed, not found (the expressway and its ramps): its geometry and cross-section are exactly as given and are never nudged or measured against buildings
     if (e.fixed) {
       const path = new Path(pts), F = e.fixed, lv = e.lv ?? 0;
-      edges.push({ id: e.id, a: e.a, b: e.b, path, len: path.len, half: F.half, sw: F.sw ?? 0, med: F.med ?? 0, lanesPerDir: F.lanes ?? 1, shoulder: F.shoulder ?? 0, laneOff: F.laneOff ?? null, oneWay: !!e.oneWay, cls: e.kind ?? "express", kind: e.kind ?? "express", hw: !!e.hw, lv, mask: maskOfLv(lv), h0: e.h0 ?? 0, h1: e.h1 ?? e.h0 ?? 0, comp: e.comp ?? 0, lanes: [null, null], rawHalf: F.half, clr: Infinity, foot: false, struct: e.struct ?? null,
+      edges.push({ id: e.id, a: e.a, b: e.b, path, len: path.len, half: F.half, sw: F.sw ?? 0, med: F.med ?? 0, lanesPerDir: F.lanes ?? 1, lw: F.lane ?? XS.lane, shoulder: F.shoulder ?? 0, laneOff: F.laneOff ?? null, oneWay: !!e.oneWay, cls: e.kind ?? "express", kind: e.kind ?? "express", hw: !!e.hw, lv, mask: maskOfLv(lv), h0: e.h0 ?? 0, h1: e.h1 ?? e.h0 ?? 0, comp: e.comp ?? 0, lanes: [null, null], rawHalf: F.half, clr: Infinity, foot: false, struct: e.struct ?? null,
         ds0: e.s0 ?? 0, ds1: e.s1 ?? 0, rail: F.rail ?? (e.kind === "ramp" ? DECK.rampParapet : e.hw ? DECK.parapet : 0), endInset: F.endInset ?? (e.kind === "express-end" ? DECK.endStop : 0) });   // rail: the parapet (not drivable); endInset: where the drivable surface stops short of a dead end (the end barrier)
       continue;
     }
     if (sdf) {
       const want = Math.min(cls === "arterial" ? 13 : CLASSES[cls]?.cap ?? XS.maxHalf, Math.max(XS.lane, rawHalf)) + XS.setback;
-      pts = relaxCentreline(pts, Math.min(want, XS.lane + 1.2), sdf);
+      pts = relaxCentreline(pts, Math.min(want, XS.minHalf + 0.7), sdf);
       const probe = new Path(pts), edge = Math.min(10, probe.len * 0.25), at = {}; let lo = Infinity;   // clearance along the road, leaving out the junction ends
       for (let s = edge; s <= probe.len - edge; s += 1.5) { probe.at(s, at); lo = Math.min(lo, sdf(at.x, at.z)); }
       clr = Number.isFinite(lo) ? lo : clr;
@@ -171,9 +174,9 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
     const avail = Math.max(0, clr - XS.setback);
     // an alley squeezed between buildings (less than a car and some margin) is a footpath: walkable pavement, but no lanes and no vehicles
     const foot = clr < XS.minDrivableClearance;
-    const X = foot ? { half: 0, med: 0, lanes: 1, shoulder: 0 } : crossSection(cls, Math.max(avail - XS.frontage, Math.min(avail, XS.minHalf)), rawHalf), half = X.half;   // keep a strip of pavement against the buildings: people step out of a car onto it, and doors open onto it
+    const X = foot ? { half: 0, med: 0, lanes: 1, shoulder: 0, laneW: XS.lane } : crossSection(cls, Math.max(avail - XS.frontage, Math.min(avail, XS.minHalf)), rawHalf), half = X.half;   // keep a strip of pavement against the buildings: people step out of a car onto it, and doors open onto it
     let sw = foot ? Math.max(1.0, Math.min(XS.pavement, clr - 0.3)) : Math.min(XS.pavement, Math.max(0, avail - half)); if (!foot && sw < XS.minPavement) sw = 0;
-    (foot ? foots : edges).push({ id: e.id, a: e.a, b: e.b, path, len: path.len, half, sw, med: X.med, lanesPerDir: X.lanes, shoulder: X.shoulder, laneOff: null, oneWay: false, cls, kind: cls, hw: false, lv: 0, mask: LV_GROUND, h0: 0, h1: 0, comp: e.comp ?? 0, lanes: [null, null], rawHalf, clr, foot });
+    (foot ? foots : edges).push({ id: e.id, a: e.a, b: e.b, path, len: path.len, half, sw, med: X.med, lanesPerDir: X.lanes, lw: X.laneW, shoulder: X.shoulder, laneOff: null, oneWay: false, cls, kind: cls, hw: false, lv: 0, mask: LV_GROUND, h0: 0, h1: 0, comp: e.comp ?? 0, lanes: [null, null], rawHalf, clr, foot });
   }
   const byId = new Map([...edges, ...foots].map((e) => [e.id, e]));
   for (const e of edges) {
@@ -208,7 +211,7 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
   const mouth = (e, node) => (node.deg >= 3 && !e.hw ? node.J?.asph.cut.get(e.id * 2 + (node.id === e.a ? 0 : 1)) ?? 0 : 0);
   const trimAt = (e, node) => (node.deg <= 1 ? XS.uTurnTrim : Math.min(0.42 * e.len, Math.max(node.radius + XS.junctionExtra, armTrim.get(e.id * 2 + (node.id === e.a ? 0 : 1)) ?? 0, mouth(e, node) ? mouth(e, node) + XS.stopGap : 0)));
   // where a lane runs, measured from the centreline: the middle of the road's own lane (the right-hand one on an express road, so traffic keeps to the outer lane), or the centreline of a one-way carriageway
-  const laneOffset = (e) => (e.oneWay ? 0 : e.laneOff ?? (e.med > 0 ? Math.min(e.half - 1.0, e.med + XS.lane * (e.lanesPerDir - 0.5)) : e.half / 2));
+  const laneOffset = (e) => (e.oneWay ? 0 : e.laneOff ?? (e.lanesPerDir > 1 ? Math.max(e.med + e.lw * 0.5 + 0.3, Math.min(e.half - 1.4, e.med + e.lw * (e.lanesPerDir - 0.5), e.clr - 2.1)) : e.half / 2));   // squeezed between walls: the outer lane keeps a car-width off the wall
   for (const e of edges) {
     for (const dir of e.oneWay ? [0] : [0, 1]) {
       const from = dir ? e.b : e.a, to = dir ? e.a : e.b, off = laneOffset(e);
