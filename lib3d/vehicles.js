@@ -166,10 +166,11 @@ function buildCar(S, paint, id = S.id) {
   const caliperMat = S.caliper ? K.flat(S.caliper, { roughness: 0.5 }) : null, ws = [], pv = [];
   for (const [x, z] of [[-wx, S.zf], [wx, S.zf], [-wx, S.zr], [wx, S.zr]]) { const w = K.mountWheel(root, x, z, S.wr, { tyre, rim: rims[x > 0 ? 1 : -1], mats, accentMat: caliperMat }); ws.push(w.spin); pv.push(w.pivot); }
   const doors = makeDoors(root, S, R, hex, mat, use);
+  K.addHeadlightBeam(root, S.L / 2, S.W);
   const v = { root, wheels: ws, front: [pv[0], pv[1]], length: S.L, width: S.W, height: S.H, wheelbase: S.zf - S.zr, track: 2 * wx, door: { side: -1, z: -0.5 }, seatZ: 0, seat: S.seat, driver: S.driver, doors, setDoor: doors.set, id: S.id, shape: "car", lamps,
-    setBrake(on) { lamps.tail.emissiveIntensity = on ? 2.6 : 0.28; }, setHeadlights(on) { lamps.head.emissiveIntensity = on ? 1.6 : 0.18; },
+    setBrake(on) { lamps.tail.emissiveIntensity = on ? 2.6 : 0.28; }, setHeadlights(on) { lamps.head.emissiveIntensity = on ? 1.6 : 0.18; }, // an override for ONE car; by default the lamps follow the sky (lib3d/vehicleKit.js)
     // geometry that came from the cache is only let go (other cars use it); anything this car made itself (a label, a plate) is freed
-    dispose() { root.traverse((o) => { if (o.isMesh) { if (!hold.owns(o.geometry)) o.geometry?.dispose?.(); if (o.userData.ownMaterial) o.material.map?.dispose(), o.material.dispose(); } }); lamps.head.dispose(); lamps.tail.dispose(); lamps.amber.dispose(); hold.releaseAll(); } };
+    dispose() { root.traverse((o) => { if (o.isMesh) { if (!hold.owns(o.geometry) && !o.userData.keepGeometry) o.geometry?.dispose?.(); if (o.userData.ownMaterial) o.material.map?.dispose(), o.material.dispose(); } }); lamps.head.dispose(); lamps.tail.dispose(); lamps.amber.dispose(); hold.releaseAll(); } };
   return v;
 }
 

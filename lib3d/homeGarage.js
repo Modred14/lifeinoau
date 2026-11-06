@@ -8,16 +8,19 @@ import { makeVehicle, rollWheels } from "./vehicles.js";
 import { createAvatar } from "./avatar/loadAvatar.js";
 import { garageLayout, garageWalkPath, garageVehicleSize, G } from "./garageLayout.js";
 import { driveWorld, createDriver, onRoad } from "./garageDrive.js";
+import { createSkyRig } from "./daylightRig.js";
 
 export function createHomeGarage(container, vehicles, options = {}) {
   const layout = garageLayout(vehicles), L = layout;
   const stage = createStage(container, { fov: 48, far: 220, maxDpr: 1.5, shadows: true, controls: { enablePan: true, enableDamping: true, dampingFactor: 0.08, minDistance: 8, maxDistance: 70, minPolarAngle: 0.28, maxPolarAngle: 1.35 } });
   const { scene, camera, controls, THREE: T } = stage, group = new T.Group(), carMeshes = new Map(), disposed = [];
   scene.background = new T.Color("#b9d0da"); scene.fog = new T.Fog("#b9d0da", 80, 190); scene.add(group);
-  scene.add(new T.HemisphereLight(0xf3f7ff, 0x71785e, 1.35));
+  const hemi = new T.HemisphereLight(0xf3f7ff, 0x71785e, 1.35); scene.add(hemi);
   const sun = new T.DirectionalLight(0xfff1d5, 2.2); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
   const sx = L.halfW + 5, sz = L.depth / 2 + 5; Object.assign(sun.shadow.camera, { left: -sx, right: sx, top: sz, bottom: -sz, near: 1, far: 120 }); sun.shadow.normalBias = 0.08;
   sun.position.set(-18, 34, L.center.z + 8); sun.target.position.set(0, 0, L.center.z); scene.add(sun, sun.target);
+  // the sky follows the world clock like the map's does (lib3d/daylightRig.js): the sun, the moon, the fog and the light on the cars
+  const sky = createSkyRig({ scene, hemi, key: sun, renderer: stage.renderer, dist: 40 }); sky.follow(new T.Vector3(0, 0, L.center.z)); stage.onFrame((t, dt) => sky.update(dt));
   const mat = (color, roughness = 0.85, extra = {}) => { const m = new T.MeshStandardMaterial({ color, roughness, ...extra }); disposed.push(m); return m; };
   const M = { paving: mat("#989d9b"), lane: mat("#80878a"), joint: mat("#6f7678"), road: mat("#42484a"), line: mat("#ede7d2"), wall: mat("#ddd6c8"), trim: mat("#f5f1e7"), roof: mat("#4b5962"), glass: mat("#75a7b1", 0.28, { metalness: 0.12 }), door: mat("#4c382b"), dark: mat("#20262a"), leaf: mat("#62834d"), warm: mat("#f9d88b", 0.25, { emissive: "#ffcc67", emissiveIntensity: 0.8 }), metal: mat("#34444b", 0.55), concrete: mat("#777e7c"), pavement: mat("#c2bfb3"), kerb: mat("#c9c6bb"), grass: mat("#688553"), canopy: mat("#9fc4cc", 0.2, { transparent: true, opacity: 0.32, depthWrite: false }), nWall: mat("#d9cfc0"), nRoof: mat("#7b6a5a") };
   const rect = (x0, x1, z0, z1, y, h, material, cast = false) => { const mesh = new T.Mesh(new T.BoxGeometry(x1 - x0, h, z1 - z0), material); mesh.position.set((x0 + x1) / 2, y + h / 2, (z0 + z1) / 2); mesh.castShadow = cast; mesh.receiveShadow = true; group.add(mesh); return mesh; };

@@ -7,6 +7,7 @@ import { createTrafficSim, HOT_KINDS } from "./trafficsim.js";
 import { createNpc, npcSpec } from "./avatar/npc.js";
 import { createAvatar } from "./avatar/loadAvatar.js";
 import { lookKey } from "../lib/look.js";
+import { headBeamMaterial } from "./vehicleKit.js";
 import { carBodyGeometry, CAR_WHEELS, CAR_WHEEL_R, CAR_COLORS, makeKeke, makeBus, makeVehicle, rollWheels, trafficWheelGeometry } from "./vehicles.js";
 import { ROAD_TOP } from "./roadsurface.js";
 import { createRoadFollower, wheelContacts } from "./vehiclepose.js";
@@ -50,6 +51,9 @@ export function createTraffic({ parent, svc, focus, density = densityFor(), seed
   const wheelGeo = trafficWheelGeometry();
   const wheelsM = new THREE.InstancedMesh(wheelGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }), Math.max(1, nCars * 4));
   bodies.castShadow = true; bodies.frustumCulled = false; wheelsM.frustumCulled = false; group.add(bodies, wheelsM); disposables.push(bodyGeo, suvGeo, wheelGeo);
+  // headlamp light on the road ahead of every car, one more instanced mesh that rides the body's matrices (invisible by day: the shared material's opacity follows the night level)
+  const beamMat = headBeamMaterial(); let beams = null;
+  if (beamMat) { const g = new THREE.PlaneGeometry(3.8, 8.5); g.rotateX(-Math.PI / 2); g.translate(0, 0.06, 5.8); beams = new THREE.InstancedMesh(g, beamMat, Math.max(1, nCars)); beams.frustumCulled = false; beams.renderOrder = 2; group.add(beams); disposables.push(g); }
   // ---- people: real rigged characters, built by the same pipeline as the player (see avatar/npc.js). Each walker keeps a character while it is near the camera;
   //      one that has wandered off is given a new face, clothes and build before it comes back, so the road never fills with the same few people. ----
   const nPed = density.peds, WALK_V = 1.4; // the walk clip's own pace in metres per second; playing it at speed/WALK_V stops the feet sliding
@@ -118,10 +122,10 @@ export function createTraffic({ parent, svc, focus, density = densityFor(), seed
     // cars
     assign(carSlots, npcs.filter((v) => v.kind === "car").map((v) => v.id));
     carSlots.forEach((s, i) => { const a = s.id == null ? null : byId.get(s.id);
-      if (!a) { bodies.setMatrixAt(i, hide); for (let w = 0; w < 4; w++) wheelsM.setMatrixAt(i * 4 + w, hide); return; }
-      s.phase += (a.v * dt) / CAR_WHEEL_R; q.setFromEuler(eul.set(-(a.pitch ?? 0), a.yaw, 0, "YXZ")); base.compose(v3.set(a.x, a.y + ROAD_TOP, a.z), q, sc); bodies.setMatrixAt(i, base); bodies.setColorAt(i, col.set(CAR_COLORS[Math.floor(a.tint * CAR_COLORS.length) % CAR_COLORS.length]));
+      if (!a) { bodies.setMatrixAt(i, hide); beams?.setMatrixAt(i, hide); for (let w = 0; w < 4; w++) wheelsM.setMatrixAt(i * 4 + w, hide); return; }
+      s.phase += (a.v * dt) / CAR_WHEEL_R; q.setFromEuler(eul.set(-(a.pitch ?? 0), a.yaw, 0, "YXZ")); base.compose(v3.set(a.x, a.y + ROAD_TOP, a.z), q, sc); bodies.setMatrixAt(i, base); beams?.setMatrixAt(i, base); bodies.setColorAt(i, col.set(CAR_COLORS[Math.floor(a.tint * CAR_COLORS.length) % CAR_COLORS.length]));
       CAR_WHEELS.forEach(([wx, wz], w) => { tmp.makeRotationX(s.phase); loc.makeTranslation(wx, CAR_WHEEL_R, wz).multiply(tmp); wheelsM.setMatrixAt(i * 4 + w, tmp.multiplyMatrices(base, loc)); }); });
-    bodies.instanceMatrix.needsUpdate = true; wheelsM.instanceMatrix.needsUpdate = true; if (bodies.instanceColor) bodies.instanceColor.needsUpdate = true;
+    bodies.instanceMatrix.needsUpdate = true; wheelsM.instanceMatrix.needsUpdate = true; if (beams) beams.instanceMatrix.needsUpdate = true; if (bodies.instanceColor) bodies.instanceColor.needsUpdate = true;
     // kekes and buses
     for (const kind of ["keke", "bus", "minibus"]) { assign(pools[kind], npcs.filter((v) => v.kind === kind).map((v) => v.id));
       for (const s of pools[kind]) { const a = s.id == null ? null : byId.get(s.id); s.model.root.visible = !!a; if (!a) continue; s.model.root.position.set(a.x, a.y + ROAD_TOP, a.z); const dy = s.yaw == null || dt <= 0 ? 0 : ((a.yaw - s.yaw + Math.PI * 3) % (Math.PI * 2) - Math.PI) / dt, sp = Math.abs(a.v), want = sp > 0.4 ? Math.max(-0.6, Math.min(0.6, Math.atan((s.model.wheelbase ?? 2) * dy / sp))) : 0;

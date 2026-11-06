@@ -12,6 +12,7 @@ import { buildGround } from "./ground.js";
 import { buildEdges } from "./edges.js";
 import { buildBillboards } from "./billboards3d.js";
 import { buildGrounds } from "./grounds.js";
+import { createSkyRig } from "./daylightRig.js";
 
 export const S = SCENE_S;   // metres -> scene units
 export const EX = 2;    // visual height exaggeration (buildings only)
@@ -117,6 +118,13 @@ export function buildRealCampus(data, meta = {}) {
     const r = ranges.find((q) => (isW ? v >= q.s0 && v < q.s1 : v >= q.c0 && v < q.c1)); return r ? placeAt.get(r.bid)?.id ?? "bld_" + r.bid : null; };
   const extent = Math.max(x1 - x0, z1 - z0) / 2, dispose = () => { dropRoads(); bb.dispose(); edges.dispose(); root.traverse((o) => { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : m ? [m] : []).forEach((q) => q.dispose()); }); win.map.dispose(); win.emis.dispose(); };
   const setBillboards = (list) => bb.setBoards(list);
+  // ---- night: lit windows and street lights ----
+  // `n` is the night level (0 day .. 1 night, lib3d/daylight.js), arriving from the sky rig a few times a minute at most. Windows are the wall material's emissive map (the lit panes of the
+  // window texture), so more emissive = more windows glowing; street lights are the glowing lamp heads and the pools of light on the road (lib3d/roadfurniture.js). Nothing here allocates.
+  let night = 0;
+  const applyLamps = (n) => furniture?.traverse((o) => { if (o.userData.lampHead) o.material.emissiveIntensity = 2.6 * n; else if (o.userData.lampPool) o.material.opacity = 0.6 * n; });
+  const setNight = (n) => { night = n; if (wallMesh) wallMesh.material.emissiveIntensity = 0.18 + 1.1 * n; applyLamps(n); };
+
   /**
    * Gives the roads their proper shape: carriageways of the real width with a pavement each side, kerbs, centre dashes, stop lines and crossings, all drawn
    * from the road graph (the very geometry vehicles drive on and people collide with). The old flat road polygons stay underneath as paved apron.
@@ -140,21 +148,27 @@ export function buildRealCampus(data, meta = {}) {
     roadScene = acquireRoadScene(graph, S, ROAD_LAYER_Y); ({ surface: roadSurface, highway, furniture } = roadScene);   // built once per graph, reused by every later map
     root.add(roadSurface); if (highway) root.add(highway);
     root.add(furniture);   // street lights, trees and stop signs, placed from the graph
+    applyLamps(night);   // the lamps are shared, cached parts: show them at the sky's current level straight away
     clearForest(graph);
     if (roadFlat) roadFlat.visible = false;   // the old polygons include roads that were pruned or straightened: the graph is the road now
     tripMode(tripOn);
   };
-  return { root, anchors, places, pick, resolve, update, setSelected, setYou, tripMode, setTripMode: tripMode, setRoadGraph, setBillboards, dispose, bounds: { x0, x1, z0, z1 }, extent, attribution: data.meta.attribution,
+  return { root, anchors, places, pick, resolve, update, setNight, setSelected, setYou, tripMode, setTripMode: tripMode, setRoadGraph, setBillboards, dispose, bounds: { x0, x1, z0, z1 }, extent, attribution: data.meta.attribution,
     camera: { home: { x: 0, z: 8, dist: 210, az: 0.7, pol: 0.95 }, min: 10, max: 520 } };
 }
 
-/** Dusk sky, fog and light. The sun follows the camera target so shadows stay sharp wherever you look. Returns { sun, follow(target) }. */
-export function addRealLighting(scene) {
-  scene.background = new THREE.Color(MAP_BG); scene.fog = new THREE.FogExp2(MAP_BG, 0.0011); // far buildings fade into the same one colour
-  scene.add(new THREE.HemisphereLight(0xf3f8ff, 0xc3cbbd, 1.5));
+/**
+ * Sky, fog and light for the time of day (lib3d/daylight.js, driven by the world clock through lib3d/daylightRig.js). The key light is the sun by day and the moon by night and follows
+ * the camera target so its shadows stay sharp wherever you look. Returns { sun, rig, follow(target), update(dt) }: call update(dt) every frame, rig.onNight(fn) to hear the night level.
+ * `renderer` (optional) lets the rig ease the exposure with the light.
+ */
+export function addRealLighting(scene, { renderer = null } = {}) {
+  scene.background = new THREE.Color(MAP_BG); scene.fog = new THREE.FogExp2(MAP_BG, 0.0011); // far buildings fade into the same one colour (the sky's colour, which the rig keeps in step)
+  const hemi = new THREE.HemisphereLight(0xf3f8ff, 0xc3cbbd, 1.5); scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff3e0, 2.8); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -80, right: 80, top: 80, bottom: -80, near: 5, far: 400 }); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.25; scene.add(sun, sun.target);
   const fill = new THREE.DirectionalLight(0xcfe0ff, 0.6); fill.position.set(80, 60, -60); scene.add(fill);
-  const follow = (t) => { sun.target.position.copy(t); sun.position.set(t.x - 90, 70, t.z + 70); };
-  follow(new THREE.Vector3()); return { sun, follow };
+  const rig = createSkyRig({ scene, hemi, key: sun, fill, renderer, dist: 130, fogDensity: 0.0011 });
+  rig.follow(new THREE.Vector3(0, 0, 0.0001));
+  return { sun, rig, follow: (t) => rig.follow(t), update: (dt) => rig.update(dt) };
 }

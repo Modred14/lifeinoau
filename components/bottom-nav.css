@@ -1,10 +1,14 @@
 /* components/bottom-nav.css: the persistent bottom bar and the layer contract that keeps it on screen.
 
+   The bar is a frosted-glass pill (Home, Buy, Map: the tab you are on opens into icon + name) with a round Phone button beside it. It is small on purpose: 52px tall (44px
+   buttons, the minimum comfortable touch target), lifted 8px off the bottom edge, so it covers as little of the world as it can.
+
    Why the bar used to vanish: it sat at z-index 30 while the phone, travel sheets, building interiors and dialogs are full-screen layers at 60-95,
    so every one of them covered it; the trip screen hid it outright; and none of those layers left any room for it.
 
    The contract now:
-   1. The bar is one fixed layer (--z-nav) above every in-game layer (the highest is the lecture fight at 300). Only toasts (1000) sit higher.
+   1. The bar is one fixed layer (--z-nav) above every in-game layer (the highest is the lecture fight at 300). Only toasts (1000) and THE PHONE sit higher: the phone is a floating
+      handset over the whole game, the bar included (phone.css puts it at --z-nav + 10), and the bar is inert behind it.
    2. --nav-band is the bar's real footprint above the bottom edge. --nav-h (the spacing the pages and the home screen already use) follows it.
    3. While the bar is mounted, <body data-nav="on">. Every full-screen layer below redefines --safe-b (the bottom inset all of them already use for
       their sheets, footers and joysticks) as "device inset + the bar", so their bottom controls stop above the bar instead of under it. */
@@ -13,51 +17,59 @@
   --nav-gap: 8px; /* between the bar and the bottom edge (the device's own inset comes on top) */
   --nav-bar-h: 52px; /* 44px buttons (the minimum comfortable touch target) + 2 x 3px padding + 2px border */
   --nav-band: calc(var(--nav-gap) + var(--nav-bar-h));
-  --bp-bg: rgba(13, 19, 33, 0.94); /* the one surface the activities panel and the bar share (components/building-panel.css) */
+  --bp-bg: rgba(13, 19, 33, 0.94); /* the one surface the activities panel and the docked bar share (components/building-panel.css) */
   --bp-line: rgba(255, 255, 255, 0.12);
+  --nav-on: #6ee7a8; /* the active tab: the game's green, a little brighter so it holds up on glass */
 }
 /* a phone held sideways has little height to give: the bar gets slimmer */
 @media (max-height: 480px) {
-  :root { --nav-gap: 6px; --nav-bar-h: 46px; }
+  :root { --nav-gap: 6px; --nav-bar-h: 48px; }
 }
 
+/* The bar: a row holding the pill and the phone button. It has no surface of its own; each part is its own piece of glass. */
 .nav {
   position: fixed; z-index: var(--z-nav); bottom: calc(var(--safe-b) + var(--nav-gap)); left: 50%; transform: translateX(-50%);
-  width: min(420px, calc(100% - 2 * var(--edge))); display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; padding: 3px;
-  background: rgba(13, 19, 33, 0.86); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
-  border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px;
-  transition: opacity 160ms var(--ease), visibility 0s linear 0s;
-  animation: nav-in 220ms var(--ease) both;
+  width: min(360px, calc(100% - 2 * var(--edge))); height: var(--nav-bar-h); display: flex; align-items: stretch; gap: 8px;
+  animation: nav-in 240ms var(--ease) both;
 }
 @keyframes nav-in { from { opacity: 0; transform: translate(-50%, 10px); } }
-.nav a, .nav button:not(:where(.campus-world *)) {
-  position: relative; min-height: 44px; flex-direction: column; gap: 2px; font-size: 0.66rem; font-weight: 500; letter-spacing: 0.02em; line-height: 1;
-  border-radius: 13px; border: 0; background: transparent; color: var(--muted); padding: 4px 2px;
-  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
-  transition: background-color 160ms var(--ease), color 160ms var(--ease), transform 120ms var(--ease);
+.nav-pill, .nav-phone {
+  background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-line); box-shadow: var(--glass-rim), var(--glass-lift);
 }
-.nav a { display: inline-flex; align-items: center; justify-content: center; }
-.nav svg { width: 20px; height: 20px; flex: none; transition: transform 180ms var(--ease); }
-.nav [data-active="1"] { background: rgba(255, 255, 255, 0.1); color: #fff; font-weight: 600; }
-/* the active mark: a short green bar on the top edge that grows in, so a tab switch reads at once without moving anything */
-.nav a::after, .nav button:not(:where(.campus-world *))::after { content: ""; position: absolute; top: 0; left: 50%; width: 16px; height: 2px; margin-left: -8px; border-radius: 0 0 2px 2px; background: var(--green-text, #6ee7a8); opacity: 0; transform: scaleX(0.3); transition: opacity 160ms var(--ease), transform 200ms var(--ease); pointer-events: none; }
-.nav [data-active="1"]::after { opacity: 1; transform: none; }
-.nav [data-active="1"] svg { transform: scale(1.06); }
-.nav a:hover:not([data-active="1"]), .nav button:not(:where(.campus-world *)):hover:not(:disabled):not([data-active="1"]) { color: var(--text); background-color: rgba(255, 255, 255, 0.07); }
-.nav a:active, .nav button:not(:where(.campus-world *)):active:not(:disabled) { transform: scale(0.95); }
-.nav a:focus-visible, .nav button:focus-visible { outline: 2px solid var(--green-text, #6ee7a8); outline-offset: -2px; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .nav-pill, .nav-phone { background: var(--glass-bg-strong); } }
+.nav-pill { flex: 1; min-width: 0; display: flex; align-items: stretch; gap: 2px; padding: 3px; border-radius: 999px; }
+.nav-phone:not(:where(.campus-world *)) { flex: none; width: var(--nav-bar-h); padding: 0; border-radius: 50%; display: grid; place-items: center; position: relative; color: rgba(234, 240, 248, 0.82); }
+
+.nav-pill > a, .nav-pill > button:not(:where(.campus-world *)) {
+  position: relative; flex: 1 1 0; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0;
+  font-size: 0.8rem; font-weight: 600; letter-spacing: 0.01em; line-height: 1; white-space: nowrap;
+  border-radius: 999px; border: 0; background: transparent; color: rgba(234, 240, 248, 0.72); padding: 0 10px;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  transition: background-color 200ms var(--ease), color 160ms var(--ease), transform 120ms var(--ease), flex-grow 240ms var(--ease);
+}
+/* the name is there for everyone (screen readers read it, a hover shows it as a tooltip) but only the tab you are on shows it: it opens out beside the icon */
+.nav-pill > * > span { max-width: 0; margin-left: 0; opacity: 0; overflow: hidden; transition: max-width 240ms var(--ease), margin-left 240ms var(--ease), opacity 180ms var(--ease); }
+.nav-pill [data-active="1"] { flex: 0 0 auto; padding: 0 14px 0 12px; background: rgba(110, 231, 168, 0.18); color: var(--nav-on); box-shadow: inset 0 0 0 1px rgba(110, 231, 168, 0.22); }
+.nav-pill [data-active="1"] > span { max-width: 4.6rem; margin-left: 7px; opacity: 1; }
+.nav svg { width: 22px; height: 22px; flex: none; transition: transform 200ms var(--ease); }
+.nav-pill > a:hover:not([data-active="1"]), .nav-pill > button:not(:where(.campus-world *)):hover:not(:disabled):not([data-active="1"]), .nav-phone:not(:where(.campus-world *)):hover { color: #fff; background-color: rgba(255, 255, 255, 0.1); }
+.nav-pill > button:disabled { opacity: 0.4; }
+.nav-pill > a:active, .nav-pill > button:not(:where(.campus-world *)):active:not(:disabled), .nav-phone:not(:where(.campus-world *)):active { transform: scale(0.94); }
+.nav-phone[data-active="1"] { background: rgba(110, 231, 168, 0.2); border-color: rgba(110, 231, 168, 0.3); color: var(--nav-on); }
+.nav a:focus-visible, .nav button:focus-visible { outline: 2px solid var(--nav-on); outline-offset: -2px; }
 @media (max-height: 480px) {
-  .nav a, .nav button:not(:where(.campus-world *)) { min-height: 44px; padding: 3px; gap: 1px; }
-  .nav svg { width: 19px; height: 19px; }
+  .nav-pill > a, .nav-pill > button:not(:where(.campus-world *)) { min-height: 40px; }
+  .nav svg { width: 20px; height: 20px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .nav { animation: none; }
-  .nav, .nav a, .nav button, .nav svg, .nav a::after, .nav button::after { transition: none !important; }
-  .nav [data-active="1"] svg, .nav a:active, .nav button:active { transform: none; }
+  .nav a, .nav button, .nav svg, .nav-pill > * > span { transition: none !important; }
+  .nav a:active, .nav button:active { transform: none; }
 }
 
 /* ---- the layers that must leave room for the bar ---- */
-body[data-nav="on"] :is(.ph-scrim, .ts-scrim, .cl-scrim, .cd-scrim, .th-pre-scrim, .sheet-scrim, .bi, .bi3, .th, .lf, .sx, .er, .nf) {
+body[data-nav="on"] :is(.ts-scrim, .cl-scrim, .cd-scrim, .th-pre-scrim, .sheet-scrim, .bi, .bi3, .th, .lf, .sx, .er, .nf) {
   --safe-b: calc(env(safe-area-inset-bottom, 0px) + var(--nav-band));
 }
 /* dialogs that sit in the MIDDLE of the screen on wider windows (they are bottom sheets on phones): the screen around them reserves the bar's room, and
@@ -77,31 +89,26 @@ body[data-nav="on"] :is(.ph-scrim, .ts-scrim, .cl-scrim, .cd-scrim, .th-pre-scri
 /* centred cards: the card's own scroll area ends above the bar */
 body[data-nav="on"] .bi { padding-bottom: calc(16px + var(--safe-b)); }
 body[data-nav="on"] .th-pre-scrim { padding-bottom: calc(12px + var(--safe-b)); }
-/* the phone: the handset ends above the bar (a real phone: its Close button and the handset both move up with it).
-   It is a layer above the building interiors (see phone.css, z-index 85) and the bar is above it, so the Phone tab stays tappable while it is open. */
-@media (min-width: 641px) {
-  body[data-nav="on"] .ph-scrim { padding-bottom: calc(16px + var(--safe-b)); }
-  body[data-nav="on"] .ph { height: min(830px, calc(100dvh - 32px - var(--safe-t) - var(--safe-b))); }
-}
-@media (max-width: 640px) {
-  body[data-nav="on"] .ph { height: calc(100dvh - var(--safe-t) - 76px - var(--safe-b)); }
-}
+/* the phone is NOT in this list: it is a floating layer ABOVE the bar (phone.css), so it keeps its own full-height position and is never pushed up by it */
 /* settings: a full page, so the page itself ends above the bar, and its floating save bar and toast sit on top of that */
 body[data-nav="on"] .sx { padding-bottom: var(--safe-b); }
 body[data-nav="on"] .sx-bar-fixed { bottom: var(--safe-b); padding-bottom: 12px; }
 body[data-nav="on"] .sx-toast { bottom: calc(20px + var(--safe-b)); }
 
 /* ---- docked: the activities panel (or the running-activity card) sits right on top of the bar and the two are ONE surface ----
-   While <body data-dock="on"> the bar keeps its lifted position (same gap from the bottom edge as the floating bar) and its width, but joins the
-   layer above it: same background, side and bottom borders only, square top corners and no top edge (the panel / card draws the single top border). */
+   While <body data-dock="on"> the bar keeps its lifted position (same gap from the bottom edge as the floating bar) but takes the panel's width and joins the layer above it:
+   same background, side and bottom borders only, square top corners and no top edge (the panel / card draws the single top border). The pill and the phone button lose their own
+   glass, so what is left is the one surface with the icons on it. */
 body[data-dock="on"] .nav {
-  box-sizing: border-box; background: var(--bp-bg); border: 0 solid var(--bp-line); border-width: 0 1px 1px;
+  box-sizing: border-box; width: min(520px, calc(100% - 2 * var(--edge))); padding: 3px; gap: 4px; background: var(--bp-bg); border: 0 solid var(--bp-line); border-width: 0 1px 1px;
   border-radius: 0 0 16px 16px; box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.75);
 }
-/* the unread badge on the Phone tab: pinned to the icon, so it never moves the label */
+body[data-dock="on"] .nav :is(.nav-pill, .nav-phone) { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; border-color: transparent; box-shadow: none; }
+body[data-dock="on"] .nav-pill { padding: 0; }
+/* the unread badge on the Phone button: pinned to the icon, so it never moves it */
 .nav .nav-ico { position: relative; display: inline-grid; place-items: center; line-height: 0; }
 .nav .nav-badge {
-  position: absolute; top: -4px; right: -9px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; box-sizing: border-box;
+  position: absolute; top: -6px; right: -9px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; box-sizing: border-box;
   display: grid; place-items: center; background: #ef4444; color: #fff; font: 700 0.62rem/1 var(--font-ui); font-style: normal;
-  border: 1.5px solid rgb(13, 19, 33);
+  border: 1.5px solid rgb(22, 32, 50);
 }

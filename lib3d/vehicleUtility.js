@@ -79,8 +79,9 @@ export function buildKeke(paint) {
   for (const m of K.meshesFrom(G.fork, mat)) { m.castShadow = true; front.pivot.add(m); }
   ws.push(front.spin); pv.push(front.pivot);
   for (const x of [-D.track / 2, D.track / 2]) { const w = K.mountWheel(root, x, 1.0 - D.wheelbase, D.wr, { tyre, rim: rim(x > 0 ? 1 : -1), mats: rimMats }); ws.push(w.spin); }
+  K.addHeadlightBeam(root, 1.0 + D.wr, D.wid);
   const keke = { root, wheels: ws, front: pv, length: D.len, width: D.wid, height: D.height, wheelbase: D.wheelbase, track: D.track, door: { side: -1, z: D.doorZ }, seatZ: D.seat.z, seat: D.seat, driver: null, doors: null, id: "keke", shape: "keke", lamps,
     setDoor() {}, setBrake(on) { lamps.tail.emissiveIntensity = on ? 2.6 : 0.28; }, setHeadlights(on) { lamps.head.emissiveIntensity = on ? 1.6 : 0.18; },
-    dispose() { root.traverse((o) => { if (o.isMesh) { if (!hold.owns(o.geometry)) o.geometry?.dispose?.(); if (o.userData.ownMaterial) o.material.dispose(); } }); lamps.head.dispose(); lamps.tail.dispose(); lamps.amber.dispose(); hold.releaseAll(); } };
+    dispose() { root.traverse((o) => { if (o.isMesh) { if (!hold.owns(o.geometry) && !o.userData.keepGeometry) o.geometry?.dispose?.(); if (o.userData.ownMaterial) o.material.dispose(); } }); lamps.head.dispose(); lamps.tail.dispose(); lamps.amber.dispose(); hold.releaseAll(); } };
   return keke;
 }

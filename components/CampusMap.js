@@ -11,6 +11,8 @@ import { selectTags } from "../lib3d/destinations.js";
 import { createTripSync } from "@/lib/tripSync";
 import { useGame } from "@/lib/gameStore";
 import { lookKey } from "@/lib/look.js";
+import { skyAt, minuteAt, overrideMinute, toCss } from "../lib3d/daylight.js";
+import { serverTime } from "@/lib/serverClock";
 
 const HOME_VIEW = { x: 0, z: 8, dist: 210, az: 0.7, pol: 0.95 };
 // campusReal.js anchors a label ROOF_LIFT scene units (12 m) over the roof: right for the overview map, where the tag must clear the roof from far away. On a trip the camera is at street
@@ -33,16 +35,18 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
 
   useEffect(() => {
     let alive = true, stage = null, campus = null, lab = null, ro = null, off = [];
+    if (box.current) box.current.style.background = toCss(skyAt(overrideMinute() ?? minuteAt(serverTime())).sky); // until the 3D scene draws, show the sky it will start with (not the daytime blue at night)
     (async () => {
       try {
         const [{ createStage }, { buildRealCampus, addRealLighting, S: SC }, { CSS2DRenderer, CSS2DObject }, data] = await Promise.all([import("../lib3d/stage.js"), import("../lib3d/campusReal.js"), import("three/addons/renderers/CSS2DRenderer.js"), loadCampusData()]);
         if (!alive) return;
         const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches, host = box.current.querySelector("[data-canvas]");
         stage = createStage(host, { fov: 42, far: 1800, controls: { maxPolarAngle: 1.38, minPolarAngle: interactive ? 0.08 : 0.35, minDistance: interactive ? 6 : 50, maxDistance: interactive ? 520 : 360, enablePan: interactive, enableRotate: interactive, enableZoom: canZoom, autoRotate: autoRotate && !reduce, autoRotateSpeed: 0.45, screenSpacePanning: false, zoomToCursor: interactive } });
-        const light = addRealLighting(stage.scene); campus = buildRealCampus(data, placeMeta(data)); stage.scene.add(campus.root);
+        const light = addRealLighting(stage.scene, { renderer: stage.renderer }); campus = buildRealCampus(data, placeMeta(data)); stage.scene.add(campus.root);
+        off.push(light.rig.onNight((n) => campus.setNight(n))); // lit windows and street lights follow the sky
         // the roads get their proper shape (lanes, pavements, markings) as soon as the road graph has loaded; the map is usable before then
         import("../lib3d/worldsvc.js").then((m) => m.peekServices(data) ?? m.loadServices(data)).then((svc) => { if (alive && campus) campus.setRoadGraph(svc.graph); }).catch((e) => console.warn("road graph unavailable, drawing the plain roads", e));
-        stage.onFrame((t, dt) => { campus.update(t, dt); light.follow(stage.controls.target); });
+        stage.onFrame((t, dt) => { campus.update(t, dt); light.follow(stage.controls.target); light.update(dt); });
         const { x, z, dist, az, pol } = view; stage.controls.target.set(x, 0, z); stage.camera.position.set(x + Math.sin(az) * Math.sin(pol) * dist, Math.cos(pol) * dist, z + Math.cos(az) * Math.sin(pol) * dist); stage.controls.update();
         if (interactive) { // drag = slide the map under your hand (like any map app); right-drag or two fingers twisting still turn it. The map can't be dragged off the campus.
           const T = stage.THREE, c = stage.controls, cam = stage.camera, bd = campus.bounds, pad = 40;

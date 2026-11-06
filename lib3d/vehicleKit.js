@@ -8,6 +8,8 @@
 // Parts are collected into named buckets (paint, trim, glass, chrome, lamps, ...) and each bucket becomes one mesh with one shared material, so a car is about ten draw calls.
 import * as THREE from "three";
 import { mergeGeometries, toCreasedNormals } from "three/addons/utils/BufferGeometryUtils.js";
+import { nightLevel, onNightLevel } from "./daylight.js";
+import { glowMaterial } from "./glow.js";
 
 export const cl = (v, a, b) => Math.max(a, Math.min(b, v));
 export const sstep = (a, b, v) => { const t = cl((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
@@ -32,13 +34,40 @@ export const MATS = {
 };
 /** The same material drawn on both faces (door skins swing open, so you see their inside too). */
 export const dbl = (m) => once("dbl" + m.uuid, () => { const c = m.clone(); c.side = THREE.DoubleSide; return c; });
-/** Lamps are per vehicle: the head lamps glow a little, the tail lamps glow harder under the brake. */
+// ---- headlamps follow the sky ----
+// The lamps glow a little by day and properly at night. The level comes from the world's lighting (lib3d/daylight.js nightLevel), through ONE listener for every car, so a map with sixty
+// cars costs the same as one with six; a car subscribes by existing and leaves when it is disposed. A car built at night starts lit (it reads the level when it is made).
+const HEADS = new Set(); let BEAM = null;
+const headGlow = (n) => 0.18 + 1.7 * n;
+onNightLevel((n) => { for (const m of HEADS) m.emissiveIntensity = headGlow(n); if (BEAM) BEAM.opacity = 0.55 * n; });
+/** Lamps are per vehicle: the head lamps glow a little (a lot at night), the tail lamps glow harder under the brake. */
 export function lampMaterials() {
+  const head = new THREE.MeshStandardMaterial({ color: "#f6f4ea", emissive: "#fff3c4", emissiveIntensity: headGlow(nightLevel()), roughness: 0.1, metalness: 0.2 });
+  HEADS.add(head); const dispose = head.dispose; head.dispose = function () { HEADS.delete(head); dispose.call(head); };
   return {
-    head: new THREE.MeshStandardMaterial({ color: "#f6f4ea", emissive: "#fff3c4", emissiveIntensity: 0.18, roughness: 0.1, metalness: 0.2 }),
+    head,
     tail: new THREE.MeshStandardMaterial({ color: "#7d1016", emissive: "#ff1f2b", emissiveIntensity: 0.28, roughness: 0.2, metalness: 0.1 }),
     amber: new THREE.MeshStandardMaterial({ color: "#c47a1c", emissive: "#ff9a1f", emissiveIntensity: 0.12, roughness: 0.3 }),
   };
+}
+/**
+ * The light the headlamps throw on the road: a flat, soft, additive pool in front of the nose, visible only at night. `z` is the nose (metres, +z is forward), `w` the car's width.
+ * One material and one geometry are shared by every car. The mesh is made so that nothing can make it cast a shadow (the callers switch castShadow on for every mesh they find).
+ * With no canvas (the headless tests) there is no glow texture and nothing is added.
+ */
+let BEAM_GEO = null;
+/** The one shared beam material (null with no canvas). Used by addHeadlightBeam and by the instanced NPC traffic (lib3d/traffic.js). */
+export function headBeamMaterial() {
+  if (BEAM) return BEAM;
+  const m = glowMaterial(0xfff0c8); if (!m.map) { m.dispose(); return null; }
+  m.opacity = 0.55 * nightLevel(); return (BEAM = m);
+}
+export function addHeadlightBeam(root, z, w) {
+  if (!headBeamMaterial()) return null;
+  BEAM_GEO ??= (() => { const g = new THREE.PlaneGeometry(1, 1); g.rotateX(-Math.PI / 2); return g; })();
+  const m = new THREE.Mesh(BEAM_GEO, BEAM); m.scale.set(w * 2.1, 1, 8.5); m.position.set(0, 0.06, z + 3.4); m.renderOrder = 2; m.frustumCulled = true;
+  Object.defineProperty(m, "castShadow", { get: () => false, set() {} }); m.userData.keepGeometry = true; // shared geometry: a car going away must not free it
+  root.add(m); return m;
 }
 
 // ---------------------------------------------------------------- geometry plumbing

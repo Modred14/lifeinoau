@@ -285,7 +285,7 @@ export default function Shell({ children }) {
         onLogout={logout}
         onClose={() => {
           setPhone(false);
-          opener.current?.focus();
+          requestAnimationFrame(() => opener.current?.focus()); // the bar is inert while the phone is up: give it back its focus once it has re-rendered
         }}
         onShop={() => {
           // the shop is its own screen: from inside a building it would take you out of the room, so the phone stays up and says so

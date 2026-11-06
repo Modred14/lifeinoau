@@ -44,7 +44,16 @@
   --nav-h: var(--nav-band, 88px); /* the bottom bar's footprint, defined in components/bottom-nav.css */
   --edge: clamp(24px, 3vw, 56px); /* breathing room between the site and the window edge */
   --hud-h: 44px;
+  /* "Glass": the frosted, translucent surface of the top bar, the bottom bar and the phone's own chips (iPhone-style). A dark tint keeps white text readable over a bright daytime
+     map and a dark night alike; the blur and the saturation boost are what make it read as glass; the 1px light edge and the inner top highlight are its rim. */
+  --glass-bg: rgba(22, 32, 50, 0.46);
+  --glass-bg-strong: rgba(18, 27, 43, 0.72); /* where there is no backdrop-filter to do the work */
+  --glass-blur: blur(24px) saturate(1.8);
+  --glass-line: rgba(255, 255, 255, 0.16);
+  --glass-rim: inset 0 1px 0 rgba(255, 255, 255, 0.24), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+  --glass-lift: 0 10px 28px -12px rgba(0, 0, 0, 0.5);
 }
+@media (max-width: 640px) { :root { --glass-blur: blur(18px) saturate(1.7); } } /* a phone's GPU pays for every blurred pixel: a little less blur there */
 * {
   box-sizing: border-box;
   scrollbar-width: none;
@@ -353,8 +362,8 @@ input[type="checkbox"] {
 .hud {
   position: fixed; z-index: 30; top: calc(var(--safe-t) + 6px); left: 50%; transform: translateX(-50%); width: min(calc(100% - 2 * var(--edge)), 1240px);
   height: var(--hud-bar-h, 36px); display: flex; align-items: center; gap: var(--s3); padding: 0 4px 0 10px;
-  background: rgba(13, 19, 33, 0.8); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
-  border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px;
+  background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-line); border-radius: 14px; box-shadow: var(--glass-rim), var(--glass-lift);
   transition: opacity 160ms var(--ease), visibility 0s linear 0s;
   animation: hud-in 220ms var(--ease) both;
 }
@@ -363,7 +372,8 @@ input[type="checkbox"] {
 .hud .brand .crown { display: grid; place-items: center; line-height: 0; }
 .hud .brand i { color: var(--green-text); font-style: normal; }
 .hud .grow { flex: 1; }
-.hud-time { color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
+.hud-time { color: rgba(234, 240, 248, 0.78); font-size: 0.78rem; white-space: nowrap; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .hud { background: var(--glass-bg-strong); } }
 .hud .cash {
   display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 9px; flex: none;
   background: rgba(242, 184, 75, 0.12); border: 1px solid rgba(242, 184, 75, 0.28); color: var(--text);

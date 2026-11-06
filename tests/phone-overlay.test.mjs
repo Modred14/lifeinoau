@@ -6,9 +6,19 @@ const read = (p) => fs.readFileSync(new URL("../" + p, import.meta.url), "utf8")
 const phoneCss = read("components/phone.css"), travelCss = read("components/travel.css"), cdCss = read("components/confirm-dialog.css");
 const z = (css, sel) => +(css.match(new RegExp("^" + sel.replace(/[.]/g, "\\.") + " \\{[^}]*?z-index: *(\\d+)", "m"))?.[1] ?? NaN);
 const phoneZ = +phoneCss.match(/--z-phone: *(\d+)/)?.[1];
+const navCss = read("components/bottom-nav.css"), navZ = +navCss.match(/--z-nav: *(\d+)/)?.[1];
 chk("the phone layer is above the building interior (.bi3)", phoneZ > z(travelCss, ".bi3"));
 chk("the phone layer is above the trip fade", phoneZ > z(travelCss, ".trip-fade"));
-chk("confirm dialogs stay above the phone layer", phoneZ < z(cdCss, ".cd-scrim"));
+// The phone floats over the bottom bar (it is not pushed up by it, and no tab shows above it); the bar stays above every other in-game layer, dialogs included.
+chk("the phone layer is above the bottom bar", phoneZ > navZ);
+chk("the phone layer is only just above the bar, below the toasts (1000)", phoneZ <= navZ + 20 && phoneZ < 1000);
+chk("outside the phone, confirm dialogs stay below the bar (which stays visible over them)", z(cdCss, ".cd-scrim") < navZ);
+// ...and while the phone is open, the things that were above it before are lifted back above it: confirm dialogs, settings, a fight, then an incoming call on top.
+const lift = (sel) => { const m = phoneCss.match(new RegExp("body\\[data-phone=\"open\"\\]\\[data-nav\\] " + sel + " \\{[^}]*z-index: *calc\\(var\\(--z-nav, *500\\) *\\+ *(\\d+)\\)")); return m ? navZ + +m[1] : NaN; };
+chk("while the phone is open, confirm dialogs are above it", lift(":is\\(\\.cd-scrim[^)]*\\)") > phoneZ);
+chk("while the phone is open, an incoming call is above the dialogs", lift("\\.cx-scrim\\.ph-scrim") > lift(":is\\(\\.cd-scrim[^)]*\\)"));
+chk("the bar is not pushed by, and does not push, the phone (no nav padding or height rule for .ph)", !/\.ph-scrim\b[^{]*\{[^}]*--nav-band/.test(navCss) && !/body\[data-nav="on"\] \.ph\b/.test(navCss) && !/:is\([^)]*\.ph-scrim/.test(navCss));
+chk("the bar is inert while the phone is open (no tab can be reached behind it)", /inert=\{phoneOpen/.test(read("components/BottomNav.js")));
 chk("the phone has no other z-index override", !/\.ph-scrim\[data-over/.test(phoneCss));
 chk("the phone scrim keeps touches off the room behind it", /\.ph-scrim \{[^}]*touch-action: none/.test(phoneCss));
 const scene = read("lib3d/interiors/scene.js");

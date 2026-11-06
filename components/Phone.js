@@ -102,6 +102,17 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
   const [appLoading, setAppLoading] = useState(false);
   const loadingSpinners = useRef(new Set());
   const wasOpen = useRef(false);
+  // closing: the handset stays mounted for a moment so it can drop away instead of vanishing (phone.css, [data-leaving]); with reduced motion it just goes
+  const [leaving, setLeaving] = useState(false), wasUp = useRef(false);
+  useEffect(() => {
+    if (open) { wasUp.current = true; setLeaving(false); return; }
+    if (!wasUp.current) return;
+    wasUp.current = false;
+    if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    setLeaving(true);
+    const t = setTimeout(() => setLeaving(false), 200);
+    return () => clearTimeout(t);
+  }, [open]);
 
   const reportAppLoading = useCallback((id, active) => {
     if (active) loadingSpinners.current.add(id);
@@ -139,14 +150,14 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
   }, [open, app, onClose]);
   const home = useCallback(() => setApp(null), []);
   const openApp = useCallback((id, who = null) => { setPeer(typeof who === "string" ? who : null); setApp(id); }, []); // `who` is only ever a player name from the server
-  if (!open) return null;
+  if (!open && !leaving) return null;
   const c = st?.character, a = st?.academics, info = c && CLASS_INFO[c.class];
   const cur = app && APPS[app];
   const Cur = cur?.C;
   return (
     <InPhone.Provider value={true}>
     <PhoneLoading.Provider value={reportAppLoading}>
-    <div className="ph-scrim" data-over={initialWith ? "1" : undefined} onClick={onClose}>
+    <div className="ph-scrim" data-over={initialWith ? "1" : undefined} data-leaving={open ? undefined : "1"} onClick={open ? onClose : undefined}>
       <div className="ph" role="dialog" aria-modal="true" aria-label="Phone" data-app={app ?? undefined} data-loading={appLoading ? "true" : undefined} onClick={(e) => e.stopPropagation()}>
         <div className="ph-screen">
           <div className="ph-status">
