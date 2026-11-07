@@ -41,6 +41,7 @@ export default function CarRadio({ active, float = false }) {
   }, [active, r.stations.length]);
   useEffect(() => { if (!open) return; const away = (e) => { if (!panel.current?.contains(e.target) && !btn.current?.contains(e.target)) setOpen(false); }; document.addEventListener("pointerdown", away); return () => document.removeEventListener("pointerdown", away); }, [open]);
   useEffect(() => { if (!active) setOpen(false); }, [active]);
+  useEffect(() => { if (list) panel.current?.querySelector('.cr-list [aria-current="true"]')?.scrollIntoView({ block: "nearest" }); }, [list]); // opening the stations shows the one that is playing
   if (!active) return null;
   const power = () => { setPower(!r.on); if (!r.on) setOpen(true); };
   return (

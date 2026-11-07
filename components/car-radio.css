@@ -1,16 +1,20 @@
-/* components/car-radio.css: the car radio (components/CarRadio.js). Uses the trip HUD's colours (--th-*, set in travel.css) and sits top left under the trip card, so the road
-   ahead, the vehicle and the pedals are never covered. Flat colours. Touch targets are at least 44px on phones. */
+/* components/car-radio.css: the car radio (components/CarRadio.js). Uses the trip HUD's colours and sizes (--th-*, set in travel.css) and sits top left under the trip card, so the road
+   ahead, the vehicle and the pedals are never covered. Flat colours. Responsive: the panel's width and height come from the HUD's own variables (the map, the wheel, the safe areas), so it
+   never runs under the map or the steering wheel on a small phone, a phone on its side, a tablet or a desktop; touch targets are at least 44px wherever a finger is the pointer. */
+.th { --cr-top: calc(var(--th-top) + 104px); --cr-w: min(340px, calc(100vw - var(--th-l) - var(--th-r) - var(--th-mini) - 14px)); }
 .th .th-radio { width: var(--th-aux); height: var(--th-aux); min-height: 0; padding: 0; border-radius: 50%; background: var(--th-surface); color: #fff; border: 1px solid var(--th-line); box-shadow: none; display: grid; place-items: center; }
 .th .th-radio:hover:not(:disabled) { background: #1d2a47; border-color: rgba(255, 255, 255, 0.3); }
 .th .th-radio[data-on="1"] { color: #06210f; background: var(--th-ok); border-color: var(--th-ok); }
 .th .th-radio-float { position: absolute; right: var(--th-r); bottom: calc(var(--th-bottom) + 6px); } /* riding (not steering): there is no pedal row, so it sits in the corner */
 
 .th .cr, .th .cr-chip { position: absolute; left: var(--th-l); z-index: 3; }
-.th .cr { top: calc(var(--th-top) + 104px); width: min(320px, calc(100vw - var(--th-l) - 112px)); min-width: 236px; max-height: calc(100dvh - var(--th-top) - var(--th-bottom) - 120px); overflow: auto; overscroll-behavior: contain; box-sizing: border-box; display: grid; gap: 10px; padding: 12px; border-radius: 18px; background: var(--th-surface); border: 1px solid var(--th-line); color: #fff; box-shadow: 0 16px 36px -14px rgba(0, 0, 0, 0.7); }
+.th .cr { top: var(--cr-top); width: var(--cr-w); min-width: 0; max-height: max(168px, calc(100dvh - var(--cr-top) - var(--th-bottom) - var(--th-wheel) - 12px)); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; box-sizing: border-box; display: grid; align-content: start; gap: 10px; padding: 12px; border-radius: 18px; background: var(--th-surface); border: 1px solid var(--th-line); color: #fff; box-shadow: 0 16px 36px -14px rgba(0, 0, 0, 0.7); }
+.th[data-phase="ride"] .cr { max-height: max(168px, calc(100dvh - var(--cr-top) - var(--th-bottom) - 12px)); } /* riding: no wheel in the corner, so the panel may be taller */
+.cr > * { min-width: 0; }
 .cr header { display: flex; align-items: center; gap: 10px; }
 .cr header b { flex: 1; font: 700 0.9rem/1 var(--font-ui); letter-spacing: 0.02em; }
 .th .cr button { min-height: 0; font: inherit; }
-.th .cr-pw, .th .cr-x { width: 36px; height: 36px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: #1b2540; color: #fff; border: 1px solid var(--th-line); }
+.th .cr-pw, .th .cr-x { flex: none; width: 36px; height: 36px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: #1b2540; color: #fff; border: 1px solid var(--th-line); }
 .th .cr-pw[data-on="1"] { background: var(--th-ok); color: #06210f; border-color: var(--th-ok); }
 .th .cr-x { background: transparent; border-color: transparent; }
 .cr-screen { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: #070c18; border: 1px solid rgba(255, 255, 255, 0.1); min-height: 52px; }
@@ -34,21 +38,60 @@
 .th .cr-ctl .cr-play { background: #fff; color: #161b26; border-color: #fff; }
 .th .cr-ctl button:disabled { opacity: 0.4; }
 .cr-vol { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; }
-.cr-vol input { width: 100%; min-height: 32px; accent-color: var(--th-ok); }
+.cr-vol input { width: 100%; min-width: 0; height: 32px; margin: 0; background: transparent; accent-color: var(--th-ok); touch-action: pan-y; cursor: pointer; -webkit-appearance: none; appearance: none; }
+.cr-vol input::-webkit-slider-runnable-track { height: 6px; border-radius: 99px; background: #2a3556; }
+.cr-vol input::-moz-range-track { height: 6px; border-radius: 99px; background: #2a3556; }
+.cr-vol input::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; margin-top: -8px; border-radius: 50%; border: 0; background: #fff; box-shadow: 0 0 0 3px rgba(63, 208, 138, 0.45); }
+.cr-vol input::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; border: 0; background: #fff; box-shadow: 0 0 0 3px rgba(63, 208, 138, 0.45); }
+.cr-vol input:focus-visible { outline: 2px solid var(--th-ok); outline-offset: 4px; border-radius: 6px; }
 .cr-vol output { min-width: 3ch; text-align: right; font-size: 0.8rem; color: #c8d0e0; }
 .cr-note { margin: 0; font-size: 0.76rem; color: var(--th-amber); }
 .th .cr-more { height: 36px; border-radius: 10px; background: transparent; color: #cfd7e8; border: 1px dashed rgba(255, 255, 255, 0.25); }
-.cr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 190px; overflow: auto; }
+.cr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: min(190px, 30dvh); min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
 .th .cr-list button { width: 100%; min-height: 44px; display: grid; gap: 1px; text-align: left; padding: 7px 12px; border-radius: 12px; background: #131c33; color: #fff; border: 1px solid transparent; }
 .th .cr-list button[aria-current="true"] { border-color: var(--th-ok); background: #14301f; }
+.cr-list b, .cr-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cr-list b { font: 650 0.88rem/1.2 var(--font-ui); } .cr-list small { font-size: 0.74rem; color: #98a4bd; }
 .cr-key { margin: 0; font-size: 0.72rem; color: #7d89a3; display: none; }
 .cr-key kbd { background: #1b2540; border: 1px solid var(--th-line); border-radius: 5px; padding: 0 5px; margin: 0 2px; font: inherit; }
 @media (hover: hover) and (pointer: fine) { .cr-key { display: block; } }
 
 /* the one-line "now playing" chip under the trip card, while the panel is closed */
-.th .cr-chip { top: calc(var(--th-top) + 104px); display: inline-flex; align-items: center; gap: 8px; max-width: min(220px, calc(100vw - var(--th-l) - 120px)); min-height: 30px; padding: 0 12px 0 10px; border-radius: 99px; background: var(--th-surface); color: #fff; border: 1px solid rgba(63, 208, 138, 0.45); font: 600 0.76rem/1 var(--font-ui); }
-.cr-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* a phone on its side has hardly any height: the panel shrinks to the essentials, the station list scrolls */
-@media (max-height: 480px) { .th .cr { top: calc(var(--th-top) + 8px); left: calc(var(--th-l) + var(--th-info-w) + 8px); width: min(300px, calc(100vw - var(--th-l) - var(--th-info-w) - var(--th-mini) - 40px)); max-height: calc(100dvh - var(--th-top) - 14px); gap: 6px; padding: 9px; } .cr-list { max-height: 110px; } .th .cr-chip { top: calc(var(--th-top) + 74px); } }
+.th .cr-chip { top: var(--cr-top); display: inline-flex; align-items: center; gap: 8px; max-width: var(--cr-w); min-height: 32px; padding: 0 12px 0 10px; border-radius: 99px; background: var(--th-surface); color: #fff; border: 1px solid rgba(63, 208, 138, 0.45); font: 600 0.76rem/1 var(--font-ui); }
+.cr-chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* a finger is the pointer (any phone or tablet): every control is at least 44px, and the panel is a little roomier */
+@media (pointer: coarse) {
+  .th .cr { gap: 12px; }
+  .th .cr-pw, .th .cr-x { width: 44px; height: 44px; }
+  .th .cr-ctl button { height: 52px; }
+  .th .cr-more { height: 44px; }
+  .cr-vol input { height: 44px; }
+  .th .cr-chip { min-height: 44px; }
+  .th .cr-list button { min-height: 48px; }
+}
+/* a very narrow phone: the panel is only as wide as the space left of the map, so the text gets a little smaller and the gaps tighter */
+@media (max-width: 359px) {
+  .th .cr { padding: 10px; gap: 8px; }
+  .cr-screen { padding: 8px 10px; gap: 8px; } .cr-txt b { font-size: 0.9rem; } .cr-txt span { font-size: 0.74rem; }
+  .cr-vol { gap: 6px; } .cr-vol output { min-width: 0; font-size: 0.74rem; }
+  .th .cr-ctl { gap: 6px; }
+}
+/* a tablet, or any window that is both wide and tall: more room, so bigger type and a taller station list */
+@media (min-width: 600px) and (min-height: 560px) {
+  .th .cr { padding: 14px; gap: 12px; border-radius: 20px; }
+  .cr header b { font-size: 1rem; } .cr-txt b { font-size: 1.05rem; } .cr-txt span { font-size: 0.86rem; }
+  .cr-list { max-height: min(240px, 34dvh); }
+}
+/* a phone on its side has hardly any height: the panel sits right beside the trip card (as wide as the room before the map), shrinks to the essentials and scrolls; the station list is short */
+@media (max-height: 520px) and (orientation: landscape) {
+  .th { --cr-w: min(300px, calc(100vw - var(--th-l) - var(--th-r) - var(--th-mini) - min(var(--th-info-w), 44vw - 66px) - 22px)); }
+  .th .cr { top: calc(var(--th-top) + 4px); left: calc(var(--th-l) + min(var(--th-info-w), 44vw - 66px) + 8px); max-height: calc(100dvh - var(--th-top) - 14px); gap: 6px; padding: 9px; }
+  .th[data-phase="ride"] .cr { max-height: calc(100dvh - var(--th-top) - 14px); }
+  .cr-list { max-height: min(110px, 26dvh); }
+  .cr-screen { min-height: 44px; padding: 6px 10px; }
+  .th .cr-ctl button { height: 44px; }
+  .th .cr-chip { top: calc(var(--th-top) + 52px); }
+}
+@media (max-height: 380px) and (orientation: landscape) { .th .cr { padding: 8px; } .cr-key { display: none !important; } }
 @media (prefers-reduced-motion: reduce) { .cr-eq[data-live="1"] b, .cr-spin { animation: none; } .cr-eq[data-live="1"] b { height: 70%; } }

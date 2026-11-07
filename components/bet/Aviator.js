@@ -1,7 +1,9 @@
 // components/bet/Aviator.js
 // Aviator, the way the real one plays: the plane climbs along an exponential curve and can fly away at ANY moment. Cash out before it does.
-// Tapping Bet takes off at once and your stake leaves your wallet at once; tapping Cash out shows your win at once. The server is the
-// only referee, and if it disagrees (the plane had already gone) the win is taken back and the screen says why.
+// Tapping Bet shows a short loading screen while the server takes the bet; the plane only takes off once the server has answered, so the animation
+// never waits on the network (the flight's clock is the server's, handed over with the answer). Your stake leaves your wallet at once and comes back
+// if the bet is refused; tapping Cash out shows your win at once. The server is the only referee, and if it disagrees (the plane had already gone)
+// the win is taken back and the screen says why. The crash point stays on the server until the flight is over: nothing on screen is guessed.
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -20,6 +22,13 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 function makeSims() {
   const names = [...NAMES].sort(() => Math.random() - 0.5).slice(0, 7);
   return names.map((n, i) => ({ name: n.slice(0, 2) + "***" + Math.floor(rnd(1, 9)), stake: [200, 300, 500, 1000, 2000, 5000, 10000][Math.floor(rnd(0, 7))], target: Math.min(60, Math.max(1.1, RTP / (1 - Math.random()))), i }));
+}
+
+/** A flight on this screen, built from the server's round. The plane's clock starts where the server's clock is NOW (its age at the moment it answered,
+ *  plus about half the trip back), so the multiplier on screen is the one the server will pay at. Nothing here is guessed: no round, no flight. */
+function flightFrom(round, serverNow, rtt = 0) {
+  const age = Math.max(0, serverNow - round.startedAt) + Math.min(400, rtt / 2), stakeKobo = BigInt(round.stakeKobo);
+  return { id: round.id, t0: performance.now() - age, stake: Number(stakeKobo / 100n), stakeKobo, autoCenti: round.autoCenti, cashed: null, crash: null, sims: makeSims(), link: true };
 }
 
 function paint(cv, f, t, w, h, dpr) {
@@ -71,6 +80,7 @@ export default function Aviator({ active }) {
   const router = useRouter(), cv = useRef(null), box = useRef(null), fl = useRef(null), poll = useRef(null), betting = useRef(false);
   const [, bump] = useState(0), rerender = useCallback(() => bump((x) => x + 1), []);
   const [stake, setStake] = useState(1000), [auto, setAuto] = useState({ on: false, x: "2.00" }), [hist, setHist] = useState([]);
+  const [boot, setBoot] = useState("loading"), [bootErr, setBootErr] = useState(""), [prep, setPrep] = useState(null), [slow, setSlow] = useState(false); // boot: loading | ready | error. prep: a bet is with the server and the plane has not taken off yet
 
   const f = fl.current, flying = f && !f.done && !f.crashShown;
   const nowCenti = () => (f ? (f.crashShown ? f.crash : centiAt((performance.now() - f.t0) / 1000)) : 100);
@@ -87,41 +97,40 @@ export default function Aviator({ active }) {
     finishRound(x, r.crashCenti);
   }, [finishRound]);
 
-  // The server starts the clock for a flight when it takes the bet. Line the plane up with that clock (once), so the multiplier on screen
-  // is the one the server will pay at, instead of a plane that took off a network trip earlier.
-  const syncClock = useCallback((x, round, serverNow, rtt = 0) => {
-    if (x.synced || !round) return;
-    x.synced = true; x.t0 = performance.now() - Math.max(0, serverNow - round.startedAt) - Math.min(400, rtt / 2);
-  }, []);
-
   // ask the server how the flight is going (twice a second while the plane is up)
   const check = useCallback(async () => {
     const x = fl.current; if (!x || x.done || x.crash || x.checking) return;
     x.checking = true;
     const r = await call("/api/bet/aviator"); x.checking = false;
-    if (r.failed || fl.current !== x) return;
+    if (fl.current !== x) return;
+    if (r.failed) { x.misses = (x.misses ?? 0) + 1; if (x.misses >= 2 && x.link) { x.link = false; rerender(); } return; } // the plane keeps flying on the server's clock; the screen says the link is down
+    x.misses = 0; if (!x.link) { x.link = true; rerender(); }
     setServerNow(r.now);
     if (r.history) setHist(r.history);
-    if (r.round && !x.id) { x.id = r.round.id; syncClock(x, r.round, r.now); }
     // Only the result of THIS flight settles it. Before the server has taken the bet, "last" is the PREVIOUS flight: using it would end the new
     // plane at the old crash point and pay out the old win a second time.
     if (!r.round && r.last && x.id && r.last.id === x.id) settleFrom(x, r.last);
-  }, [settleFrom, syncClock]);
+  }, [settleFrom, rerender]);
 
-  // load history, and pick up a flight that was in the air when the app was closed
-  useEffect(() => {
-    let on = true;
-    (async () => {
-      const r = await call("/api/bet/aviator"); if (!on || r.failed) return;
-      setServerNow(r.now); setHist(r.history ?? []);
-      if (r.round && !fl.current) {
-        const age = Math.max(0, r.now - r.round.startedAt);
-        fl.current = { id: r.round.id, synced: true, t0: performance.now() - age, stake: Number(BigInt(r.round.stakeKobo) / 100n), stakeKobo: BigInt(r.round.stakeKobo), autoCenti: r.round.autoCenti, cashed: null, crash: null, sims: makeSims() };
-        rerender();
-      }
-    })();
-    return () => { on = false; };
-  }, [rerender]);
+  // load history, and pick up a flight that was in the air when the app was closed. Nothing can be bet until this has answered, so a flight in the air is never missed.
+  const load = useCallback(async () => {
+    setBoot("loading"); setBootErr("");
+    const sent = performance.now(), r = await call("/api/bet/aviator");
+    if (r.aborted) return;
+    if (r.failed) { setBootErr(r.offline ? "You appear to be offline." : r.timedOut ? "The server is taking too long to answer." : r.error || "We could not reach the game."); setBoot("error"); return; }
+    setServerNow(r.now); setHist(r.history ?? []);
+    if (r.round && !fl.current) fl.current = flightFrom(r.round, r.now, performance.now() - sent);
+    setBoot("ready");
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { // back online: try again by itself
+    if (boot !== "error") return;
+    window.addEventListener("online", load); return () => window.removeEventListener("online", load);
+  }, [boot, load]);
+  useEffect(() => { // a slow answer is said out loud, once
+    if (!prep && boot !== "loading") { setSlow(false); return; }
+    const t = setTimeout(() => setSlow(true), 4000); return () => { clearTimeout(t); setSlow(false); };
+  }, [prep, boot]);
 
   // the animation loop, and a slower tick for the buttons
   useEffect(() => {
@@ -158,7 +167,7 @@ export default function Aviator({ active }) {
 
   async function bet() {
     const cur = fl.current;
-    if (betting.current || (cur && !cur.done && !cur.crashShown)) return; // read live, not from the last render: two quick taps must make ONE bet
+    if (betting.current || boot !== "ready" || (cur && !cur.done && !cur.crashShown)) return; // read live, not from the last render: two quick taps must make ONE bet
     const n = Math.floor(Number(stake));
     if (!Number.isInteger(n) || n < MIN_STAKE || n > MAX_STAKE) return toast.error(`Stake between ${money(MIN_STAKE)} and ${money(MAX_STAKE)}.`, { id: "avstake" });
     let autoX = null;
@@ -166,44 +175,43 @@ export default function Aviator({ active }) {
     const stakeKobo = BigInt(n) * 100n;
     if (!canAfford(stakeKobo)) return toast.error("You do not have enough cash for that stake.", { id: "avcash" });
     betting.current = true;
-    const x = { id: null, t0: performance.now(), stake: n, stakeKobo, autoCenti: autoX ? Math.round(autoX * 100) : null, cashed: null, crash: null, sims: makeSims(), key: crypto.randomUUID() };
-    fl.current = x; rerender(); // the plane is already climbing and the stake is already off your wallet (below)
-    const sent = performance.now();
-    let res;
+    fl.current = null; setPrep({ n }); // the loading screen: the plane stays on the ground until the server has the bet and has sent the round
+    const key = crypto.randomUUID(), sent = performance.now();
     try {
-      res = await run({
+      const res = await run({
         key: "av:bet", router,
-        request: () => call("/api/bet/aviator", { stakeNaira: n, autoCashout: autoX ?? undefined, requestId: x.key }),
+        request: () => call("/api/bet/aviator", { stakeNaira: n, autoCashout: autoX ?? undefined, requestId: key }),
         effects: [{ store: game, patch: cash(-stakeKobo) }],
       });
-    } finally { betting.current = false; }
-    if (res.skipped) return; // the same bet is already on its way: leave that flight alone
-    if (res.round) { // taken (or taken earlier: a repeat of the same request answers with the flight it started)
-      x.id = res.round.id; syncClock(x, res.round, res.now ?? res.round.startedAt, performance.now() - sent);
-      if (res.duplicate) game.scheduleRefresh();
-      if (x.queued) sendCash(x);
-      return;
-    }
-    if (res.failed && res.unknown) return recover(x); // no answer at all: the bet may have gone through, so find out before taking the plane down
-    toast.dismiss("avwin");
-    if (fl.current === x) fl.current = null; // refused: the plane lands and the stake is back
-    if (res.duplicate) game.scheduleRefresh(); // an earlier try of this bet had already been settled: the balance catches up
-    rerender();
+      if (res.skipped) return; // the same bet is already on its way: leave that one alone
+      if (res.round) { // taken (or taken earlier: a repeat of the same request answers with the flight it started): take off now, with everything already in hand
+        fl.current = flightFrom(res.round, res.now ?? res.round.startedAt, performance.now() - sent);
+        if (res.duplicate) game.scheduleRefresh();
+        return;
+      }
+      if (res.failed && res.unknown) { // no answer at all: the bet may have gone through, so find out before deciding anything
+        setPrep({ n, confirming: true });
+        const r = await recover(); if (r) fl.current = flightFrom(r.round, r.now, performance.now() - r.sent);
+        return;
+      }
+      toast.dismiss("avwin"); // refused: nothing took off and the stake is back
+      if (res.duplicate) game.scheduleRefresh(); // an earlier try of this bet had already been settled: the balance catches up
+    } finally { betting.current = false; setPrep(null); rerender(); }
   }
 
-  /** The bet's answer never came. Ask the server whether a flight exists; if so, carry on with it, otherwise land the plane. */
-  async function recover(x) {
-    for (let i = 0; i < 4 && fl.current === x; i++) {
+  /** The bet's answer never came. Ask the server whether a flight exists; if so the caller carries on with it, otherwise nothing was taken. */
+  async function recover() {
+    for (let i = 0; i < 4; i++) {
       await new Promise((r) => setTimeout(r, 1200));
-      const r = await call("/api/bet/aviator");
+      const sent = performance.now(), r = await call("/api/bet/aviator");
       if (r.failed) continue;
-      setServerNow(r.now);
-      if (r.round) { x.id = r.round.id; syncClock(x, r.round, r.now); game.scheduleRefresh(); rerender(); if (x.queued) sendCash(x); return; }
+      setServerNow(r.now); game.scheduleRefresh();
+      if (r.round) return { round: r.round, now: r.now, sent };
       break;
     }
-    toast.dismiss("avwin");
-    if (fl.current === x) { fl.current = null; rerender(); }
+    toast.dismiss("avwin"); toast.info("We could not confirm that bet. If it went through, your balance will catch up.", { id: "avlost" });
     game.scheduleRefresh();
+    return null;
   }
 
   /** The cash-out's answer never came. Find out what the server did, and put the screen in line with it. */
@@ -248,10 +256,11 @@ export default function Aviator({ active }) {
     x.cashed = { centi, payout: pay, pending: true };
     toast.pending(`Cashing out at ${fmtX(centi)}…`, { id: "avwin" }); // the win is only announced once the server has confirmed it was not too late
     rerender();
-    if (x.id) sendCash(x); else x.queued = true; // the bet is still on its way: the cash-out follows it
+    sendCash(x);
   }
 
   const centi = nowCenti(), live = f && !f.done;
+  const locked = !!prep || boot !== "ready"; // the controls wait while the round is loading or being taken
   const canCash = f && !f.crashShown && !f.crash && !f.cashed, waitingAuto = f && f.autoAsked && !f.cashed && !f.crash;
   const adj = (m) => setStake((s) => Math.max(MIN_STAKE, Math.min(MAX_STAKE, Math.round(m(Number(s) || 0)))));
 
@@ -261,23 +270,48 @@ export default function Aviator({ active }) {
       <div className="av-hist" aria-label="Recent flights">
         {hist.length === 0 ? <small>Your flights show up here</small> : hist.slice(0, 14).map((h) => <span key={h.id} className={`hx ${tier(h.crashCenti)}`}>{fmtX(h.crashCenti)}</span>)}
       </div>
-      <div className="av-stage" ref={box}><canvas ref={cv} aria-label="Aviator flight" /></div>
+      <div className="av-stage" ref={box}>
+        <canvas ref={cv} aria-label="Aviator flight" />
+        {locked && (
+          <div className="av-load" role="status" aria-live="polite" data-state={boot === "error" ? "error" : "busy"}>
+            {boot === "error" ? (
+              <>
+                <Icon name="wifi" size={26} />
+                <b>Can’t reach Aviator</b>
+                <span>{bootErr}</span>
+                <button type="button" className="av-retry" onClick={load}>Try again</button>
+              </>
+            ) : (
+              <>
+                <svg className="av-load-plane" viewBox="-34 -22 68 44" width="68" height="44" aria-hidden="true">
+                  <path d="M6 1 L-9 15 L-16 15 L-8 1 Z" fill="#c4283b" /><path d="M-21 -3 L-28 -17 L-17 -17 L-10 -3 Z" fill="#f0455a" />
+                  <rect x="-24" y="-6" width="50" height="12" rx="6" fill="#f0455a" /><rect x="8" y="-4" width="11" height="5" rx="2.5" fill="#ffd9de" />
+                </svg>
+                <b>{boot === "loading" ? "Getting Aviator ready" : prep?.confirming ? "Confirming your bet" : "Preparing your flight"}</b>
+                <span>{slow ? "This is taking longer than usual. Hang on, your connection may be slow." : boot === "loading" ? "Checking for a flight in progress…" : prep?.confirming ? "Asking the server whether your bet went through…" : `Placing your ${money(prep?.n ?? 0)} bet with the server…`}</span>
+                <i className="av-load-bar" aria-hidden="true" />
+              </>
+            )}
+          </div>
+        )}
+        {f && !f.link && !f.done && <p className="av-link" role="status">Connection lost. Reconnecting… a cash-out may be late.</p>}
+      </div>
 
       <div className="av-ctl">
         <div className="av-stake">
-          <button type="button" className="rd" disabled={flying} onClick={() => adj((s) => s - (s > 1000 ? 500 : 100))} aria-label="Lower stake"><Icon name="minus" size={16} weight="bold" /></button>
-          <div className="inp-wrap"><span>₦</span><input className="inp" type="text" inputMode="numeric" disabled={flying} value={Number(stake) ? Number(stake).toLocaleString("en-NG") : ""} placeholder="0" onChange={(e) => setStake(Number(e.target.value.replace(/\D/g, "")) || 0)} aria-label="Stake" /></div>
-          <button type="button" className="rd" disabled={flying} onClick={() => adj((s) => s + (s >= 1000 ? 500 : 100))} aria-label="Raise stake"><Icon name="plus" size={16} weight="bold" /></button>
+          <button type="button" className="rd" disabled={flying || locked} onClick={() => adj((s) => s - (s > 1000 ? 500 : 100))} aria-label="Lower stake"><Icon name="minus" size={16} weight="bold" /></button>
+          <div className="inp-wrap"><span>₦</span><input className="inp" type="text" inputMode="numeric" disabled={flying || locked} value={Number(stake) ? Number(stake).toLocaleString("en-NG") : ""} placeholder="0" onChange={(e) => setStake(Number(e.target.value.replace(/\D/g, "")) || 0)} aria-label="Stake" /></div>
+          <button type="button" className="rd" disabled={flying || locked} onClick={() => adj((s) => s + (s >= 1000 ? 500 : 100))} aria-label="Raise stake"><Icon name="plus" size={16} weight="bold" /></button>
         </div>
         <div className="qk">
-          {QUICK.map((q) => <button key={q} type="button" disabled={flying} onClick={() => setStake(q)}>{money(q)}</button>)}
-          <button type="button" disabled={flying} onClick={() => adj((s) => s / 2)}>½</button>
-          <button type="button" disabled={flying} onClick={() => adj((s) => s * 2)}>2×</button>
+          {QUICK.map((q) => <button key={q} type="button" disabled={flying || locked} onClick={() => setStake(q)}>{money(q)}</button>)}
+          <button type="button" disabled={flying || locked} onClick={() => adj((s) => s / 2)}>½</button>
+          <button type="button" disabled={flying || locked} onClick={() => adj((s) => s * 2)}>2×</button>
         </div>
         <div className="av-auto">
-          <button type="button" role="switch" aria-checked={auto.on} className={`sw${auto.on ? " on" : ""}`} disabled={flying} onClick={() => setAuto({ ...auto, on: !auto.on })}><i /></button>
+          <button type="button" role="switch" aria-checked={auto.on} className={`sw${auto.on ? " on" : ""}`} disabled={flying || locked} onClick={() => setAuto({ ...auto, on: !auto.on })}><i /></button>
           <span>Auto cash out at</span>
-          <div className="inp-wrap sm"><input className="inp" type="text" inputMode="decimal" disabled={flying || !auto.on} value={auto.x} onChange={(e) => setAuto({ ...auto, x: e.target.value.replace(/[^\d.]/g, "").slice(0, 7) })} aria-label="Auto cash-out multiplier" /><span>x</span></div>
+          <div className="inp-wrap sm"><input className="inp" type="text" inputMode="decimal" disabled={flying || locked || !auto.on} value={auto.x} onChange={(e) => setAuto({ ...auto, x: e.target.value.replace(/[^\d.]/g, "").slice(0, 7) })} aria-label="Auto cash-out multiplier" /><span>x</span></div>
         </div>
 
         {canCash ? (
@@ -287,8 +321,8 @@ export default function Aviator({ active }) {
         ) : live && f.cashed && !f.crashShown ? (
           <button type="button" className="av-go done" disabled><small>Cashed out at {fmtX(f.cashed.centi)}</small><b className="num">+{moneyK(f.cashed.payout - f.stakeKobo)}</b></button>
         ) : (
-          <button type="button" className="av-go bet" onClick={bet} disabled={flying}>
-            <small>{f?.crashShown && f.cashed ? `Won ${moneyK(f.cashed.payout - f.stakeKobo)} · go again` : f?.crashShown ? `Lost ${money(f.stake)} · go again` : "Bet"}</small><b className="num">{money(Number(stake) || 0)}</b>
+          <button type="button" className="av-go bet" onClick={bet} disabled={flying || locked}>
+            <small>{prep ? "Preparing your flight…" : boot === "loading" ? "Loading…" : boot === "error" ? "Not connected" : f?.crashShown && f.cashed ? `Won ${moneyK(f.cashed.payout - f.stakeKobo)} · go again` : f?.crashShown ? `Lost ${money(f.stake)} · go again` : "Bet"}</small><b className="num">{money(Number(stake) || 0)}</b>
           </button>
         )}
       </div>

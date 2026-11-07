@@ -185,6 +185,19 @@
 .hx.low { color: var(--bblue); } .hx.mid { color: var(--bpurple); } .hx.high { color: var(--bpink); }
 .av-stage { position: relative; height: 250px; border-radius: 18px; background: var(--b1); border: 1px solid var(--bl); overflow: hidden; }
 .av-stage canvas { font-family: var(--font-head), system-ui, sans-serif; position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* the loading screen over the stage: shown while the game loads or the server takes the bet, so the plane only takes off with its data in hand. Flat colours, no gradients. */
+.av-load { position: absolute; inset: 0; z-index: 2; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px 20px; text-align: center; background: var(--b1); color: var(--bt); }
+.av-load b { font: 700 1.05rem/1.2 var(--font-head), system-ui, sans-serif; }
+.av-load span { max-width: 30ch; font-size: 0.82rem; line-height: 1.4; color: var(--bm); }
+.av-load > svg { color: var(--bm); }
+.av-load-plane { animation: av-bob 1.4s ease-in-out infinite; margin-bottom: 4px; }
+.av-load-bar { position: relative; display: block; width: min(200px, 60%); height: 4px; margin-top: 8px; border-radius: 99px; background: var(--b3); overflow: hidden; }
+.av-load-bar::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 34%; border-radius: inherit; background: var(--bred); animation: av-slide 1.1s ease-in-out infinite; }
+.bt .av-retry { min-height: 44px; margin-top: 6px; padding: 0 22px; border-radius: 12px; background: var(--bg); color: var(--bg-ink); font-weight: 700; }
+.bt .av-retry:hover:not(:disabled) { background: #31d27b; }
+.av-link { position: absolute; z-index: 1; left: 10px; right: 10px; bottom: 8px; margin: 0; padding: 6px 10px; border-radius: 10px; background: var(--b2); border: 1px solid rgba(244, 185, 66, 0.4); color: var(--bgold); font-size: 0.76rem; line-height: 1.3; text-align: center; }
+@keyframes av-bob { 0%, 100% { transform: translateY(2px) rotate(-6deg); } 50% { transform: translateY(-5px) rotate(-6deg); } }
+@keyframes av-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
 .av-ctl { margin-top: 12px; padding: 12px; border-radius: 18px; background: var(--b1); border: 1px solid var(--bl); }
 .av-stake { display: flex; gap: 8px; align-items: center; }
 .av-stake .inp-wrap { flex: 1; }
