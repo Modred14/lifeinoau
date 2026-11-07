@@ -21,7 +21,8 @@ import { createTripFlow } from "./tripflow.js";
 import { ROAD_TOP } from "./roadsurface.js";
 import { wheelContacts } from "./vehiclepose.js";
 import { rigSuspension, leanBody } from "./suspension.js";
-import { createTraffic, makeWalker } from "./traffic.js";
+import { createTraffic, makeWalker, densityFor, DENSITY_LOW } from "./traffic.js";
+import { playSound } from "../lib/sound.js";
 import { createPlayerTags, isTaggable } from "./playerTags.js";
 import { createAvatar } from "./avatar/loadAvatar.js";
 import { lookKey } from "../lib/look.js";
@@ -154,6 +155,10 @@ export async function startTrip(env, o) {
 
   const camPt = { x: plan.start.x, z: plan.start.z };
   const traffic = createTraffic({ parent: world, svc, focus: () => camPt, tags }); disposers.push(() => traffic.dispose());
+  // ---- the sound of the trip: engines, horns, traffic, the town (lib/audio/tripAudio.js). Loaded on its own so a sound problem can never stop a trip: without it the trip is silent but works. ----
+  let audio = null;
+  try { const { createTripAudio } = await import("../lib/audio/tripAudio.js"); audio = createTripAudio({ places: (data.places ?? []).filter((p) => p.x != null && !p.offmap).map((p) => ({ x: p.x, z: p.z, kind: p.kind })), low: densityFor() === DENSITY_LOW }); disposers.push(() => audio.dispose()); } catch (e) { console.warn("trip sound unavailable", e); }
+  let hornWas = false;
 
   // ---- the journey ----
   const flow = createTripFlow({ svc, sim: traffic.sim }, { plan, enterable, dims: vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width, id: vehicle.id, seat: vehicle.seat, driver: vehicle.driver, wheels: wheelContacts(vehicle) } : null, rnd: Math.random, free: !!o.free, spawn: o.spawn ?? null, onArrive: () => o.onArrive?.() ?? true, onEnter: () => o.onEnter?.(), onEnd: (why) => { if (alive) o.onEnd?.(why); }, onNotice: (m) => o.onNotice?.(m) });
@@ -299,6 +304,11 @@ export async function startTrip(env, o) {
     if (inp.stop) flow.stopAuto(); if (inp.door) flow.pressDoor(); if (inp.goIn) flow.enterNow();
     flow.update(dt, { dx: ax, dz: az, mag: m, run: inp.run, gas: inp.gas, brake: inp.brake, steer: inp.steer, exit: inp.exit, enter: inp.enter, close: inp.close });
     lastPhase = F.phase;
+    // sound: where the listener is and which way the view faces, what you are riding or driving, who is near. The horn is the held HUD button / H key (input.horn).
+    { const vv = inVehNow() ? flow.vehicle : null, who = vv ?? P, sp = vv ? (vv.v ?? 0) : WK.speed, hx = who.hx ?? 0, hz = who.hz ?? 1, horn = !!input.horn && driving();
+      if (audio) audio.update(dt, { phase: F.phase, mode, carId: vehicle?.id ?? o.car ?? null, ego: flow.vehicle ?? null, own: flow.own ?? null, pos: { x: who.x, z: who.z, vx: hx * sp, vz: hz * sp }, fwd: f, horn, onDeck: ((flow.own ? flow.own.h : flow.vehicle?.y) ?? 0) > 2, sim: traffic.sim.vehicles, peds: traffic.sim.peds, remote: traffic.remoteVehicles });
+      else if (horn && !hornWas) playSound("horn");   // no trip sound (it failed to load): the old single beep
+      hornWas = horn; }
     drawPerson(dt); drawVehicle(dt); door?.open(F.doorK, F.hinge); bay.visible = driving() && !!plan.drop && !flow.free; if (bay.visible) bay.scale.set(1, 1, 1 + Math.sin(time * 3) * 0.02);
     beam.visible = ring.visible = !flow.free; if (door) door.group.visible = !flow.free;   // a free drive has no destination to point at
     beam.material.opacity = 0.2 + Math.sin(time * 3) * 0.08; ring.scale.setScalar(1 + Math.sin(time * 3) * 0.08); hornT = Math.max(0, hornT - dt);

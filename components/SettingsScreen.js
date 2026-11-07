@@ -30,7 +30,7 @@ const TABS = [
   ["character", "Character & Appearance", "sparkle", "Body, hair and clothes"],
   ["account", "Account", "driver", "Email and login"],
   ["gameplay", "Gameplay", "game", "Camera and name tags"],
-  ["audio", "Audio", "sound", "Music and sound effects"],
+  ["audio", "Audio", "sound", "Music, effects, vehicles, town and radio"],
   ["notifications", "Notifications", "bell", "Pop-ups and alerts"],
   ["privacy", "Privacy & Security", "shield", "Who can find you, password"],
   ["accessibility", "Accessibility", "eye", "Motion, text and contrast"],
@@ -422,7 +422,7 @@ export default function SettingsScreen({ onClose, onLogout, loggingOut }) {
       </Card>
     ),
 
-    audio: draft && (
+    audio: draft && (<>
       <Card title="Sound" note="Your choice is saved to your account." icon="sound">
         <Toggle title="Background music" note={`${MUSIC.title} · ${MUSIC.artist}`} checked={draft.audio.music} onChange={setPref("audio", "music")} />
         <Slider id="sx-music" title="Music volume" value={draft.audio.musicVolume} disabled={!draft.audio.music} onChange={setPref("audio", "musicVolume")} />
@@ -430,7 +430,27 @@ export default function SettingsScreen({ onClose, onLogout, loggingOut }) {
         <Slider id="sx-sfx" title="Effects volume" value={draft.audio.sfxVolume} disabled={!draft.audio.sfx} onChange={setPref("audio", "sfxVolume")} />
         <p className="sx-foot">{!draft.audio.music && !draft.audio.sfx ? "The game is silent." : "Changes play at once so you can hear them."} Browsers start sound after your first tap.</p>
       </Card>
-    ),
+      <Card title="Vehicles and town" note="Engines, horns, traffic, the sound of the town and the car radio. Each has its own volume and mute." icon="ride">
+        <Slider id="sx-master" title="Master volume" value={draft.audio.masterVolume} disabled={draft.audio.masterMute} onChange={setPref("audio", "masterVolume")} />
+        <Toggle title="Mute everything" note="Music, effects, vehicles, town and radio" checked={draft.audio.masterMute} onChange={setPref("audio", "masterMute")} />
+        <Slider id="sx-engine" title="Engine sounds (your vehicle)" value={draft.audio.engineVolume} disabled={draft.audio.engineMute} onChange={setPref("audio", "engineVolume")} />
+        <Toggle title="Mute engine sounds" checked={draft.audio.engineMute} onChange={setPref("audio", "engineMute")} />
+        <Slider id="sx-horn" title="Vehicle horns" value={draft.audio.hornVolume} disabled={draft.audio.hornMute} onChange={setPref("audio", "hornVolume")} />
+        <Toggle title="Mute horns" checked={draft.audio.hornMute} onChange={setPref("audio", "hornMute")} />
+        <div className="sx-row" data-sound="none">
+          <span className="sx-rowtxt"><b>Your horn</b><small>Automatic uses the horn that belongs to your vehicle. Hold the horn button (or H) to keep it sounding.</small></span>
+          <select aria-label="Your horn" value={draft.audio.hornStyle} onChange={(e) => setPref("audio", "hornStyle")(e.target.value)}>
+            <option value="auto">Automatic (your vehicle's own)</option><option value="standard">Standard</option><option value="deep">Deep</option><option value="bright">Bright</option><option value="air">Air horn</option>
+          </select>
+        </div>
+        <Slider id="sx-traffic" title="Traffic (other vehicles and distant road)" value={draft.audio.trafficVolume} disabled={draft.audio.trafficMute} onChange={setPref("audio", "trafficVolume")} />
+        <Toggle title="Mute traffic" checked={draft.audio.trafficMute} onChange={setPref("audio", "trafficMute")} />
+        <Slider id="sx-town" title="Town ambience (people, birds, surroundings)" value={draft.audio.townVolume} disabled={draft.audio.townMute} onChange={setPref("audio", "townVolume")} />
+        <Toggle title="Mute town ambience" checked={draft.audio.townMute} onChange={setPref("audio", "townMute")} />
+        <Slider id="sx-radio" title="Car radio volume" value={draft.audio.radioVolume} disabled={draft.audio.masterMute} onChange={setPref("audio", "radioVolume")} />
+        <p className="sx-foot">The radio is switched on and off in the car. On iPhone and iPad the radio follows the device volume.</p>
+      </Card>
+    </>),
 
     notifications: draft && (
       <Card title="Pop-ups and alerts" note="Messages always show their unread badge on the phone." icon="bell">

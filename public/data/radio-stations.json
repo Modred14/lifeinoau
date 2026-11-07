@@ -1,0 +1,4 @@
+{
+  "_readme": "Only stations that passed tools/radio/verify-stations.mjs belong here (it fills this file in). Add candidates to tools/radio/candidates.json and run: node tools/radio/verify-stations.mjs --write",
+  "stations": []
+}

@@ -1,0 +1,54 @@
+/* components/car-radio.css: the car radio (components/CarRadio.js). Uses the trip HUD's colours (--th-*, set in travel.css) and sits top left under the trip card, so the road
+   ahead, the vehicle and the pedals are never covered. Flat colours. Touch targets are at least 44px on phones. */
+.th .th-radio { width: var(--th-aux); height: var(--th-aux); min-height: 0; padding: 0; border-radius: 50%; background: var(--th-surface); color: #fff; border: 1px solid var(--th-line); box-shadow: none; display: grid; place-items: center; }
+.th .th-radio:hover:not(:disabled) { background: #1d2a47; border-color: rgba(255, 255, 255, 0.3); }
+.th .th-radio[data-on="1"] { color: #06210f; background: var(--th-ok); border-color: var(--th-ok); }
+.th .th-radio-float { position: absolute; right: var(--th-r); bottom: calc(var(--th-bottom) + 6px); } /* riding (not steering): there is no pedal row, so it sits in the corner */
+
+.th .cr, .th .cr-chip { position: absolute; left: var(--th-l); z-index: 3; }
+.th .cr { top: calc(var(--th-top) + 104px); width: min(320px, calc(100vw - var(--th-l) - 112px)); min-width: 236px; max-height: calc(100dvh - var(--th-top) - var(--th-bottom) - 120px); overflow: auto; overscroll-behavior: contain; box-sizing: border-box; display: grid; gap: 10px; padding: 12px; border-radius: 18px; background: var(--th-surface); border: 1px solid var(--th-line); color: #fff; box-shadow: 0 16px 36px -14px rgba(0, 0, 0, 0.7); }
+.cr header { display: flex; align-items: center; gap: 10px; }
+.cr header b { flex: 1; font: 700 0.9rem/1 var(--font-ui); letter-spacing: 0.02em; }
+.th .cr button { min-height: 0; font: inherit; }
+.th .cr-pw, .th .cr-x { width: 36px; height: 36px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: #1b2540; color: #fff; border: 1px solid var(--th-line); }
+.th .cr-pw[data-on="1"] { background: var(--th-ok); color: #06210f; border-color: var(--th-ok); }
+.th .cr-x { background: transparent; border-color: transparent; }
+.cr-screen { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: #070c18; border: 1px solid rgba(255, 255, 255, 0.1); min-height: 52px; }
+.cr-screen[data-on="1"] { border-color: rgba(63, 208, 138, 0.45); }
+.cr-txt { min-width: 0; flex: 1; display: grid; gap: 3px; }
+.cr-txt b { font: 700 0.98rem/1.2 var(--font-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cr-txt span { font-size: 0.8rem; color: #8fe9b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cr-screen:not([data-on="1"]) .cr-txt span { color: #8b96ad; }
+/* the little level bars: still when off or connecting, moving while it plays (not for people who asked for less motion) */
+.cr-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 18px; flex: none; }
+.cr-eq b { display: block; width: 3px; height: 30%; border-radius: 2px; background: #5a6683; }
+.cr-eq[data-live="1"] b { background: var(--th-ok); animation: cr-bar 0.9s ease-in-out infinite; }
+.cr-eq[data-live="1"] b:nth-child(2) { animation-delay: -0.3s; } .cr-eq[data-live="1"] b:nth-child(3) { animation-delay: -0.6s; } .cr-eq[data-live="1"] b:nth-child(4) { animation-delay: -0.15s; }
+.cr-eq[data-busy="1"] b { background: var(--th-amber); }
+@keyframes cr-bar { 0%, 100% { height: 25%; } 50% { height: 100%; } }
+.cr-spin { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.25); border-top-color: var(--th-amber); animation: cr-rot 0.8s linear infinite; }
+@keyframes cr-rot { to { transform: rotate(360deg); } }
+.cr-ctl { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 8px; }
+.th .cr-ctl button { height: 46px; border-radius: 14px; display: grid; place-items: center; background: #1b2540; color: #fff; border: 1px solid var(--th-line); }
+.th .cr-ctl button:hover:not(:disabled) { background: #26345a; }
+.th .cr-ctl .cr-play { background: #fff; color: #161b26; border-color: #fff; }
+.th .cr-ctl button:disabled { opacity: 0.4; }
+.cr-vol { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; }
+.cr-vol input { width: 100%; min-height: 32px; accent-color: var(--th-ok); }
+.cr-vol output { min-width: 3ch; text-align: right; font-size: 0.8rem; color: #c8d0e0; }
+.cr-note { margin: 0; font-size: 0.76rem; color: var(--th-amber); }
+.th .cr-more { height: 36px; border-radius: 10px; background: transparent; color: #cfd7e8; border: 1px dashed rgba(255, 255, 255, 0.25); }
+.cr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 190px; overflow: auto; }
+.th .cr-list button { width: 100%; min-height: 44px; display: grid; gap: 1px; text-align: left; padding: 7px 12px; border-radius: 12px; background: #131c33; color: #fff; border: 1px solid transparent; }
+.th .cr-list button[aria-current="true"] { border-color: var(--th-ok); background: #14301f; }
+.cr-list b { font: 650 0.88rem/1.2 var(--font-ui); } .cr-list small { font-size: 0.74rem; color: #98a4bd; }
+.cr-key { margin: 0; font-size: 0.72rem; color: #7d89a3; display: none; }
+.cr-key kbd { background: #1b2540; border: 1px solid var(--th-line); border-radius: 5px; padding: 0 5px; margin: 0 2px; font: inherit; }
+@media (hover: hover) and (pointer: fine) { .cr-key { display: block; } }
+
+/* the one-line "now playing" chip under the trip card, while the panel is closed */
+.th .cr-chip { top: calc(var(--th-top) + 104px); display: inline-flex; align-items: center; gap: 8px; max-width: min(220px, calc(100vw - var(--th-l) - 120px)); min-height: 30px; padding: 0 12px 0 10px; border-radius: 99px; background: var(--th-surface); color: #fff; border: 1px solid rgba(63, 208, 138, 0.45); font: 600 0.76rem/1 var(--font-ui); }
+.cr-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* a phone on its side has hardly any height: the panel shrinks to the essentials, the station list scrolls */
+@media (max-height: 480px) { .th .cr { top: calc(var(--th-top) + 8px); left: calc(var(--th-l) + var(--th-info-w) + 8px); width: min(300px, calc(100vw - var(--th-l) - var(--th-info-w) - var(--th-mini) - 40px)); max-height: calc(100dvh - var(--th-top) - 14px); gap: 6px; padding: 9px; } .cr-list { max-height: 110px; } .th .cr-chip { top: calc(var(--th-top) + 74px); } }
+@media (prefers-reduced-motion: reduce) { .cr-eq[data-live="1"] b, .cr-spin { animation: none; } .cr-eq[data-live="1"] b { height: 70%; } }

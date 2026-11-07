@@ -1,0 +1,1838 @@
+diff --git a/components/CarRadio.js b/components/CarRadio.js
+new file mode 100644
+index 0000000..e618538
+--- /dev/null
++++ b/components/CarRadio.js
+@@ -0,0 +1,82 @@
++// components/CarRadio.js
++// The car radio: a round button with the other driving buttons, and a small panel that opens under the trip card (top left). The panel is kept compact so the road, the
++// vehicle and the pedals stay clear: the station and what is playing, previous / play-pause / next, the volume, and a list of stations that opens when you want to browse.
++// While it is playing and the panel is closed, a one-line chip under the trip card says what is on. Everything here is a real button (keyboard and screen reader friendly);
++// on a keyboard: R opens/closes the panel, , and . change station. The radio plays only while `active` (you are in a vehicle); leaving it stops the stream.
++// The sound itself is lib/radio/radio.js; the station list is public/data/radio-stations.json.
++"use client";
++import { useEffect, useRef, useState } from "react";
++import { Icon } from "./Icon";
++import { useRadio, initRadio, setPower, setPlaying, selectStation, stepStation, setInVehicle } from "@/lib/radio/radio.js";
++import { useMix, setMix } from "@/lib/audio/mixer.js";
++import "./car-radio.css";
++
++/** What the panel says under the station name. */
++export function radioLine(r) {
++  if (!r.on) return "Radio off";
++  if (!r.stations.length) return r.loaded ? "No stations available right now" : "Loading stations…";
++  const track = [r.artist, r.track].filter(Boolean).join(" · ");
++  switch (r.status) {
++    case "loading": return "Connecting…";
++    case "buffering": return "Buffering…";
++    case "reconnecting": return `Reconnecting… (${Math.min(r.attempt, 5)}/5)`;
++    case "error": return r.error || "Could not play this station";
++    case "tap": return r.error || "Tap play to start";
++    case "paused": return "Paused";
++    case "playing": return track || [r.stations.find((s) => s.id === r.stationId)?.genre, r.stations.find((s) => s.id === r.stationId)?.country].filter(Boolean).join(" · ") || "On air";
++    default: return "Ready";
++  }
++}
++
++export default function CarRadio({ active, float = false }) {
++  const r = useRadio(), mix = useMix(), [open, setOpen] = useState(false), [list, setList] = useState(false), panel = useRef(null), btn = useRef(null);
++  const cur = r.stations.find((s) => s.id === r.stationId), busy = ["loading", "buffering", "reconnecting"].includes(r.status);
++  useEffect(() => { initRadio(); }, []);
++  useEffect(() => { setInVehicle(!!active); return () => setInVehicle(false); }, [active]);   // getting out (or leaving the trip) stops the stream
++  useEffect(() => {
++    if (!active) return;
++    const k = (e) => { if (e.metaKey || e.ctrlKey || e.altKey || e.target?.closest?.("input,textarea,select")) return;
++      if (e.code === "KeyR" && !e.repeat) setOpen((o) => !o); else if (e.key === "." && r.stations.length) stepStation(1); else if (e.key === "," && r.stations.length) stepStation(-1); else if (e.key === "Escape") setOpen(false); };
++    window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
++  }, [active, r.stations.length]);
++  useEffect(() => { if (!open) return; const away = (e) => { if (!panel.current?.contains(e.target) && !btn.current?.contains(e.target)) setOpen(false); }; document.addEventListener("pointerdown", away); return () => document.removeEventListener("pointerdown", away); }, [open]);
++  useEffect(() => { if (!active) setOpen(false); }, [active]);
++  if (!active) return null;
++  const power = () => { setPower(!r.on); if (!r.on) setOpen(true); };
++  return (
++    <>
++      <button ref={btn} type="button" className={"th-btn th-radio" + (float ? " th-radio-float" : "")} data-on={r.on ? "1" : undefined} aria-label={open ? "Close the car radio" : "Open the car radio"} aria-expanded={open} data-sound="none" onClick={() => setOpen((o) => !o)}>
++        <Icon name="radio" size={22} weight={r.on ? "fill" : "regular"} />
++      </button>
++      {!open && r.on && r.stations.length > 0 && <button type="button" className="cr-chip" onClick={() => setOpen(true)} data-sound="none" aria-label={`Radio: ${cur?.name ?? ""}. ${radioLine(r)}. Open the radio`}><i className="cr-eq" data-busy={busy ? "1" : undefined} data-live={r.status === "playing" ? "1" : undefined} aria-hidden="true"><b /><b /><b /></i><span>{cur?.name}</span></button>}
++      {open && (
++        <div ref={panel} className="cr" role="dialog" aria-label="Car radio">
++          <header>
++            <button type="button" className="cr-pw" data-on={r.on ? "1" : undefined} aria-pressed={r.on} aria-label={r.on ? "Turn the radio off" : "Turn the radio on"} data-sound="none" onClick={power}><Icon name="power" size={18} weight="bold" /></button>
++            <b>Car radio</b>
++            <button type="button" className="cr-x ghost" aria-label="Close the radio" data-sound="none" onClick={() => setOpen(false)}><Icon name="close" size={18} /></button>
++          </header>
++          <div className="cr-screen" data-on={r.on ? "1" : undefined}>
++            <i className="cr-eq" data-busy={busy ? "1" : undefined} data-live={r.status === "playing" ? "1" : undefined} aria-hidden="true"><b /><b /><b /><b /></i>
++            <div className="cr-txt"><b>{r.on ? cur?.name ?? "No station" : "—"}</b><span role="status" aria-live="polite">{radioLine(r)}</span></div>
++            {busy && <i className="cr-spin" aria-hidden="true" />}
++          </div>
++          <div className="cr-ctl">
++            <button type="button" aria-label="Previous station" disabled={!r.stations.length} data-sound="none" onClick={() => stepStation(-1)}><Icon name="prevStation" size={20} weight="fill" /></button>
++            <button type="button" className="cr-play" aria-label={r.on && !r.paused ? "Pause" : "Play"} disabled={!r.stations.length} data-sound="none" onClick={() => (r.on ? setPlaying(r.paused || r.status === "error" || r.status === "tap") : setPower(true))}><Icon name={r.on && !r.paused && r.status !== "error" && r.status !== "tap" ? "pause" : "play"} size={24} weight="fill" /></button>
++            <button type="button" aria-label="Next station" disabled={!r.stations.length} data-sound="none" onClick={() => stepStation(1)}><Icon name="nextStation" size={20} weight="fill" /></button>
++          </div>
++          <div className="cr-vol">
++            <Icon name={mix.radioVolume === 0 || mix.masterMute ? "mute" : "sound"} size={18} />
++            <input type="range" min="0" max="100" step="5" value={mix.radioVolume} aria-label="Radio volume" onChange={(e) => setMix({ radioVolume: Number(e.target.value) })} aria-valuetext={`${mix.radioVolume} percent`} />
++            <output className="num">{mix.radioVolume}%</output>
++          </div>
++          {mix.masterMute && <p className="cr-note">Everything is muted in Settings.</p>}
++          {r.stations.length > 1 && <button type="button" className="cr-more ghost" aria-expanded={list} data-sound="none" onClick={() => setList((l) => !l)}>{list ? "Hide stations" : `Stations (${r.stations.length})`}</button>}
++          {list && <ul className="cr-list" aria-label="Stations">{r.stations.map((s) => <li key={s.id}><button type="button" aria-current={s.id === r.stationId ? "true" : undefined} data-sound="none" onClick={() => { selectStation(s.id); }}><b>{s.name}</b><small>{[s.genre, s.country].filter(Boolean).join(" · ")}</small></button></li>)}</ul>}
++          <p className="cr-key" aria-hidden="true"><kbd>R</kbd> radio <kbd>,</kbd><kbd>.</kbd> station</p>
++        </div>
++      )}
++    </>
++  );
++}
+diff --git a/components/Icon.js b/components/Icon.js
+index 65a9a8d..21a1584 100644
+--- a/components/Icon.js
++++ b/components/Icon.js
+@@ -1,6 +1,6 @@
+ // components/Icon.js
+ "use client";
+-import { TShirt, House, MapTrifold, DeviceMobile, Briefcase, ChatCircleText, TrendUp, Heart, GraduationCap, Trophy, Medal, Confetti, Wallet, Bell, ArrowClockwise, ArrowCounterClockwise,
++import { Radio, SkipBack, SkipForward, Power, TShirt, House, MapTrifold, DeviceMobile, Briefcase, ChatCircleText, TrendUp, Heart, GraduationCap, Trophy, Medal, Confetti, Wallet, Bell, ArrowClockwise, ArrowCounterClockwise,
+   Plus, Minus, X, CaretLeft, Buildings, Books, FirstAidKit, Plant, Bed, UsersThree, Star, Door, MusicNotes, Storefront, Eye, EyeSlash, ListBullets, ArrowRight, Check, Crosshair,
+   Lightning, Smiley, BookOpen, HeartStraight, Coins, Gift, Car, PersonSimpleWalk, Warning, DiceFive, FastForward, Moon, Sun, ChatsCircle, UserFocus, CaretRight, Lock, Phone, HandCoins, Siren, Timer,
+   ShoppingBag, CookingPot, Couch, GameController, Package, Tag, ArrowsClockwise, Gear, SignOut, CellSignalFull, WifiHigh, BatteryFull, SmileyMeh, SmileySad, SmileyWink, CaretDown, CaretUp, Cube, Backpack, Bank, Handshake, Newspaper, Sparkle, ArrowsOutCardinal, Fan, Wrench, Presentation, Image, UploadSimple, SpeakerHigh, SpeakerSlash, Bus, Taxi, SteeringWheel, MapPin, NavigationArrow, IdentificationBadge, DoorOpen, Megaphone, Users, ArrowLeft, SoccerBall, AirplaneTilt, Ticket, Receipt, ArrowUUpLeft, Trash, Clock, LockSimple, CheckCircle, XCircle, ShieldCheck, Repeat, DotsThreeVertical, MagnifyingGlass, PaperPlaneRight, Prohibit, Flag, UserCircle, ArrowDown, WarningCircle, Code , Pause, Play, Copy } from "@phosphor-icons/react";
+@@ -23,7 +23,7 @@ const ICONS = { home: House, map: MapTrifold, phone: DeviceMobile, jobs: Briefca
+   meh: SmileyMeh, sad: SmileySad, wink: SmileyWink, down: CaretDown, up: CaretUp, cube: Cube, backpack: Backpack, bank: Bank, deal: Handshake, news: Newspaper, sparkle: Sparkle, move: ArrowsOutCardinal, fan: Fan, wrench: Wrench, billboard: Presentation, image: Image, upload: UploadSimple, music: MusicNotes, sound: SpeakerHigh, mute: SpeakerSlash,
+   bus: Bus, keke: Taxi, wheel: SteeringWheel, pin: MapPin, nav: NavigationArrow, driver: IdentificationBadge, door: DoorOpen, horn: Megaphone, users: Users, left: ArrowLeft, right: ArrowRight,
+   ball: SoccerBall, plane: AirplaneTilt, ticket: Ticket, receipt: Receipt, undo: ArrowUUpLeft, trash: Trash, clock: Clock, lockS: LockSimple, win: CheckCircle, lose: XCircle, shield: ShieldCheck, repeat: Repeat, roulette: Roulette,
+-  pause: Pause, play: Play, more: DotsThreeVertical, search: MagnifyingGlass, send: PaperPlaneRight, block: Prohibit, flag: Flag, person: UserCircle, arrowDown: ArrowDown, alert: WarningCircle, code: Code, copy: Copy };
++  pause: Pause, play: Play, radio: Radio, prevStation: SkipBack, nextStation: SkipForward, power: Power, more: DotsThreeVertical, search: MagnifyingGlass, send: PaperPlaneRight, block: Prohibit, flag: Flag, person: UserCircle, arrowDown: ArrowDown, alert: WarningCircle, code: Code, copy: Copy };
+ export const KIND_ICON = { hall: "hall", library: "library", faculty: "faculty", hospital: "hospital", farm: "farm", hostel: "hostel", social: "social", statue: "statue", gate: "gate", club: "club", town: "town" };
+ 
+ /** One consistent icon set (Phosphor, regular weight). Decorative by default; pass `label` when the icon stands alone. */
+diff --git a/components/SettingsScreen.js b/components/SettingsScreen.js
+index b3b526e..31b9de7 100644
+--- a/components/SettingsScreen.js
++++ b/components/SettingsScreen.js
+@@ -30,7 +30,7 @@ const TABS = [
+   ["character", "Character & Appearance", "sparkle", "Body, hair and clothes"],
+   ["account", "Account", "driver", "Email and login"],
+   ["gameplay", "Gameplay", "game", "Camera and name tags"],
+-  ["audio", "Audio", "sound", "Music and sound effects"],
++  ["audio", "Audio", "sound", "Music, effects, vehicles, town and radio"],
+   ["notifications", "Notifications", "bell", "Pop-ups and alerts"],
+   ["privacy", "Privacy & Security", "shield", "Who can find you, password"],
+   ["accessibility", "Accessibility", "eye", "Motion, text and contrast"],
+@@ -422,7 +422,7 @@ export default function SettingsScreen({ onClose, onLogout, loggingOut }) {
+       </Card>
+     ),
+ 
+-    audio: draft && (
++    audio: draft && (<>
+       <Card title="Sound" note="Your choice is saved to your account." icon="sound">
+         <Toggle title="Background music" note={`${MUSIC.title} · ${MUSIC.artist}`} checked={draft.audio.music} onChange={setPref("audio", "music")} />
+         <Slider id="sx-music" title="Music volume" value={draft.audio.musicVolume} disabled={!draft.audio.music} onChange={setPref("audio", "musicVolume")} />
+@@ -430,7 +430,27 @@ export default function SettingsScreen({ onClose, onLogout, loggingOut }) {
+         <Slider id="sx-sfx" title="Effects volume" value={draft.audio.sfxVolume} disabled={!draft.audio.sfx} onChange={setPref("audio", "sfxVolume")} />
+         <p className="sx-foot">{!draft.audio.music && !draft.audio.sfx ? "The game is silent." : "Changes play at once so you can hear them."} Browsers start sound after your first tap.</p>
+       </Card>
+-    ),
++      <Card title="Vehicles and town" note="Engines, horns, traffic, the sound of the town and the car radio. Each has its own volume and mute." icon="ride">
++        <Slider id="sx-master" title="Master volume" value={draft.audio.masterVolume} disabled={draft.audio.masterMute} onChange={setPref("audio", "masterVolume")} />
++        <Toggle title="Mute everything" note="Music, effects, vehicles, town and radio" checked={draft.audio.masterMute} onChange={setPref("audio", "masterMute")} />
++        <Slider id="sx-engine" title="Engine sounds (your vehicle)" value={draft.audio.engineVolume} disabled={draft.audio.engineMute} onChange={setPref("audio", "engineVolume")} />
++        <Toggle title="Mute engine sounds" checked={draft.audio.engineMute} onChange={setPref("audio", "engineMute")} />
++        <Slider id="sx-horn" title="Vehicle horns" value={draft.audio.hornVolume} disabled={draft.audio.hornMute} onChange={setPref("audio", "hornVolume")} />
++        <Toggle title="Mute horns" checked={draft.audio.hornMute} onChange={setPref("audio", "hornMute")} />
++        <div className="sx-row" data-sound="none">
++          <span className="sx-rowtxt"><b>Your horn</b><small>Automatic uses the horn that belongs to your vehicle. Hold the horn button (or H) to keep it sounding.</small></span>
++          <select aria-label="Your horn" value={draft.audio.hornStyle} onChange={(e) => setPref("audio", "hornStyle")(e.target.value)}>
++            <option value="auto">Automatic (your vehicle's own)</option><option value="standard">Standard</option><option value="deep">Deep</option><option value="bright">Bright</option><option value="air">Air horn</option>
++          </select>
++        </div>
++        <Slider id="sx-traffic" title="Traffic (other vehicles and distant road)" value={draft.audio.trafficVolume} disabled={draft.audio.trafficMute} onChange={setPref("audio", "trafficVolume")} />
++        <Toggle title="Mute traffic" checked={draft.audio.trafficMute} onChange={setPref("audio", "trafficMute")} />
++        <Slider id="sx-town" title="Town ambience (people, birds, surroundings)" value={draft.audio.townVolume} disabled={draft.audio.townMute} onChange={setPref("audio", "townVolume")} />
++        <Toggle title="Mute town ambience" checked={draft.audio.townMute} onChange={setPref("audio", "townMute")} />
++        <Slider id="sx-radio" title="Car radio volume" value={draft.audio.radioVolume} disabled={draft.audio.masterMute} onChange={setPref("audio", "radioVolume")} />
++        <p className="sx-foot">The radio is switched on and off in the car. On iPhone and iPad the radio follows the device volume.</p>
++      </Card>
++    </>),
+ 
+     notifications: draft && (
+       <Card title="Pop-ups and alerts" note="Messages always show their unread badge on the phone." icon="bell">
+diff --git a/components/TripHud.js b/components/TripHud.js
+index cf871a3..187b769 100644
+--- a/components/TripHud.js
++++ b/components/TripHud.js
+@@ -9,6 +9,7 @@
+ import { useEffect, useRef, useState } from "react";
+ import { Icon } from "./Icon";
+ import SteerButtons from "./SteerButtons";
++import CarRadio from "./CarRadio";
+ import { playSound } from "@/lib/sound";
+ import { fmtDuration } from "@/lib/travel.js";
+ import "./travel.css";
+@@ -41,8 +42,14 @@ export function Hold({ className, label, onDown, onUp, children }) {
+ 
+ export default function TripHud({ trip, placeName, st, input, miniRef, previewRef, onCancel }) {
+   const [preview, setPreview] = useState(false), phase = st?.phase ?? "intro", drive = trip.mode === "car" && !trip.driver, steering = phase === "drive", walking = ["trek", "approach", "walk", "afoot", "door"].includes(phase), doorOn = phase === "door" && st?.hasDoor;
+-  // the H key is the horn on a keyboard (never while typing, never with a shortcut such as Ctrl+H, and not on key repeat: one press, one honk)
+-  useEffect(() => { if (!steering) return; const k = (e) => { if (e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.target?.closest?.("input,textarea,select")) return; if (e.code === "KeyH" || (!e.code && e.key?.toLowerCase() === "h")) playSound("horn"); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [steering]);
++  // the H key is the horn on a keyboard: it sounds for as long as it is held (never while typing, never with a shortcut such as Ctrl+H, and key repeat does not matter: held is held)
++  useEffect(() => {
++    if (!steering) return;
++    const typing = (e) => e.metaKey || e.ctrlKey || e.altKey || e.target?.closest?.("input,textarea,select"), isH = (e) => e.code === "KeyH" || (!e.code && e.key?.toLowerCase() === "h");
++    const down = (e) => { if (!typing(e) && isH(e)) input.horn = true; }, up = (e) => { if (isH(e)) input.horn = false; }, off = () => { input.horn = false; };
++    window.addEventListener("keydown", down); window.addEventListener("keyup", up); window.addEventListener("blur", off);
++    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); window.removeEventListener("blur", off); input.horn = false; };
++  }, [steering, input]);
+   useEffect(() => { if (!preview) return; const k = (e) => e.key === "Escape" && setPreview(false); document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [preview]);
+   const m = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + " km" : n + " m");
+   const vname = trip.mode === "bus" ? "bus" : trip.mode === "keke" ? "keke" : "car";
+@@ -78,7 +85,10 @@ export default function TripHud({ trip, placeName, st, input, miniRef, previewRe
+           <SteerButtons input={input} />
+           <div className="th-pedals">
+             <div className="th-aux">
+-              <button type="button" className="th-btn th-horn" aria-label="Horn" data-sound="none" style={NO_GESTURE} onPointerDown={() => playSound("horn")} onClick={(e) => { if (e.detail === 0) playSound("horn"); /* Enter or Space on the focused button: a pointer press has already honked */ }} onContextMenu={(e) => e.preventDefault()}><Icon name="horn" size={22} weight="fill" /></button>
++              <button type="button" className="th-btn th-horn" aria-label="Horn: hold to sound it" data-sound="none" style={NO_GESTURE}
++                onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); input.horn = true; e.preventDefault(); }} onPointerUp={() => (input.horn = false)} onPointerCancel={() => (input.horn = false)} onLostPointerCapture={() => (input.horn = false)}
++                onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { input.horn = true; e.preventDefault(); } }} onKeyUp={(e) => { if (e.key === " " || e.key === "Enter") input.horn = false; }} onBlur={() => (input.horn = false)} onContextMenu={(e) => e.preventDefault()}><Icon name="horn" size={22} weight="fill" /></button>
++              <CarRadio active />
+               <button type="button" className="th-btn th-exit" aria-label="Exit car" data-sound="none" disabled={!!st?.exiting} onClick={() => { input.exit = true; playSound("tap"); }}>
+                 <Icon name="door" size={20} weight="bold" /> <span>{st?.exiting ? "Stopping…" : "Exit car"}</span>
+               </button>
+@@ -92,9 +102,10 @@ export default function TripHud({ trip, placeName, st, input, miniRef, previewRe
+               <b>GAS</b>
+             </Hold>
+           </div>
+-          <div className="th-keys" aria-hidden="true"><span><kbd>W</kbd><kbd>↑</kbd> Gas</span><span><kbd>S</kbd><kbd>↓</kbd> Brake · hold to reverse</span><span><kbd>A</kbd><kbd>D</kbd> Steer</span><span><kbd>H</kbd> Horn</span><span><kbd>E</kbd> Exit car</span></div>
++          <div className="th-keys" aria-hidden="true"><span><kbd>W</kbd><kbd>↑</kbd> Gas</span><span><kbd>S</kbd><kbd>↓</kbd> Brake · hold to reverse</span><span><kbd>A</kbd><kbd>D</kbd> Steer</span><span><kbd>H</kbd> Horn (hold)</span><span><kbd>R</kbd> Radio</span><span><kbd>E</kbd> Exit car</span></div>
+         </>
+       )}
++      {phase === "ride" && <CarRadio active float />}
+       {phase === "afoot" && (st?.canEnter || st?.canClose) && (
+         <div className="th-act">
+           {st.canEnter && <button type="button" className="th-btn th-act-btn" data-sound="none" onClick={() => { input.enter = true; playSound("tap"); }}><Icon name="ride" size={20} weight="bold" /> Get in car</button>}
+diff --git a/components/car-radio.css b/components/car-radio.css
+new file mode 100644
+index 0000000..c89bde1
+--- /dev/null
++++ b/components/car-radio.css
+@@ -0,0 +1,54 @@
++/* components/car-radio.css: the car radio (components/CarRadio.js). Uses the trip HUD's colours (--th-*, set in travel.css) and sits top left under the trip card, so the road
++   ahead, the vehicle and the pedals are never covered. Flat colours. Touch targets are at least 44px on phones. */
++.th .th-radio { width: var(--th-aux); height: var(--th-aux); min-height: 0; padding: 0; border-radius: 50%; background: var(--th-surface); color: #fff; border: 1px solid var(--th-line); box-shadow: none; display: grid; place-items: center; }
++.th .th-radio:hover:not(:disabled) { background: #1d2a47; border-color: rgba(255, 255, 255, 0.3); }
++.th .th-radio[data-on="1"] { color: #06210f; background: var(--th-ok); border-color: var(--th-ok); }
++.th .th-radio-float { position: absolute; right: var(--th-r); bottom: calc(var(--th-bottom) + 6px); } /* riding (not steering): there is no pedal row, so it sits in the corner */
++
++.th .cr, .th .cr-chip { position: absolute; left: var(--th-l); z-index: 3; }
++.th .cr { top: calc(var(--th-top) + 104px); width: min(320px, calc(100vw - var(--th-l) - 112px)); min-width: 236px; max-height: calc(100dvh - var(--th-top) - var(--th-bottom) - 120px); overflow: auto; overscroll-behavior: contain; box-sizing: border-box; display: grid; gap: 10px; padding: 12px; border-radius: 18px; background: var(--th-surface); border: 1px solid var(--th-line); color: #fff; box-shadow: 0 16px 36px -14px rgba(0, 0, 0, 0.7); }
++.cr header { display: flex; align-items: center; gap: 10px; }
++.cr header b { flex: 1; font: 700 0.9rem/1 var(--font-ui); letter-spacing: 0.02em; }
++.th .cr button { min-height: 0; font: inherit; }
++.th .cr-pw, .th .cr-x { width: 36px; height: 36px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: #1b2540; color: #fff; border: 1px solid var(--th-line); }
++.th .cr-pw[data-on="1"] { background: var(--th-ok); color: #06210f; border-color: var(--th-ok); }
++.th .cr-x { background: transparent; border-color: transparent; }
++.cr-screen { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: #070c18; border: 1px solid rgba(255, 255, 255, 0.1); min-height: 52px; }
++.cr-screen[data-on="1"] { border-color: rgba(63, 208, 138, 0.45); }
++.cr-txt { min-width: 0; flex: 1; display: grid; gap: 3px; }
++.cr-txt b { font: 700 0.98rem/1.2 var(--font-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++.cr-txt span { font-size: 0.8rem; color: #8fe9b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++.cr-screen:not([data-on="1"]) .cr-txt span { color: #8b96ad; }
++/* the little level bars: still when off or connecting, moving while it plays (not for people who asked for less motion) */
++.cr-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 18px; flex: none; }
++.cr-eq b { display: block; width: 3px; height: 30%; border-radius: 2px; background: #5a6683; }
++.cr-eq[data-live="1"] b { background: var(--th-ok); animation: cr-bar 0.9s ease-in-out infinite; }
++.cr-eq[data-live="1"] b:nth-child(2) { animation-delay: -0.3s; } .cr-eq[data-live="1"] b:nth-child(3) { animation-delay: -0.6s; } .cr-eq[data-live="1"] b:nth-child(4) { animation-delay: -0.15s; }
++.cr-eq[data-busy="1"] b { background: var(--th-amber); }
++@keyframes cr-bar { 0%, 100% { height: 25%; } 50% { height: 100%; } }
++.cr-spin { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.25); border-top-color: var(--th-amber); animation: cr-rot 0.8s linear infinite; }
++@keyframes cr-rot { to { transform: rotate(360deg); } }
++.cr-ctl { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 8px; }
++.th .cr-ctl button { height: 46px; border-radius: 14px; display: grid; place-items: center; background: #1b2540; color: #fff; border: 1px solid var(--th-line); }
++.th .cr-ctl button:hover:not(:disabled) { background: #26345a; }
++.th .cr-ctl .cr-play { background: #fff; color: #161b26; border-color: #fff; }
++.th .cr-ctl button:disabled { opacity: 0.4; }
++.cr-vol { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; }
++.cr-vol input { width: 100%; min-height: 32px; accent-color: var(--th-ok); }
++.cr-vol output { min-width: 3ch; text-align: right; font-size: 0.8rem; color: #c8d0e0; }
++.cr-note { margin: 0; font-size: 0.76rem; color: var(--th-amber); }
++.th .cr-more { height: 36px; border-radius: 10px; background: transparent; color: #cfd7e8; border: 1px dashed rgba(255, 255, 255, 0.25); }
++.cr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 190px; overflow: auto; }
++.th .cr-list button { width: 100%; min-height: 44px; display: grid; gap: 1px; text-align: left; padding: 7px 12px; border-radius: 12px; background: #131c33; color: #fff; border: 1px solid transparent; }
++.th .cr-list button[aria-current="true"] { border-color: var(--th-ok); background: #14301f; }
++.cr-list b { font: 650 0.88rem/1.2 var(--font-ui); } .cr-list small { font-size: 0.74rem; color: #98a4bd; }
++.cr-key { margin: 0; font-size: 0.72rem; color: #7d89a3; display: none; }
++.cr-key kbd { background: #1b2540; border: 1px solid var(--th-line); border-radius: 5px; padding: 0 5px; margin: 0 2px; font: inherit; }
++@media (hover: hover) and (pointer: fine) { .cr-key { display: block; } }
++
++/* the one-line "now playing" chip under the trip card, while the panel is closed */
++.th .cr-chip { top: calc(var(--th-top) + 104px); display: inline-flex; align-items: center; gap: 8px; max-width: min(220px, calc(100vw - var(--th-l) - 120px)); min-height: 30px; padding: 0 12px 0 10px; border-radius: 99px; background: var(--th-surface); color: #fff; border: 1px solid rgba(63, 208, 138, 0.45); font: 600 0.76rem/1 var(--font-ui); }
++.cr-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++/* a phone on its side has hardly any height: the panel shrinks to the essentials, the station list scrolls */
++@media (max-height: 480px) { .th .cr { top: calc(var(--th-top) + 8px); left: calc(var(--th-l) + var(--th-info-w) + 8px); width: min(300px, calc(100vw - var(--th-l) - var(--th-info-w) - var(--th-mini) - 40px)); max-height: calc(100dvh - var(--th-top) - 14px); gap: 6px; padding: 9px; } .cr-list { max-height: 110px; } .th .cr-chip { top: calc(var(--th-top) + 74px); } }
++@media (prefers-reduced-motion: reduce) { .cr-eq[data-live="1"] b, .cr-spin { animation: none; } .cr-eq[data-live="1"] b { height: 70%; } }
+diff --git a/lib/audio/ambience.js b/lib/audio/ambience.js
+new file mode 100644
+index 0000000..484500b
+--- /dev/null
++++ b/lib/audio/ambience.js
+@@ -0,0 +1,121 @@
++// lib/audio/ambience.js
++// The sound of the town around the listener. Built live (no sound files), in two layers, and blended by the weights from zones.js so there are no hard borders:
++//
++//   BEDS: always running, each one turned up or down by the weight of what causes it, with slow random drift so none of them is a loop you can hear repeat:
++//     traffic    the low wash of cars and keke on roads you cannot see (more on busy roads and the expressway)
++//     crowd      a murmur of many people talking: noise through vowel-like formants, each drifting on its own
++//     nature     leaves and a light breeze (quietest near roads and markets)
++//     crickets   at night, in the quiet places
++//     wind       the rush of speed on the expressway
++//     generator  a petrol generator humming somewhere near a hostel: positioned at the hostel itself
++//   EVENTS: single sounds that happen now and then, placed in the world around the listener (so you can tell where they came from), each limited by how many may be alive:
++//     a distant horn or two, a burst of voices, a trader calling, birds in the day, a speaker thumping bass from a hostel at night
++// What a place gets is decided by its weights: the market has voices and traders, the hostels a hum and a faint bass, the expressway nothing but road and wind.
++import { makePanner, setPannerPos, noiseSource, startNoise, clamp } from "./spatial.js";
++import { HORNS } from "./profiles.js";
++import { playHorn } from "./hornVoice.js";
++
++const VOWELS = [[800, 1200], [520, 1800], [320, 2300], [500, 900], [350, 700]];   // first two formants of a, e, i, o, u
++const rnd = (a, b) => a + Math.random() * (b - a);
++const pick = (a) => a[Math.floor(Math.random() * a.length)];
++const chance = (perMin, dt) => Math.random() < 1 - Math.exp((-perMin * dt) / 60);
++
++/**
++ * ctx, dest: the context and the node the ambience plays into. ch: { traffic(), town() } the current channel levels 0..1. low: a phone (fewer events, no second crowd layer).
++ * Returns { update(dt, W, L), dispose() }. W: the weights from soundWeights(). L: { x, z, night }.
++ */
++export function createAmbience(ctx, dest, ch, { low = false } = {}) {
++  const all = [], src = [], timers = new Set(); let alive = true, driftT = 0, evT = 0, live = 0;
++  const maxLive = low ? 2 : 4;
++  const node = (n) => (all.push(n), n);
++  const bus = (name) => { const g = node(ctx.createGain()); g.gain.value = 0; g.connect(dest); g.name = name; return g; };
++  const trafficBus = bus("traffic"), townBus = bus("town");
++  const hp = (f) => { const x = node(ctx.createBiquadFilter()); x.type = "highpass"; x.frequency.value = f; return x; };
++  const lpf = (f, q = 0.7) => { const x = node(ctx.createBiquadFilter()); x.type = "lowpass"; x.frequency.value = f; x.Q.value = q; return x; };
++  const bpf = (f, q) => { const x = node(ctx.createBiquadFilter()); x.type = "bandpass"; x.frequency.value = f; x.Q.value = q; return x; };
++  const gain = (v = 0) => { const g = node(ctx.createGain()); g.gain.value = v; return g; };
++  const noise = (rate) => { const s = node(noiseSource(ctx, rate)); src.push(s); return s; };
++
++  // ---- beds ----
++  const trafficG = gain(0); { const s = noise(0.92), f = lpf(420); s.connect(f); f.connect(trafficG); const s2 = noise(1.05), f2 = lpf(900); s2.connect(f2); const g2 = gain(0.35); f2.connect(g2); g2.connect(trafficG); trafficG.connect(trafficBus); }   // the wash of traffic swells and fades as cars come and go (see update)
++  const crowdG = gain(0), formants = []; {
++    const layers = low ? 1 : 2;
++    for (let l = 0; l < layers; l++) { const s = noise(0.9 + l * 0.17), pre = hp(180); s.connect(pre); for (const [f0, q] of [[480, 5], [1500, 6], [2700, 7]]) { const b = bpf(f0 * (0.9 + l * 0.2), q), g = gain(0.5); pre.connect(b); b.connect(g); g.connect(crowdG); formants.push(g); } }
++    crowdG.connect(townBus);
++  }
++  const breezeG = gain(0); { const s = noise(0.8), f = bpf(1700, 0.45); s.connect(f); f.connect(breezeG); breezeG.connect(townBus); }
++  const cricketG = gain(0), cricketLfo = []; {
++    for (const [fr, lfoHz] of [[4300, 11], [5100, 14.3]]) { const o = node(ctx.createOscillator()), env = gain(0), l = node(ctx.createOscillator()), d = gain(0.5), off = node(ctx.createConstantSource()); o.frequency.value = fr; l.type = "square"; l.frequency.value = lfoHz * (0.97 + Math.random() * 0.06); off.offset.value = 0.5; l.connect(d); d.connect(env.gain); off.connect(env.gain); const f = bpf(fr, 14); o.connect(f); f.connect(env); env.connect(cricketG); src.push(o, l, off); cricketLfo.push(l); }
++    cricketG.connect(townBus);
++  }
++  const windG = gain(0); { const s = noise(1.2), f = bpf(700, 0.6), h = hp(120); s.connect(f); f.connect(h); h.connect(windG); windG.connect(trafficBus); }
++  // a generator, positioned at the nearest hostel: a 50 Hz engine drone with its buzz
++  const genP = node(makePanner(ctx, { ref: 5, rolloff: 1.5, max: 160 })), genG = gain(0); {
++    const a = node(ctx.createOscillator()), b = node(ctx.createOscillator()), f = lpf(260, 1.2), n = noise(1), nf = lpf(520), ng = gain(0.18);
++    a.type = "sawtooth"; a.frequency.value = 48.7; b.type = "square"; b.frequency.value = 97.8; const bg = gain(0.35); a.connect(f); b.connect(bg); bg.connect(f); n.connect(nf); nf.connect(ng); ng.connect(f); f.connect(genG); genG.connect(genP); genP.connect(townBus); src.push(a, b);
++    const wob = node(ctx.createOscillator()), wd = gain(0.7); wob.frequency.value = 0.35; wob.connect(wd); wd.connect(a.frequency); src.push(wob);   // the engine hunts a little
++  }
++  for (const s of src) { try { if (s.buffer) startNoise(s); else s.start(); } catch { /* ok */ } }
++
++  const drift = () => { for (const g of formants) g.gain.setTargetAtTime(rnd(0.12, 1), ctx.currentTime, rnd(0.25, 0.7)); };
++
++  // ---- events ----
++  const track = (nodes, ms) => { live++; const t = setTimeout(() => { timers.delete(t); live--; for (const n of nodes) { try { n.disconnect(); } catch { /* gone */ } } }, ms); timers.add(t); };
++  const placed = (distMin, distMax, y = 1.5) => { const a = Math.random() * Math.PI * 2, d = rnd(distMin, distMax); return { x: L0.x + Math.cos(a) * d, y, z: L0.z + Math.sin(a) * d, d }; };
++  let L0 = { x: 0, z: 0 };
++  /** One syllable-run of speech-like sound: voiced buzz through two vowel formants. calls: a trader's rising call; otherwise chatter. */
++  function voice(p, kind) {
++    const t0 = ctx.currentTime + 0.02, out = gain(kind === "call" ? 0.5 : 0.34), pan = makePanner(ctx, { ref: 3, rolloff: 1.5, max: 120 }); setPannerPos(pan, p.x, p.y, p.z);
++    const nodes = [out, pan]; out.connect(pan); pan.connect(townBus);
++    const syl = kind === "call" ? Math.floor(rnd(2, 5)) : Math.floor(rnd(4, 10)); let t = t0; const f0 = rnd(95, 240), vib = rnd(4.5, 6.5);
++    for (let i = 0; i < syl; i++) {
++      const dur = kind === "call" ? rnd(0.22, 0.5) : rnd(0.1, 0.24), [a, b] = pick(VOWELS), o = ctx.createOscillator(), e = ctx.createGain(), f1 = ctx.createBiquadFilter(), f2 = ctx.createBiquadFilter(), v = ctx.createOscillator(), vd = ctx.createGain();
++      o.type = "sawtooth"; const base = f0 * (kind === "call" ? 1.1 + i * 0.12 : 1 + rnd(-0.12, 0.12)); o.frequency.setValueAtTime(base, t); o.frequency.linearRampToValueAtTime(base * (kind === "call" ? 1.18 : 1 + rnd(-0.08, 0.08)), t + dur);
++      v.frequency.value = vib; vd.gain.value = base * 0.012; v.connect(vd); vd.connect(o.frequency);
++      f1.type = f2.type = "bandpass"; f1.frequency.value = a; f2.frequency.value = b; f1.Q.value = 6; f2.Q.value = 8;
++      e.gain.setValueAtTime(0.0001, t); e.gain.exponentialRampToValueAtTime(1, t + 0.03); e.gain.setValueAtTime(1, t + dur * 0.7); e.gain.exponentialRampToValueAtTime(0.0001, t + dur);
++      o.connect(f1); o.connect(f2); f1.connect(e); f2.connect(e); e.connect(out); o.start(t); v.start(t); o.stop(t + dur + 0.05); v.stop(t + dur + 0.05); nodes.push(o, e, f1, f2, v, vd);
++      t += dur + (kind === "call" ? rnd(0.04, 0.12) : rnd(0.02, 0.16));
++    }
++    track(nodes, (t - ctx.currentTime) * 1000 + 400);
++  }
++  function chirp(p) {
++    const t0 = ctx.currentTime + 0.02, out = gain(0.12), pan = makePanner(ctx, { ref: 4, rolloff: 1.6, max: 90 }); setPannerPos(pan, p.x, p.y, p.z); out.connect(pan); pan.connect(townBus); const nodes = [out, pan]; let t = t0;
++    const base = rnd(2600, 4800), n = Math.floor(rnd(2, 6));
++    for (let i = 0; i < n; i++) { const o = ctx.createOscillator(), e = ctx.createGain(), d = rnd(0.05, 0.12); o.frequency.setValueAtTime(base * rnd(0.9, 1.1), t); o.frequency.exponentialRampToValueAtTime(base * rnd(0.7, 1.4), t + d); e.gain.setValueAtTime(0.0001, t); e.gain.exponentialRampToValueAtTime(1, t + 0.012); e.gain.exponentialRampToValueAtTime(0.0001, t + d); o.connect(e); e.connect(out); o.start(t); o.stop(t + d + 0.02); nodes.push(o, e); t += d + rnd(0.04, 0.16); }
++    track(nodes, (t - ctx.currentTime) * 1000 + 300);
++  }
++  function bass(p) {   // a hostel's speaker: a soft four-to-the-floor thump heard through walls, a few bars long
++    const t0 = ctx.currentTime + 0.05, out = gain(0.55), f = lpf(210, 0.9), pan = makePanner(ctx, { ref: 6, rolloff: 1.4, max: 140 }); setPannerPos(pan, p.x, p.y, p.z); out.connect(f); f.connect(pan); pan.connect(townBus); const nodes = [out, f, pan], beat = 60 / rnd(98, 112), bars = Math.floor(rnd(6, 12));
++    for (let i = 0; i < bars; i++) { const t = t0 + i * beat, o = ctx.createOscillator(), e = ctx.createGain(); o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.14); e.gain.setValueAtTime(0.0001, t); e.gain.exponentialRampToValueAtTime(1, t + 0.008); e.gain.exponentialRampToValueAtTime(0.0001, t + 0.22); o.connect(e); e.connect(out); o.start(t); o.stop(t + 0.25); nodes.push(o, e); }
++    track(nodes, bars * beat * 1000 + 600);
++  }
++  function farHorn() {   // somewhere out of sight on the road: one or two toots, muffled by distance (the traffic channel)
++    const p = placed(70, 160, 1), engine = pick(["compact", "compact", "saloon", "minibus", "keke", "deep"]), H = HORNS[engine] ?? HORNS.compact;
++    live++; const h = playHorn(ctx, trafficBus, H, { pattern: pick(["toot", "toot", "double", engine === "keke" ? "peep" : "toot"]), level: 0.5, pos: p, dist: p.d }); const t = setTimeout(() => { timers.delete(t); live--; }, 1800); timers.add(t); void h;
++  }
++
++  let sinceBeds = 0;
++  return {
++    /** dt seconds. W: soundWeights(). L: { x, z, night, hostelAt }. */
++    update(dt, W, L) {
++      if (!alive) return; L0 = L; const t = ctx.currentTime, T = ch.traffic(), C = ch.town();
++      trafficBus.gain.setTargetAtTime(T, t, 0.4); townBus.gain.setTargetAtTime(C, t, 0.4);
++      const tc = 1.4;
++      trafficG.gain.setTargetAtTime(0.5 * W.traffic, t, tc); windG.gain.setTargetAtTime(0.5 * W.wind, t, tc);
++      crowdG.gain.setTargetAtTime(0.34 * W.crowd, t, tc); breezeG.gain.setTargetAtTime(0.05 + 0.09 * W.nature, t, tc);
++      cricketG.gain.setTargetAtTime(L.night ? 0.05 * W.nature : 0, t, 2); genG.gain.setTargetAtTime(0.55 * W.generator, t, tc);
++      if (W.hostelAt) setPannerPos(genP, W.hostelAt.x, 1, W.hostelAt.z);
++      if ((driftT -= dt) <= 0) { drift(); driftT = rnd(0.3, 0.8); trafficG.gain.setTargetAtTime(0.5 * W.traffic * rnd(0.75, 1.15), t, 1.2); }   // the wash of traffic swells and fades
++      if (T < 0.02 && C < 0.02) return;   // everything is off: no events either
++      evT += dt; if (evT < 0.4) return; const step = evT; evT = 0; if (live >= maxLive) return;
++      const f = low ? 0.6 : 1;
++      if (T > 0.02 && chance(W.traffic * 3.2 * f * (W.name === "highway" ? 0.5 : 1), step)) farHorn();
++      if (C > 0.02 && chance(W.crowd * 7 * f, step)) voice(placed(5, 38), "chat");
++      if (C > 0.02 && chance(W.market * 3.4 * f, step)) voice(placed(10, 45), "call");
++      if (C > 0.02 && !L.night && chance(W.nature * 5 * f, step)) chirp(placed(8, 40, rnd(3, 9)));
++      if (C > 0.02 && L.night && chance(W.hostel * 1.1 * f, step)) bass(W.hostelAt ? { x: W.hostelAt.x, y: 2, z: W.hostelAt.z, d: 40 } : placed(40, 90, 2));
++    },
++    dispose() { alive = false; for (const t of timers) clearTimeout(t); timers.clear(); for (const s of src) { try { s.stop(); } catch { /* stopped */ } } for (const n of all) { try { n.disconnect(); } catch { /* gone */ } } src.length = all.length = 0; },
++  };
++}
+diff --git a/lib/audio/engineModel.js b/lib/audio/engineModel.js
+new file mode 100644
+index 0000000..14c6a70
+--- /dev/null
++++ b/lib/audio/engineModel.js
+@@ -0,0 +1,73 @@
++// lib/audio/engineModel.js
++// What an engine is doing, from how fast the vehicle goes and how hard the driver is on the throttle: its RPM, which gear an automatic gearbox would be in,
++// and how loaded it is. Pure JS (no Web Audio, no DOM): engineVoice.js turns the result into sound and the tests check the behaviour.
++//
++//   - it idles when the vehicle stands, and revs freely (like a torque converter) when you floor it from a standstill,
++//   - in gear the RPM follows the road speed, so the revs climb through each gear and fall at each upshift (the gear changes you hear),
++//   - a gear change takes a moment: the throttle is cut, the revs fall (or blip on a downshift) towards the new gear, then power comes back,
++//   - the RPM has weight: it rises and falls at a limited rate instead of jumping, and never goes above the redline (it bounces off the limiter),
++//   - an electric motor has no gears or idle: its whine rises with speed,
++//   - starting: it cranks, catches, and settles at idle; switching off lets the revs fall away.
++const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
++const SHIFT_S = 0.3;
++
++/** A new engine, switched off. */
++export function createEngine(P) { return { P, mode: "off", t: 0, rpm: 0, gear: 1, shiftT: 0, shiftDir: 0, load: 0, thr: 0, limiter: 0, wob: Math.random() * 6 }; }
++
++/** Turn the key: it cranks for about half a second, catches, flares and settles to idle. */
++export function startEngine(e) { if (e.mode === "run" || e.mode === "crank") return; e.mode = e.P.ev ? "run" : "crank"; e.t = 0; e.gear = 1; e.shiftT = 0; if (e.P.ev) e.rpm = 0; }
++/** Switch off: the revs fall away (the voice fades out as rpm reaches 0). */
++export function stopEngine(e) { if (e.mode !== "off") { e.mode = "stopping"; e.t = 0; } }
++export const isSilent = (e) => e.mode === "off" || (e.mode === "stopping" && e.rpm < 60);
++
++/** The gear for a speed: the lowest one whose top speed is above it (what a gearbox holding revs low would pick). */
++function gearRpm(P, gear, speed) {
++  const top = P.gears[gear - 1], span = (P.red * 0.94 - P.idle);
++  return P.idle + span * clamp(speed / top, 0, 1.12);
++}
++
++/**
++ * Advance one step. in: { speed (m/s, >= 0), throttle (0..1), dt }. Returns the engine, whose rpm, gear, load (0..1) and rpmN (0..1 between idle and redline) are what the sound needs.
++ */
++export function stepEngine(e, { speed = 0, throttle = 0, dt = 1 / 60 }) {
++  const P = e.P; dt = clamp(dt, 0, 0.25); speed = Math.max(0, speed); throttle = clamp(throttle, 0, 1); e.t += dt; e.thr += (throttle - e.thr) * (1 - Math.exp(-dt * 12));
++  if (P.ev) { // a motor: no gears, no idle; the whine follows the speed (with a little extra under load)
++    if (e.mode === "stopping") { e.rpmN = Math.max(0, (e.rpmN ?? 0) - dt * 1.6); e.rpm = e.rpmN * 100; if (e.rpmN <= 0) e.mode = "off"; e.load = 0; return e; }
++    if (e.mode === "off") { e.rpm = 0; e.rpmN = 0; e.load = 0; return e; }
++    const want = clamp(speed / 38, 0, 1) * 0.92 + e.thr * 0.08;
++    e.rpmN = (e.rpmN ?? 0) + (want - (e.rpmN ?? 0)) * (1 - Math.exp(-dt * 7)); e.rpm = e.rpmN * 100; e.load = clamp(0.12 + e.thr * 0.88, 0, 1); e.gear = 1; return e;
++  }
++  const span = P.red - P.idle;
++  if (e.mode === "off") { e.rpm = 0; e.load = 0; e.rpmN = 0; return e; }
++  if (e.mode === "crank") { // the starter turns it over unevenly, then it catches and flares above idle
++    if (e.t < 0.55) { e.rpm = 210 + Math.sin(e.t * 34) * 55 + Math.sin(e.t * 13) * 30; e.load = 0.25; e.rpmN = 0; return e; }
++    if (e.t < 0.75) { e.rpm = clamp(e.rpm + (P.idle * 1.5 - e.rpm) * (1 - Math.exp(-dt * 18)), 0, P.red); e.load = 0.5; e.rpmN = (e.rpm - P.idle) / span; return e; }
++    e.mode = "run";
++  }
++  if (e.mode === "stopping") { e.rpm = Math.max(0, e.rpm - (700 + e.rpm * 2.2) * dt); e.load = 0; e.rpmN = clamp((e.rpm - P.idle) / span, 0, 1); if (e.rpm <= 0) e.mode = "off"; return e; }
++
++  // ---- the gearbox ----
++  const top = P.gears.length, up = P.idle + span * (0.5 + 0.38 * e.thr), down = P.idle + span * (0.17 + 0.06 * e.thr);
++  if (e.shiftT > 0) e.shiftT = Math.max(0, e.shiftT - dt);
++  else if (speed > 0.8) {
++    const r = gearRpm(P, e.gear, speed);
++    if (e.gear < top && r > up) { e.gear++; e.shiftT = SHIFT_S; e.shiftDir = 1; }
++    else if (e.gear > 1 && r < down) { e.gear--; e.shiftT = SHIFT_S * 0.8; e.shiftDir = -1; }
++    else if (e.gear > 1 && e.thr > 0.9 && gearRpm(P, e.gear - 1, speed) < P.red * 0.8) { e.gear--; e.shiftT = SHIFT_S * 0.8; e.shiftDir = -1; }   // kickdown: floor it and it drops a gear
++  } else if (e.gear > 1) { e.gear = 1; e.shiftT = 0; }
++
++  // ---- the revs ----
++  const shifting = e.shiftT > 0, inGear = gearRpm(P, e.gear, speed);
++  let target;
++  if (speed < 1.2) target = P.idle + span * 0.62 * Math.pow(e.thr, 1.2) + (e.thr < 0.04 ? Math.sin((e.wob += dt * 5.5)) * 14 : 0);   // standing: idle, or revving freely
++  else if (shifting) target = e.shiftDir > 0 ? Math.max(P.idle * 1.1, inGear * 0.92) : inGear * 1.05;   // between gears: heading for where the new gear will put it
++  else target = Math.max(inGear, P.idle + span * 0.45 * e.thr * (speed < 5 ? 1 : 0));
++  const rising = target > e.rpm, rate = rising ? 2600 + 7000 * (0.25 + e.thr) : 2400 + e.rpm * 0.9;   // RPM per second: it takes a moment to rev, and a moment to fall
++  e.rpm += clamp(target - e.rpm, -rate * dt, rate * dt);
++  if (e.rpm > P.red * 0.985) { e.limiter = Math.min(1, e.limiter + dt * 8); e.rpm = P.red * 0.985 - e.limiter * 120; } else e.limiter = Math.max(0, e.limiter - dt * 4);   // bounces off the limiter
++  e.rpm = clamp(e.rpm, P.idle * 0.9, P.red);
++  e.rpmN = clamp((e.rpm - P.idle) / span, 0, 1);
++  // load: how hard it is working. A gear change cuts it; coasting in gear (engine braking) is light; throttle on a loaded engine is heavy
++  e.load = clamp((shifting ? 0.12 : 0.1 + 0.9 * e.thr) * (0.75 + 0.25 * e.rpmN), 0, 1);
++  return e;
++}
+diff --git a/lib/audio/engineVoice.js b/lib/audio/engineVoice.js
+new file mode 100644
+index 0000000..c53e3b2
+--- /dev/null
++++ b/lib/audio/engineVoice.js
+@@ -0,0 +1,69 @@
++// lib/audio/engineVoice.js
++// One engine, as sound. A voice is a small Web Audio graph built from an engine profile (profiles.js) and driven every few frames by the engine model (engineModel.js):
++//
++//   exhaust pulse: two oscillators playing the profile's harmonic stack at the firing frequency (the second a few cents off, so the pair slowly beats, like a real engine)
++//   + a half-order lump (triangle at half the firing rate) + a diesel clatter (the sound pulsing at the firing rate)   ->  a low-pass that opens with throttle and revs
++//   + intake / mechanical noise (band-passed noise that rises with revs)
++//   all of it with a slow random wander in pitch, so no two revolutions are exactly alike: it never sounds like a loop, and there are no samples to repeat.
++//
++// An "exterior" voice (another vehicle) also passes through an air filter (far = muffled) and a panner (placed in the world); your own vehicle's voice goes straight out.
++// A voice is cheap to run (about a dozen nodes; the light version about eight), is created once, and is disposed completely when its vehicle goes.
++import { makePanner, setPannerPos, noiseSource, startNoise, airCutoff, clamp } from "./spatial.js";
++
++const waves = new WeakMap();
++/** The exhaust pulse of a profile: harmonic n with weight n^-tilt (even ones scaled by `even`). Built once per profile per context. */
++function pulseWave(ctx, P) {
++  let m = waves.get(ctx); if (!m) waves.set(ctx, (m = new Map()));
++  let w = m.get(P); if (w) return w;
++  const n = (P.wave?.n ?? 20) + 1, re = new Float32Array(n), im = new Float32Array(n);
++  for (let h = 1; h < n; h++) im[h] = Math.pow(h, -(P.wave?.tilt ?? 1)) * (h % 2 === 0 ? P.wave?.even ?? 0.8 : 1);
++  w = ctx.createPeriodicWave(re, im, { disableNormalization: false }); m.set(P, w); return w;
++}
++
++/**
++ * ctx, dest: where to play. P: an engine profile. opts: { spatial (exterior: panned and filtered by distance), lite (fewer nodes, for phones) }.
++ * Returns { update(s), setPosition(x, y, z), fadeOut(sec), dispose(), alive }.
++ */
++export function createEngineVoice(ctx, dest, P, { spatial = false, lite = false } = {}) {
++  const t0 = ctx.currentTime, all = [], src = [];
++  const node = (n) => (all.push(n), n);
++  const out = node(ctx.createGain()); out.gain.value = 0;
++  let air = null, panner = null;
++  if (spatial) { air = node(ctx.createBiquadFilter()); air.type = "lowpass"; air.frequency.value = 12000; panner = node(makePanner(ctx)); out.connect(air); air.connect(panner); panner.connect(dest); } else out.connect(dest);
++
++  const lp = node(ctx.createBiquadFilter()); lp.type = "lowpass"; lp.Q.value = P.ev ? 2.2 : 0.8; lp.frequency.value = P.cut[0];
++  const am = node(ctx.createGain()); am.gain.value = 1 - (P.knock ?? 0) * 0.5; lp.connect(am); am.connect(out);
++  const wave = pulseWave(ctx, P), f0 = P.ev ? P.fMin : Math.max(8, (P.idle / 60) * P.cyl / 2);
++  const osc = (type, detune = 0) => { const o = node(ctx.createOscillator()); if (type) o.type = type; else o.setPeriodicWave(wave); o.frequency.value = f0; o.detune.value = detune; src.push(o); return o; };
++  const mainOsc = osc(null), g1 = node(ctx.createGain()); g1.gain.value = 0.55; mainOsc.connect(g1); g1.connect(lp);
++  let osc2 = null; if (!lite) { osc2 = osc(null, 7 + Math.random() * 6); const g2 = node(ctx.createGain()); g2.gain.value = 0.38; osc2.connect(g2); g2.connect(lp); }
++  let sub = null; if (P.sub > 0) { sub = osc("triangle"); const gs = node(ctx.createGain()); gs.gain.value = P.sub * 0.55; sub.connect(gs); gs.connect(lp); }
++  let knock = null; if ((P.knock ?? 0) > 0 && !lite) { knock = osc("sine"); const kd = node(ctx.createGain()); kd.gain.value = P.knock * 0.5; knock.connect(kd); kd.connect(am.gain); }
++  // intake and mechanical noise, past the tone filter so it keeps its hiss
++  const ns = node(noiseSource(ctx, 0.9 + Math.random() * 0.2)), bp = node(ctx.createBiquadFilter()), gn = node(ctx.createGain()); bp.type = "bandpass"; bp.Q.value = 0.7; bp.frequency.value = 400; gn.gain.value = 0; ns.connect(bp); bp.connect(gn); gn.connect(out); src.push(ns);
++  for (const s of src) { if (s === ns) startNoise(s); else s.start(t0 + Math.random() * 0.05); }
++
++  let wander = 0, alive = true, last = t0;
++  const api = {
++    get alive() { return alive; },
++    /** s: { rpm, rpmN (0..1), load (0..1), level (0..1: the channel volume and any ducking), dop (pitch ratio), dist (m, exterior only), facing (-1 receding .. 1 approaching) } */
++    update(s) {
++      if (!alive) return; const t = ctx.currentTime, dt = clamp(t - last, 0.005, 0.25); last = t;
++      wander += (Math.random() - 0.5) * (P.jitter ?? 0.004) * 6 - wander * dt * 3; wander = clamp(wander, -(P.jitter ?? 0.004) * 3, (P.jitter ?? 0.004) * 3);   // a slow random drift that pulls back to nothing
++      const rpmN = clamp(s.rpmN ?? 0, 0, 1), load = clamp(s.load ?? 0, 0, 1), dop = s.dop ?? 1;
++      const f = (P.ev ? P.fMin + (P.fMax - P.fMin) * rpmN : (s.rpm / 60) * P.cyl / (P.stroke === 2 ? 1 : 2)) * dop * (1 + wander), tc = 0.035;
++      mainOsc.frequency.setTargetAtTime(f, t, tc); osc2?.frequency.setTargetAtTime(f, t, tc); sub?.frequency.setTargetAtTime(f / 2, t, tc); knock?.frequency.setTargetAtTime(f, t, tc);
++      const open = P.ev ? 0.4 + 0.6 * rpmN : 0.2 + 0.4 * rpmN + 0.4 * load, face = 0.85 + 0.15 * (s.facing ?? 0);
++      lp.frequency.setTargetAtTime((P.cut[0] + (P.cut[1] - P.cut[0]) * open) * face, t, 0.06);
++      const idleG = P.ev ? 0 : 0.34, body = P.ev ? 0.15 + 0.85 * rpmN : idleG + (1 - idleG) * (0.3 * rpmN + 0.7 * load);
++      out.gain.setTargetAtTime((P.gain ?? 0.6) * body * (s.level ?? 1) * (s.rpm < 40 && !P.ev ? 0 : 1), t, 0.05);
++      bp.frequency.setTargetAtTime(350 + 2600 * rpmN, t, 0.08); gn.gain.setTargetAtTime((P.noise ?? 0.1) * (0.25 + 0.75 * load) * (0.4 + 0.6 * rpmN), t, 0.08);
++      if (air) air.frequency.setTargetAtTime(airCutoff(s.dist ?? 0) * (0.8 + 0.2 * (s.facing ?? 0)), t, 0.1);
++    },
++    setPosition(x, y, z) { if (panner) setPannerPos(panner, x, y, z); },
++    /** Let the sound fall away over `sec` seconds, then free everything. */
++    fadeOut(sec = 0.25) { if (!alive) return; alive = false; const t = ctx.currentTime; out.gain.cancelScheduledValues(t); out.gain.setTargetAtTime(0, t, sec / 4); setTimeout(() => api.dispose(true), sec * 1000 + 80); },
++    dispose(already) { if (!already) alive = false; for (const s of src) { try { s.stop(); } catch { /* already stopped */ } } for (const n of all) { try { n.disconnect(); } catch { /* already gone */ } } src.length = all.length = 0; },
++  };
++  return api;
++}
+diff --git a/lib/audio/hornBrain.js b/lib/audio/hornBrain.js
+new file mode 100644
+index 0000000..43772fb
+--- /dev/null
++++ b/lib/audio/hornBrain.js
+@@ -0,0 +1,54 @@
++// lib/audio/hornBrain.js
++// When a computer-driven vehicle honks. Pure JS. It looks at what is in the way of each vehicle (the thing the traffic simulation says it is following) and decides,
++// like a patient driver: a person standing in the road ahead gets one warning toot as it comes up to them, and more if it is stopped and they do not move; a vehicle that is
++// stopped in front for a long time gets an impatient toot; a vehicle waiting its turn at a junction hardly honks at all. Nobody honks every second:
++//   - one honk, a double or one long honk, then a quiet spell for that vehicle (at least 9 s, and at most 3 honks at one blockage, then 30 s of silence),
++//   - never more than one NPC honk per second anywhere, and none for a vehicle too far away to be heard.
++// consider() is cheap: call it for the vehicles near the listener a few times a second.
++const PERSON = new Set(["ped", "player"]);
++
++/** What a `lead` from the traffic simulation is in the way: "ped" (a walker), "player" (you on foot), "vehicle", or "other" (your own car). */
++export function leadKind(who) {
++  if (!who) return null;
++  if (who.edge !== undefined && who.speed !== undefined) return "ped";   // a simulated pedestrian
++  if (who.kind !== undefined && who.route !== undefined) return "vehicle";
++  if ((who.len ?? 9) < 1) return "player";                              // the player on foot is registered as a 0.6 m box
++  return "other";
++}
++
++export function createHornBrain({ rnd = Math.random, maxHear = 140 } = {}) {
++  const mem = new Map(); let lastAny = -1e9;
++  const get = (id) => { let m = mem.get(id); if (!m) { m = { since: null, last: -1e9, n: 0, quietUntil: 0, warned: false, patience: 0.9 + rnd() * 1.3, wait: 4 + rnd() * 3.5 }; mem.set(id, m); } return m; };
++  return {
++    /**
++     * id: a stable vehicle id. kind: "car"|"keke"|"bus"|"minibus". s: { v: speed m/s, lead: { gap, v, who } | null, waiting: at a junction's stop line, dist: metres from the listener }. now: seconds.
++     * Returns null, or { pattern: "toot"|"double"|"long"|"peep" }.
++     */
++    consider(id, kind, s, now) {
++      if (s.dist > maxHear) return null;
++      const m = get(id), lead = s.lead, lk = lead ? leadKind(lead.who) : null;
++      if (!lead || lead.gap > 15 || lk === "other") { m.since = null; m.warned = false; if (!lead) m.n = 0; return null; }
++      if (now < m.quietUntil || now - lastAny < 1 || now - m.last < 9) return null;
++      const person = PERSON.has(lk), k = kind === "keke" ? 0.7 : kind === "bus" ? 1.4 : 1;
++      const go = (pattern) => { m.last = lastAny = now; m.n++; m.since = now; if (m.n >= 3) { m.quietUntil = now + 30; m.n = 0; } return { pattern: kind === "keke" ? "peep" : kind === "bus" && pattern !== "toot" ? "long" : pattern }; };
++      if (person) {
++        // coming up to someone in the road at speed: one warning toot per encounter
++        if (!m.warned && s.v > 2.5 && lead.gap > 4 && lead.gap < 15 && rnd() < 0.85) { m.warned = true; return go("toot"); }
++        // stopped for them and they are still there
++        if (s.v < 1 && lead.gap < 8) { m.since ??= now; if (now - m.since > m.patience * k) return go(m.n ? "double" : "toot"); }
++        else if (s.v >= 1) m.since = null;
++        return null;
++      }
++      // stopped behind another vehicle that is not moving: impatience, mostly after a long wait, and rarely at a junction where everyone is waiting their turn
++      if (lead.v < 0.3 && s.v < 0.5 && lead.gap < 8) {
++        m.since ??= now; const need = m.wait * k * (s.waiting ? 4 : 1);
++        if (now - m.since > need && rnd() < (s.waiting ? 0.2 : 0.55)) return go(rnd() < 0.3 ? "long" : "toot");
++      } else m.since = null;
++      return null;
++    },
++    forget(id) { mem.delete(id); },
++    /** Drop what is known about vehicles that are no longer there (call with the set of ids alive now). */
++    prune(alive) { for (const id of mem.keys()) if (!alive.has(id)) mem.delete(id); },
++    get size() { return mem.size; },
++  };
++}
+diff --git a/lib/audio/hornVoice.js b/lib/audio/hornVoice.js
+new file mode 100644
+index 0000000..ae57c4d
+--- /dev/null
++++ b/lib/audio/hornVoice.js
+@@ -0,0 +1,46 @@
++// lib/audio/hornVoice.js
++// Car horns, built from reeds (a pair of buzzing tones a third apart, like a real two-tone horn). Each vehicle category has its own (profiles.js: HORNS).
++//   playHorn()   a honk or a pattern of honks ("toot", "double", "long", "peep"): positional when given a place in the world, then it frees itself
++//   holdHorn()   the player's own horn: sounds for as long as the button is held (never shorter than a real horn's first blast), then lets go
++// Horns are short-lived and capped by the caller (tripAudio keeps at most a few alive), so they cost nothing when nobody is honking.
++import { makePanner, setPannerPos, airCutoff } from "./spatial.js";
++import { PATTERNS } from "./profiles.js";
++
++/** Builds the reeds of horn H into `dest` starting at time t0 (s), lasting `dur`. Returns { oscs, nodes, release(t) }. */
++function reeds(ctx, dest, H, t0, dur, gain, sustain) {
++  const oscs = [], nodes = [], env = ctx.createGain(); nodes.push(env);
++  env.gain.setValueAtTime(0.0001, t0); env.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), t0 + 0.012);
++  if (!sustain) { env.gain.setValueAtTime(Math.max(0.0002, gain), Math.max(t0 + 0.012, t0 + dur - 0.06)); env.gain.exponentialRampToValueAtTime(0.0001, t0 + dur); }
++  env.connect(dest);
++  for (const T of H.tones) {
++    const o = ctx.createOscillator(), g = ctx.createGain(); o.type = T.type; o.frequency.setValueAtTime(T.f, t0); g.gain.value = T.vol; oscs.push(o); nodes.push(g);
++    let tail = o;
++    if (T.lp) { const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = T.lp; o.connect(f); tail = f; nodes.push(f); }
++    if (T.buzz) { const l = ctx.createOscillator(), d = ctx.createGain(); l.frequency.value = 95; d.gain.value = T.buzz; l.connect(d); d.connect(o.frequency); oscs.push(l); nodes.push(d); }   // the reed's rasp
++    tail.connect(g); g.connect(env);
++  }
++  for (const o of oscs) o.start(t0);
++  return { oscs, nodes, env, stopAt(t) { for (const o of oscs) { try { o.stop(t); } catch { /* already stopped */ } } } };
++}
++const free = (nodes, ms) => setTimeout(() => { for (const n of nodes) { try { n.disconnect(); } catch { /* gone */ } } }, ms);
++
++/**
++ * H: a horn from HORNS. opts: { pattern: "toot"|"double"|"long"|"peep"|"tap", level (0..1), pos: { x, y, z } | null, dist (m; for the muffling of a far horn) }.
++ * Returns { stop() }.
++ */
++export function playHorn(ctx, dest, H, { pattern = "toot", level = 1, pos = null, dist = 0 } = {}) {
++  const beats = PATTERNS[pattern] ?? PATTERNS.toot, t0 = ctx.currentTime + 0.01, nodes = [], stops = [];
++  let sink = dest;
++  if (pos) { const air = ctx.createBiquadFilter(); air.type = "lowpass"; air.frequency.value = airCutoff(dist); const p = makePanner(ctx, { ref: 8, rolloff: 1.1, max: 300 }); setPannerPos(p, pos.x, pos.y ?? 1, pos.z); air.connect(p); p.connect(dest); nodes.push(air, p); sink = air; }
++  let end = t0;
++  for (const [at, len] of beats) { const r = reeds(ctx, sink, H, t0 + at, len, 0.55 * level, false); nodes.push(...r.nodes); r.stopAt(t0 + at + len + 0.05); stops.push(r); end = Math.max(end, t0 + at + len); }
++  const ms = (end - ctx.currentTime) * 1000 + 250; free(nodes, ms);
++  return { stop() { for (const r of stops) { try { r.env.gain.cancelScheduledValues(ctx.currentTime); r.env.gain.setTargetAtTime(0, ctx.currentTime, 0.015); r.stopAt(ctx.currentTime + 0.1); } catch { /* done */ } } } };
++}
++
++/** The player's horn: starts now, sounds until release() (at least `min` seconds, as a real horn is never a click). */
++export function holdHorn(ctx, dest, H, { level = 1, min = 0.16 } = {}) {
++  const t0 = ctx.currentTime + 0.005, r = reeds(ctx, dest, H, t0, 0, 0.55 * level, true); let done = false;
++  const stop = () => { if (done) return; done = true; const t = ctx.currentTime; r.env.gain.cancelScheduledValues(t); r.env.gain.setTargetAtTime(0.0001, t, 0.02); r.stopAt(t + 0.16); free(r.nodes, 400); };
++  return { release() { const wait = Math.max(0, t0 + min - ctx.currentTime); if (wait > 0) setTimeout(stop, wait * 1000); else stop(); }, stop };
++}
+diff --git a/lib/audio/mixer.js b/lib/audio/mixer.js
+new file mode 100644
+index 0000000..303fa8b
+--- /dev/null
++++ b/lib/audio/mixer.js
+@@ -0,0 +1,53 @@
++// lib/audio/mixer.js
++// The volume knobs for the world's sound (engines, horns, traffic, town, radio) and the master over everything. Plain module state + subscribe, like lib/sound.js,
++// so the audio code, the Settings app and the radio panel all read and write the same store. Pure apart from localStorage (guarded): it also runs in the tests.
++//
++// The SAVED copy of these lives in the player's settings on the server (lib/settings.js: audio.*), applied by lib/prefs.js through applyMixFromPrefs().
++// Changes made from the car (the radio's volume slider) are kept on this device only, the same way the quick mute button is: the Settings screen stays the saved copy.
++import { useSyncExternalStore } from "react";
++
++export const MIX_DEFAULTS = Object.freeze({
++  masterVolume: 100, engineVolume: 100, hornVolume: 100, trafficVolume: 100, townVolume: 100, radioVolume: 80,
++  masterMute: false, engineMute: false, hornMute: false, trafficMute: false, townMute: false,
++  hornStyle: "auto",
++});
++export const HORN_STYLES = ["auto", "standard", "deep", "bright", "air"];
++const KEY = "lifeinoau:mix";
++const pct = (v, d) => (typeof v === "number" && Number.isFinite(v) ? Math.min(100, Math.max(0, Math.round(v))) : d);
++const clean = (j) => {
++  const o = j && typeof j === "object" ? j : {}, out = {};
++  for (const [k, d] of Object.entries(MIX_DEFAULTS)) out[k] = typeof d === "number" ? pct(o[k], d) : typeof d === "boolean" ? (typeof o[k] === "boolean" ? o[k] : d) : HORN_STYLES.includes(o[k]) ? o[k] : d;
++  return Object.freeze(out);
++};
++
++let mix = MIX_DEFAULTS, loaded = false;
++const subs = new Set();
++const emit = () => { for (const f of subs) f(); };
++function load() {
++  if (loaded || typeof window === "undefined") return;
++  loaded = true;
++  try { mix = clean(JSON.parse(localStorage.getItem(KEY) ?? "null")); } catch { mix = MIX_DEFAULTS; }
++}
++export const getMix = () => { load(); return mix; };
++export const subscribeMix = (f) => { subs.add(f); return () => subs.delete(f); };
++export const useMix = () => useSyncExternalStore(subscribeMix, getMix, () => MIX_DEFAULTS);
++
++/** setMix({ radioVolume: 40 }). Saved on this device. */
++export function setMix(patch, { save = true } = {}) {
++  load();
++  const next = clean({ ...mix, ...patch });
++  if (Object.keys(next).every((k) => next[k] === mix[k])) return;
++  mix = next;
++  if (save) { try { localStorage.setItem(KEY, JSON.stringify(mix)); } catch { /* private mode: it just won't be remembered */ } }
++  emit();
++}
++/** The player's saved audio settings (server copy) become the live mix. */
++export function applyMixFromPrefs(audio) { if (audio) setMix(audio, { save: true }); }
++
++/** The level (0..1) of one channel: "master" | "engine" | "horn" | "traffic" | "town" | "radio". Muting the master, or the channel, gives 0. */
++export function channel(name, m = getMix()) {
++  const master = m.masterMute ? 0 : m.masterVolume / 100;
++  if (name === "master") return master;
++  if (name === "radio") return master * (m.radioVolume / 100);
++  return m[name + "Mute"] ? 0 : master * (m[name + "Volume"] / 100);
++}
+diff --git a/lib/audio/profiles.js b/lib/audio/profiles.js
+new file mode 100644
+index 0000000..bd0090d
+--- /dev/null
++++ b/lib/audio/profiles.js
+@@ -0,0 +1,73 @@
++// lib/audio/profiles.js
++// What every kind of vehicle sounds like, as numbers (pure JS: used by the voices in engineVoice.js / hornVoice.js and by the tests).
++// There are no recordings: each engine is built live from these numbers (a stack of harmonics at the engine's firing frequency, its own lumpiness, intake and exhaust noise),
++// so a keke, a bus, a hatchback and a V10 sound like different machines, and the pitch follows the real RPM.
++//
++//   cyl, stroke   cylinders and 2 or 4 stroke: the engine fires cyl/2 times per turn (4-stroke), so the sound's pitch is rpm/60 * cyl/2
++//   idle, red     idle and redline RPM
++//   gears         the speed (m/s) at the top of each gear, near redline: this is what makes the revs rise and fall with every gear change
++//   wave          the exhaust pulse's harmonics: { n harmonics, tilt (higher = rounder), even (how strong the even ones are) }
++//   cut           the tone's low-pass cutoff [at idle, wide open] in Hz   |   sub: weight of the half-order lump   |   noise: intake and mechanical hiss
++//   knock         diesel clatter: how strongly the sound pulses at the firing rate   |   jitter: cycle-to-cycle wander (keeps it from sounding like a machine)
++//   gain          overall level   |   ev: an electric motor (a rising whine, no gears)
++import { VEHICLE_PERFORMANCE } from "../vehiclePerformance.js";
++
++export const ENGINES = {
++  compact:  { name: "Small petrol 4-cylinder", cyl: 4, stroke: 4, idle: 800, red: 6400, gears: [9, 16, 24, 33, 44],            wave: { n: 22, tilt: 1.05, even: 0.75 }, cut: [650, 3400], sub: 0.35, noise: 0.10, knock: 0,    jitter: 0.004, gain: 0.55 },
++  turbo4:   { name: "Turbo 4-cylinder",        cyl: 4, stroke: 4, idle: 780, red: 6500, gears: [11, 19, 28, 38, 49, 60],        wave: { n: 22, tilt: 1.15, even: 0.6 },  cut: [600, 3000], sub: 0.25, noise: 0.14, knock: 0,    jitter: 0.003, gain: 0.55 },
++  sedanV6:  { name: "V6",                      cyl: 6, stroke: 4, idle: 700, red: 6500, gears: [12, 20, 29, 40, 52, 66],        wave: { n: 24, tilt: 1.2,  even: 0.8 },  cut: [520, 2700], sub: 0.30, noise: 0.10, knock: 0,    jitter: 0.003, gain: 0.58 },
++  sportV6:  { name: "Sport V6",                cyl: 6, stroke: 4, idle: 750, red: 7200, gears: [13, 22, 32, 44, 57, 70],        wave: { n: 26, tilt: 0.95, even: 0.85 }, cut: [700, 4200], sub: 0.22, noise: 0.12, knock: 0,    jitter: 0.003, gain: 0.6 },
++  suv:      { name: "SUV V6",                  cyl: 6, stroke: 4, idle: 650, red: 6000, gears: [11, 19, 27, 36, 48, 60],        wave: { n: 22, tilt: 1.35, even: 0.7 },  cut: [420, 2200], sub: 0.5,  noise: 0.12, knock: 0,    jitter: 0.004, gain: 0.64 },
++  v8:       { name: "Twin-turbo V8",           cyl: 8, stroke: 4, idle: 700, red: 7000, gears: [14, 23, 33, 45, 58, 72, 90],    wave: { n: 24, tilt: 1.2,  even: 0.9 },  cut: [450, 2800], sub: 0.55, noise: 0.12, knock: 0,    jitter: 0.005, gain: 0.68 },
++  v10:      { name: "V10 supercar",            cyl: 10, stroke: 4, idle: 950, red: 8500, gears: [15, 25, 36, 49, 63, 79, 98],   wave: { n: 30, tilt: 0.8,  even: 0.95 }, cut: [900, 6000], sub: 0.12, noise: 0.16, knock: 0,    jitter: 0.002, gain: 0.7 },
++  ev:       { name: "Electric motor",          cyl: 4, stroke: 4, idle: 0,   red: 1,    gears: [], ev: true, fMin: 160, fMax: 2400, wave: { n: 6, tilt: 1.8, even: 0.2 }, cut: [900, 5200], sub: 0,    noise: 0.05, knock: 0,    jitter: 0.001, gain: 0.34 },
++  keke:     { name: "Keke single-cylinder",    cyl: 1, stroke: 4, idle: 1500, red: 5600, gears: [4.2, 8, 12.5, 17],            wave: { n: 40, tilt: 0.62, even: 1 },    cut: [900, 3600], sub: 0.15, noise: 0.22, knock: 0.35, jitter: 0.02,  gain: 0.6 },
++  minibus:  { name: "Minibus diesel",          cyl: 4, stroke: 4, idle: 720, red: 3900, gears: [5.5, 9.5, 14.5, 20, 27],        wave: { n: 22, tilt: 1.0,  even: 0.7 },  cut: [380, 1900], sub: 0.45, noise: 0.18, knock: 0.5,  jitter: 0.008, gain: 0.7 },
++  bus:      { name: "Bus diesel",              cyl: 6, stroke: 4, idle: 620, red: 2700, gears: [4.2, 7, 10.5, 15, 21, 28],      wave: { n: 20, tilt: 1.1,  even: 0.65 }, cut: [320, 1500], sub: 0.6,  noise: 0.2,  knock: 0.55, jitter: 0.008, gain: 0.78 },
++};
++
++/** Which engine each purchasable car has (the real-world engine character of that model), and the hired vehicles. */
++export const VEHICLE_ENGINE = {
++  "corolla-2011": "compact", "accord-2014": "sedanV6", "camry-2014": "sedanV6", "is350-2014": "sportV6", "cclass-2016": "turbo4",
++  "gle-2018": "suv", "rrsport-2016": "suv", "urus-2025": "v8", "huracan-2025": "v10", "cybertruck-2024": "ev",
++  keke: "keke", bus: "bus", minibus: "minibus",
++};
++/** The mix of ordinary cars on the road (traffic cars have no model): mostly small cars, some saloons and SUVs, like a real Nigerian road. */
++const TRAFFIC_CARS = ["compact", "compact", "compact", "sedanV6", "turbo4", "suv", "compact", "sedanV6"];
++
++/** Which engine a thing on the road has: { kind: "car"|"keke"|"bus"|"minibus", carId?, tint? (0..1: which ordinary car) } -> a key of ENGINES. */
++export function engineKeyFor({ kind = "car", carId = null, tint = 0 } = {}) {
++  if (carId && VEHICLE_ENGINE[carId]) return VEHICLE_ENGINE[carId];
++  if (kind === "keke" || kind === "bus" || kind === "minibus") return kind;
++  return TRAFFIC_CARS[Math.floor(Math.max(0, Math.min(0.999, tint)) * TRAFFIC_CARS.length)];
++}
++export const engineProfile = (key) => ENGINES[key] ?? ENGINES.compact;
++
++/** The horns. Each tone is one reed (Hz, wave, level, low-pass, buzz); beats: [start s, length s] per honk of a pattern. */
++const two = (a, b, o = {}) => [{ f: a, type: "sawtooth", vol: 0.2, lp: 2300, buzz: 5, ...o }, { f: b, type: "sawtooth", vol: 0.17, lp: 2300, buzz: 6, ...o }, { f: b * 2, type: "square", vol: 0.035, lp: 2300 }];
++export const HORNS = {
++  compact: { name: "Compact horn", tones: two(420, 528) },
++  saloon:  { name: "Saloon horn",  tones: two(370, 466, { lp: 2000 }) },
++  deep:    { name: "Deep SUV horn", tones: [...two(330, 415, { lp: 1700, vol: 0.22 }), { f: 165, type: "sawtooth", vol: 0.12, lp: 600 }] },
++  bright:  { name: "Bright sport horn", tones: two(494, 622, { lp: 3200 }) },
++  truck:   { name: "Truck horn", tones: two(350, 440, { lp: 1800, vol: 0.24 }) },
++  keke:    { name: "Keke bulb horn", tones: [{ f: 760, type: "square", vol: 0.12, lp: 2600, buzz: 14 }, { f: 1140, type: "square", vol: 0.05, lp: 3000 }] },
++  minibus: { name: "Danfo horn", tones: two(440, 554, { lp: 2400, vol: 0.24, buzz: 9 }) },
++  air:     { name: "Air horn", tones: [{ f: 311, type: "sawtooth", vol: 0.2, lp: 1700, buzz: 3 }, { f: 392, type: "sawtooth", vol: 0.19, lp: 1700, buzz: 3 }, { f: 466, type: "sawtooth", vol: 0.17, lp: 1700, buzz: 3 }, { f: 155, type: "sawtooth", vol: 0.12, lp: 500 }] },
++};
++export const PATTERNS = {
++  toot:   [[0, 0.2]],
++  double: [[0, 0.17], [0.27, 0.19]],
++  long:   [[0, 0.75]],
++  peep:   [[0, 0.1], [0.17, 0.1]],        // the keke's "pe-pe"
++  tap:    [[0, 0.4]],                      // a single press with no hold
++};
++const HORN_OF_ENGINE = { compact: "compact", turbo4: "saloon", sedanV6: "saloon", sportV6: "bright", suv: "deep", v8: "deep", v10: "bright", ev: "truck", keke: "keke", minibus: "minibus", bus: "air" };
++const STYLE_HORN = { standard: "compact", deep: "deep", bright: "bright", air: "air" };
++/** The horn for a vehicle (its engine key), or the one the player chose in Settings ("auto" = the vehicle's own). */
++export const hornFor = (engineKey, style = "auto") => HORNS[STYLE_HORN[style] ?? HORN_OF_ENGINE[engineKey] ?? "compact"];
++/** The pattern a vehicle honks in by default. */
++export const defaultPattern = (engineKey) => (engineKey === "keke" ? "peep" : engineKey === "bus" ? "long" : "toot");
++
++/** The top speed (m/s) of a car model, for the gear sizes of a fast car (a Huracan's gears are longer than a Corolla's). */
++export const topSpeedOf = (carId, fallback = 45) => (VEHICLE_PERFORMANCE[carId]?.topKmh ? VEHICLE_PERFORMANCE[carId].topKmh / 3.6 : fallback);
+diff --git a/lib/audio/spatial.js b/lib/audio/spatial.js
+new file mode 100644
+index 0000000..038debc
+--- /dev/null
++++ b/lib/audio/spatial.js
+@@ -0,0 +1,47 @@
++// lib/audio/spatial.js
++// Positional audio helpers on the game's own AudioContext (lib/sound.js owns it). The world is in metres: x east, z south, y up, the same axes the game uses,
++// and Web Audio's listener is right-handed with +y up, so world coordinates go in as they are: a vehicle to the east of someone facing north is on their right.
++export const SPEED_OF_SOUND = 343;
++const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
++
++/** A panner that makes a source quieter with distance (inverse law from `ref` metres) and places it left/right. Cheap "equalpower" panning, so many sources cost little. */
++export function makePanner(ctx, { ref = 6, rolloff = 1.3, max = 240 } = {}) {
++  const p = ctx.createPanner();
++  p.panningModel = "equalpower"; p.distanceModel = "inverse"; p.refDistance = ref; p.rolloffFactor = rolloff; p.maxDistance = max;
++  return p;
++}
++export function setPannerPos(p, x, y, z) {
++  if (p.positionX) { p.positionX.value = x; p.positionY.value = y; p.positionZ.value = z; } else p.setPosition(x, y, z);   // older Safari has no AudioParams here
++}
++/** The listener: where the player is (x, y, z) and which way the view faces on the ground (fx, fz). */
++export function setListener(ctx, { x, y = 1.6, z, fx, fz }) {
++  const L = ctx.listener, l = Math.hypot(fx, fz) || 1;
++  if (L.positionX) { L.positionX.value = x; L.positionY.value = y; L.positionZ.value = z; L.forwardX.value = fx / l; L.forwardY.value = 0; L.forwardZ.value = fz / l; L.upX.value = 0; L.upY.value = 1; L.upZ.value = 0; }
++  else { L.setPosition(x, y, z); L.setOrientation(fx / l, 0, fz / l, 0, 1, 0); }
++}
++/**
++ * The pitch ratio the listener hears from a moving source (Doppler). Positions and velocities are on the ground (m, m/s).
++ * Approaching raises the pitch, receding lowers it; it is exactly 1 when the source passes straight across. `boost` exaggerates it a little (games usually do).
++ */
++export function dopplerRatio(lx, lz, lvx, lvz, sx, sz, svx, svz, boost = 1.4) {
++  const dx = sx - lx, dz = sz - lz, d = Math.hypot(dx, dz); if (d < 1) return 1;
++  const ux = dx / d, uz = dz / d, vL = lvx * ux + lvz * uz, vS = svx * ux + svz * uz;   // + means: the listener moves towards the source / the source moves away
++  const r = (SPEED_OF_SOUND + vL) / (SPEED_OF_SOUND + vS);
++  return clamp(1 + (r - 1) * boost, 0.8, 1.25);
++}
++/** How bright a source sounds: sound loses its highs with distance (air absorbs them), so far things are muffled. Returns a low-pass cutoff in Hz. */
++export const airCutoff = (dist) => clamp(19000 / (1 + dist / 14), 700, 19000);
++
++/** One looped buffer of pink-ish noise per context, shared by every layer that needs noise (never rebuilt, never downloaded). */
++const noiseCache = new WeakMap();
++export function sharedNoise(ctx) {
++  let b = noiseCache.get(ctx); if (b) return b;
++  const len = Math.floor(ctx.sampleRate * 4); b = ctx.createBuffer(1, len, ctx.sampleRate); const d = b.getChannelData(0);
++  let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;   // Paul Kellet's pink filter
++  for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759; b2 = 0.969 * b2 + w * 0.153852; b3 = 0.8665 * b3 + w * 0.3104856; b4 = 0.55 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.016898; d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11; b6 = w * 0.115926; }
++  noiseCache.set(ctx, b); return b;
++}
++/** A looping noise source starting at a random place in the shared buffer (so layers do not sound alike). */
++export function noiseSource(ctx, rate = 1) { const s = ctx.createBufferSource(); s.buffer = sharedNoise(ctx); s.loop = true; s.playbackRate.value = rate; return s; }
++export const startNoise = (s) => s.start(0, Math.random() * 3.5);
++export { clamp };
+diff --git a/lib/audio/tripAudio.js b/lib/audio/tripAudio.js
+new file mode 100644
+index 0000000..a09e810
+--- /dev/null
++++ b/lib/audio/tripAudio.js
+@@ -0,0 +1,157 @@
++// lib/audio/tripAudio.js
++// All the sound of a trip, in one place, driven by the same frame loop as the drawing (lib3d/travel.js calls update() once a frame and dispose() when the trip ends).
++// It runs on the game's own AudioContext (lib/sound.js: getWorldAudio), so there is one audio engine, one autoplay unlock and one master volume.
++//
++//   your vehicle      one engine voice: cranks and idles when you get in, revs with the road speed through the gears, falls away when you get out. Tyre and wind noise rise with speed.
++//   other vehicles    a small POOL of positional voices (12 on a computer, 6 on a phone) given to the nearest vehicles of the traffic simulation, by distance. A voice follows its
++//                     vehicle's real position, speed and throttle, gets Doppler and distance muffling, and is released the moment its vehicle leaves the simulation (never left playing).
++//                     Far voices update less often than near ones.
++//   horns             yours (held for as long as the button is down) and computer-driven vehicles' (decided by hornBrain.js from what is in their way), positional, at most 3 at once
++//   the town          ambience.js, blended by where you are (zones.js)
++// Everything is stopped, disconnected and forgotten in dispose(), and when the tab is hidden nothing is updated.
++import { getWorldAudio } from "../sound.js";
++import { channel, getMix } from "./mixer.js";
++import { engineKeyFor, engineProfile, hornFor, defaultPattern, topSpeedOf } from "./profiles.js";
++import { createEngine, startEngine, stopEngine, stepEngine, isSilent } from "./engineModel.js";
++import { createHornBrain } from "./hornBrain.js";
++import { soundWeights } from "./zones.js";
++import { createAmbience } from "./ambience.js";
++import { createEngineVoice } from "./engineVoice.js";
++import { holdHorn, playHorn } from "./hornVoice.js";
++import { setListener, dopplerRatio, noiseSource, startNoise, clamp } from "./spatial.js";
++import { isGameNight } from "../campus-clock.js";
++
++const TICK = 1 / 24, PICK_EVERY = 0.25, AMB_EVERY = 0.2;
++const HEAR = { car: 150, keke: 130, minibus: 170, bus: 190 };   // how far (m) each kind of vehicle is heard at all
++
++/**
++ * o: { places: [{ x, z, kind }], low: a phone, night(): boolean }.
++ * Returns { update(dt, f), dispose() }. f (every frame): {
++ *   phase, mode ("keke"|"bus"|"car"|"trek"), carId, ego (the sim vehicle or own car you are in, or null), own (your own driven car, or null),
++ *   pos: { x, z, vx, vz }, fwd: { x, z } (where the view faces), horn (the horn button is held), onDeck, sim: the traffic's vehicles, peds: its walkers, remote: other players' vehicles (an array, or a function that returns it, called only when the pool is re-chosen) }
++ */
++export function createTripAudio({ places = [], low = false, night = isGameNight } = {}) {
++  let rig = null, disposed = false, acc = 0, pickAcc = 0, ambAcc = 0, now = 0;
++  const maxVoices = low ? 6 : 12;
++  const brain = createHornBrain();
++
++  function build() {
++    const W = getWorldAudio(); if (!W) return null;
++    const { ctx, out } = W, bus = () => { const g = ctx.createGain(); g.gain.value = 0; g.connect(out); return g; };
++    const r = { ctx, out, engineBus: bus(), trafficBus: bus(), hornBus: bus(), voices: new Map(), ego: null, egoKey: null, hornHeld: null, hornsLive: 0, road: null, hornTimers: new Set(), prevEgoV: 0, egoThr: 0 };
++    r.ambience = createAmbience(ctx, out, { traffic: () => channel("traffic"), town: () => channel("town") }, { low });
++    // tyre and wind noise of your own vehicle: grows with speed
++    const n1 = noiseSource(ctx, 0.9), bp = ctx.createBiquadFilter(), hi = ctx.createBiquadFilter(), g = ctx.createGain(); bp.type = "bandpass"; bp.frequency.value = 420; bp.Q.value = 0.6; hi.type = "highpass"; hi.frequency.value = 90; g.gain.value = 0; n1.connect(bp); bp.connect(hi); hi.connect(g); g.connect(r.engineBus); startNoise(n1); r.road = { n1, bp, hi, g };
++    return r;
++  }
++
++  const releaseVoice = (id, v, sec = 0.2) => { rig.voices.delete(id); brain.forget(id); v.voice.fadeOut(sec); };
++  function stopEgo(immediate) { const e = rig.ego; if (!e) return; if (immediate || isSilent(e.model)) { e.voice.fadeOut(immediate ? 0.1 : 0.2); rig.ego = null; } }
++
++  function egoFrame(dt, f) {
++    const on = rig.egoOn, own = !!f.own;
++    const key = engineKeyFor({ kind: f.mode === "keke" || f.mode === "bus" ? f.mode : "car", carId: own ? f.carId : null, tint: 0.3 });
++    if (on && (!rig.ego || rig.egoKey !== key)) {   // getting in: a new engine (the key turns, or a hired vehicle is already running)
++      if (rig.ego) stopEgo(true);
++      const P = engineProfile(key), model = createEngine(P); startEngine(model); if (!own) { model.mode = "run"; model.rpm = P.idle; }
++      rig.ego = { voice: createEngineVoice(rig.ctx, rig.engineBus, P, { spatial: false, lite: low }), model, P, own }; rig.egoKey = key; rig.prevEgoV = 0;
++    }
++    const e = rig.ego; if (!e) return;
++    if (!on && e.model.mode !== "stopping" && e.model.mode !== "off") stopEngine(e.model);   // getting out: it is switched off and the revs fall away
++    const v = on ? Math.abs(f.ego.v ?? 0) : 0;
++    let thr = 0;
++    if (on && own) thr = f.own.thr ?? 0;
++    else if (on) { const a = (v - rig.prevEgoV) / Math.max(dt, 1e-3); rig.egoThr += (clamp(a / 2, 0, 1) - rig.egoThr) * Math.min(1, dt * 4); thr = rig.egoThr; }   // a hired vehicle: how hard it pushes, from how fast it is gaining speed
++    rig.prevEgoV = v;
++    stepEngine(e.model, { speed: v, throttle: thr, dt });
++    e.voice.update({ rpm: e.model.rpm, rpmN: e.model.rpmN, load: e.model.load, level: own ? 1 : 0.72, dop: 1, facing: own ? 0.2 : -0.4 });
++    if (!on && isSilent(e.model)) stopEgo(false);
++    // tyre and wind noise
++    const R = rig.road, rn = on ? clamp(v / 34, 0, 1) : 0; R.g.gain.setTargetAtTime(0.32 * Math.pow(rn, 1.5) * (own ? 1 : 0.6), rig.ctx.currentTime, 0.2); R.bp.frequency.setTargetAtTime(300 + 900 * rn, rig.ctx.currentTime, 0.2);
++  }
++
++  function playerHorn(f) {
++    const want = !!f.horn && f.phase === "drive" && !!rig.ego;
++    if (want && !rig.hornHeld) { const style = getMix().hornStyle, H = hornFor(rig.egoKey, style); rig.hornHeld = holdHorn(rig.ctx, rig.hornBus, H, { level: 1 }); }
++    else if (!want && rig.hornHeld) { rig.hornHeld.release(); rig.hornHeld = null; }
++  }
++
++  function npcHorn(v, key, kind, d, pos) {
++    if (rig.hornsLive >= 3) return;
++    const lead = v.lead, r = brain.consider("v" + v.id, kind, { v: v.v, lead, waiting: v.stopLine != null, dist: d }, now); if (!r) return;
++    rig.hornsLive++; const t = setTimeout(() => { rig.hornTimers.delete(t); rig.hornsLive--; }, 1600); rig.hornTimers.add(t);
++    playHorn(rig.ctx, rig.hornBus, hornFor(key, "auto"), { pattern: r.pattern ?? defaultPattern(key), level: 0.9, pos: { x: pos.x, y: 1, z: pos.z }, dist: d });
++  }
++
++  function pick(f) {
++    const L = f.pos, cand = [], present = new Set(); let near = 0;
++    const consider = (id, v, kind, remote) => {
++      present.add(id); const dx = v.x - L.x, dz = v.z - L.z, d2 = dx * dx + dz * dz, R = HEAR[kind] ?? 150;
++      if (d2 < 6400) near++;
++      if (d2 > R * R) return; cand.push({ id, v, kind, remote, d: Math.sqrt(d2), score: Math.sqrt(d2) - Math.min(30, Math.abs(v.v ?? 0) * 1.5) });   // a moving vehicle is heard a little further than a parked one
++    };
++    for (const v of f.sim ?? []) { if (v.done || (rig.egoOn && v === f.ego)) continue; consider("v" + v.id, v, v.kind, false); }
++    for (const v of (typeof f.remote === "function" ? f.remote() : f.remote) ?? []) consider(v.id, v, v.kind, true);
++    cand.sort((a, b) => a.score - b.score); const keep = new Set();
++    for (let i = 0; i < cand.length && keep.size < maxVoices; i++) keep.add(cand[i].id);
++    // voices whose vehicle has left the simulation stop at once; voices that are merely too far or out of the top few fade
++    for (const [id, e] of rig.voices) { if (!present.has(id)) releaseVoice(id, e, 0.12); else if (!keep.has(id)) { e.out = (e.out ?? 0) + PICK_EVERY; if (e.out > 0.75) releaseVoice(id, e, 0.3); } else e.out = 0; }
++    for (const c of cand) {
++      if (!keep.has(c.id) || rig.voices.has(c.id)) continue;
++      const key = engineKeyFor({ kind: c.kind, carId: c.v.car || null, tint: c.v.tint ?? 0.5 }), P = engineProfile(key), model = createEngine(P); startEngine(model); model.mode = "run"; model.rpm = P.idle;
++      rig.voices.set(c.id, { voice: createEngineVoice(rig.ctx, rig.trafficBus, P, { spatial: true, lite: low }), model, P, key, kind: c.kind, last: now, nextAt: 0, prevV: c.v.v ?? 0, thr: 0, remote: c.remote });
++    }
++    brain.prune(present);
++    return { cand, near };
++  }
++
++  return {
++    update(dt, f) {
++      if (disposed || typeof document === "undefined" || document.hidden) return;
++      now += dt;
++      if (!rig) { if (!(rig = build())) return; }
++      const ctx = rig.ctx, t = ctx.currentTime;
++      rig.egoOn = !!f.ego && (f.phase === "drive" || f.phase === "ride" || f.phase === "paying");   // only while you are in it is it YOUR engine; before that (it is driving up to you) it is just a vehicle on the road
++      rig.engineBus.gain.setTargetAtTime(channel("engine"), t, 0.1); rig.trafficBus.gain.setTargetAtTime(channel("traffic"), t, 0.1); rig.hornBus.gain.setTargetAtTime(channel("horn"), t, 0.05);
++      acc += dt; if (acc < TICK) return; const step = acc; acc = 0;
++      const L = f.pos; setListener(ctx, { x: L.x, y: 1.6, z: L.z, fx: f.fwd.x, fz: f.fwd.z });
++      egoFrame(step, f); playerHorn(f);
++      pickAcc += step; let list = rig.last;
++      if (pickAcc >= PICK_EVERY || !list) { pickAcc = 0; list = rig.last = pick(f); rig.hornPass = true; }
++      // update each voice at the rate its distance deserves: near every tick, mid ~10 Hz, far ~4 Hz
++      const byId = new Map(); for (const c of list.cand) byId.set(c.id, c);
++      for (const [id, e] of rig.voices) {
++        const c = byId.get(id); if (!c) continue; const v = c.v;
++        if (now < e.nextAt) continue; e.nextAt = now + (c.d < 30 ? 0 : c.d < 70 ? 0.09 : 0.22);
++        const dtv = clamp(now - e.last, 0.01, 0.5); e.last = now; const sp = Math.abs(v.v ?? 0);
++        let thr; if (c.remote) { const a = (sp - e.prevV) / dtv; e.thr += (clamp(a / 2, 0, 1) - e.thr) * Math.min(1, dtv * 4); thr = e.thr; } else thr = clamp((v.acc ?? 0) / Math.max(0.5, v.aMax ?? 2), 0, 1);
++        e.prevV = sp; stepEngine(e.model, { speed: sp, throttle: thr, dt: dtv });
++        const hx = v.hx ?? Math.sin(v.h ?? 0), hz = v.hz ?? Math.cos(v.h ?? 0), dx = L.x - v.x, dz = L.z - v.z, d = Math.max(1, c.d), facing = (hx * dx + hz * dz) / d;
++        const dop = dopplerRatio(L.x, L.z, L.vx ?? 0, L.vz ?? 0, v.x, v.z, hx * (v.v ?? 0), hz * (v.v ?? 0));
++        e.voice.setPosition(v.x, 0.8, v.z); e.voice.update({ rpm: e.model.rpm, rpmN: e.model.rpmN, load: e.model.load, level: 1, dop, dist: d, facing });
++        if (rig.hornPass && !c.remote && d < 140) npcHorn(v, e.key, c.kind, d, v);
++      }
++      // a vehicle with no voice (too many nearby) can still honk at someone, if it is close enough to be heard
++      if (rig.hornPass) { for (const c of list.cand) if (!c.remote && !rig.voices.has(c.id) && c.d < 70) npcHorn(c.v, engineKeyFor({ kind: c.kind, tint: c.v.tint ?? 0.5 }), c.kind, c.d, c.v); rig.hornPass = false; }
++      ambAcc += step; if (ambAcc >= AMB_EVERY) {
++        const peds = f.peds ?? []; let np = 0; for (const p of peds) if ((p.x - L.x) ** 2 + (p.z - L.z) ** 2 < 1600) np++;
++        const Wt = soundWeights({ x: L.x, z: L.z, places, vehicles: list.near, peds: np, onDeck: !!f.onDeck, speed: Math.hypot(L.vx ?? 0, L.vz ?? 0), night: night() });
++        rig.ambience.update(ambAcc, Wt, { x: L.x, z: L.z, night: night(), hostelAt: Wt.hostelAt }); ambAcc = 0; rig.zone = Wt.name;
++      }
++    },
++    /** For the tests and the debug overlay: what is playing right now. */
++    stats() { return rig ? { voices: rig.voices.size, ego: !!rig.ego, hornsLive: rig.hornsLive, zone: rig.zone ?? "" } : { voices: 0, ego: false, hornsLive: 0, zone: "" }; },
++    dispose() {
++      if (disposed) return; disposed = true; if (!rig) return;
++      try { rig.hornHeld?.stop(); } catch { /* done */ }
++      for (const [id, e] of rig.voices) { try { e.voice.dispose(); } catch { /* gone */ } rig.voices.delete(id); }
++      try { rig.ego?.voice.dispose(); } catch { /* gone */ } rig.ego = null;
++      try { rig.ambience.dispose(); } catch { /* gone */ }
++      try { rig.road.n1.stop(); rig.road.g.disconnect(); } catch { /* gone */ }
++      for (const t of rig.hornTimers) clearTimeout(t); rig.hornTimers.clear();
++      for (const b of [rig.engineBus, rig.trafficBus, rig.hornBus]) { try { b.disconnect(); } catch { /* gone */ } }
++      brain.prune(new Set()); rig = null;
++    },
++  };
++}
++export { topSpeedOf };
+diff --git a/lib/audio/zones.js b/lib/audio/zones.js
+new file mode 100644
+index 0000000..52030be
+--- /dev/null
++++ b/lib/audio/zones.js
+@@ -0,0 +1,34 @@
++// lib/audio/zones.js
++// What the town sounds like where the listener is (pure JS). Not a set of hard zones with a click at the border: every kind of sound has a weight from 0 to 1 that rises
++// smoothly with how close the things that cause it are (a shop front, a hostel, the lecture halls, a busy road, the expressway), so walking from the faculty buildings
++// to the market fades one soundscape into the other. ambience.js turns the weights into sound.
++const sm = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
++/** 1 at the place, 0 at `r` metres. */
++const near = (d, r) => sm(1 - d / r);
++// which kinds of place cause which sounds (the kinds are those of public/data/oau-campus.json, the same list the traffic uses for where people gather)
++const COMMERCIAL = new Set(["shop", "town", "social"]), ACADEMIC = new Set(["lecture", "faculty", "library", "admin", "hall", "bank"]), QUIET = new Set(["worship", "hospital", "farm"]);
++
++/**
++ * ctx: { x, z, places: [{ x, z, kind }], vehicles: how many vehicles within 80 m, peds: how many walkers within 40 m, onDeck: on the expressway, speed: m/s of the listener, night: boolean }
++ * Returns { traffic, crowd, nature, market, hostel, generator, wind, name, hostelAt } (all 0..1 except `name` and `hostelAt`: { x, z } of the nearest hostel, or null).
++ */
++export function soundWeights(ctx) {
++  const { x, z, places = [], vehicles = 0, peds = 0, onDeck = false, speed = 0, night = false } = ctx;
++  let com = 0, host = 0, acad = 0, quiet = 0, hostelAt = null, hd = Infinity;
++  for (const p of places) {
++    const d = Math.hypot(p.x - x, p.z - z); if (d > 130) continue;
++    if (COMMERCIAL.has(p.kind)) com = Math.max(com, near(d, 95));
++    else if (p.kind === "hostel") { host = Math.max(host, near(d, 80)); if (d < hd) { hd = d; hostelAt = { x: p.x, z: p.z }; } }
++    else if (ACADEMIC.has(p.kind)) acad = Math.max(acad, near(d, 70));
++    else if (QUIET.has(p.kind)) quiet = Math.max(quiet, near(d, 60));
++  }
++  const busy = sm(vehicles / 10), peopleHere = sm(peds / 8), deck = onDeck ? 1 : 0;
++  const traffic = Math.min(1, 0.22 + 0.5 * busy + 0.7 * deck + 0.3 * com - 0.12 * quiet);
++  const crowd = Math.min(1, 0.45 * com + 0.4 * host + 0.2 * acad + 0.4 * peopleHere) * (deck ? 0.1 : 1);
++  const market = com * (1 - deck);
++  const nature = Math.max(0, (1 - Math.max(com * 0.8, busy * 0.7, deck)) * (0.55 + 0.45 * quiet));
++  const generator = host * (night ? 1 : 0.6) * (1 - deck);
++  const wind = deck ? Math.min(1, 0.35 + speed / 30) : 0;
++  const top = [["highway", deck], ["commercial", com], ["hostel", host], ["road", busy > 0.5 ? busy : 0], ["campus", acad], ["quiet", 0.3]].sort((a, b) => b[1] - a[1])[0][0];
++  return { traffic, crowd, nature, market, hostel: host, generator, wind, name: top, hostelAt: host > 0.05 ? hostelAt : null };
++}
+diff --git a/lib/prefs.js b/lib/prefs.js
+index 8e8a7f6..b74eb61 100644
+--- a/lib/prefs.js
++++ b/lib/prefs.js
+@@ -6,6 +6,7 @@
+ import { useSyncExternalStore } from "react";
+ import { SETTING_DEFAULTS, cleanSettings, settingsOf } from "./settings.js";
+ import { setSoundSettings } from "./sound.js";
++import { applyMixFromPrefs } from "./audio/mixer.js";
+ import { onReset } from "./optimistic.js";
+ 
+ const KEY = "lifeinoau:prefs";
+@@ -31,6 +32,7 @@ export function applyPrefs(settings, { cache = true } = {}) {
+   const next = cleanSettings(settings);
+   current = next; paint(next);
+   const au = next.audio; setSoundSettings({ music: au.music, sfx: au.sfx, musicVolume: au.musicVolume, sfxVolume: au.sfxVolume });
++  applyMixFromPrefs({ masterVolume: au.masterVolume, engineVolume: au.engineVolume, hornVolume: au.hornVolume, trafficVolume: au.trafficVolume, townVolume: au.townVolume, radioVolume: au.radioVolume, masterMute: au.masterMute, engineMute: au.engineMute, hornMute: au.hornMute, trafficMute: au.trafficMute, townMute: au.townMute, hornStyle: au.hornStyle });
+   if (cache) { try { localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* private mode: only this page remembers */ } }
+   subs.forEach((f) => f());
+ }
+diff --git a/lib/radio/icy.js b/lib/radio/icy.js
+new file mode 100644
+index 0000000..b48fd07
+--- /dev/null
++++ b/lib/radio/icy.js
+@@ -0,0 +1,33 @@
++// lib/radio/icy.js
++// What is playing on a radio station, read from the stream itself. Internet radio (Shoutcast / Icecast) can carry the current track in the audio: ask for it with the
++// request header "Icy-MetaData: 1", and the server answers with "icy-metaint: N" and puts a small text block after every N bytes of audio, like  StreamTitle='Artist - Song';
++// Browsers cannot read it from an <audio> element, so the server (src/app/api/radio/meta/route.js) reads the first block and the radio panel shows the result.
++// Pure JS (works on bytes), so it is tested without a network.
++
++/** "StreamTitle='Artist - Song';StreamUrl='';" -> "Artist - Song" (or "" when there is none). Tolerates apostrophes inside the title. */
++export function parseStreamTitle(block) {
++  const m = /StreamTitle='([\s\S]*?)';(?:\s*Stream\w+=|\s*$|\u0000)/.exec(block) ?? /StreamTitle='([\s\S]*?)'/.exec(block);
++  return m ? m[1].replace(/\u0000/g, "").trim() : "";
++}
++/** "Artist - Song" -> { artist, track }. Without a " - ", the whole text is the track. Returns null for empty or placeholder titles. */
++export function splitTitle(title) {
++  const t = String(title ?? "").replace(/\s+/g, " ").trim();
++  if (!t || t.length > 200 || /^(unknown|n\/a|-|null|undefined|live|advert(isement)?)$/i.test(t)) return null;
++  const i = t.indexOf(" - ");
++  return i > 0 ? { artist: t.slice(0, i).trim(), track: t.slice(i + 3).trim() } : { artist: "", track: t };
++}
++/**
++ * Reads the first metadata block of a stream. `read` is an async function returning the next Uint8Array chunk (or null at the end), `metaint` the interval from the header.
++ * Returns the raw text of the block ("" if the first block is empty: most stations send an empty block between changes), or null if the stream ends before it.
++ * Never reads more than metaint + 4096 bytes.
++ */
++export async function readIcyBlock(read, metaint) {
++  if (!Number.isInteger(metaint) || metaint < 1 || metaint > 65536) return null;
++  let buf = new Uint8Array(0), need = metaint + 1;
++  const push = (c) => { const n = new Uint8Array(buf.length + c.length); n.set(buf); n.set(c, buf.length); buf = n; };
++  while (buf.length < need) { const c = await read(); if (!c) return null; push(c); if (buf.length > metaint + 4096 + 1) break; }
++  if (buf.length < need) return null;
++  const len = buf[metaint] * 16; if (len === 0) return "";
++  need = metaint + 1 + len; while (buf.length < need) { const c = await read(); if (!c) return null; push(c); }
++  return new TextDecoder("utf-8", { fatal: false }).decode(buf.slice(metaint + 1, need));
++}
+diff --git a/lib/radio/radio.js b/lib/radio/radio.js
+new file mode 100644
+index 0000000..38ab850
+--- /dev/null
++++ b/lib/radio/radio.js
+@@ -0,0 +1,97 @@
++// lib/radio/radio.js
++// The car radio: one player for the whole game. Plain module state + subscribe (like lib/sound.js), read by components/CarRadio.js with useRadio().
++//
++//   - ONE <audio> element, reused for every station. Before any new stream starts the old one is torn down completely (pause, remove the source, load()), which is what
++//     closes its connection: switching stations quickly, or turning the radio off, can never leave two streams playing or one downloading in the background.
++//   - Power (the radio is on or off) is separate from Play/Pause (a paused radio is on, with its stream released, so it uses no data).
++//   - A stream that stalls, errors or ends is reconnected with a growing delay (1, 2, 4, 8, 15 s), six times; after that it says so and waits for you to press play.
++//   - It plays only while you are in a vehicle (setInVehicle): getting out stops the stream, getting back in resumes it if the radio was on. A hidden tab pauses it too.
++//   - The volume is the "radio" channel of lib/audio/mixer.js (and the master). iOS ignores element.volume (the device volume rules there), which Settings says.
++//   - What is playing comes from /api/radio/meta (the server reads the stream's own metadata) every 20 s, for stations that carry it.
++//   - What it remembers on this device: on/off and the last station. Nothing is played until a person has pressed something.
++import { useSyncExternalStore } from "react";
++import { channel, subscribeMix } from "../audio/mixer.js";
++import { cleanStations, playable, STATIONS_URL } from "./stations.js";
++import { splitTitle } from "./icy.js";
++
++let RETRY = [1000, 2000, 4000, 8000, 15000];
++const KEY = "lifeinoau:radio", META_EVERY = 20_000, STALL_MS = 12_000;
++const IDLE = Object.freeze({ on: false, paused: false, stationId: null, status: "off", stations: [], loaded: false, inVehicle: false, artist: "", track: "", error: "", attempt: 0 });
++let st = IDLE, el = null, token = 0, retryT = null, metaT = null, stallT = null, started = false;
++const subs = new Set();
++const set = (p) => { st = { ...st, ...p }; for (const f of subs) f(); };
++export const getRadio = () => st;
++export const subscribeRadio = (f) => (subs.add(f), () => subs.delete(f));
++export const useRadio = () => useSyncExternalStore(subscribeRadio, getRadio, () => IDLE);
++
++const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ on: st.on, stationId: st.stationId })); } catch { /* not remembered */ } };
++const station = (id = st.stationId) => st.stations.find((s) => s.id === id) ?? null;
++
++function audioEl() {
++  if (el || typeof document === "undefined") return el;
++  el = new Audio(); el.preload = "none"; el.autoplay = false; el.setAttribute("playsinline", ""); el.crossOrigin = null;   // no crossOrigin: a plain <audio> plays any stream, CORS or not
++  el.addEventListener("playing", () => { if (!live(el)) return; clearTimeout(stallT); set({ status: "playing", error: "", attempt: 0 }); });
++  el.addEventListener("waiting", () => { if (!live(el)) return; set({ status: "buffering" }); armStall(); });
++  el.addEventListener("stalled", () => { if (!live(el)) return; armStall(); });
++  el.addEventListener("error", () => { if (!live(el)) return; reconnect("The stream stopped."); });
++  el.addEventListener("ended", () => { if (!live(el)) return; reconnect("The stream ended."); });
++  return el;
++}
++/** Is the element currently supposed to be streaming? (events from a stream we already tore down are ignored) */
++const live = (e) => e === el && st.on && !st.paused && st.inVehicle && !!e.getAttribute("src");
++const armStall = () => { clearTimeout(stallT); stallT = setTimeout(() => { if (st.status === "buffering" || st.status === "loading") reconnect("No sound from the station."); }, STALL_MS); };
++const applyVolume = () => { if (el) el.volume = Math.max(0, Math.min(1, channel("radio"))); };
++
++/** Stop and forget the current stream (this is what really closes the connection). */
++function teardown() {
++  token++; clearTimeout(retryT); clearTimeout(stallT); clearInterval(metaT); retryT = stallT = metaT = null;
++  if (el) { try { el.pause(); } catch { /* not playing */ } el.removeAttribute("src"); try { el.load(); } catch { /* ok */ } }
++  import("../sound.js").then((m) => m.duckMusic?.(false)).catch(() => {});
++}
++function startStream() {
++  teardown();
++  const s = station(), a = audioEl();
++  if (!a) return;
++  if (!st.on || st.paused || !st.inVehicle) { set({ status: st.on ? (st.paused ? "paused" : "idle") : "off" }); return; }
++  if (!s) { set({ status: "nostation", artist: "", track: "" }); return; }
++  const my = token; set({ status: "loading", artist: "", track: "", error: "" }); applyVolume(); a.src = s.url; armStall();
++  const p = a.play(); p?.catch?.((e) => { if (my !== token) return; if (e?.name === "NotAllowedError") set({ status: "tap", error: "Tap play to start the radio." }); else if (e?.name !== "AbortError") reconnect("Could not start the stream."); });
++  import("../sound.js").then((m) => { if (my === token) m.duckMusic?.(true); }).catch(() => {});   // the game's background song gives way to the radio
++  if (s.meta === "icy") { pollMeta(my, s); metaT = setInterval(() => pollMeta(my, s), META_EVERY); }
++}
++function reconnect(why) {
++  if (!st.on || st.paused || !st.inVehicle) return;
++  const n = st.attempt;
++  if (n >= RETRY.length) { teardown(); set({ status: "error", error: why + " Press play to try again.", attempt: 0 }); return; }
++  const my = ++token; clearTimeout(stallT); clearInterval(metaT); if (el) { try { el.pause(); } catch { /* ok */ } el.removeAttribute("src"); try { el.load(); } catch { /* ok */ } }
++  set({ status: "reconnecting", error: why, attempt: n + 1 }); retryT = setTimeout(() => { if (my === token && st.on && !st.paused && st.inVehicle) { const keep = st.attempt; startStream(); set({ attempt: keep }); } }, RETRY[n]);
++}
++async function pollMeta(my, s) {
++  if (my !== token || (typeof document !== "undefined" && document.hidden)) return;
++  try { const r = await fetch(`/api/radio/meta?id=${encodeURIComponent(s.id)}`, { cache: "no-store" }); if (!r.ok || my !== token) return; const j = await r.json(); if (my !== token) return; const t = splitTitle(j.title); set({ artist: t?.artist ?? "", track: t?.track ?? "" }); } catch { /* no track info: the station name still shows */ }
++}
++
++// ---- the API the panel uses ----
++/** Load the station list (once) and the remembered choice. Safe to call often. */
++export async function initRadio() {
++  if (started || typeof window === "undefined") return; started = true;
++  let mem = {}; try { mem = JSON.parse(localStorage.getItem(KEY) ?? "{}") ?? {}; } catch { /* none */ }
++  let list = []; try { const r = await fetch(STATIONS_URL, { cache: "no-cache" }); if (r.ok) list = cleanStations(await r.json()); } catch { /* offline: no stations */ }
++  const probe = document.createElement("audio"), ok = list.filter((s) => playable(s, { protocol: location.protocol, canPlay: (t) => probe.canPlayType(t) }));
++  const id = ok.some((s) => s.id === mem.stationId) ? mem.stationId : ok[0]?.id ?? null;
++  set({ stations: ok, loaded: true, stationId: id, on: !!mem.on && !!id }); if (st.on) startStream();
++  subscribeMix(applyVolume);
++  document.addEventListener("visibilitychange", () => { if (document.hidden) { if (st.on && st.status !== "off") { teardown(); } } else startStream(); });
++  window.addEventListener("pagehide", teardown);
++}
++export function setPower(on) { if (on && !st.stations.length) { set({ on: true, status: "nostation" }); save(); return; } set({ on: !!on, paused: false, attempt: 0 }); save(); startStream(); }
++export function setPlaying(play) { set({ paused: !play, attempt: 0 }); startStream(); }
++export function selectStation(id) { if (!station(id)) return; set({ stationId: id, on: true, paused: false, attempt: 0 }); save(); startStream(); }
++/** Next (+1) or previous (-1) station, wrapping round. Switches on the radio if it is off. */
++export function stepStation(d) { const l = st.stations; if (!l.length) return; const i = Math.max(0, l.findIndex((s) => s.id === st.stationId)); selectStation(l[(i + d + l.length) % l.length].id); }
++/** The radio plays only while you are in a vehicle. */
++export function setInVehicle(inV) { if (st.inVehicle === inV) return; set({ inVehicle: inV }); if (inV) startStream(); else { teardown(); set({ status: st.on ? "idle" : "off", artist: "", track: "" }); } }
++/** For the tests: shorter reconnect delays. */
++export const _setRetry = (a) => { RETRY = a; };
++/** For the tests: forget everything. */
++export function _resetRadio() { teardown(); st = IDLE; started = false; el = null; }
+diff --git a/lib/radio/stations.js b/lib/radio/stations.js
+new file mode 100644
+index 0000000..9299ced
+--- /dev/null
++++ b/lib/radio/stations.js
+@@ -0,0 +1,27 @@
++// lib/radio/stations.js
++// The radio station directory, as data. Stations live in public/data/radio-stations.json (so adding one is a data change, not a code change) and only stations that PASSED the
++// stream check (tools/radio/verify-stations.mjs) belong there: it opens every stream, checks it really is audio, and records when. This module validates what it is given, so a
++// bad entry is dropped quietly instead of breaking the radio, and works out which stations this browser can actually play.
++//
++// A station: { id, name, country, city?, genre, url, format ("mp3"|"aac"|"ogg"), homepage, meta ("icy"|"none"), verifiedAt (ISO date) }
++export const STATIONS_URL = "/data/radio-stations.json";
++const FORMATS = { mp3: "audio/mpeg", aac: "audio/aac", ogg: "audio/ogg" };
++
++export function cleanStation(s) {
++  if (!s || typeof s !== "object") return null;
++  const id = String(s.id ?? "").trim().toLowerCase(), name = String(s.name ?? "").trim().slice(0, 60);
++  let url; try { url = new URL(String(s.url ?? "")); } catch { return null; }
++  if (!/^[a-z0-9][a-z0-9-]{0,40}$/.test(id) || !name || !/^https?:$/.test(url.protocol) || url.username || url.password || !s.verifiedAt) return null;
++  return { id, name, country: String(s.country ?? "").slice(0, 40), city: String(s.city ?? "").slice(0, 40), genre: String(s.genre ?? "").slice(0, 40), url: url.href, format: FORMATS[s.format] ? s.format : "mp3", homepage: /^https?:\/\//.test(s.homepage ?? "") ? s.homepage : "", meta: s.meta === "icy" ? "icy" : "none", verifiedAt: String(s.verifiedAt) };
++}
++/** The valid stations of a file's contents ({ stations: [...] }), without duplicates, in the file's order. */
++export function cleanStations(json) {
++  const seen = new Set(), out = [];
++  for (const raw of Array.isArray(json?.stations) ? json.stations : []) { const s = cleanStation(raw); if (s && !seen.has(s.id)) { seen.add(s.id); out.push(s); } }
++  return out;
++}
++/** Can this browser play this station? An http stream cannot be played from an https page (mixed content), and the browser must know the format. */
++export function playable(s, { protocol = "https:", canPlay = () => "maybe" } = {}) {
++  if (protocol === "https:" && s.url.startsWith("http:")) return false;
++  return canPlay(FORMATS[s.format] ?? "audio/mpeg") !== "";
++}
+diff --git a/lib/settings.js b/lib/settings.js
+index 90ea32f..aa8f911 100644
+--- a/lib/settings.js
++++ b/lib/settings.js
+@@ -2,15 +2,18 @@
+ // The player's saved preferences. ONE definition shared by the browser (the Settings screen, the places that obey a preference) and the server (validation).
+ // Stored in Character.settings (JSON). A missing or damaged value simply means "the defaults", so old player records need no migration of their data.
+ export const SETTING_DEFAULTS = Object.freeze({
+-  audio: { music: true, sfx: true, musicVolume: 100, sfxVolume: 100 }, // volumes are 0-100 (percent of the game's normal level)
++  // volumes are 0-100 (percent of the game's normal level). masterVolume is over everything; engine = your vehicle, horn = every horn, traffic = other vehicles and the distant road, town = people and surroundings
++  // (the Music and sound-effect volumes are the original two). The Mute switches silence one channel and leave its volume where it was.
++  audio: { music: true, sfx: true, musicVolume: 100, sfxVolume: 100, masterVolume: 100, engineVolume: 100, hornVolume: 100, trafficVolume: 100, townVolume: 100, radioVolume: 80,
++    masterMute: false, engineMute: false, hornMute: false, trafficMute: false, townMute: false, hornStyle: "auto" },
+   gameplay: { interiorView: "follow", nameTags: true, leftHanded: false, controlHints: true }, // the camera you start with inside a building; whether other players' name tags are drawn; the on-screen stick and buttons swap sides; the "how to move" line in buildings
+   notifications: { achievements: true, alertSound: true, messagePopups: true, messageSound: true }, // pop-ups for awards; the chime that comes with a game alert; the pop-up and the sound for a new message
+   privacy: { showRelationship: true, searchable: true }, // your relationship status on your public profile; appearing in player search
+   accessibility: { reduceMotion: false, largeText: false, highContrast: false, autoSpin: true }, // autoSpin: the character preview turns by itself
+ });
+ 
+-const ENUMS = { "gameplay.interiorView": ["follow", "overhead"] };
+-const RANGES = { "audio.musicVolume": [0, 100], "audio.sfxVolume": [0, 100] };
++const ENUMS = { "gameplay.interiorView": ["follow", "overhead"], "audio.hornStyle": ["auto", "standard", "deep", "bright", "air"] };
++const RANGES = Object.fromEntries(["musicVolume", "sfxVolume", "masterVolume", "engineVolume", "hornVolume", "trafficVolume", "townVolume", "radioVolume"].map((k) => ["audio." + k, [0, 100]]));
+ 
+ /** Merge a (possibly partial, possibly hostile) settings object onto `base`. Unknown groups and keys are dropped, wrong types are ignored, numbers are clamped. */
+ export function cleanSettings(input, base = SETTING_DEFAULTS) {
+diff --git a/lib/sound.js b/lib/sound.js
+index e42744d..60d947d 100644
+--- a/lib/sound.js
++++ b/lib/sound.js
+@@ -13,6 +13,7 @@
+ // data-sound="none" (silent) or data-sound="confirm" (any sound name) to it or to a parent.
+ import { useSyncExternalStore } from "react";
+ import { makeKit, SOUNDS } from "./sfx.js";
++import { channel, subscribeMix } from "./audio/mixer.js";
+ 
+ /** The song is a 2:35 cut of the track, 0:50 to 3:25 (see public/audio). It loops. */
+ export const MUSIC = {
+@@ -34,7 +35,7 @@ const emit = () => { for (const l of listeners) l(); };
+ 
+ const pct = (v) => (typeof v === "number" && Number.isFinite(v) ? Math.min(100, Math.max(0, Math.round(v))) : 100);
+ let ducked = false; // a club DJ is playing: the background song gives way (see duckMusic)
+-const musicLevel = () => (ducked ? 0 : MUSIC.volume * (settings.musicVolume / 100));
++const musicLevel = () => (ducked ? 0 : MUSIC.volume * (settings.musicVolume / 100) * channel("master")); // the master volume (lib/audio/mixer.js) is over the song too
+ let masterGain = null; // the sound effects' volume knob, once the audio context exists
+ function read() {
+   try {
+@@ -63,7 +64,7 @@ export function setSoundSettings(patch) {
+   if (next.music === settings.music && next.sfx === settings.sfx && next.musicVolume === settings.musicVolume && next.sfxVolume === settings.sfxVolume) return;
+   const musicVolumeChanged = next.musicVolume !== settings.musicVolume;
+   settings = next;
+-  if (masterGain) masterGain.gain.setTargetAtTime(SFX_VOLUME * (settings.sfxVolume / 100), ctx.currentTime, 0.015);
++  if (masterGain) masterGain.gain.setTargetAtTime(SFX_VOLUME * (settings.sfxVolume / 100) * channel("master"), ctx.currentTime, 0.015);
+   if (el && intent && settings.music && musicVolumeChanged) { clearFade(); el.volume = musicLevel(); } // slider changes take effect immediately, even during a fade
+   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)); } catch { /* private mode: it just won't be remembered */ }
+   syncMusic();
+@@ -140,7 +141,7 @@ function makeCtx() {
+   try {
+     ctx = new AC({ latencyHint: "interactive" });
+     const master = ctx.createGain();
+-    master.gain.value = SFX_VOLUME * (settings.sfxVolume / 100);
++    master.gain.value = SFX_VOLUME * (settings.sfxVolume / 100) * channel("master");
+     masterGain = master;
+     const limiter = ctx.createDynamicsCompressor(); // only there to tame several sounds landing at once
+     limiter.threshold.value = -12;
+@@ -156,6 +157,24 @@ function makeCtx() {
+   return ctx;
+ }
+ 
++/**
++ * The shared audio context and a bus for the sound of the world (engines, horns, traffic, town), or null until the person has tapped something (the browser's rule).
++ * The vehicle and town sound (lib/audio/tripAudio.js) plays through this, so the whole game has ONE audio engine and ONE unlock; the world has its own limiter so a pile-up of
++ * engines never clips, and the master volume is applied per channel by lib/audio/mixer.js.
++ */
++let worldOut = null;
++export function getWorldAudio() {
++  if (typeof window === "undefined" || !gestured) return null;
++  const c = makeCtx(); if (!c) return null;
++  if (c.state !== "running") c.resume().catch(() => {});
++  if (!worldOut) {
++    const g = c.createGain(), lim = c.createDynamicsCompressor();
++    lim.threshold.value = -10; lim.knee.value = 18; lim.ratio.value = 5; lim.attack.value = 0.006; lim.release.value = 0.2;
++    g.connect(lim); lim.connect(c.destination); worldOut = g;
++  }
++  return { ctx: c, out: worldOut };
++}
++
+ /** Play one UI sound by name. Silent when sound effects are off, before the first tap, or for an unknown name. */
+ export function playSound(name) {
+   if (typeof window === "undefined" || !gestured) return;
+@@ -236,7 +255,8 @@ export function initSound() {
+     playSound("key");
+   }, opts);
+ 
+-  on(document, "visibilitychange", syncMusic);
++  on(document, "visibilitychange", () => { if (ctx) { if (document.hidden) ctx.suspend().catch(() => {}); else ctx.resume().catch(() => {}); } syncMusic(); });   // a hidden tab makes no sound and uses no audio CPU
++  offs.push(subscribeMix(() => { if (masterGain) masterGain.gain.setTargetAtTime(SFX_VOLUME * (settings.sfxVolume / 100) * channel("master"), ctx.currentTime, 0.015); if (el && intent && settings.music) { clearFade(); el.volume = musicLevel(); } }));
+   on(window, "storage", (e) => {
+     if (e.key !== STORAGE_KEY) return; // another tab changed the settings
+     settings = read();
+diff --git a/lib3d/traffic.js b/lib3d/traffic.js
+index 18625b3..6609af8 100644
+--- a/lib3d/traffic.js
++++ b/lib3d/traffic.js
+@@ -150,5 +150,7 @@ export function createTraffic({ parent, svc, focus, density = densityFor(), seed
+       else e.walker.pose((e.phase += d * 2.4), Math.min(1, d / dt / 1.2)); }
+   }
+   function dispose() { gone = true; for (const [id, e] of live) { tags?.remove(id); e.av?.dispose(); e.model?.dispose?.(); } for (const s of [...pools.keke, ...pools.bus, ...pools.minibus]) s.model.dispose?.(); for (const s of pedSlots) s.npc?.dispose(); sim.dispose?.(); group.traverse((o) => { if (o.userData.npcMesh || o.isSkinnedMesh || o.geometry?.userData?.shared) return; o.geometry?.dispose?.(); }); disposables.forEach((g) => { if (!g.userData?.shared) g.dispose(); }); bodies.dispose(); wheelsM.dispose(); parent.remove(group); }
+-  return { update, setTravellers, dispose, sim, peds: pedSlots /* read-only, for tests */ };
++  /** For the sound (lib/audio/tripAudio.js): the other real players' vehicles as plain { id, kind, car, x, z, v, h } (their own drawn position and speed). The computer-driven vehicles are read straight from `sim.vehicles`. */
++  function remoteVehicles() { const out = []; for (const [id, e] of live) if (e.model) out.push({ id: "r" + id, kind: e.kind, car: e.car, x: e.x, z: e.z, v: e.sp ?? 0, h: e.h }); return out; }
++  return { update, setTravellers, dispose, sim, remoteVehicles, peds: pedSlots /* read-only, for tests */ };
+ }
+\ No newline at end of file
+diff --git a/lib3d/travel.js b/lib3d/travel.js
+index ab33514..9383822 100644
+--- a/lib3d/travel.js
++++ b/lib3d/travel.js
+@@ -21,7 +21,8 @@ import { createTripFlow } from "./tripflow.js";
+ import { ROAD_TOP } from "./roadsurface.js";
+ import { wheelContacts } from "./vehiclepose.js";
+ import { rigSuspension, leanBody } from "./suspension.js";
+-import { createTraffic, makeWalker } from "./traffic.js";
++import { createTraffic, makeWalker, densityFor, DENSITY_LOW } from "./traffic.js";
++import { playSound } from "../lib/sound.js";
+ import { createPlayerTags, isTaggable } from "./playerTags.js";
+ import { createAvatar } from "./avatar/loadAvatar.js";
+ import { lookKey } from "../lib/look.js";
+@@ -154,6 +155,10 @@ export async function startTrip(env, o) {
+ 
+   const camPt = { x: plan.start.x, z: plan.start.z };
+   const traffic = createTraffic({ parent: world, svc, focus: () => camPt, tags }); disposers.push(() => traffic.dispose());
++  // ---- the sound of the trip: engines, horns, traffic, the town (lib/audio/tripAudio.js). Loaded on its own so a sound problem can never stop a trip: without it the trip is silent but works. ----
++  let audio = null;
++  try { const { createTripAudio } = await import("../lib/audio/tripAudio.js"); audio = createTripAudio({ places: (data.places ?? []).filter((p) => p.x != null && !p.offmap).map((p) => ({ x: p.x, z: p.z, kind: p.kind })), low: densityFor() === DENSITY_LOW }); disposers.push(() => audio.dispose()); } catch (e) { console.warn("trip sound unavailable", e); }
++  let hornWas = false;
+ 
+   // ---- the journey ----
+   const flow = createTripFlow({ svc, sim: traffic.sim }, { plan, enterable, dims: vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width, id: vehicle.id, seat: vehicle.seat, driver: vehicle.driver, wheels: wheelContacts(vehicle) } : null, rnd: Math.random, free: !!o.free, spawn: o.spawn ?? null, onArrive: () => o.onArrive?.() ?? true, onEnter: () => o.onEnter?.(), onEnd: (why) => { if (alive) o.onEnd?.(why); }, onNotice: (m) => o.onNotice?.(m) });
+@@ -299,6 +304,11 @@ export async function startTrip(env, o) {
+     if (inp.stop) flow.stopAuto(); if (inp.door) flow.pressDoor(); if (inp.goIn) flow.enterNow();
+     flow.update(dt, { dx: ax, dz: az, mag: m, run: inp.run, gas: inp.gas, brake: inp.brake, steer: inp.steer, exit: inp.exit, enter: inp.enter, close: inp.close });
+     lastPhase = F.phase;
++    // sound: where the listener is and which way the view faces, what you are riding or driving, who is near. The horn is the held HUD button / H key (input.horn).
++    { const vv = inVehNow() ? flow.vehicle : null, who = vv ?? P, sp = vv ? (vv.v ?? 0) : WK.speed, hx = who.hx ?? 0, hz = who.hz ?? 1, horn = !!input.horn && driving();
++      if (audio) audio.update(dt, { phase: F.phase, mode, carId: vehicle?.id ?? o.car ?? null, ego: flow.vehicle ?? null, own: flow.own ?? null, pos: { x: who.x, z: who.z, vx: hx * sp, vz: hz * sp }, fwd: f, horn, onDeck: ((flow.own ? flow.own.h : flow.vehicle?.y) ?? 0) > 2, sim: traffic.sim.vehicles, peds: traffic.sim.peds, remote: traffic.remoteVehicles });
++      else if (horn && !hornWas) playSound("horn");   // no trip sound (it failed to load): the old single beep
++      hornWas = horn; }
+     drawPerson(dt); drawVehicle(dt); door?.open(F.doorK, F.hinge); bay.visible = driving() && !!plan.drop && !flow.free; if (bay.visible) bay.scale.set(1, 1, 1 + Math.sin(time * 3) * 0.02);
+     beam.visible = ring.visible = !flow.free; if (door) door.group.visible = !flow.free;   // a free drive has no destination to point at
+     beam.material.opacity = 0.2 + Math.sin(time * 3) * 0.08; ring.scale.setScalar(1 + Math.sin(time * 3) * 0.08); hornT = Math.max(0, hornT - dt);
+diff --git a/public/data/radio-stations.json b/public/data/radio-stations.json
+new file mode 100644
+index 0000000..75ffe8c
+--- /dev/null
++++ b/public/data/radio-stations.json
+@@ -0,0 +1,4 @@
++{
++  "_readme": "Only stations that passed tools/radio/verify-stations.mjs belong here (it fills this file in). Add candidates to tools/radio/candidates.json and run: node tools/radio/verify-stations.mjs --write",
++  "stations": []
++}
+diff --git a/src/app/api/radio/meta/route.js b/src/app/api/radio/meta/route.js
+new file mode 100644
+index 0000000..59d3e65
+--- /dev/null
++++ b/src/app/api/radio/meta/route.js
+@@ -0,0 +1,33 @@
++// src/app/api/radio/meta/route.js
++// GET /api/radio/meta?id=<station id>  ->  { title, name }   what is playing on a radio station right now.
++// The browser cannot read a stream's track information from an <audio> element, so this reads it for the player: it opens the station's stream asking for its metadata
++// (lib/radio/icy.js), reads just the first block, and closes the connection. Safety rules, because this makes the server open a URL:
++//   - the id must be one of OUR stations (public/data/radio-stations.json): the URL is never taken from the request, so this cannot be pointed at anything else,
++//   - you must be logged in, the answer is cached for 20 s per station (so any number of players cost one upstream request per station per 20 s),
++//   - 6 s timeout, at most ~70 KB read, and a station with no track information is remembered for 10 minutes and not asked again.
++import { readFile } from "node:fs/promises";
++import path from "node:path";
++import { getUserId } from "@/lib/auth";
++import { cleanStations } from "@/lib/radio/stations";
++import { parseStreamTitle, readIcyBlock } from "@/lib/radio/icy";
++export const dynamic = "force-dynamic";
++const cache = (globalThis.__radioMeta ??= new Map());   // id -> { at, ttl, body }
++const NONE = { title: "", name: "" };
++
++async function stations() { try { return cleanStations(JSON.parse(await readFile(path.join(process.cwd(), "public", "data", "radio-stations.json"), "utf8"))); } catch { return []; } }
++
++export async function GET(req) {
++  if (!(await getUserId())) return Response.json({ error: "Please log in." }, { status: 401 });
++  const id = new URL(req.url).searchParams.get("id") ?? "", s = (await stations()).find((x) => x.id === id);
++  if (!s || s.meta !== "icy") return Response.json(NONE);
++  const hit = cache.get(id); if (hit && Date.now() - hit.at < hit.ttl) return Response.json(hit.body);
++  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 6000); let body = NONE, ttl = 20_000;
++  try {
++    const r = await fetch(s.url, { headers: { "Icy-MetaData": "1", "User-Agent": "LifeinOAU-Radio/1.0" }, signal: ctl.signal, redirect: "follow", cache: "no-store" });
++    const metaint = parseInt(r.headers.get("icy-metaint") ?? "", 10), name = r.headers.get("icy-name") ?? "";
++    if (!r.ok || !r.body || !Number.isInteger(metaint)) { ttl = 10 * 60_000; body = { title: "", name }; }
++    else { const rd = r.body.getReader(); const block = await readIcyBlock(async () => { const { value, done } = await rd.read(); return done ? null : value; }, metaint); try { await rd.cancel(); } catch { /* closed */ } body = { title: block ? parseStreamTitle(block) : "", name }; }
++  } catch { ttl = 60_000; } finally { clearTimeout(timer); ctl.abort(); }
++  cache.set(id, { at: Date.now(), ttl, body });
++  return Response.json(body);
++}
+diff --git a/tests/radio.test.mjs b/tests/radio.test.mjs
+new file mode 100644
+index 0000000..3b4a838
+--- /dev/null
++++ b/tests/radio.test.mjs
+@@ -0,0 +1,83 @@
++// tests/radio.test.mjs
++// The car radio (lib/radio/*), headless with a fake <audio>: only ever one stream, switching stations, play/pause, power, reconnecting with a delay then giving up,
++// playing only while in a vehicle, remembering the last station, and the pure parts (station validation, mixed-content rule, stream metadata, stream sniffing).
++import assert from "node:assert/strict";
++import { cleanStation, cleanStations, playable } from "../lib/radio/stations.js";
++import { parseStreamTitle, splitTitle, readIcyBlock } from "../lib/radio/icy.js";
++import { sniff } from "../tools/radio/verify-stations.mjs";
++let n = 0; const ok = (name, cond) => { assert.ok(cond, name); n++; };
++const wait = (ms) => new Promise((r) => setTimeout(r, ms));
++
++// ---- stations ----
++const good = { id: "demo-fm", name: "Demo FM", url: "https://example.com/live.mp3", format: "mp3", meta: "icy", verifiedAt: "2026-11-01" };
++ok("a verified station is accepted", cleanStation(good)?.id === "demo-fm");
++ok("a station that was never verified is not", cleanStation({ ...good, verifiedAt: "" }) === null);
++ok("no id, no name, a bad URL, a non-http URL or one with a password are all rejected", [{ ...good, id: "" }, { ...good, name: "" }, { ...good, url: "nope" }, { ...good, url: "ftp://x/y" }, { ...good, url: "https://u:p@x.com/a" }, { ...good, id: "Has Space" }].every((s) => cleanStation(s) === null));
++ok("duplicates are dropped and bad entries skipped, order kept", cleanStations({ stations: [good, { ...good, name: "Again" }, null, { id: "b", name: "B", url: "https://b.com/s", verifiedAt: "x" }] }).map((s) => s.id).join() === "demo-fm,b");
++ok("nonsense input gives an empty list, not an error", cleanStations(null).length === 0 && cleanStations({ stations: "x" }).length === 0 && cleanStations({}).length === 0);
++ok("an http stream cannot play on an https page, but can on http", !playable({ url: "http://a/b", format: "mp3" }, { protocol: "https:" }) && playable({ url: "http://a/b", format: "mp3" }, { protocol: "http:" }));
++ok("a format the browser cannot play is skipped", !playable({ url: "https://a/b", format: "aac" }, { protocol: "https:", canPlay: () => "" }) && playable({ url: "https://a/b", format: "aac" }, { protocol: "https:", canPlay: () => "maybe" }));
++
++// ---- track information ----
++ok("the title is read from a metadata block", parseStreamTitle("StreamTitle='Burna Boy - Last Last';StreamUrl='';") === "Burna Boy - Last Last");
++ok("an apostrophe inside a title is kept", parseStreamTitle("StreamTitle='Don't Stop - Artist';StreamUrl='http://x';") === "Don't Stop - Artist");
++ok("no title gives an empty string", parseStreamTitle("") === "" && parseStreamTitle("StreamUrl='x';") === "");
++ok("artist and track are split; a title with no dash is just the track", JSON.stringify(splitTitle("Wizkid - Essence")) === '{"artist":"Wizkid","track":"Essence"}' && splitTitle("Evening News").track === "Evening News" && splitTitle("Evening News").artist === "");
++ok("empty or placeholder titles are not shown", splitTitle("") === null && splitTitle("  ") === null && splitTitle("Unknown") === null && splitTitle("x".repeat(300)) === null);
++{ const enc = (s) => new TextEncoder().encode(s), meta = "StreamTitle='A - B';", len = Math.ceil(meta.length / 16), blk = new Uint8Array(1 + len * 16); blk[0] = len; blk.set(enc(meta), 1);
++  const audio = new Uint8Array(100).fill(7), whole = new Uint8Array([...audio, ...blk, ...audio]);
++  const chunked = (b, size) => { let i = 0; return async () => (i >= b.length ? null : b.slice(i, (i += size))); };
++  ok("a metadata block is found however the bytes arrive", (await readIcyBlock(chunked(whole, 100), 100)).startsWith("StreamTitle='A - B'") && (await readIcyBlock(chunked(whole, 7), 100)).startsWith("StreamTitle='A - B'") && (await readIcyBlock(chunked(whole, 1000), 100)).startsWith("StreamTitle"));
++  ok("an empty block gives an empty string; a stream that ends early gives null; a silly interval is refused", (await readIcyBlock(chunked(new Uint8Array([...audio, 0]), 50), 100)) === "" && (await readIcyBlock(chunked(audio.slice(0, 50), 10), 100)) === null && (await readIcyBlock(chunked(whole, 100), 999999)) === null && (await readIcyBlock(chunked(whole, 100), 0)) === null); }
++
++// ---- the verifier's idea of "real audio" ----
++ok("it recognises MP3 (with and without a tag), AAC and Ogg", sniff(new Uint8Array([0xff, 0xfb, 0x90, 0x00, 1, 2, 3, 4])) === "mp3" && sniff(new Uint8Array([0xff, 0xf1, 0x50, 0x80, 1, 2])) === "aac" && sniff(new TextEncoder().encode("OggS\0\x02abcdefgh")) === "ogg");
++ok("it recognises an MP3 stream that starts with an ID3 tag", sniff(new Uint8Array([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 4, 9, 9, 9, 9, 0xff, 0xfb, 0x90, 0])) === "mp3");
++ok("an HTML error page, a playlist, or random bytes are not audio", sniff(new TextEncoder().encode("<html><body>Not found</body></html>")) === null && sniff(new TextEncoder().encode("#EXTM3U\n#EXT-X-VERSION:3")) === "hls" && sniff(new Uint8Array(64).fill(1)) === null);
++
++// ---- the player, with a fake <audio> ----
++const log = { src: [], violations: 0, plays: 0, loads: 0 }, made = [];
++class FakeAudio { constructor() { this.l = {}; this._src = null; this.volume = 1; this.paused = true; made.push(this); }
++  setAttribute() {} addEventListener(e, f) { (this.l[e] ??= []).push(f); } emit(e) { for (const f of this.l[e] ?? []) f(); }
++  set src(v) { if (this._src) log.violations++; this._src = v; log.src.push(v); } get src() { return this._src; }
++  getAttribute(k) { return k === "src" ? this._src : null; } removeAttribute(k) { if (k === "src") this._src = null; }
++  play() { log.plays++; this.paused = false; return Promise.resolve(); } pause() { this.paused = true; } load() { log.loads++; } }
++const mem = new Map(), stationsFile = { stations: [good, { ...good, id: "two", name: "Two FM", url: "https://example.com/two.mp3", meta: "none" }, { ...good, id: "three", name: "Three FM", url: "https://example.com/three.mp3", meta: "none" }] };
++globalThis.window = globalThis; globalThis.Audio = FakeAudio; globalThis.location = { protocol: "https:" };
++globalThis.localStorage = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v), removeItem: (k) => mem.delete(k) };
++globalThis.document = { hidden: false, createElement: () => ({ canPlayType: () => "maybe" }), addEventListener() {} }; globalThis.addEventListener = () => {};
++globalThis.fetch = async (u) => (String(u).includes("/data/radio-stations.json") ? { ok: true, json: async () => stationsFile } : { ok: true, json: async () => ({ title: "Wizkid - Essence" }) });
++const R = await import("../lib/radio/radio.js"), el = () => R.getRadio();
++await R.initRadio();
++ok("the stations load and the first is chosen; the radio starts off", R.getRadio().stations.length === 3 && R.getRadio().stationId === "demo-fm" && !R.getRadio().on && R.getRadio().status === "off");
++R.setInVehicle(true); R.setPower(true); await wait(5);
++ok("switching on plays the chosen station", R.getRadio().on && log.src.at(-1) === "https://example.com/live.mp3" && R.getRadio().status === "loading");
++R.selectStation("two"); R.selectStation("three"); R.selectStation("demo-fm"); R.selectStation("two");
++ok("switching stations quickly never has two streams at once (the old source is always removed first)", log.violations === 0 && log.src.at(-1) === "https://example.com/two.mp3");
++ok("the new station is what the panel shows", R.getRadio().stationId === "two");
++R.stepStation(1); ok("next goes to the next station, wrapping at the end", R.getRadio().stationId === "three"); R.stepStation(1); ok("...round to the first", R.getRadio().stationId === "demo-fm"); R.stepStation(-1); ok("previous goes back", R.getRadio().stationId === "three");
++R.selectStation("demo-fm"); await wait(30);
++ok("a station with track information shows what is playing", R.getRadio().artist === "Wizkid" && R.getRadio().track === "Essence");
++R.setPlaying(false); ok("pause releases the stream (no data used) but the radio stays on", R.getRadio().on && R.getRadio().status === "paused" && log.src.at(-1) === "https://example.com/live.mp3");
++{ const before = log.src.length; R.setPlaying(true); await wait(5); ok("play starts it again", log.src.length === before + 1 && R.getRadio().status === "loading"); }
++R.setPower(false); ok("switching off stops everything", R.getRadio().status === "off" && !R.getRadio().on);
++{ const before = log.src.length; R.setInVehicle(false); R.setInVehicle(true); await wait(5); ok("with the radio off, getting into a vehicle plays nothing", log.src.length === before); }
++R.setPower(true); await wait(5); { const before = log.src.length; R.setInVehicle(false); ok("getting out of the vehicle stops the stream", R.getRadio().status === "idle" || R.getRadio().status === "off"); R.setInVehicle(true); await wait(5); ok("getting back in resumes the radio that was on", log.src.length === before + 1 && R.getRadio().on); }
++ok("on/off and the last station are remembered", JSON.parse(mem.get("lifeinoau:radio")).on === true && JSON.parse(mem.get("lifeinoau:radio")).stationId === "demo-fm");
++// a dropped stream reconnects after a delay, then gives up with a message
++{ R._setRetry([15, 15, 15, 15, 15]); const e = made[0]; R.setPower(false); R.setPower(true); await wait(5); const base = log.src.length;
++  e.emit("playing"); ok("when the stream plays, the status is playing", R.getRadio().status === "playing");
++  e.emit("error"); ok("a dropped stream is reconnecting, with a reason", R.getRadio().status === "reconnecting" && /stopped/.test(R.getRadio().error) && e.getAttribute("src") === null);
++  await wait(40); ok("and it reconnects to the same station on its own, with one stream", log.src.length === base + 1 && log.src.at(-1) === "https://example.com/live.mp3" && log.violations === 0);
++  e.emit("playing"); ok("a successful reconnect resets the count", R.getRadio().status === "playing" && R.getRadio().attempt === 0);
++  let tries = 0; for (let i = 0; i < 8 && R.getRadio().status !== "error"; i++) { e.emit("error"); await wait(40); tries++; }
++  ok("after six failed attempts it stops and says so (and how to retry), using no data", R.getRadio().status === "error" && /Press play/.test(R.getRadio().error) && e.getAttribute("src") === null && tries === 6);
++  R.setPlaying(false); R.setPlaying(true); await wait(5); ok("pressing play after that tries again", R.getRadio().status === "loading" && e.getAttribute("src") !== null);
++  R.setPower(false); const frozen = log.src.length; e.emit("error"); e.emit("ended"); await wait(40); ok("events from a stream that was switched off are ignored (nothing restarts it)", R.getRadio().status === "off" && log.src.length === frozen);
++  R.setPower(true); await wait(5); e.emit("waiting"); ok("a stall shows buffering", R.getRadio().status === "buffering"); e.emit("ended"); ok("a stream that ends is treated as dropped", R.getRadio().status === "reconnecting"); await wait(40); R.setPower(false); }
++ok("there was never more than one stream at a time", log.violations === 0);
++R._resetRadio();
++// ---- no stations ----
++{ const empty = { stations: [] }; globalThis.fetch = async () => ({ ok: true, json: async () => empty }); mem.clear(); await R.initRadio(); R.setInVehicle(true); R.setPower(true);
++  ok("with no stations the radio says so clearly and plays nothing", R.getRadio().status === "nostation" && R.getRadio().stations.length === 0 && log.violations === 0); R._resetRadio(); }
++console.log(`${n} radio checks passed`);
+diff --git a/tests/trip-controls.test.mjs b/tests/trip-controls.test.mjs
+index d87e4d4..49e5ab2 100644
+--- a/tests/trip-controls.test.mjs
++++ b/tests/trip-controls.test.mjs
+@@ -94,7 +94,9 @@ ok("a browser with no code falls back to the letter", keyId({ key: "a" }) === "K
+   ok("the pedals are held buttons that show when they are pressed", /th-pedal th-brake/.test(hud) && /th-pedal th-gas/.test(hud) && /\.th \.th-pedal\[data-down\]/.test(css) && /dataset\.down/.test(hud));
+   ok("the wheel shows when a finger is on it", /dataset\.held/.test(read("components/SteeringWheel.js")) && /\.th-wheel\[data-held="1"\]/.test(css));
+   ok("touch targets are at least 44 px", /--th-aux: 44px/.test(css) && /--th-pw: 78px/.test(css) && !/--th-aux: (3[0-9]|[12]?[0-9])px/.test(css.replace(/max-height: 380px[\s\S]*?\n\}/, "")));
+-  ok("the horn honks on press and has no silent click path", /onPointerDown=\{\(\) => playSound\("horn"\)\}/.test(hud) && !/data-sound="horn"/.test(hud));
++  // the horn is HELD: input.horn is true from the press until it is let go (release, cancel, lost capture, key up or focus lost), so a finger that slides off never leaves it stuck
++  ok("the horn sounds while the button is held and stops when it is let go, however the press ends, with no silent click path", /onPointerDown=\{[^}]*input\.horn = true/.test(hud) && ["onPointerUp", "onPointerCancel", "onLostPointerCapture", "onBlur"].every((e) => new RegExp(e + "=\\{\\(\\) => \\(input\\.horn = false\\)\\}").test(hud)) && /onKeyUp=/.test(hud) && !/data-sound="horn"/.test(hud));
++  { const travel = read("lib3d/travel.js"); ok("the trip reads the held horn and plays it through the trip sound (the old beep is only the fallback if that cannot load)", /input\.horn/.test(travel) && /horn,\s*onDeck/.test(travel) && /playSound\("horn"\)/.test(travel)); }
+   const nav = read("lib3d/travel.js"); ok("the engine reads keys by place (tripkeys) and steers them through keysteer", /createKeys/.test(nav) && /stepKeySteer/.test(nav) && !/e\.key\.toLowerCase\(\)/.test(nav.slice(nav.indexOf("controls: keys"), nav.indexOf("controls: keys") + 900))); }
+ 
+ console.log(`trip-controls: ${n} checks passed`);
+diff --git a/tests/vehicle-audio.test.mjs b/tests/vehicle-audio.test.mjs
+new file mode 100644
+index 0000000..ed45603
+--- /dev/null
++++ b/tests/vehicle-audio.test.mjs
+@@ -0,0 +1,93 @@
++// tests/vehicle-audio.test.mjs
++// The logic behind the vehicle and town sound (lib/audio/*), headless: engine profiles per vehicle, the RPM and gearbox model, when computer-driven vehicles honk,
++// the ambience weights, the volume mixer and the radio's station list and metadata reader. (The Web Audio nodes themselves are checked by tools/audio/render-check.mjs.)
++import assert from "node:assert/strict";
++import { ENGINES, VEHICLE_ENGINE, engineKeyFor, hornFor, HORNS, PATTERNS, defaultPattern } from "../lib/audio/profiles.js";
++import { createEngine, startEngine, stopEngine, stepEngine, isSilent } from "../lib/audio/engineModel.js";
++import { createHornBrain, leadKind } from "../lib/audio/hornBrain.js";
++import { soundWeights } from "../lib/audio/zones.js";
++import { MIX_DEFAULTS, channel } from "../lib/audio/mixer.js";
++import { VEHICLE_PERFORMANCE } from "../lib/vehiclePerformance.js";
++let n = 0; const ok = (name, cond) => { assert.ok(cond, name); n++; };
++
++// ---- 1. every vehicle has its own engine, and the categories really differ ----
++for (const id of Object.keys(VEHICLE_PERFORMANCE)) ok(`${id} has an engine profile`, !!ENGINES[VEHICLE_ENGINE[id]]);
++for (const id of ["keke", "bus", "minibus"]) ok(`${id} is a different engine from a car`, ENGINES[engineKeyFor({ kind: id })] !== ENGINES.compact);
++ok("a keke, a bus and a car are three different engines", new Set([engineKeyFor({ kind: "keke" }), engineKeyFor({ kind: "bus" }), engineKeyFor({ kind: "car" })]).size === 3);
++ok("the Cybertruck is electric, the Huracan a V10, the Urus a V8", ENGINES[VEHICLE_ENGINE["cybertruck-2024"]].ev && ENGINES[VEHICLE_ENGINE["huracan-2025"]].cyl === 10 && ENGINES[VEHICLE_ENGINE["urus-2025"]].cyl === 8);
++ok("ordinary traffic cars are not all the same engine", new Set([0, 0.2, 0.4, 0.55, 0.7, 0.9].map((t) => engineKeyFor({ kind: "car", tint: t }))).size >= 3);
++ok("an unknown car id falls back to a car engine", engineKeyFor({ kind: "car", carId: "nope" }) in ENGINES);
++const fire = (P, rpm) => (rpm / 60) * P.cyl / 2;   // firing frequency = the pitch
++ok("a diesel bus is darker and heavier than a petrol hatchback (lower cutoff, more sub-lump, diesel clatter)", ENGINES.bus.cut[1] < ENGINES.compact.cut[1] && ENGINES.bus.sub > ENGINES.compact.sub && ENGINES.bus.knock > 0 && ENGINES.compact.knock === 0);
++ok("a keke thumps at a few puffs a second at idle, far below a car's", fire(ENGINES.keke, ENGINES.keke.idle) < fire(ENGINES.compact, ENGINES.compact.idle) / 1.5);
++ok("every vehicle category has a horn, and the horns differ", ["compact", "keke", "bus", "minibus", "suv", "supercar"].length && new Set(["compact", "keke", "bus", "minibus", "v8", "ev"].map((k) => hornFor(k).name)).size === 6);
++ok("a chosen horn style overrides the vehicle's own", hornFor("compact", "air") === HORNS.air && hornFor("compact", "auto") === HORNS.compact);
++ok("the keke peeps and the bus holds its horn", defaultPattern("keke") === "peep" && defaultPattern("bus") === "long" && defaultPattern("compact") === "toot");
++for (const [k, beats] of Object.entries(PATTERNS)) ok(`pattern ${k} is a list of [start, length]`, beats.every((b) => b.length === 2 && b[1] > 0));
++
++// ---- 2. the RPM and gearbox model ----
++const drive = (key, { sec = 20, fps = 60, thr = 1, speedOf }) => { const e = createEngine(ENGINES[key]); startEngine(e); let v = 0, log = []; for (let i = 0; i < sec * fps; i++) { const t = i / fps; v = speedOf ? speedOf(t, v) : v; stepEngine(e, { speed: v, throttle: typeof thr === "function" ? thr(t) : thr, dt: 1 / fps }); log.push({ t, rpm: e.rpm, gear: e.gear, v, load: e.load }); } return { e, log }; };
++{ const { e, log } = drive("compact", { sec: 2, speedOf: () => 0, thr: 0 }); ok("it cranks, catches and settles at idle", Math.abs(e.rpm - ENGINES.compact.idle) < 90 && log[10].rpm < 400);
++  ok("while it cranks it is below idle", log.slice(0, 20).every((p) => p.rpm < 500)); }
++{ const { e } = drive("compact", { sec: 3, speedOf: () => 0, thr: 0 }); const idle = e.rpm; for (let i = 0; i < 60; i++) stepEngine(e, { speed: 0, throttle: 1, dt: 1 / 60 }); ok("floored from a standstill the revs climb well above idle", e.rpm > idle + 2000);
++  for (let i = 0; i < 180; i++) stepEngine(e, { speed: 0, throttle: 0, dt: 1 / 60 }); ok("and fall back to idle when you let go", Math.abs(e.rpm - ENGINES.compact.idle) < 100); }
++{ const { log } = drive("compact", { sec: 25, speedOf: (t, v) => Math.min(44, v + 3.2 / 60) });   // a steady pull from 0 to 44 m/s
++  const gears = [...new Set(log.map((p) => p.gear))]; ok("accelerating through the speed range changes gear several times", gears.length >= 4);
++  let falls = 0; for (let i = 1; i < log.length; i++) if (log[i].rpm < log[i - 1].rpm - 4 && log[i].gear > log[i - 1].gear - 0.5 && log[i].v > log[i - 1].v) falls++; ok("the revs fall at the upshifts (the sound of a gear change)", falls > 8);
++  ok("revs never pass the redline", log.every((p) => p.rpm <= ENGINES.compact.red + 1)); ok("revs never drop below idle once running", log.slice(60).every((p) => p.rpm >= ENGINES.compact.idle * 0.9 - 1));
++  const lo = log.filter((p) => p.gear === 1 && p.v > 4).length; ok("it stays in a gear for a while", lo > 5); }
++{ const a = drive("sedanV6", { sec: 12, fps: 30, speedOf: (t, v) => Math.min(30, v + 3 / 30) }), b = drive("sedanV6", { sec: 12, fps: 144, speedOf: (t, v) => Math.min(30, v + 3 / 144) });
++  ok("the same drive at 30 and 144 fps ends with about the same revs and gear", Math.abs(a.e.rpm - b.e.rpm) < 350 && a.e.gear === b.e.gear); }
++{ const { log } = drive("compact", { sec: 30, speedOf: (t, v) => (t < 12 ? Math.min(25, v + 2.5 / 60) : Math.max(0, v - 2 / 60)), thr: (t) => (t < 12 ? 0.7 : 0) });
++  const peak = Math.max(...log.map((p) => p.rpm)), end = log.at(-1); ok("slowing down with the throttle off brings the revs down to idle", end.rpm < ENGINES.compact.idle + 150 && peak > 2500); ok("decelerating, the load is light (engine braking)", log.slice(-300).every((p) => p.load < 0.25)); }
++{ const e = createEngine(ENGINES.keke); startEngine(e); for (let i = 0; i < 120; i++) stepEngine(e, { speed: 0, throttle: 0, dt: 1 / 60 }); ok("a keke idles at its own rpm", Math.abs(e.rpm - ENGINES.keke.idle) < 120); }
++{ const e = createEngine(ENGINES.bus); startEngine(e); for (let i = 0; i < 120; i++) stepEngine(e, { speed: 0, throttle: 0, dt: 1 / 60 }); const idle = e.rpm; let v = 0; for (let i = 0; i < 60 * 12; i++) { v = Math.min(20, v + 1.2 / 60); stepEngine(e, { speed: v, throttle: 0.8, dt: 1 / 60 }); } ok("a bus idles low and revs but never above its (low) redline", idle < 700 && e.rpm <= ENGINES.bus.red); }
++{ const e = createEngine(ENGINES.compact); startEngine(e); for (let i = 0; i < 120; i++) stepEngine(e, { speed: 0, throttle: 0, dt: 1 / 60 }); ok("running is not silent", !isSilent(e)); stopEngine(e); let t = 0; while (!isSilent(e) && t < 400) { stepEngine(e, { speed: 0, throttle: 0, dt: 1 / 60 }); t++; } ok("switching off lets the revs fall to silence within a second or two", isSilent(e) && t < 150);
++  startEngine(e); ok("and it can be started again", e.mode === "crank"); }
++{ const e = createEngine(ENGINES.ev); startEngine(e); for (let i = 0; i < 60; i++) stepEngine(e, { speed: 0, throttle: 0, dt: 1 / 60 }); const still = e.rpm; for (let i = 0; i < 200; i++) stepEngine(e, { speed: 25, throttle: 0.5, dt: 1 / 60 }); ok("an electric motor has no idle and its whine rises with speed", still < 5 && e.rpm > 40 && e.gear === 1); }
++{ const e = createEngine(ENGINES.huracan ?? ENGINES.v10); startEngine(e); let v = 0, g = new Set(); for (let i = 0; i < 60 * 20; i++) { v = Math.min(90, v + 4.5 / 60); stepEngine(e, { speed: v, throttle: 1, dt: 1 / 60 }); g.add(e.gear); } ok("a V10 supercar goes through all its gears", g.size >= 6); }
++{ const e = createEngine(ENGINES.compact); startEngine(e); for (let i = 0; i < 300; i++) stepEngine(e, { speed: 0, throttle: 1, dt: 1 / 60 }); ok("flat out at a standstill it sits on the limiter without overshooting", e.rpm <= ENGINES.compact.red); }
++
++// ---- 3. when computer-driven vehicles honk ----
++const person = { edge: 3, speed: 1.2 }, car = { kind: "car", route: {} }, you = { len: 0.6 }, mine = { len: 4.5 };
++ok("leads are told apart", leadKind(person) === "ped" && leadKind(car) === "vehicle" && leadKind(you) === "player" && leadKind(mine) === "other" && leadKind(null) === null);
++{ const rnd = () => 0.1, b = createHornBrain({ rnd }); let honks = 0, t = 0;
++  ok("nothing in the way: no honk, ever", (() => { for (let i = 0; i < 500; i++) if (b.consider("a", "car", { v: 10, lead: null, dist: 20 }, i * 0.1)) return false; return true; })());
++  const first = b.consider("p", "car", { v: 8, lead: { gap: 12, v: 0, who: you }, dist: 20 }, 100); ok("coming up to someone standing in the road: a warning toot", first?.pattern === "toot");
++  ok("not again at once for the same person", b.consider("p", "car", { v: 8, lead: { gap: 9, v: 0, who: you }, dist: 20 }, 100.5) === null);
++  const stopped = []; for (let i = 0; i < 230; i++) { const r = b.consider("p", "car", { v: 0, lead: { gap: 3, v: 0, who: you }, dist: 20 }, 101 + i * 0.1); if (r) stopped.push(101 + i * 0.1); }
++  ok("stopped with them still in front, it honks again only after a pause of at least 9 s (never every second)", stopped.length === 2 && stopped.every((x, i) => i === 0 || x - stopped[i - 1] >= 9));
++  ok("after the third honk at one blockage (the warning plus two) it is quiet for a long while", b.consider("p", "car", { v: 0, lead: { gap: 3, v: 0, who: you }, dist: 20 }, 130) === null && b.consider("p", "car", { v: 0, lead: { gap: 3, v: 0, who: you }, dist: 20 }, 145) === null); }
++{ const b = createHornBrain({ rnd: () => 0.1 }), a = b.consider("far", "car", { v: 8, lead: { gap: 10, v: 0, who: you }, dist: 400 }, 5); ok("a vehicle too far away to be heard does not honk", a === null); }
++{ const b = createHornBrain({ rnd: () => 0.1 }); const r = b.consider("k", "keke", { v: 8, lead: { gap: 10, v: 0, who: person }, dist: 30 }, 5); ok("a keke 'peeps'", r?.pattern === "peep"); const r2 = b.consider("b", "bus", { v: 0, lead: { gap: 4, v: 0, who: person }, dist: 30 }, 6); ok("a bus does not toot within a second of someone else honking", r2 === null); }
++{ const b = createHornBrain({ rnd: () => 0.5 }); let any = 0; for (let i = 0; i < 300; i++) if (b.consider("w", "car", { v: 0, waiting: true, lead: { gap: 3, v: 0, who: car }, dist: 30 }, i * 0.1)) any++; ok("a vehicle waiting its turn at a junction does not honk (rnd 0.5 is above its 20% chance)", any === 0); }
++{ const b = createHornBrain({ rnd: () => 0.1 }); let any = null; for (let i = 0; i < 300; i++) any ||= b.consider("q", "car", { v: 0, lead: { gap: 3, v: 0, who: car }, dist: 30 }, i * 0.1); ok("stuck behind a stopped vehicle for a long time: an impatient honk", !!any); }
++{ const b = createHornBrain({ rnd: () => 0.1 }); b.consider("x", "car", { v: 8, lead: { gap: 10, v: 0, who: you }, dist: 20 }, 1); b.consider("y", "car", { v: 8, lead: { gap: 10, v: 0, who: you }, dist: 20 }, 50); ok("memory is kept per vehicle", b.size === 2); b.prune(new Set(["y"])); ok("and forgotten when a vehicle goes", b.size === 1); }
++{ const b = createHornBrain({ rnd: () => 0.1 }); ok("it never honks at the player's own car", b.consider("z", "car", { v: 8, lead: { gap: 6, v: 0, who: mine }, dist: 20 }, 3) === null); }
++
++// ---- 4. the soundscape ----
++const places = [{ x: 0, z: 0, kind: "shop" }, { x: 400, z: 0, kind: "hostel" }, { x: 800, z: 0, kind: "lecture" }, { x: 1200, z: 0, kind: "worship" }];
++{ const m = soundWeights({ x: 5, z: 0, places, vehicles: 4, peds: 10 }), h = soundWeights({ x: 400, z: 10, places, vehicles: 1, peds: 2, night: true }), q = soundWeights({ x: 2500, z: 0, places, vehicles: 0, peds: 0 }), w = soundWeights({ x: 0, z: 2000, places, vehicles: 12, peds: 0, onDeck: true, speed: 28 });
++  ok("at the market there is more human activity than at a quiet spot", m.crowd > q.crowd + 0.3 && m.market > 0.9); ok("a hostel has its own sound (a generator hum, murmur), a quiet spot none", h.generator > 0.8 && h.hostelAt && q.generator === 0);
++  ok("a busy road is busier than a quiet one", soundWeights({ x: 2500, z: 0, places, vehicles: 14, peds: 0 }).traffic > q.traffic + 0.3); ok("the expressway is all traffic and wind, with no crowd", w.traffic > 0.9 && w.wind > 0.5 && w.crowd < 0.1 && w.name === "highway");
++  ok("nature is strongest where it is quiet", q.nature > m.nature + 0.3); ok("the generator hum is louder at night", soundWeights({ x: 400, z: 0, places, night: true }).generator > soundWeights({ x: 400, z: 0, places, night: false }).generator);
++  const a = soundWeights({ x: 60, z: 0, places }), b = soundWeights({ x: 61, z: 0, places }); ok("weights change smoothly with position: no jump from one soundscape to another", Math.abs(a.crowd - b.crowd) < 0.05 && Math.abs(a.traffic - b.traffic) < 0.05);
++  ok("every weight is between 0 and 1", [m, h, q, w].every((r) => ["traffic", "crowd", "nature", "market", "generator", "wind", "hostel"].every((k) => r[k] >= 0 && r[k] <= 1))); }
++
++// ---- 5. the mixer ----
++ok("by default everything is on", channel("engine", MIX_DEFAULTS) === 1 && channel("horn", MIX_DEFAULTS) === 1 && channel("master", MIX_DEFAULTS) === 1);
++ok("the master scales every channel", Math.abs(channel("engine", { ...MIX_DEFAULTS, masterVolume: 50 }) - 0.5) < 1e-9 && Math.abs(channel("radio", { ...MIX_DEFAULTS, masterVolume: 50, radioVolume: 50 }) - 0.25) < 1e-9);
++ok("each channel is independent", channel("engine", { ...MIX_DEFAULTS, hornVolume: 0 }) === 1 && channel("horn", { ...MIX_DEFAULTS, hornVolume: 0 }) === 0);
++ok("a channel mute silences only that channel", channel("town", { ...MIX_DEFAULTS, townMute: true }) === 0 && channel("traffic", { ...MIX_DEFAULTS, townMute: true }) === 1);
++ok("muting the master silences all, the radio too", ["engine", "horn", "traffic", "town", "radio", "master"].every((c) => channel(c, { ...MIX_DEFAULTS, masterMute: true }) === 0));
++console.log(`${n} vehicle-audio checks passed`);
++
++// ---- 6. the audio settings are saved and validated like every other setting ----
++{ const { SETTING_DEFAULTS, cleanSettings } = await import("../lib/settings.js"), d = SETTING_DEFAULTS.audio;
++  ok("every volume and mute has a default", ["masterVolume", "engineVolume", "hornVolume", "trafficVolume", "townVolume", "radioVolume", "masterMute", "engineMute", "hornMute", "trafficMute", "townMute", "hornStyle"].every((k) => k in d));
++  ok("the old settings are untouched", d.music === true && d.sfx === true && d.musicVolume === 100 && d.sfxVolume === 100);
++  const c = cleanSettings({ audio: { masterVolume: 150, hornVolume: -5, radioVolume: "loud", hornStyle: "nope", engineMute: true, trafficMute: "yes" } }).audio;
++  ok("volumes are clamped to 0..100 and junk falls back to the default", c.masterVolume === 100 && c.hornVolume === 0 && c.radioVolume === d.radioVolume);
++  ok("an unknown horn style falls back to automatic; a real boolean is kept; a non-boolean is ignored", c.hornStyle === "auto" && c.engineMute === true && c.trafficMute === false);
++  ok("every horn style the Settings list offers is accepted", ["auto", "standard", "deep", "bright", "air"].every((h) => cleanSettings({ audio: { hornStyle: h } }).audio.hornStyle === h)); }
++console.log(`${n} vehicle-audio checks passed (with settings)`);
+diff --git a/tools/audio/render-check.mjs b/tools/audio/render-check.mjs
+new file mode 100644
+index 0000000..9783646
+--- /dev/null
++++ b/tools/audio/render-check.mjs
+@@ -0,0 +1,88 @@
++// tools/audio/render-check.mjs
++// Renders the engine, horn and ambience voices OFFLINE in Node and measures what comes out, because the sound itself cannot be unit-tested the way the logic can:
++//   - every engine makes sound, never clips and never goes NaN, and is silent when it is switched off,
++//   - the pitch it makes is the firing frequency the model asks for, and rises with the revs,
++//   - the categories really sound different (their tone, measured as the spectral centroid, and their level),
++//   - an exterior voice gets quieter and duller with distance, and louder when it is closer, and sits to the side it is on,
++//   - horns are distinct per category, ambience beds are non-silent and a voice leaves nothing running when it is disposed.
++// It needs a Web Audio implementation for Node, which is NOT a dependency of the game:   npm i --no-save node-web-audio-api   then   node tools/audio/render-check.mjs
++// Add --wav to write a .wav of each sound into /tmp/lifeinoau-audio so they can be listened to.
++import assert from "node:assert/strict";
++import fs from "node:fs";
++import { ENGINES, HORNS, PATTERNS } from "../../lib/audio/profiles.js";
++import { createEngineVoice } from "../../lib/audio/engineVoice.js";
++import { playHorn } from "../../lib/audio/hornVoice.js";
++import { createAmbience } from "../../lib/audio/ambience.js";
++import { setListener, dopplerRatio } from "../../lib/audio/spatial.js";
++import { soundWeights } from "../../lib/audio/zones.js";
++
++let wa; try { wa = await import("node-web-audio-api"); } catch { console.log("skipped: node-web-audio-api is not installed (npm i --no-save node-web-audio-api)"); process.exit(0); }
++const { OfflineAudioContext } = wa, SR = 22050, WAV = process.argv.includes("--wav"); if (WAV) fs.mkdirSync("/tmp/lifeinoau-audio", { recursive: true });
++let n = 0; const ok = (name, cond, info = "") => { assert.ok(cond, name + " " + info); n++; };
++const stat = (x) => { let s = 0, pk = 0; for (const v of x) { s += v * v; pk = Math.max(pk, Math.abs(v)); } return { rms: Math.sqrt(s / x.length), peak: pk, bad: x.some((v) => !Number.isFinite(v)) }; };
++/** In-place radix-2 FFT. */
++function fft(re, im) { const n = re.length; for (let i = 1, j = 0; i < n; i++) { let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; } }
++  for (let len = 2; len <= n; len <<= 1) { const ang = (-2 * Math.PI) / len, wr = Math.cos(ang), wi = Math.sin(ang); for (let i = 0; i < n; i += len) { let cr = 1, ci = 0; for (let k = 0; k < len / 2; k++) { const ur = re[i + k], ui = im[i + k], vr = re[i + k + len / 2] * cr - im[i + k + len / 2] * ci, vi = re[i + k + len / 2] * ci + im[i + k + len / 2] * cr; re[i + k] = ur + vr; im[i + k] = ui + vi; re[i + k + len / 2] = ur - vr; im[i + k + len / 2] = ui - vi; const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t; } } } }
++/** Spectral centroid in Hz (where the "weight" of the tone is): the magnitude-weighted mean frequency over a few windows. */
++function centroid(x) { const N = 4096; let num = 0, den = 0; for (let off = 0; off + N <= x.length; off += N) { const re = new Float64Array(N), im = new Float64Array(N); for (let i = 0; i < N; i++) re[i] = x[off + i] * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N)); fft(re, im); for (let k = 2; k < N / 2; k++) { const m = Math.hypot(re[k], im[k]); num += m * k * (SR / N); den += m; } } return den ? num / den : 0; }
++/** The repeat period of the sound (autocorrelation) as a frequency: the firing frequency of an engine. */
++function pitch(x, lo, hi) { let best = -1, bf = 0; const a = Math.floor(SR / hi), b = Math.floor(SR / lo), n = Math.min(x.length, SR); for (let lag = a; lag <= b; lag++) { let c = 0; for (let i = 0; i + lag < n; i += 2) c += x[i] * x[i + lag]; if (c > best) { best = c; bf = SR / lag; } } return bf; }
++const wav = (name, x) => { if (!WAV) return; const b = Buffer.alloc(44 + x.length * 2); b.write("RIFF", 0); b.writeUInt32LE(36 + x.length * 2, 4); b.write("WAVEfmt ", 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(SR, 24); b.writeUInt32LE(SR * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write("data", 36); b.writeUInt32LE(x.length * 2, 40); for (let i = 0; i < x.length; i++) b.writeInt16LE(Math.max(-1, Math.min(1, x[i])) * 32767, 44 + i * 2); fs.writeFileSync(`/tmp/lifeinoau-audio/${name}.wav`, b); };
++const render = async (build, sec = 2.6) => { const ctx = new OfflineAudioContext(2, Math.floor(SR * sec), SR); const h = build(ctx); const buf = await ctx.startRendering(); return { L: buf.getChannelData(0), R: buf.getChannelData(1), h }; };
++const tail = (x) => x.slice(Math.floor(x.length * 0.45));
++
++// ---- engines at idle, cruising and flat out ----
++const results = {};
++for (const [key, P] of Object.entries(ENGINES)) {
++  results[key] = {};
++  for (const [label, rpmN, load] of [["idle", 0, 0.1], ["cruise", 0.35, 0.4], ["flat", 0.9, 1]]) {
++    const rpm = P.ev ? rpmN * 100 : P.idle + (P.red - P.idle) * rpmN;
++    const { L } = await render((ctx) => { const v = createEngineVoice(ctx, ctx.destination, P, { spatial: false }); v.update({ rpm, rpmN, load, level: 1 }); return v; });
++    const x = tail(L), s = stat(x); results[key][label] = { ...s, c: centroid(x), x };
++    ok(`${key} ${label}: makes sound`, s.rms > 0.003, `rms ${s.rms}`); ok(`${key} ${label}: never clips or goes NaN`, !s.bad && s.peak < 1.0, `peak ${s.peak}`);
++    if (label === "idle") wav(`engine-${key}-idle`, x); if (label === "flat") wav(`engine-${key}-flat`, x);
++  }
++  const r = results[key]; ok(`${key}: louder and brighter when worked hard than at idle`, P.ev || (r.flat.rms > r.idle.rms * 1.2 && r.flat.c > r.idle.c), `idle ${r.idle.rms.toFixed(3)}/${r.idle.c.toFixed(0)} flat ${r.flat.rms.toFixed(3)}/${r.flat.c.toFixed(0)}`);
++}
++// the pitch is the firing frequency, and it rises with the revs
++for (const key of ["compact", "sedanV6", "v8", "bus", "minibus"]) { const P = ENGINES[key]; for (const [label, rpm] of [["idle", P.idle], ["cruise", P.idle + (P.red - P.idle) * 0.35]]) { const want = (rpm / 60) * P.cyl / 2, got = pitch(results[key][label === "idle" ? "idle" : "cruise"].x, want * 0.6, want * 1.7);
++  ok(`${key} ${label}: pitch ${got.toFixed(1)} Hz is the firing frequency ${want.toFixed(1)} Hz (or a whole multiple/fraction of it)`, [1, 2, 0.5].some((m) => Math.abs(got / (want * m) - 1) < 0.1), `got ${got}`); } }
++ok("a keke's idle sounds as slow puffs, well below a car's pitch", pitch(results.keke.idle.x, 6, 60) < pitch(results.compact.idle.x, 15, 80) * 0.9);
++// categories sound different: not one recording
++const cents = Object.fromEntries(Object.keys(ENGINES).map((k) => [k, results[k].cruise.c]));
++console.log("cruise spectral centroid (Hz):", Object.entries(cents).map(([k, v]) => `${k} ${v.toFixed(0)}`).join(", "));
++ok("a bus sounds darker than a car, and a supercar brighter than both", cents.bus < cents.compact && cents.v10 > cents.compact);
++ok("a keke is raspier (brighter) than a bus", cents.keke > cents.bus);
++ok("no two vehicle categories have the same tone", new Set(Object.values(cents).map((c) => Math.round(c / 40))).size >= 8);
++
++// ---- exterior voices: distance, direction ----
++const ext = async (x, z, fx = 0, fz = -1) => { const { L, R, h } = await render((ctx) => { setListener(ctx, { x: 0, z: 0, fx, fz }); const v = createEngineVoice(ctx, ctx.destination, ENGINES.compact, { spatial: true }); v.setPosition(x, 0.8, z); v.update({ rpm: 3000, rpmN: 0.4, load: 0.5, level: 1, dop: 1, dist: Math.hypot(x, z), facing: 0 }); return v; }); return { l: stat(tail(L)).rms, r: stat(tail(R)).rms, c: centroid(tail(L)), h }; };
++const d10 = await ext(10, 0), d40 = await ext(40, 0), d120 = await ext(120, 0);
++ok("a vehicle gets quieter as it moves away", d10.r > d40.r && d40.r > d120.r, `${d10.r} ${d40.r} ${d120.r}`);
++ok("and duller (air takes the highs)", d10.c > d120.c, `${d10.c} ${d120.c}`);
++ok("a vehicle 120 m away is much quieter than one at 10 m", d120.r < d10.r * 0.35);
++const east = await ext(30, 0), west = await ext(-30, 0);   // facing north: east is on the right
++ok("a vehicle to the east, facing north, is heard in the right ear", east.r > east.l * 1.5 && west.l > west.r * 1.5, `east l${east.l} r${east.r}; west l${west.l} r${west.r}`);
++const ahead = await ext(0, -30), behind = await ext(0, 30);
++ok("ahead and behind are centred", Math.abs(ahead.l - ahead.r) < ahead.l * 0.25 && Math.abs(behind.l - behind.r) < behind.l * 0.25);
++const turned = await ext(30, 0, 0, 1);   // now facing south: east is on the LEFT
++ok("turning round swaps the sides", turned.l > turned.r * 1.5);
++// Doppler
++const approaching = dopplerRatio(0, 0, 0, 0, 0, 60, 0, -20), receding = dopplerRatio(0, 0, 0, 0, 0, 60, 0, 20), passing = dopplerRatio(0, 0, 0, 0, 40, 0, 0, 20);
++ok("an approaching vehicle is higher in pitch, a receding one lower, one passing across unchanged", approaching > 1.03 && receding < 0.97 && Math.abs(passing - 1) < 0.005, `${approaching} ${receding} ${passing}`);
++
++// ---- horns ----
++const hornRes = {};
++for (const [k, H] of Object.entries(HORNS)) { const pat = k === "keke" ? "peep" : "toot"; const { L } = await render((ctx) => playHorn(ctx, ctx.destination, H, { pattern: pat, level: 1 }), 1.2); const s = stat(L); hornRes[k] = { ...s, c: centroid(L) }; ok(`horn ${k}: audible, not clipping`, s.rms > 0.004 && s.peak < 1 && !s.bad, JSON.stringify(s)); wav(`horn-${k}`, L); }
++ok("the horns do not all sound alike", new Set(Object.values(hornRes).map((h) => Math.round(h.c / 60))).size >= 5, JSON.stringify(Object.fromEntries(Object.entries(hornRes).map(([k, v]) => [k, Math.round(v.c)]))));
++{ const near = await render((ctx) => { setListener(ctx, { x: 0, z: 0, fx: 0, fz: -1 }); return playHorn(ctx, ctx.destination, HORNS.compact, { pattern: "toot", pos: { x: 10, y: 1, z: 0 }, dist: 10 }); }, 0.6), far = await render((ctx) => { setListener(ctx, { x: 0, z: 0, fx: 0, fz: -1 }); return playHorn(ctx, ctx.destination, HORNS.compact, { pattern: "toot", pos: { x: 120, y: 1, z: 0 }, dist: 120 }); }, 0.6);
++  ok("a horn is much quieter far away, and comes from the side it is on", stat(far.R).rms < stat(near.R).rms * 0.3 && stat(near.R).rms > stat(near.L).rms * 1.5); }
++for (const [p, beats] of Object.entries(PATTERNS)) ok(`pattern ${p} fits in two seconds`, beats.at(-1)[0] + beats.at(-1)[1] < 2);
++
++// ---- ambience ----
++{ const ch = { traffic: () => 1, town: () => 1 }, W = (x) => ({ ...soundWeights({ x, z: 0, places: [{ x: 0, z: 0, kind: "shop" }], vehicles: 8, peds: 8 }) });
++  const run = async (w) => (await render((ctx) => { setListener(ctx, { x: 0, z: 0, fx: 0, fz: -1 }); const a = createAmbience(ctx, ctx.destination, ch); a.update(0.2, w, { x: 0, z: 0, night: false }); return a; }, 3)).L;
++  const market = stat(tail(await run(W(0)))), quiet = stat(tail(await run(W(2000)))), road = stat(tail(await run(soundWeights({ x: 0, z: 2000, places: [], vehicles: 14, peds: 0, onDeck: true, speed: 25 }))));
++  ok("the market's ambience is louder and busier than the quiet edge of town", market.rms > quiet.rms * 1.2, `${market.rms} ${quiet.rms}`); ok("ambience is audible but not loud (it must not drown the engines)", market.rms > 0.002 && market.rms < 0.25 && road.rms < 0.35, `${market.rms} ${road.rms}`); ok("no ambience layer clips", market.peak < 1 && road.peak < 1 && !market.bad); }
++
++console.log(`${n} render checks passed` + (WAV ? "; wav files in /tmp/lifeinoau-audio" : ""));
+diff --git a/tools/radio/candidates.json b/tools/radio/candidates.json
+new file mode 100644
+index 0000000..5c7c498
+--- /dev/null
++++ b/tools/radio/candidates.json
+@@ -0,0 +1,11 @@
++{
++  "_readme": "Streams to TRY. Nothing here is in the game until tools/radio/verify-stations.mjs --write has opened the stream and found real audio. Entries are public listening streams the stations publish; confirm each station's streaming terms before adding it. Fields: id (lowercase, a-z 0-9 -), name, country, city, genre, url (https), homepage.",
++  "candidates": [
++    { "id": "bbc-world-service", "name": "BBC World Service", "country": "United Kingdom", "genre": "News", "url": "https://stream.live.vc.bbcmedia.co.uk/bbc_world_service", "homepage": "https://www.bbc.co.uk/sounds/play/live:bbc_world_service" },
++    { "id": "somafm-groove-salad", "name": "SomaFM Groove Salad", "country": "United States", "genre": "Downtempo", "url": "https://ice1.somafm.com/groovesalad-128-mp3", "homepage": "https://somafm.com/groovesalad/" },
++    { "id": "radio-paradise", "name": "Radio Paradise", "country": "United States", "genre": "Eclectic", "url": "https://stream.radioparadise.com/mp3-128", "homepage": "https://radioparadise.com" },
++    { "id": "nts-1", "name": "NTS Radio 1", "country": "United Kingdom", "genre": "Eclectic", "url": "https://stream-relay-geo.ntslive.net/stream", "homepage": "https://www.nts.live" },
++    { "id": "kexp", "name": "KEXP 90.3 Seattle", "country": "United States", "genre": "Indie", "url": "https://kexp.streamguys1.com/kexp128.mp3", "homepage": "https://www.kexp.org" }
++  ],
++  "nigerian_stations_to_add": "These have NO URL yet on purpose: stream URLs must be copied from each station's own website (or looked up on radio-browser.info, which lists community-reported streams), then listed under candidates and verified. Good ones to look for: Cool FM (Lagos), Wazobia FM, Nigeria Info FM, Beat FM, Raypower FM, Classic FM, Naija FM, Rhythm FM, and Ile-Ife / Osun stations such as Oodua-area community and campus radio. Prefer https streams."
++}
+diff --git a/tools/radio/verify-stations.mjs b/tools/radio/verify-stations.mjs
+new file mode 100644
+index 0000000..1de4796
+--- /dev/null
++++ b/tools/radio/verify-stations.mjs
+@@ -0,0 +1,63 @@
++// tools/radio/verify-stations.mjs
++// Decides which radio stations may be in the game. A station is added ONLY if its stream really works, checked here, from a machine with normal internet access:
++//
++//   node tools/radio/verify-stations.mjs                 check every candidate in tools/radio/candidates.json and print a report (changes nothing)
++//   node tools/radio/verify-stations.mjs --write         ...and put the ones that pass into public/data/radio-stations.json (existing entries are re-checked too)
++//   node tools/radio/verify-stations.mjs --check         re-check the stations already in the game (use it on a schedule: streams move and die) and exit 1 if any failed
++//   --allow-http                                         accept http:// streams (they cannot play on the https site: the game skips them, so this is only for testing)
++//
++// What "works" means: the server answers 200, within 10 s sends at least 16 KB, and those bytes really ARE audio (an MP3 frame, ADTS AAC or an Ogg page: not an HTML page, a
++// playlist or an error message with an audio content type). It also notes whether the stream carries track information (Icy metadata) so the radio can show what is playing.
++// Respect each station's terms: candidates must be streams the station publishes for public listening; nothing here records or stores audio, it reads ~16 KB and disconnects.
++import fs from "node:fs";
++import { cleanStation } from "../../lib/radio/stations.js";
++import { parseStreamTitle, readIcyBlock } from "../../lib/radio/icy.js";
++
++const args = new Set(process.argv.slice(2)), CAND = new URL("./candidates.json", import.meta.url), OUT = new URL("../../public/data/radio-stations.json", import.meta.url);
++const read = (u) => JSON.parse(fs.readFileSync(u, "utf8"));
++const need = 16 * 1024, TIMEOUT = 10_000;
++
++/** What kind of audio these first bytes are: "mp3" | "aac" | "ogg" | "hls" | null. */
++export function sniff(b) {
++  if (b.length < 4) return null;
++  const txt = new TextDecoder().decode(b.slice(0, 16));
++  if (txt.startsWith("#EXTM3U")) return "hls";
++  if (txt.startsWith("OggS")) return "ogg";
++  let i = 0; if (txt.startsWith("ID3")) { i = 10 + (((b[6] & 0x7f) << 21) | ((b[7] & 0x7f) << 14) | ((b[8] & 0x7f) << 7) | (b[9] & 0x7f)); if (i + 4 > b.length) return "mp3"; }
++  for (let k = i; k < Math.min(b.length - 1, i + 4096); k++) { if (b[k] !== 0xff) continue; const n = b[k + 1]; if ((n & 0xf6) === 0xf0) return "aac"; if ((n & 0xe0) === 0xe0 && (n & 0x18) !== 0x08 && (n & 0x06) !== 0) return "mp3"; }
++  return null;
++}
++
++export async function check(s, { allowHttp = false } = {}) {
++  const res = { id: s.id, ok: false, why: "", format: null, meta: "none", title: "", contentType: "" };
++  let u; try { u = new URL(s.url); } catch { res.why = "not a URL"; return res; }
++  if (u.protocol === "http:" && !allowHttp) { res.why = "http:// stream: it cannot play on the https game (mixed content). Ask the station for an https URL"; return res; }
++  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), TIMEOUT);
++  try {
++    const r = await fetch(u, { headers: { "Icy-MetaData": "1", "User-Agent": "LifeinOAU-Radio-Verify/1.0" }, signal: ctl.signal, redirect: "follow" });
++    res.contentType = r.headers.get("content-type") ?? ""; if (!r.ok) { res.why = `HTTP ${r.status}`; return res; }
++    if (/text\/html/i.test(res.contentType)) { res.why = "returns a web page, not audio"; return res; }
++    const rd = r.body.getReader(), metaint = parseInt(r.headers.get("icy-metaint") ?? "", 10); let got = new Uint8Array(0);
++    const next = async () => { const { value, done } = await rd.read(); return done ? null : value; };
++    while (got.length < need) { const c = await next(); if (!c) break; const n = new Uint8Array(got.length + c.length); n.set(got); n.set(c, got.length); got = n; }
++    if (got.length < need) { res.why = `only ${got.length} bytes in ${TIMEOUT / 1000} s (not a live stream)`; return res; }
++    const kind = sniff(got); if (!kind) { res.why = "the bytes are not MP3, AAC or Ogg audio"; return res; } if (kind === "hls") { res.why = "an HLS playlist: <audio> cannot play it outside Safari"; return res; }
++    res.format = kind;
++    if (Number.isInteger(metaint) && metaint > 0) { res.meta = "icy"; try { const r2 = await fetch(u, { headers: { "Icy-MetaData": "1" }, signal: ctl.signal }); const rd2 = r2.body.getReader(); const blk = await readIcyBlock(async () => { const { value, done } = await rd2.read(); return done ? null : value; }, metaint); res.title = blk ? parseStreamTitle(blk) : ""; await rd2.cancel(); } catch { /* the stream works; the title just was not readable */ } }
++    try { await rd.cancel(); } catch { /* closed */ }
++    res.ok = true; return res;
++  } catch (e) { res.why = e?.name === "AbortError" ? `timed out after ${TIMEOUT / 1000} s` : `${e?.cause?.code ?? e?.message ?? e}`; return res; } finally { clearTimeout(timer); ctl.abort(); }
++}
++
++if (import.meta.url === `file://${process.argv[1]}`) {
++  const existing = read(OUT).stations ?? [], cands = args.has("--check") ? [] : (read(CAND).candidates ?? []).filter((c) => c && c.url);
++  const byId = new Map(); for (const s of [...existing, ...cands]) byId.set(s.id, { ...(byId.get(s.id) ?? {}), ...s });
++  const all = [...byId.values()]; if (!all.length) { console.log("Nothing to check: add stations to tools/radio/candidates.json."); process.exit(0); }
++  const pass = [], fail = [];
++  for (const s of all) { const r = await check(s, { allowHttp: args.has("--allow-http") }); console.log(`${r.ok ? "PASS" : "FAIL"}  ${s.id.padEnd(22)} ${r.ok ? `${r.format} · ${r.meta === "icy" ? "track info" + (r.title ? ` ("${r.title.slice(0, 40)}")` : "") : "no track info"}` : r.why}`);
++    if (r.ok) { const clean = cleanStation({ ...s, format: r.format, meta: r.meta, verifiedAt: new Date().toISOString().slice(0, 10) }); if (clean) pass.push(clean); else fail.push([s.id, "incomplete entry (needs id, name, url)"]); } else fail.push([s.id, r.why]); }
++  console.log(`\n${pass.length} stream(s) work, ${fail.length} do not.`);
++  if (args.has("--write")) { fs.writeFileSync(OUT, JSON.stringify({ _readme: read(OUT)._readme, stations: pass }, null, 2) + "\n"); console.log(`Wrote ${pass.length} station(s) to public/data/radio-stations.json (failed ones are left out).`); }
++  else if (pass.length) console.log("Run again with --write to add the working ones to the game.");
++  process.exit(args.has("--check") && fail.length ? 1 : 0);
++}

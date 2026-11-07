@@ -150,5 +150,7 @@ export function createTraffic({ parent, svc, focus, density = densityFor(), seed
       else e.walker.pose((e.phase += d * 2.4), Math.min(1, d / dt / 1.2)); }
   }
   function dispose() { gone = true; for (const [id, e] of live) { tags?.remove(id); e.av?.dispose(); e.model?.dispose?.(); } for (const s of [...pools.keke, ...pools.bus, ...pools.minibus]) s.model.dispose?.(); for (const s of pedSlots) s.npc?.dispose(); sim.dispose?.(); group.traverse((o) => { if (o.userData.npcMesh || o.isSkinnedMesh || o.geometry?.userData?.shared) return; o.geometry?.dispose?.(); }); disposables.forEach((g) => { if (!g.userData?.shared) g.dispose(); }); bodies.dispose(); wheelsM.dispose(); parent.remove(group); }
-  return { update, setTravellers, dispose, sim, peds: pedSlots /* read-only, for tests */ };
+  /** For the sound (lib/audio/tripAudio.js): the other real players' vehicles as plain { id, kind, car, x, z, v, h } (their own drawn position and speed). The computer-driven vehicles are read straight from `sim.vehicles`. */
+  function remoteVehicles() { const out = []; for (const [id, e] of live) if (e.model) out.push({ id: "r" + id, kind: e.kind, car: e.car, x: e.x, z: e.z, v: e.sp ?? 0, h: e.h }); return out; }
+  return { update, setTravellers, dispose, sim, remoteVehicles, peds: pedSlots /* read-only, for tests */ };
 }

@@ -94,7 +94,9 @@ ok("a browser with no code falls back to the letter", keyId({ key: "a" }) === "K
   ok("the pedals are held buttons that show when they are pressed", /th-pedal th-brake/.test(hud) && /th-pedal th-gas/.test(hud) && /\.th \.th-pedal\[data-down\]/.test(css) && /dataset\.down/.test(hud));
   ok("the wheel shows when a finger is on it", /dataset\.held/.test(read("components/SteeringWheel.js")) && /\.th-wheel\[data-held="1"\]/.test(css));
   ok("touch targets are at least 44 px", /--th-aux: 44px/.test(css) && /--th-pw: 78px/.test(css) && !/--th-aux: (3[0-9]|[12]?[0-9])px/.test(css.replace(/max-height: 380px[\s\S]*?\n\}/, "")));
-  ok("the horn honks on press and has no silent click path", /onPointerDown=\{\(\) => playSound\("horn"\)\}/.test(hud) && !/data-sound="horn"/.test(hud));
+  // the horn is HELD: input.horn is true from the press until it is let go (release, cancel, lost capture, key up or focus lost), so a finger that slides off never leaves it stuck
+  ok("the horn sounds while the button is held and stops when it is let go, however the press ends, with no silent click path", /onPointerDown=\{[^}]*input\.horn = true/.test(hud) && ["onPointerUp", "onPointerCancel", "onLostPointerCapture", "onBlur"].every((e) => new RegExp(e + "=\\{\\(\\) => \\(input\\.horn = false\\)\\}").test(hud)) && /onKeyUp=/.test(hud) && !/data-sound="horn"/.test(hud));
+  { const travel = read("lib3d/travel.js"); ok("the trip reads the held horn and plays it through the trip sound (the old beep is only the fallback if that cannot load)", /input\.horn/.test(travel) && /horn,\s*onDeck/.test(travel) && /playSound\("horn"\)/.test(travel)); }
   const nav = read("lib3d/travel.js"); ok("the engine reads keys by place (tripkeys) and steers them through keysteer", /createKeys/.test(nav) && /stepKeySteer/.test(nav) && !/e\.key\.toLowerCase\(\)/.test(nav.slice(nav.indexOf("controls: keys"), nav.indexOf("controls: keys") + 900))); }
 
 console.log(`trip-controls: ${n} checks passed`);

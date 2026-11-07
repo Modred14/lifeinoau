@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import SteerButtons from "./SteerButtons";
+import CarRadio from "./CarRadio";
 import { playSound } from "@/lib/sound";
 import { fmtDuration } from "@/lib/travel.js";
 import "./travel.css";
@@ -41,8 +42,14 @@ export function Hold({ className, label, onDown, onUp, children }) {
 
 export default function TripHud({ trip, placeName, st, input, miniRef, previewRef, onCancel }) {
   const [preview, setPreview] = useState(false), phase = st?.phase ?? "intro", drive = trip.mode === "car" && !trip.driver, steering = phase === "drive", walking = ["trek", "approach", "walk", "afoot", "door"].includes(phase), doorOn = phase === "door" && st?.hasDoor;
-  // the H key is the horn on a keyboard (never while typing, never with a shortcut such as Ctrl+H, and not on key repeat: one press, one honk)
-  useEffect(() => { if (!steering) return; const k = (e) => { if (e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.target?.closest?.("input,textarea,select")) return; if (e.code === "KeyH" || (!e.code && e.key?.toLowerCase() === "h")) playSound("horn"); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [steering]);
+  // the H key is the horn on a keyboard: it sounds for as long as it is held (never while typing, never with a shortcut such as Ctrl+H, and key repeat does not matter: held is held)
+  useEffect(() => {
+    if (!steering) return;
+    const typing = (e) => e.metaKey || e.ctrlKey || e.altKey || e.target?.closest?.("input,textarea,select"), isH = (e) => e.code === "KeyH" || (!e.code && e.key?.toLowerCase() === "h");
+    const down = (e) => { if (!typing(e) && isH(e)) input.horn = true; }, up = (e) => { if (isH(e)) input.horn = false; }, off = () => { input.horn = false; };
+    window.addEventListener("keydown", down); window.addEventListener("keyup", up); window.addEventListener("blur", off);
+    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); window.removeEventListener("blur", off); input.horn = false; };
+  }, [steering, input]);
   useEffect(() => { if (!preview) return; const k = (e) => e.key === "Escape" && setPreview(false); document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [preview]);
   const m = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + " km" : n + " m");
   const vname = trip.mode === "bus" ? "bus" : trip.mode === "keke" ? "keke" : "car";
@@ -78,7 +85,10 @@ export default function TripHud({ trip, placeName, st, input, miniRef, previewRe
           <SteerButtons input={input} />
           <div className="th-pedals">
             <div className="th-aux">
-              <button type="button" className="th-btn th-horn" aria-label="Horn" data-sound="none" style={NO_GESTURE} onPointerDown={() => playSound("horn")} onClick={(e) => { if (e.detail === 0) playSound("horn"); /* Enter or Space on the focused button: a pointer press has already honked */ }} onContextMenu={(e) => e.preventDefault()}><Icon name="horn" size={22} weight="fill" /></button>
+              <button type="button" className="th-btn th-horn" aria-label="Horn: hold to sound it" data-sound="none" style={NO_GESTURE}
+                onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); input.horn = true; e.preventDefault(); }} onPointerUp={() => (input.horn = false)} onPointerCancel={() => (input.horn = false)} onLostPointerCapture={() => (input.horn = false)}
+                onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { input.horn = true; e.preventDefault(); } }} onKeyUp={(e) => { if (e.key === " " || e.key === "Enter") input.horn = false; }} onBlur={() => (input.horn = false)} onContextMenu={(e) => e.preventDefault()}><Icon name="horn" size={22} weight="fill" /></button>
+              <CarRadio active />
               <button type="button" className="th-btn th-exit" aria-label="Exit car" data-sound="none" disabled={!!st?.exiting} onClick={() => { input.exit = true; playSound("tap"); }}>
                 <Icon name="door" size={20} weight="bold" /> <span>{st?.exiting ? "Stopping…" : "Exit car"}</span>
               </button>
@@ -92,9 +102,10 @@ export default function TripHud({ trip, placeName, st, input, miniRef, previewRe
               <b>GAS</b>
             </Hold>
           </div>
-          <div className="th-keys" aria-hidden="true"><span><kbd>W</kbd><kbd>↑</kbd> Gas</span><span><kbd>S</kbd><kbd>↓</kbd> Brake · hold to reverse</span><span><kbd>A</kbd><kbd>D</kbd> Steer</span><span><kbd>H</kbd> Horn</span><span><kbd>E</kbd> Exit car</span></div>
+          <div className="th-keys" aria-hidden="true"><span><kbd>W</kbd><kbd>↑</kbd> Gas</span><span><kbd>S</kbd><kbd>↓</kbd> Brake · hold to reverse</span><span><kbd>A</kbd><kbd>D</kbd> Steer</span><span><kbd>H</kbd> Horn (hold)</span><span><kbd>R</kbd> Radio</span><span><kbd>E</kbd> Exit car</span></div>
         </>
       )}
+      {phase === "ride" && <CarRadio active float />}
       {phase === "afoot" && (st?.canEnter || st?.canClose) && (
         <div className="th-act">
           {st.canEnter && <button type="button" className="th-btn th-act-btn" data-sound="none" onClick={() => { input.enter = true; playSound("tap"); }}><Icon name="ride" size={20} weight="bold" /> Get in car</button>}
