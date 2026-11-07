@@ -1,5 +1,5 @@
 // components/apps/PortalApp.js: the E-Portal, inside the phone (see components/Phone.js). Reads /api/portal, which is built from the player's own saved exam results.
-// Laid out for the handset: one column, no tables and no sideways scrolling. Every course is a row (grade badge, code + title, score + units).
+// Laid out for the phone's ~340px page: a summary card, then stacked rows (no wide tables, nothing scrolls sideways).
 "use client";
 import { useState } from "react";
 import LoadError from "@/components/LoadError";
@@ -8,84 +8,51 @@ import { useResource } from "@/lib/gameStore";
 import "./portal-app.css";
 
 const g2 = (n) => (n == null ? "–" : Number(n).toFixed(2));
-const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
-const GRADES = [["70 – 100", "A", 5, "Excellent"], ["60 – 69", "B", 4, "Very good"], ["50 – 59", "C", 3, "Good"], ["45 – 49", "D", 2, "Fair"], ["40 – 44", "E", 1, "Pass"], ["0 – 39", "F", 0, "Fail"]];
-
-function Stat({ label, value }) {
-  return <div className="ep-stat"><b className="num">{value}</b><span>{label}</span></div>;
+/** CGPA as a ring: the arc fills in proportion to the grade point scale (5.00 = full). */
+function Ring({ value, scale }) {
+  const R = 34, C = 2 * Math.PI * R, v = Number(value);
+  const pct = Number.isFinite(v) && scale > 0 ? Math.max(0, Math.min(1, v / scale)) : 0;
+  return (
+    <div className="ep-ring" role="img" aria-label={`Cumulative GPA ${g2(value)} out of ${Number(scale).toFixed(2)}`}>
+      <svg viewBox="0 0 84 84" aria-hidden="true">
+        <circle cx="42" cy="42" r={R} className="ep-ring-bg" />
+        <circle cx="42" cy="42" r={R} className="ep-ring-fg" strokeDasharray={`${(C * pct).toFixed(1)} ${C.toFixed(1)}`} transform="rotate(-90 42 42)" />
+      </svg>
+      <b className="num">{g2(value)}</b>
+    </div>
+  );
 }
 
-/** One course in a semester: grade badge, code and title, then the score and the credit units. */
-function ResultRow({ c }) {
-  return (
-    <li className="ep-row">
-      <i className="ep-grade" data-g={c.grade} aria-label={`Grade ${c.grade}`}>{c.grade}</i>
-      <div className="ep-main"><b className="code">{c.code}</b><span>{c.title}</span></div>
-      <div className="ep-end"><b className="num">{c.score}</b><small>{plural(c.units, "unit")}</small></div>
-    </li>
-  );
+function Grade({ g }) {
+  return <i className="ep-grade" data-g={g}>{g}</i>;
 }
 
 function Semester({ s }) {
   return (
-    <section className="ep-sem" aria-label={`${s.name}, week ${s.week}`}>
-      <header>
+    <section className="ep-card" aria-label={`${s.name}, week ${s.week}`}>
+      <header className="ep-card-h">
         <div><h4>{s.name}</h4><small>Examined in week {s.week}</small></div>
-        <div className="ep-sem-gpa"><b className="num">{g2(s.gpa)}</b><small>GPA</small></div>
+        <div className="ep-gpa"><b className="num">{g2(s.gpa)}</b><small>GPA</small></div>
       </header>
-      {s.missed && <p className="ep-flag" data-tone="bad">Examination not sat. Every course is recorded as 0.</p>}
-      {s.malpractice && <p className="ep-flag" data-tone="bad">Examination malpractice: the semester score was capped.</p>}
-      {s.courses.length ? <ul className="ep-list">{s.courses.map((c) => <ResultRow key={c.code} c={c} />)}</ul> : <p className="ep-note">No course list is on record for this semester.</p>}
-      <footer>
+      {s.missed && <p className="ep-flag">Examination not sat. Every course is recorded as 0.</p>}
+      {s.malpractice && <p className="ep-flag">Examination malpractice: the semester score was capped.</p>}
+      {s.courses.length ? (
+        <ul className="ep-rows">
+          {s.courses.map((c) => (
+            <li key={c.code} className="ep-row">
+              <Grade g={c.grade} />
+              <div className="ep-row-t"><b>{c.title}</b><small>{c.code} · {c.units} unit{c.units === 1 ? "" : "s"}</small></div>
+              <div className="ep-row-v"><b className="num">{c.score}</b><small>score</small></div>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="ep-note">No course list is on record for this semester.</p>}
+      <footer className="ep-foot">
         <span><b className="num">{s.score}</b>Mean score</span>
         <span><b className="num">{s.unitsEarned}/{s.units}</b>Units earned</span>
         <span><b className="num">{g2(s.cgpaAfter)}</b>CGPA after</span>
       </footer>
-    </section>
-  );
-}
-
-function Registration({ cur }) {
-  if (!cur) return <div className="ep-empty"><b>Graduated</b><p>You have completed your degree. There is nothing left to register.</p></div>;
-  const pct = Math.max(0, Math.min(100, Math.round((cur.week / cur.sessionWeeks) * 100)));
-  const units = cur.courses.reduce((t, c) => t + c.units, 0);
-  return (
-    <section className="ep-sem" aria-label="Current registration">
-      <header>
-        <div><h4>{cur.level} Level registration</h4><small>Week {cur.week} of {cur.sessionWeeks} · {plural(cur.weeksLeft, "week")} left</small></div>
-        <div className="ep-sem-gpa"><b className="num">{cur.sat ? "Sat" : `Wk ${cur.nextExamWeek}`}</b><small>{cur.sat ? "this week" : "next exam"}</small></div>
-      </header>
-      <div className="ep-track" role="progressbar" aria-label="Session progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}><i style={{ width: `${pct}%` }} /></div>
-      <ul className="ep-list">
-        {cur.courses.map((c) => (
-          <li className="ep-row" key={c.code}>
-            <i className="ep-grade ep-pct num" aria-hidden="true">{c.attendancePct}%</i>
-            <div className="ep-main"><b className="code">{c.code}</b><span>{c.title}</span><small className="ep-lect">{c.lecturer}</small></div>
-            <div className="ep-end"><b className="num">{c.units}</b><small>{c.units === 1 ? "unit" : "units"}</small></div>
-          </li>
-        ))}
-      </ul>
-      <footer><span><b className="num">{units}</b>Units registered</span><span><b className="num">{cur.courses.length}</b>Courses</span></footer>
-    </section>
-  );
-}
-
-function Grading() {
-  return (
-    <section className="ep-sem" aria-label="Grading system">
-      <header><div><h4>Grading system</h4><small>5-point scale</small></div></header>
-      <ul className="ep-list">
-        {GRADES.map(([range, l, p, word]) => (
-          <li className="ep-row" key={l}>
-            <i className="ep-grade" data-g={l} aria-hidden="true">{l}</i>
-            <div className="ep-main"><b>{range}</b><span>{word}</span></div>
-            <div className="ep-end"><b className="num">{p}</b><small>{p === 1 ? "point" : "points"}</small></div>
-          </li>
-        ))}
-      </ul>
-      <p className="ep-note">Each semester is one examination. Its GPA is the grade point of your mean score across that semester&rsquo;s four courses, and your CGPA is the average of all your semester GPAs. Credit units show the weight of each course and how many you earned (a score of 40 or more).</p>
-      <p className="ep-note">Degree classes: First Class 4.50+, Second Class Upper 3.50+, Second Class Lower 2.40+, Third Class 1.50+, Pass 1.00+.</p>
     </section>
   );
 }
@@ -100,21 +67,28 @@ export default function PortalApp() {
   return (
     <div className="ep">
       <section className="ep-id" aria-label="Student">
-        <span className="ep-seal" aria-hidden="true"><Icon name="library" size={22} weight="fill" /></span>
-        <div><b>{st.name}</b><small>{st.matric}</small><small>{st.faculty}</small></div>
+        <span className="ep-seal" aria-hidden="true"><Icon name="library" size={20} weight="fill" /></span>
+        <div><b>{st.name}</b><small>{st.matric} · {st.faculty}</small></div>
         <span className="ep-level num">{st.graduated ? "Graduate" : `${st.level}L`}</span>
       </section>
 
       <section className="ep-hero" aria-label="Academic summary">
-        <div className="ep-cgpa"><small>Cumulative GPA</small><b className="num">{g2(sm.cgpa)}</b><span>out of {sm.scale.toFixed(2)}</span></div>
-        <div className="ep-cgpa"><small>Last semester GPA</small><b className="num">{g2(sm.gpa)}</b><span>{sm.semesters ? plural(sm.semesters, "semester") + " on record" : "No semester yet"}</span></div>
+        <div className="ep-hero-top">
+          <Ring value={sm.cgpa} scale={sm.scale} />
+          <div className="ep-hero-t">
+            <small>Cumulative GPA</small>
+            <b className="num">{g2(sm.cgpa)}<span> / {sm.scale.toFixed(2)}</span></b>
+            <span>Last semester <b className="num">{g2(sm.gpa)}</b></span>
+            <span>{sm.semesters ? `${sm.semesters} semester${sm.semesters === 1 ? "" : "s"} on record` : "No semester yet"}</span>
+          </div>
+        </div>
+        <div className="ep-stats">
+          <span><b className="num">{sm.totalUnits}</b>Units taken</span>
+          <span><b className="num">{sm.unitsEarned}</b>Units earned</span>
+          <span><b className="num">{sm.strikes}/5</b>Strikes</span>
+        </div>
       </section>
       <p className="ep-standing" data-tone={sm.tone}><b>{sm.standing}</b><span>{sm.status}</span></p>
-      <div className="ep-stats">
-        <Stat label="Units taken" value={sm.totalUnits} />
-        <Stat label="Units earned" value={sm.unitsEarned} />
-        <Stat label="Strikes" value={`${sm.strikes}/5`} />
-      </div>
 
       <div role="tablist" aria-label="E-Portal sections">
         {[["results", "Results"], ["registration", "Registration"], ["about", "Grading"]].map(([k, n]) => (
@@ -140,8 +114,38 @@ export default function PortalApp() {
         </>
       ))}
 
-      {tab === "registration" && <Registration cur={cur} />}
-      {tab === "about" && <Grading />}
+      {tab === "registration" && (cur ? (
+        <section className="ep-card" aria-label="Current registration">
+          <header className="ep-card-h">
+            <div><h4>{cur.level} Level registration</h4><small>Week {cur.week} of {cur.sessionWeeks} · {cur.weeksLeft} week{cur.weeksLeft === 1 ? "" : "s"} left</small></div>
+            <div className="ep-gpa"><b className="num">{cur.sat ? "Sat" : `Wk ${cur.nextExamWeek}`}</b><small>{cur.sat ? "this week" : "next exam"}</small></div>
+          </header>
+          <ul className="ep-rows">
+            {cur.courses.map((c) => (
+              <li key={c.code} className="ep-row ep-reg">
+                <div className="ep-row-t"><b>{c.title}</b><small>{c.code} · {c.units} unit{c.units === 1 ? "" : "s"} · {c.lecturer}</small>
+                  <span className="ep-bar" aria-hidden="true"><i style={{ width: `${Math.max(0, Math.min(100, c.attendancePct))}%` }} /></span>
+                </div>
+                <div className="ep-row-v"><b className="num">{c.attendancePct}%</b><small>attended</small></div>
+              </li>
+            ))}
+          </ul>
+          <footer className="ep-foot ep-foot-1"><span><b className="num">{cur.courses.reduce((t, c) => t + c.units, 0)}</b>Units registered</span></footer>
+        </section>
+      ) : <div className="ep-empty"><b>Graduated</b><p>You have completed your degree. There is nothing left to register.</p></div>)}
+
+      {tab === "about" && (
+        <section className="ep-card" aria-label="Grading system">
+          <header className="ep-card-h"><div><h4>Grading system</h4><small>5-point scale</small></div></header>
+          <ul className="ep-rows">
+            {[["70 – 100", "A", 5], ["60 – 69", "B", 4], ["50 – 59", "C", 3], ["45 – 49", "D", 2], ["40 – 44", "E", 1], ["0 – 39", "F", 0]].map(([r, l, p]) => (
+              <li key={l} className="ep-row"><Grade g={l} /><div className="ep-row-t"><b>{r}</b><small>Score range</small></div><div className="ep-row-v"><b className="num">{p}</b><small>point{p === 1 ? "" : "s"}</small></div></li>
+            ))}
+          </ul>
+          <p className="ep-note">Each semester is one examination. Its GPA is the grade point of your mean score across that semester&rsquo;s four courses, and your CGPA is the average of all your semester GPAs. Credit units show the weight of each course and how many you earned (a score of 40 or more).</p>
+          <p className="ep-note">Degree classes: First Class 4.50+, Second Class Upper 3.50+, Second Class Lower 2.40+, Third Class 1.50+, Pass 1.00+.</p>
+        </section>
+      )}
     </div>
   );
 }

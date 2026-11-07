@@ -1,62 +1,75 @@
-/* components/apps/portal-app.css: the E-Portal inside the phone. One column, flat surfaces, hairline borders, no gradients, no sideways scrolling.
-   Sizes follow the handset (about 360-400px wide): course rows instead of tables, 44px tap targets, long text wraps or is clamped. */
-.ep { display: grid; gap: 12px; padding-top: 2px; container-type: inline-size; min-width: 0; }
+/* components/apps/portal-app.css: the E-Portal inside the phone. Built for the phone's ~340px page: rows instead of tables, nothing scrolls sideways.
+   Flat surfaces, hairline borders, no gradients. Uses the phone's light page variables (--surface, --line, --muted ...). */
+.ep { --ep-green: #14532d; display: grid; gap: 12px; padding-top: 2px; min-width: 0; }
 .ep > * { min-width: 0; }
+.ep small { color: var(--muted); font-size: 0.74rem; line-height: 1.25; }
 
-/* student card */
-.ep-id { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 20px; background: var(--surface); }
+/* who you are */
+.ep-id { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 18px; background: var(--surface); }
 .ep-id > div { min-width: 0; flex: 1; }
-.ep-id b { display: block; font: 700 1rem/1.25 var(--font-head); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ep-id small { display: block; color: var(--muted); font-size: 0.78rem; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ep-seal { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; background: #14532d; color: #fff; flex: none; }
-.ep-level { font-weight: 700; font-size: 0.82rem; padding: 5px 11px; border-radius: 999px; background: #fff; border: 1px solid var(--line); flex: none; }
+.ep-id b { display: block; font: 700 0.98rem var(--font-head); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ep-id small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ep-seal { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 13px; background: var(--ep-green); color: #fff; flex: none; }
+.ep-level { flex: none; font-weight: 700; font-size: 0.8rem; padding: 4px 10px; border-radius: 999px; background: #fff; border: 1px solid var(--line); }
 
-/* CGPA tiles */
-.ep-hero { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.ep-cgpa { display: grid; gap: 2px; align-content: start; padding: 14px 15px; border-radius: 20px; background: #14532d; color: #fff; min-width: 0; }
-.ep-cgpa:nth-child(2) { background: var(--surface); color: var(--text); }
-.ep-cgpa small { font-size: 0.74rem; opacity: 0.85; } .ep-cgpa b { font: 700 2.1rem/1.05 var(--font-head); letter-spacing: -0.03em; } .ep-cgpa span { font-size: 0.74rem; opacity: 0.8; }
-.ep-standing { display: grid; gap: 2px; margin: 0; padding: 11px 14px; border-radius: 16px; background: var(--surface); border-left: 4px solid var(--field); }
-.ep-standing b { font: 700 0.98rem var(--font-head); } .ep-standing span { color: var(--muted); font-size: 0.84rem; line-height: 1.4; }
+/* the summary card: ring, then three numbers */
+.ep-hero { display: grid; gap: 14px; padding: 16px 14px 12px; border-radius: 22px; background: var(--ep-green); color: #fff; }
+.ep-hero-top { display: flex; align-items: center; gap: 16px; }
+.ep-ring { position: relative; flex: none; width: 92px; height: 92px; display: grid; place-items: center; }
+.ep-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ep-ring circle { fill: none; stroke-width: 7; }
+.ep-ring-bg { stroke: rgba(255, 255, 255, 0.18); }
+.ep-ring-fg { stroke: #86efac; stroke-linecap: round; transition: stroke-dasharray 500ms cubic-bezier(0.22, 1, 0.36, 1); }
+.ep-ring b { font: 700 1.55rem/1 var(--font-head); letter-spacing: -0.03em; }
+.ep-hero-t { display: grid; gap: 3px; min-width: 0; font-size: 0.84rem; color: rgba(255, 255, 255, 0.85); }
+.ep-hero-t small { color: rgba(255, 255, 255, 0.8); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+.ep-hero-t > b { font: 700 1.05rem var(--font-head); color: #fff; } .ep-hero-t > b span { font: 500 0.8rem var(--font-ui); color: rgba(255, 255, 255, 0.7); }
+.ep-hero-t span b { color: #fff; }
+.ep-stats { display: grid; grid-template-columns: repeat(3, 1fr); padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.18); }
+.ep-stats span { display: grid; gap: 1px; justify-items: center; text-align: center; font-size: 0.7rem; color: rgba(255, 255, 255, 0.75); line-height: 1.2; }
+.ep-stats span + span { border-left: 1px solid rgba(255, 255, 255, 0.14); }
+.ep-stats b { font: 700 1.15rem var(--font-head); color: #fff; }
+
+.ep-standing { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 14px; background: var(--surface); border-left: 4px solid var(--field); }
+.ep-standing b { font: 700 0.95rem var(--font-head); } .ep-standing span { color: var(--muted); font-size: 0.82rem; }
 .ep-standing[data-tone="good"] { border-left-color: var(--green); } .ep-standing[data-tone="warn"] { border-left-color: #d97706; } .ep-standing[data-tone="bad"] { border-left-color: var(--danger-text); }
-.ep-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.ep-stat { display: grid; gap: 2px; padding: 10px 12px; border-radius: 16px; border: 1px solid var(--line); min-width: 0; }
-.ep-stat b { font: 700 1.15rem var(--font-head); } .ep-stat span { color: var(--muted); font-size: 0.72rem; line-height: 1.2; }
 
-/* session picker (tab styling comes from .pa-content [role="tablist"] in phone.css; this one scrolls sideways on its own) */
-.ep-chips { margin-top: 0 !important; }
-.ep-sess h3 { margin: 4px 0 2px; } .ep-sess p { color: var(--muted); font-size: 0.84rem; line-height: 1.4; } .ep-sess b { color: var(--text); }
+/* session picker (the segmented control itself comes from phone.css) and its heading */
+.ep-chips { margin: 0 !important; }
+.ep-sess { display: grid; gap: 2px; padding: 0 2px; }
+.ep-sess h3 { margin: 0; font: 700 1.02rem var(--font-head); } .ep-sess p { margin: 0; color: var(--muted); font-size: 0.82rem; } .ep-sess b { color: var(--text); }
 
-/* a semester / the registration / the grading scale */
-.ep-sem { display: grid; gap: 10px; padding: 14px; border-radius: 20px; background: var(--surface); min-width: 0; }
-.ep-sem > header { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; }
-.ep-sem > header > div:first-child { min-width: 0; }
-.ep-sem h4 { margin: 0; font: 700 1rem/1.25 var(--font-head); } .ep-sem small { color: var(--muted); font-size: 0.76rem; }
-.ep-sem-gpa { text-align: right; display: grid; flex: none; } .ep-sem-gpa b { font: 700 1.5rem/1 var(--font-head); letter-spacing: -0.02em; }
-.ep-track { height: 6px; border-radius: 999px; background: #e4e7ec; overflow: hidden; } .ep-track i { display: block; height: 100%; border-radius: inherit; background: #14532d; }
+/* a semester / registration / grading card */
+.ep-card { display: grid; gap: 4px; padding: 14px 12px 10px; border-radius: 20px; background: var(--surface); }
+.ep-card-h { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 0 2px 6px; }
+.ep-card-h h4 { margin: 0; font: 700 1rem var(--font-head); }
+.ep-gpa { display: grid; justify-items: center; min-width: 58px; padding: 6px 10px; border-radius: 14px; background: #fff; border: 1px solid var(--line); }
+.ep-gpa b { font: 700 1.2rem/1.1 var(--font-head); letter-spacing: -0.02em; }
+.ep-gpa small { font-size: 0.66rem; }
 
-/* course rows */
-.ep-list { list-style: none; margin: 0; padding: 0; display: grid; border-radius: 14px; background: #fff; border: 1px solid var(--line); overflow: hidden; }
-.ep-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 12px; min-height: 56px; }
-.ep-row + .ep-row { border-top: 1px solid var(--line); }
-.ep-main { display: grid; gap: 1px; min-width: 0; }
-.ep-main b { font-size: 0.86rem; font-weight: 700; } .ep-main .code { white-space: nowrap; }
-.ep-main span { color: var(--text); font-size: 0.84rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
-.ep-lect { display: block; color: var(--muted); font-size: 0.74rem; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ep-end { display: grid; justify-items: end; gap: 1px; } .ep-end b { font: 700 1.05rem/1.1 var(--font-head); } .ep-end small { white-space: nowrap; }
-.ep-grade { font-style: normal; display: inline-grid; place-items: center; min-width: 38px; height: 38px; border-radius: 12px; font: 700 1rem var(--font-head); background: #e4e7ec; color: var(--text); }
-.ep-grade.ep-pct { font-size: 0.78rem; }
+/* course rows: grade tile, title over code, score on the right */
+.ep-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ep-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 14px; background: #fff; border: 1px solid var(--line); min-width: 0; }
+.ep-row-t { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.ep-row-t b { font-weight: 600; font-size: 0.88rem; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ep-row-v { flex: none; display: grid; justify-items: end; gap: 1px; }
+.ep-row-v b { font: 700 1.05rem/1 var(--font-head); }
+.ep-row-v small { font-size: 0.66rem; }
+.ep-reg .ep-row-t b { -webkit-line-clamp: 1; }
+.ep-bar { display: block; height: 5px; margin-top: 4px; border-radius: 3px; background: #e4e7ec; overflow: hidden; }
+.ep-bar i { display: block; height: 100%; border-radius: 3px; background: var(--green); }
+
+.ep-grade { font-style: normal; flex: none; display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 11px; font: 700 1rem var(--font-head); background: #e4e7ec; color: var(--text); }
 .ep-grade[data-g="A"] { background: #dcfce7; color: #14532d; } .ep-grade[data-g="B"] { background: #e0f2e9; color: #166534; } .ep-grade[data-g="C"] { background: #fef3c7; color: #8a5a00; }
 .ep-grade[data-g="D"], .ep-grade[data-g="E"] { background: #ffedd5; color: #9a3412; } .ep-grade[data-g="F"] { background: #fee2e2; color: #b42318; }
 
-/* semester footer: three small figures side by side */
-.ep-sem > footer { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 8px; color: var(--muted); font-size: 0.72rem; line-height: 1.2; }
-.ep-sem > footer span { display: grid; gap: 2px; padding: 8px 10px; border-radius: 12px; background: #fff; border: 1px solid var(--line); }
-.ep-sem > footer b { color: var(--text); font: 700 0.98rem var(--font-head); }
+/* the three numbers under a card */
+.ep-foot { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding-top: 6px; }
+.ep-foot span { display: grid; gap: 1px; justify-items: center; text-align: center; font-size: 0.68rem; color: var(--muted); line-height: 1.2; }
+.ep-foot b { font: 700 0.98rem var(--font-head); color: var(--text); }
+.ep-foot-1 { grid-template-columns: 1fr; }
 
-.ep-flag { margin: 0; padding: 8px 10px; border-radius: 10px; font-size: 0.82rem; line-height: 1.4; background: #fee2e2; color: #b42318; }
-.ep-note { margin: 0 2px; color: var(--muted); font-size: 0.82rem; line-height: 1.45; }
-.ep-empty { display: grid; gap: 6px; padding: 26px 18px; border-radius: 20px; background: var(--surface); text-align: center; } .ep-empty b { font: 700 1.05rem var(--font-head); } .ep-empty p { color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
-
-/* narrow handsets */
-@container (max-width: 330px) { .ep-hero { grid-template-columns: 1fr; } .ep-cgpa b { font-size: 1.8rem; } .ep-row { gap: 10px; padding: 9px 10px; } .ep-grade { min-width: 34px; height: 34px; } .ep-stat { padding: 9px 10px; } }
+.ep-flag { margin: 0 0 2px; padding: 8px 10px; border-radius: 10px; font-size: 0.8rem; background: #fee2e2; color: #b42318; }
+.ep-note { margin: 4px 2px 0; color: var(--muted); font-size: 0.8rem; line-height: 1.45; }
+.ep-empty { display: grid; gap: 6px; padding: 26px 18px; border-radius: 18px; background: var(--surface); text-align: center; } .ep-empty b { font: 700 1.05rem var(--font-head); } .ep-empty p { margin: 0; color: var(--muted); font-size: 0.86rem; line-height: 1.45; }
+@media (max-width: 360px) { .ep-ring { width: 80px; height: 80px; } .ep-ring b { font-size: 1.35rem; } .ep-hero-top { gap: 12px; } }
