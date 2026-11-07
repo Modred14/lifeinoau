@@ -93,12 +93,13 @@ export function buildRealCampus(data, meta = {}) {
   const bbEntries = data.places.filter((p) => p.kind === "billboard").map((p) => ({ id: p.id, x: p.x * S, z: p.z * S, yaw: p.yaw, board: p.board })), bb = buildBillboards(bbEntries); root.add(bb.group);
 
   // ---- places: label anchors sit above the roof (true or estimated height, times the exaggeration) ----
+  const NO_PIN = new Set(["main_bowl"]);   // places with no footprint that get no yellow pin
   const bById = new Map(data.buildings.map((q) => [q.id, q])), anchors = new Map(), places = [], pinMat = new THREE.MeshStandardMaterial({ color: "#f0c05a", emissive: "#6a4a10", emissiveIntensity: 0.6 });
   for (const p of data.places) {
     const bd = p.bid != null ? bById.get(p.bid) : null, x = p.x * S, z = p.z * S; let top, h;
     if (p.kind === "billboard") { h = null; top = bb.height; }
     else if (bd) { h = bd.h; top = h * S * EX; if (p.id === "amphitheatre") top = 4.5 * S * EX; }
-    else { h = null; top = 1.6; const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, top, 6), pinMat), cap = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), pinMat); pole.position.set(x, top / 2, z); cap.position.set(x, top, z); root.add(pole, cap); } // no footprint known: a marker, not an invented building
+    else { h = null; top = 1.6; if (!NO_PIN.has(p.id)) { const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, top, 6), pinMat), cap = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), pinMat); pole.position.set(x, top / 2, z); cap.position.set(x, top, z); root.add(pole, cap); } } // no footprint known: a marker, not an invented building (except where the place is an open field that needs no marker)
     const pos = new THREE.Vector3(x, top + 1.2, z); anchors.set(p.id, pos);
     places.push({ ...meta[p.id], id: p.id, name: p.name, kind: p.kind, tier: p.tier, conf: p.conf, src: p.src, x, z, h, hSrc: bd?.hSrc ?? null, hasFootprint: !!bd, approx: p.conf === "approximate" || p.conf === "game", offmap: !!p.offmap, unnamed: !!p.unnamed, osmLabel: p.osmLabel, pos, radius: bd ? Math.max(3, Math.sqrt(bd.area) * S * 0.7) : p.kind === "billboard" ? 5 : 3 });
   }
@@ -106,10 +107,9 @@ export function buildRealCampus(data, meta = {}) {
   /** Any place the player can pick: a named place, or a building with no name ("bld_12"). Returns { id, x, z, radius, pos, bid } in scene units, or null. */
   const unnamed = new Map(), resolve = (id) => { const L = places.find((l) => l.id === id); if (L) return L; if (!id?.startsWith("bld_")) return null; if (unnamed.has(id)) return unnamed.get(id); const bd = bById.get(Number(id.slice(4))); if (!bd) return null; const [cx, cz] = centroid(bd.pts), r = { id, name: "Building", kind: "building", bid: bd.id, x: cx * S, z: cz * S, radius: Math.max(3, Math.sqrt(bd.area ?? 400) * S * 0.7), pos: new THREE.Vector3(cx * S, bd.h * S * EX + 1.2, cz * S) }; unnamed.set(id, r); return r; };
   const setSelected = (id) => { const L = resolve(id); if (!L) { sel.visible = false; return; } sel.position.set(L.x, 0.2, L.z); sel.scale.setScalar(L.radius); sel.visible = true; };
-  // "You are here": a pulsing gold ring and arrow over the building the player is at
-  const here = new THREE.Group(), hereMat = new THREE.MeshBasicMaterial({ color: "#f0c05a", transparent: true, opacity: 0.95, side: THREE.DoubleSide }), hring = new THREE.Mesh(new THREE.RingGeometry(1, 1.14, 48), hereMat), harrow = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.1, 4), hereMat); hring.rotation.x = -Math.PI / 2; harrow.rotation.x = Math.PI; here.add(hring, harrow); here.visible = false; root.add(here);
-  let hereId = null; const setYou = (id) => { hereId = id; const L = resolve(id); if (!L) { here.visible = false; return; } here.visible = true; here.position.set(L.x, 0, L.z); hring.position.y = 0.22; hring.scale.setScalar(L.radius * 1.1); harrow.position.y = (L.pos?.y ?? 3) + 0.6; };
-  const update = (t, dt = 0.016) => { bb.update(dt); const k = 0.35 + 0.65 * Math.max(0, Math.sin(t * 5)); glow.forEach((m) => m.color.setRGB(k, k * 0.23, k * 0.19)); if (sel.visible) { sel.material.opacity = 0.65 + Math.sin(t * 3) * 0.25; sel.rotation.z = t * 0.4; } if (here.visible) { harrow.position.y += Math.sin(t * 4) * 0.004; hring.rotation.z = t * 0.3; } };
+  // "You are here": the gold ring and arrow over the player's building are gone. setYou stays so callers keep working, but it draws nothing.
+  const setYou = () => {};
+  const update = (t, dt = 0.016) => { bb.update(dt); const k = 0.35 + 0.65 * Math.max(0, Math.sin(t * 5)); glow.forEach((m) => m.color.setRGB(k, k * 0.23, k * 0.19)); if (sel.visible) { sel.material.opacity = 0.65 + Math.sin(t * 3) * 0.25; sel.rotation.z = t * 0.4; } };
   /** While a trip runs, the flat ground layers sit almost on the ground so cars and people do not look like they stand on slabs, and the map's labels get out of the way. */
   const tripMode = (on) => { tripOn = on; root.traverse((o) => { if (o.userData?.layerY != null) o.position.y = on ? o.userData.layerY * TRIP_LOWER : o.userData.layerY; }); edges.group.traverse((o) => { if (o.name === "road-stubs") { o.userData.layerY ??= o.position.y; o.position.y = on ? o.userData.layerY * TRIP_LOWER : o.userData.layerY; } }); };
 
@@ -122,7 +122,7 @@ export function buildRealCampus(data, meta = {}) {
   // `n` is the night level (0 day .. 1 night, lib3d/daylight.js), arriving from the sky rig a few times a minute at most. Windows are the wall material's emissive map (the lit panes of the
   // window texture), so more emissive = more windows glowing; street lights are the glowing lamp heads and the pools of light on the road (lib3d/roadfurniture.js). Nothing here allocates.
   let night = 0;
-  const applyLamps = (n) => furniture?.traverse((o) => { if (o.userData.lampHead) o.material.emissiveIntensity = 2.6 * n; else if (o.userData.lampPool) o.material.opacity = 0.6 * n; });
+  const applyLamps = (n) => { for (const grp of [furniture, highway]) grp?.traverse((o) => { if (o.userData.lampHead) o.material.emissiveIntensity = 2.6 * n; else if (o.userData.lampPool) o.material.opacity = 0.6 * n; }); };   // the street lights of the roads and of the expressway
   const setNight = (n) => { night = n; if (wallMesh) wallMesh.material.emissiveIntensity = 0.18 + 1.1 * n; applyLamps(n); };
 
   /**

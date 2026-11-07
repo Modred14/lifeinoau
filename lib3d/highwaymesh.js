@@ -6,6 +6,7 @@
 import * as THREE from "three";
 import { heightOn } from "./roadgraph.js";
 import { ROAD_TOP, DECK } from "./roadsurface.js";
+import { glowMaterial } from "./glow.js";
 
 const COL = { deck: "#3a3f47", shoulder: "#4a4f56", concrete: "#a9aca8", mark: "#ece9dd", edge: "#e6c34a", under: "#7d8083", rail: "#b9bcc0", lamp: "#8a8e93" };
 
@@ -111,11 +112,15 @@ export function buildHighwayMeshes(ex, S) {
   for (const p of ex.piers) { box(piers, p.x, p.z, p.hx, p.hz, colW, colD, -ROAD_TOP, headBottom); box(piers, p.x, p.z, p.hx, p.hz, headW, headD, headBottom, H - gird); }
 
   // ---- lamp posts in the median: pole and a double arm, every ~40 m
-  const lamps = new Tris(S);
+  // The heads are a mesh of their own (userData.lampHead) that glows at night, and each spills a pool of light on the deck beneath it (userData.lampPool): campusReal.js sets both from the night level.
+  const lamps = new Tris(S), lampHeads = new Tris(S), POOL_ALONG = 50, POOL_ACROSS = 12, pools = [];   // the pools are longer than the 42 m between lamps, so they overlap; 12 m across keeps each on its own carriageway
   for (const [x, z] of ex.lamps) {
     let best = 0, bd = 1e12; for (let i = 0; i < line.P.length; i++) { const d = (line.P[i].x - x) ** 2 + (line.P[i].z - z) ** 2; if (d < bd) { bd = d; best = i; } }
     const q = line.at(line.s[best]); box(lamps, x, z, q.hx, q.hz, 0.35, 0.35, H, H + 11); box(lamps, x, z, q.hx, q.hz, 14, 0.25, H + 10.7, H + 10.95);
-    for (const sg of [-1, 1]) { const p = off(q, sg * 6.2); box(lamps, p[0], p[1], q.hx, q.hz, 0.6, 1.1, H + 10.45, H + 10.7); }
+    for (const sg of [-1, 1]) {
+      const p = off(q, sg * 6.2); box(lampHeads, p[0], p[1], q.hx, q.hz, 0.6, 1.1, H + 10.45, H + 10.7);
+      const a = POOL_ALONG / 2, c = POOL_ACROSS / 2; pools.push([[-c, -a, 0, 0], [c, -a, 1, 0], [c, a, 1, 1], [-c, a, 0, 1]].map(([u, w, tu, tv]) => [p[0] + -q.hz * u + q.hx * w, p[1] + q.hx * u + q.hz * w, tu, tv]));
+    }
   }
 
   // ---- ramps
@@ -140,6 +145,15 @@ export function buildHighwayMeshes(ex, S) {
   add(under, COL.under, { rough: 0.95 }); add(rampU, COL.under, { rough: 0.95 });
   add(piers, COL.concrete, { rough: 0.95 }); add(rampPi, COL.concrete, { rough: 0.95 });
   add(rail, COL.rail, { rough: 0.4, metal: 0.6 }); add(lamps, COL.lamp, { rough: 0.5, metal: 0.5 });
+  const heads = lampHeads.mesh("#f4e9b8", { rough: 0.4, shadow: false });   // the lit lamp heads: dark by day, glowing as the night level rises
+  if (heads) { heads.material.emissive.set("#ffcf70"); heads.material.emissiveIntensity = 0; heads.userData.lampHead = true; g.add(heads); }
+  const poolMat = glowMaterial(0xffc46b); poolMat.side = THREE.DoubleSide;   // (no canvas, as in the node tests: no glow texture, so no pools)
+  if (poolMat.map && pools.length) {
+    const pos = new Float32Array(pools.length * 18), uv = new Float32Array(pools.length * 12), y = (H + 0.07) * S;   // just above the deck's paint
+    pools.forEach((qd, i) => { [0, 1, 2, 0, 2, 3].forEach((k, j) => { const v = qd[k]; pos.set([v[0] * S, y, v[1] * S], i * 18 + j * 3); uv.set([v[2], v[3]], i * 12 + j * 2); }); });
+    const pg = new THREE.BufferGeometry(); pg.setAttribute("position", new THREE.BufferAttribute(pos, 3)); pg.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+    const pm = new THREE.Mesh(pg, poolMat); pm.userData.lampPool = true; pm.renderOrder = 1; pm.frustumCulled = false; g.add(pm);
+  }
   g.userData.dispose = () => g.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
   return g;
 }
