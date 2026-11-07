@@ -1,4 +1,5 @@
 // components/apps/PortalApp.js: the E-Portal, inside the phone (see components/Phone.js). Reads /api/portal, which is built from the player's own saved exam results.
+// Laid out for the handset: one column, no tables and no sideways scrolling. Every course is a row (grade badge, code + title, score + units).
 "use client";
 import { useState } from "react";
 import LoadError from "@/components/LoadError";
@@ -7,9 +8,23 @@ import { useResource } from "@/lib/gameStore";
 import "./portal-app.css";
 
 const g2 = (n) => (n == null ? "–" : Number(n).toFixed(2));
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
+const GRADES = [["70 – 100", "A", 5, "Excellent"], ["60 – 69", "B", 4, "Very good"], ["50 – 59", "C", 3, "Good"], ["45 – 49", "D", 2, "Fair"], ["40 – 44", "E", 1, "Pass"], ["0 – 39", "F", 0, "Fail"]];
 
 function Stat({ label, value }) {
   return <div className="ep-stat"><b className="num">{value}</b><span>{label}</span></div>;
+}
+
+/** One course in a semester: grade badge, code and title, then the score and the credit units. */
+function ResultRow({ c }) {
+  return (
+    <li className="ep-row">
+      <i className="ep-grade" data-g={c.grade} aria-label={`Grade ${c.grade}`}>{c.grade}</i>
+      <div className="ep-main"><b className="code">{c.code}</b><span>{c.title}</span></div>
+      <div className="ep-end"><b className="num">{c.score}</b><small>{plural(c.units, "unit")}</small></div>
+    </li>
+  );
 }
 
 function Semester({ s }) {
@@ -21,26 +36,56 @@ function Semester({ s }) {
       </header>
       {s.missed && <p className="ep-flag" data-tone="bad">Examination not sat. Every course is recorded as 0.</p>}
       {s.malpractice && <p className="ep-flag" data-tone="bad">Examination malpractice: the semester score was capped.</p>}
-      {s.courses.length ? (
-        <div className="ep-scroll">
-          <table className="ep-table">
-            <thead><tr><th scope="col">Code</th><th scope="col">Course title</th><th scope="col" className="r">CU</th><th scope="col" className="r">Score</th><th scope="col" className="r">Grade</th></tr></thead>
-            <tbody>
-              {s.courses.map((c) => (
-                <tr key={c.code}>
-                  <td className="code">{c.code}</td><td>{c.title}</td><td className="r num">{c.units}</td><td className="r num">{c.score}</td>
-                  <td className="r"><i className="ep-grade" data-g={c.grade}>{c.grade}</i></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : <p className="ep-note">No course list is on record for this semester.</p>}
+      {s.courses.length ? <ul className="ep-list">{s.courses.map((c) => <ResultRow key={c.code} c={c} />)}</ul> : <p className="ep-note">No course list is on record for this semester.</p>}
       <footer>
-        <span>Mean score <b className="num">{s.score}</b></span>
-        <span>Units <b className="num">{s.unitsEarned}/{s.units}</b></span>
-        <span>CGPA after <b className="num">{g2(s.cgpaAfter)}</b></span>
+        <span><b className="num">{s.score}</b>Mean score</span>
+        <span><b className="num">{s.unitsEarned}/{s.units}</b>Units earned</span>
+        <span><b className="num">{g2(s.cgpaAfter)}</b>CGPA after</span>
       </footer>
+    </section>
+  );
+}
+
+function Registration({ cur }) {
+  if (!cur) return <div className="ep-empty"><b>Graduated</b><p>You have completed your degree. There is nothing left to register.</p></div>;
+  const pct = Math.max(0, Math.min(100, Math.round((cur.week / cur.sessionWeeks) * 100)));
+  const units = cur.courses.reduce((t, c) => t + c.units, 0);
+  return (
+    <section className="ep-sem" aria-label="Current registration">
+      <header>
+        <div><h4>{cur.level} Level registration</h4><small>Week {cur.week} of {cur.sessionWeeks} · {plural(cur.weeksLeft, "week")} left</small></div>
+        <div className="ep-sem-gpa"><b className="num">{cur.sat ? "Sat" : `Wk ${cur.nextExamWeek}`}</b><small>{cur.sat ? "this week" : "next exam"}</small></div>
+      </header>
+      <div className="ep-track" role="progressbar" aria-label="Session progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}><i style={{ width: `${pct}%` }} /></div>
+      <ul className="ep-list">
+        {cur.courses.map((c) => (
+          <li className="ep-row" key={c.code}>
+            <i className="ep-grade ep-pct num" aria-hidden="true">{c.attendancePct}%</i>
+            <div className="ep-main"><b className="code">{c.code}</b><span>{c.title}</span><small className="ep-lect">{c.lecturer}</small></div>
+            <div className="ep-end"><b className="num">{c.units}</b><small>{c.units === 1 ? "unit" : "units"}</small></div>
+          </li>
+        ))}
+      </ul>
+      <footer><span><b className="num">{units}</b>Units registered</span><span><b className="num">{cur.courses.length}</b>Courses</span></footer>
+    </section>
+  );
+}
+
+function Grading() {
+  return (
+    <section className="ep-sem" aria-label="Grading system">
+      <header><div><h4>Grading system</h4><small>5-point scale</small></div></header>
+      <ul className="ep-list">
+        {GRADES.map(([range, l, p, word]) => (
+          <li className="ep-row" key={l}>
+            <i className="ep-grade" data-g={l} aria-hidden="true">{l}</i>
+            <div className="ep-main"><b>{range}</b><span>{word}</span></div>
+            <div className="ep-end"><b className="num">{p}</b><small>{p === 1 ? "point" : "points"}</small></div>
+          </li>
+        ))}
+      </ul>
+      <p className="ep-note">Each semester is one examination. Its GPA is the grade point of your mean score across that semester&rsquo;s four courses, and your CGPA is the average of all your semester GPAs. Credit units show the weight of each course and how many you earned (a score of 40 or more).</p>
+      <p className="ep-note">Degree classes: First Class 4.50+, Second Class Upper 3.50+, Second Class Lower 2.40+, Third Class 1.50+, Pass 1.00+.</p>
     </section>
   );
 }
@@ -56,17 +101,17 @@ export default function PortalApp() {
     <div className="ep">
       <section className="ep-id" aria-label="Student">
         <span className="ep-seal" aria-hidden="true"><Icon name="library" size={22} weight="fill" /></span>
-        <div><b>{st.name}</b><small>{st.matric} · {st.faculty}</small></div>
+        <div><b>{st.name}</b><small>{st.matric}</small><small>{st.faculty}</small></div>
         <span className="ep-level num">{st.graduated ? "Graduate" : `${st.level}L`}</span>
       </section>
 
       <section className="ep-hero" aria-label="Academic summary">
         <div className="ep-cgpa"><small>Cumulative GPA</small><b className="num">{g2(sm.cgpa)}</b><span>out of {sm.scale.toFixed(2)}</span></div>
-        <div className="ep-cgpa"><small>Last semester GPA</small><b className="num">{g2(sm.gpa)}</b><span>{sm.semesters ? `${sm.semesters} semester${sm.semesters === 1 ? "" : "s"} on record` : "No semester yet"}</span></div>
+        <div className="ep-cgpa"><small>Last semester GPA</small><b className="num">{g2(sm.gpa)}</b><span>{sm.semesters ? plural(sm.semesters, "semester") + " on record" : "No semester yet"}</span></div>
       </section>
       <p className="ep-standing" data-tone={sm.tone}><b>{sm.standing}</b><span>{sm.status}</span></p>
       <div className="ep-stats">
-        <Stat label="Credit units taken" value={sm.totalUnits} />
+        <Stat label="Units taken" value={sm.totalUnits} />
         <Stat label="Units earned" value={sm.unitsEarned} />
         <Stat label="Strikes" value={`${sm.strikes}/5`} />
       </div>
@@ -95,29 +140,8 @@ export default function PortalApp() {
         </>
       ))}
 
-      {tab === "registration" && (cur ? (
-        <section className="ep-sem" aria-label="Current registration">
-          <header><div><h4>{cur.level} Level registration</h4><small>Week {cur.week} of {cur.sessionWeeks} · {cur.weeksLeft} week{cur.weeksLeft === 1 ? "" : "s"} left</small></div>
-            <div className="ep-sem-gpa"><b className="num">{cur.sat ? "Sat" : `Wk ${cur.nextExamWeek}`}</b><small>{cur.sat ? "this week" : "next exam"}</small></div></header>
-          <div className="ep-scroll">
-            <table className="ep-table">
-              <thead><tr><th scope="col">Code</th><th scope="col">Course title</th><th scope="col" className="r">CU</th><th scope="col" className="r">Attend.</th></tr></thead>
-              <tbody>{cur.courses.map((c) => <tr key={c.code}><td className="code">{c.code}</td><td>{c.title}<small className="ep-lect">{c.lecturer}</small></td><td className="r num">{c.units}</td><td className="r num">{c.attendancePct}%</td></tr>)}</tbody>
-            </table>
-          </div>
-          <footer><span>Units registered <b className="num">{cur.courses.reduce((t, c) => t + c.units, 0)}</b></span></footer>
-        </section>
-      ) : <div className="ep-empty"><b>Graduated</b><p>You have completed your degree. There is nothing left to register.</p></div>)}
-
-      {tab === "about" && (
-        <section className="ep-sem" aria-label="Grading system">
-          <header><div><h4>Grading system</h4><small>5-point scale</small></div></header>
-          <div className="ep-scroll"><table className="ep-table"><thead><tr><th scope="col">Score</th><th scope="col">Grade</th><th scope="col" className="r">Point</th></tr></thead>
-            <tbody>{[["70 – 100", "A", 5], ["60 – 69", "B", 4], ["50 – 59", "C", 3], ["45 – 49", "D", 2], ["40 – 44", "E", 1], ["0 – 39", "F", 0]].map(([r, l, p]) => <tr key={l}><td>{r}</td><td><i className="ep-grade" data-g={l}>{l}</i></td><td className="r num">{p}</td></tr>)}</tbody></table></div>
-          <p className="ep-note">Each semester is one examination. Its GPA is the grade point of your mean score across that semester&rsquo;s four courses, and your CGPA is the average of all your semester GPAs. Credit units show the weight of each course and how many you earned (a score of 40 or more).</p>
-          <p className="ep-note">Degree classes: First Class 4.50+, Second Class Upper 3.50+, Second Class Lower 2.40+, Third Class 1.50+, Pass 1.00+.</p>
-        </section>
-      )}
+      {tab === "registration" && <Registration cur={cur} />}
+      {tab === "about" && <Grading />}
     </div>
   );
 }
