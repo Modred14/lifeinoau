@@ -4,6 +4,7 @@ import { resolveCourseAction, resolveCourseExam, surpriseTest, attendanceRate, C
 import { getCourses, courseAction } from "../lib/courseService.js";
 import { doAction, sitExam } from "../lib/gameService.js";
 import { makeDb } from "./fakedb.mjs";
+import { creditUnits } from "../lib/portal.js";
 
 const science = ["Science", "Technology", "Computer Science", "Pharmacy", "Agriculture"];
 for (const faculty of FACULTIES_WITH_COURSES) {
@@ -102,7 +103,7 @@ async function examWith(rows) {
   const result = await sitExam(db, "u1", false, id);
   assert.equal(result.ok, true);
   assert.equal(T.examResult.length, 1);
-  assert.deepEqual(T.examResult[0].detail, result.perCourse);
+  assert.deepEqual(T.examResult[0].detail, result.perCourse.map((x) => ({ ...x, units: creditUnits(x.code) })));
   assert.equal(result.perCourse.length, 4);
   const before = structuredClone(T);
   assert.equal((await sitExam(db, "u1", false, id)).duplicate, true);

@@ -368,21 +368,9 @@ export default function GameHome({
       BigInt(sel.paidKobo) > 0n ? fmtN(sellKobo(sel.paidKobo) / 100n) : null,
   };
   const status = statusOf(live),
-    score = roomScore(items),
-    mood =
-      c.happiness >= 80
-        ? ["Very happy", "happy"]
-        : c.happiness >= 60
-          ? ["Happy", "happy"]
-          : c.happiness >= 40
-            ? ["Okay", "meh"]
-            : ["Low", "sad"];
+    score = roomScore(items);
   const examToday = a.nextExamWeek === st.week && !a.satThisWeek,
-    stopped = !!fz,
-    sessionDone = Math.min(
-      100,
-      Math.round(((12 - a.weeksLeftInSession) / 12) * 100),
-    );
+    stopped = !!fz;
   const hours = fz ? left : 0;
 
   return (
@@ -499,48 +487,6 @@ export default function GameHome({
                 </div>
               </section>
             )}
-            <section className="gx-card gx-acad" aria-labelledby="ac-h">
-              <div className="gx-acad-top">
-                <div>
-                  <h2 id="ac-h">Academics</h2>
-                  <p className="mut">
-                    {a.weeksLeftInSession} weeks left this session
-                  </p>
-                </div>
-                <div className="gx-cgpa">
-                  <b className="num">{a.cgpa ?? "–"}</b>
-                  <span className="mut">
-                    {a.standing ? `CGPA · ${a.standing}` : "CGPA"}
-                  </span>
-                </div>
-              </div>
-              <div
-                className="gx-bar gx-bar--gold"
-                role="progressbar"
-                aria-label="Session progress"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={sessionDone}
-              >
-                <i style={{ width: sessionDone + "%" }} />
-              </div>
-              <div className="gx-strikes">
-                <span className="mut">Strikes</span>
-                <span
-                  className="gx-pips"
-                  aria-label={`${c.strikes} of 5 strikes`}
-                >
-                  {Array.from({ length: 5 }, (_, i) => (
-                    <i key={i} data-on={i < c.strikes ? "true" : undefined} />
-                  ))}
-                </span>
-                {!examToday && (
-                  <span className="mut gx-next">
-                    <Icon name="timer" size={14} /> Exam week {a.nextExamWeek}
-                  </span>
-                )}
-              </div>
-            </section>
           </>
         )}
       </div>
@@ -696,17 +642,7 @@ export default function GameHome({
         </section>
       )}
 
-      {/* home: a small label; buy: the shop */}
-      {!buying && (
-        <div className="gx-room-tag">
-          <Icon name="hostel" size={16} />
-          {c.hostel} · {room.occupants ? `${room.occupants} in the room` : `${room.w}×${room.d} room`}<i>Room score {score}</i>
-          <span className="gx-mood" title="Mood">
-            <Icon name={mood[1]} size={16} />
-            {mood[0]}
-          </span>
-        </div>
-      )}
+      {/* buy: the shop */}
       {buying && (
         <BuySheet
           items={items}

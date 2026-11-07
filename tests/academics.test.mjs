@@ -8,6 +8,7 @@ import { coursesFor } from "../lib/curriculum.js";
 import { catchUp } from "../lib/tick.js";
 import { getCourses } from "../lib/courseService.js";
 import { sitExam } from "../lib/gameService.js";
+import { creditUnits } from "../lib/portal.js";
 import { makeDb } from "./fakedb.mjs";
 
 let checks = 0;
@@ -165,7 +166,7 @@ await okAsync("an exam result is stored once, with its per-course detail, and ev
   T.courseProgress.push(...rows);
   const r = await sitExam(db, "u1", false, "persist-req-0001");
   assert.equal(T.examResult.length, 1); const saved = T.examResult[0];
-  assert.equal(saved.score, r.score); assert.equal(saved.gradePoint, r.gradePoint); assert.deepEqual(saved.detail, r.perCourse); assert.equal(saved.gradePoint, gradePoint(saved.score));
+  assert.equal(saved.score, r.score); assert.equal(saved.gradePoint, r.gradePoint); assert.deepEqual(saved.detail, r.perCourse.map((x) => ({ ...x, units: creditUnits(x.code) })), "per-course detail is saved with each course's credit units"); assert.equal(saved.gradePoint, gradePoint(saved.score));
   assert.equal(cgpa(T.examResult.map((x) => x.gradePoint)), r.gradePoint, "the CGPA after the first exam is that exam's grade point");
   const again = await sitExam(db, "u1", false, "persist-req-0001"); assert.equal(again.duplicate, true); assert.equal(T.examResult.length, 1, "a repeated request stores nothing more");
   const logs = T.actionLog.length;

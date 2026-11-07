@@ -222,3 +222,4 @@ body[data-phone-full] .cx-scrim.ph-scrim { z-index: calc(var(--z-nav, 500) + 40)
 /* Opened from a player's name tag while inside a building or on a trip: the same layer as always (85), above those screens. */
 
 /* The Parties app's own look lives in components/apps/parties-app.css. */
+.ph-ico[data-tone="portal"] { background: #14532d; color: #fff; } /* the E-Portal app: flat, no gradient */
