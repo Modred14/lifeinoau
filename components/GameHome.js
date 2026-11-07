@@ -10,7 +10,7 @@ import { playSound } from "@/lib/sound";
 import { confirmAction } from "@/lib/confirm";
 import { usePlayMode, setPlayMode } from "@/lib/ui";
 import { game, roomStore, useStore, begin, finish, cash, canAfford } from "@/lib/gameStore";
-import { ITEMS, MAX_ITEMS, roomScore, sellKobo, priceKobo, canGoOutside, isFixture, isOutdoor } from "@/lib/furniture.js";
+import { ITEMS, MAX_ITEMS, ownedCount, roomScore, sellKobo, priceKobo, canGoOutside, isFixture, isOutdoor } from "@/lib/furniture.js";
 import { roomFor, autoPlace, isOutside } from "@/lib/room.js";
 import { fmtN } from "@/lib/classes.js";
 import { bailFor, HUSTLE } from "@/lib/engine.js";
@@ -245,7 +245,7 @@ export default function GameHome({
   const buy = async (key) => {
     const d = ITEMS[key],
       price = priceKobo(key);
-    if (items.length >= MAX_ITEMS)
+    if (ownedCount(items) >= MAX_ITEMS)
       return toast.error("Your storage is full. Sell something first.");
     if (!canAfford(price)) return toast.error("You cannot afford that.");
     const requestId = crypto.randomUUID(),

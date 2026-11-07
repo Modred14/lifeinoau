@@ -12,7 +12,6 @@ import { applyPwaUpdate, checkPwaUpdate, usePwaUpdate } from "@/lib/pwa";
 import MessagesApp from "./apps/MessagesApp";
 import { chat, useChat } from "@/lib/chat";
 import CareerApp from "./apps/CareerApp";
-import CoursesApp from "./apps/CoursesApp";
 import PortalApp from "./apps/PortalApp";
 import InvestApp from "./apps/InvestApp";
 import BankApp from "./apps/BankApp";
@@ -40,7 +39,6 @@ import "./phone.css";
 const APPS = {
   messages: { name: "Messages", icon: "chat", tone: "blue", own: true },
   jobs: { name: "Jobs", icon: "jobs", tone: "green", C: CareerApp },
-  courses: { name: "Courses", icon: "courses", tone: "teal", C: CoursesApp },
   portal: { name: "E-Portal", icon: "library", tone: "portal", C: PortalApp }, // academic records: CGPA, GPA and every semester's results, from /api/portal
   invest: { name: "Invest", icon: "invest", tone: "gold", C: InvestApp },
   bank: { name: "Bank", icon: "bank", tone: "navy", C: BankApp }, // balance, savings, goals, net worth and the statement
@@ -64,7 +62,7 @@ const APPS = {
   developer: { name: "Developer", icon: "code", tone: "dev", C: DeveloperApp }, // who made Life in OAU; its Message button opens the real Messages app on the developer's player
 };
 export const PHONE_APPS = Object.keys(APPS);
-const GRID = ["messages", "calls", "bank", "jobs", "courses", "portal", "invest", "vouchers", "love", "parties", "spending", "forbes", "awards", "housing", "ride", "offishall", "luxury", "hire", "bet", "games", "sug", "guide", "developer", "settings"];
+const GRID = ["messages", "calls", "bank", "jobs", "portal", "invest", "vouchers", "love", "parties", "spending", "forbes", "awards", "housing", "ride", "offishall", "luxury", "hire", "bet", "games", "sug", "guide", "developer", "settings"];
 /** In Floor O (N-QRS Custody) the PHONE keeps working: custody stops you leaving, not using your phone. Only the apps that are about getting somewhere (rides, drivers, moving house) are
  *  tucked away. Every app that stays follows its own rules: the server still refuses anything custody forbids (working a shift, going out...) with a clear message. */
 const CUSTODY_HIDDEN = ["ride", "hire", "housing"];

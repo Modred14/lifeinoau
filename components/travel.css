@@ -260,7 +260,9 @@ body[data-trip] .map-chrome { display: none !important; } /* the bottom bar is n
 .bi3-act-doing b { color: var(--text); }
 .bi3-act-sel { display: grid; gap: 6px; font-size: 0.8rem; color: var(--muted); }
 .bi3-act-sel select { min-height: 48px; border-radius: 12px; background: var(--raised); color: var(--text); border: 1px solid var(--line); padding: 0 12px; font: inherit; }
-.bi3-act-sel option { color: #111; }
+.bi3-act-sel select { color-scheme: dark; }
+.bi3-act-sel option { background: #131b2e; color: #fff; }
+.bi3-act-sel option:checked, .bi3-act-sel option:hover { background: #1f7a47; color: #fff; }
 .bi3-act-btns { display: grid; gap: 8px; }
 .bi3-act .bi3-b { width: 100%; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-weight: 600; }
 .bi3-act .bi3-b:hover:not(:disabled) { background: rgba(255, 255, 255, 0.05); color: var(--text); border-color: rgba(255, 255, 255, 0.28); }
