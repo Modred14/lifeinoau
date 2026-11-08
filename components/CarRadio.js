@@ -5,7 +5,8 @@
 // on a keyboard: R opens/closes the panel, , and . change station. The radio plays only while `active` (you are in a vehicle); leaving it stops the stream.
 // The sound itself is lib/radio/radio.js; the station list is public/data/radio-stations.json.
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "./Icon";
 import { useRadio, initRadio, setPower, setPlaying, selectStation, stepStation, setInVehicle } from "@/lib/radio/radio.js";
 import { useMix, setMix } from "@/lib/audio/mixer.js";
@@ -30,6 +31,10 @@ export function radioLine(r) {
 
 export default function CarRadio({ active, float = false }) {
   const r = useRadio(), mix = useMix(), [open, setOpen] = useState(false), [list, setList] = useState(false), panel = useRef(null), btn = useRef(null);
+  // The panel and the chip are placed against the SCREEN (the HUD root, .th), but the button lives inside the pedal cluster, whose boxes are positioned themselves: left unattended, the panel would be
+  // positioned against the pedals and land off screen. So they are rendered into the HUD root. host: undefined = not mounted yet, null = no HUD around (render in place), element = the HUD root.
+  const [host, setHost] = useState(undefined);
+  const setBtn = useCallback((el) => { btn.current = el; setHost(el ? el.closest(".th") : undefined); }, []);
   const cur = r.stations.find((s) => s.id === r.stationId), busy = ["loading", "buffering", "reconnecting"].includes(r.status);
   useEffect(() => { initRadio(); }, []);
   useEffect(() => { setInVehicle(!!active); return () => setInVehicle(false); }, [active]);   // getting out (or leaving the trip) stops the stream
@@ -44,11 +49,8 @@ export default function CarRadio({ active, float = false }) {
   useEffect(() => { if (list) panel.current?.querySelector('.cr-list [aria-current="true"]')?.scrollIntoView({ block: "nearest" }); }, [list]); // opening the stations shows the one that is playing
   if (!active) return null;
   const power = () => { setPower(!r.on); if (!r.on) setOpen(true); };
-  return (
+  const floating = (
     <>
-      <button ref={btn} type="button" className={"th-btn th-radio" + (float ? " th-radio-float" : "")} data-on={r.on ? "1" : undefined} aria-label={open ? "Close the car radio" : "Open the car radio"} aria-expanded={open} data-sound="none" onClick={() => setOpen((o) => !o)}>
-        <Icon name="radio" size={22} weight={r.on ? "fill" : "regular"} />
-      </button>
       {!open && r.on && r.stations.length > 0 && <button type="button" className="cr-chip" onClick={() => setOpen(true)} data-sound="none" aria-label={`Radio: ${cur?.name ?? ""}. ${radioLine(r)}. Open the radio`}><i className="cr-eq" data-busy={busy ? "1" : undefined} data-live={r.status === "playing" ? "1" : undefined} aria-hidden="true"><b /><b /><b /></i><span>{cur?.name}</span></button>}
       {open && (
         <div ref={panel} className="cr" role="dialog" aria-label="Car radio">
@@ -78,6 +80,14 @@ export default function CarRadio({ active, float = false }) {
           <p className="cr-key" aria-hidden="true"><kbd>R</kbd> radio <kbd>,</kbd><kbd>.</kbd> station</p>
         </div>
       )}
+    </>
+  );
+  return (
+    <>
+      <button ref={setBtn} type="button" className={"th-btn th-radio" + (float ? " th-radio-float" : "")} data-on={r.on ? "1" : undefined} aria-label={open ? "Close the car radio" : "Open the car radio"} aria-expanded={open} data-sound="none" onClick={() => setOpen((o) => !o)}>
+        <Icon name="radio" size={22} weight={r.on ? "fill" : "regular"} />
+      </button>
+      {host === undefined ? null : host ? createPortal(floating, host) : floating}
     </>
   );
 }

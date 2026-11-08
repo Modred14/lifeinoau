@@ -1,18 +1,33 @@
 /* components/car-radio.css: the car radio (components/CarRadio.js). Uses the trip HUD's colours and sizes (--th-*, set in travel.css) and sits top left under the trip card, so the road
    ahead, the vehicle and the pedals are never covered. Flat colours. Responsive: the panel's width and height come from the HUD's own variables (the map, the wheel, the safe areas), so it
    never runs under the map or the steering wheel on a small phone, a phone on its side, a tablet or a desktop; touch targets are at least 44px wherever a finger is the pointer. */
-.th { --cr-top: calc(var(--th-top) + 104px); --cr-w: min(340px, calc(100vw - var(--th-l) - var(--th-r) - var(--th-mini) - 14px)); }
-.th .th-radio { width: var(--th-aux); height: var(--th-aux); min-height: 0; padding: 0; border-radius: 50%; background: var(--th-surface); color: #fff; border: 1px solid var(--th-line); box-shadow: none; display: grid; place-items: center; }
+/* Where the panel may go. The panel and the chip are children of the HUD root (.th, the whole screen: see CarRadio.js), so left / top / max-height are measured from the screen edges, and they are
+   worked out from the HUD's own sizes (--th-*) so they follow every layout in travel.css:
+     --cr-top    : just under the trip card (top left);
+     --cr-w      : as wide as the room left of the map (and never more than 340px);
+     --cr-clear  : how much of the screen's bottom the panel must leave alone. Default (tablet, laptop, desktop): the steering buttons are bottom left, the pedals bottom right and far away, so only the
+                   steering buttons count; a phone held upright: the pedal stack (gas, brake, and the horn / radio / exit row above them) reaches under the panel's width, so it counts; riding (no pedals): only
+                   the radio button in the corner.
+   A phone on its side is different again (below): the panel moves beside the trip card and stops short of the pedals. */
+.th {
+  --cr-top: calc(var(--th-top) + 104px); --cr-panel-top: var(--cr-top); --cr-left: var(--th-l);
+  --cr-w: min(340px, calc(100vw - var(--th-l) - var(--th-r) - var(--th-mini) - 14px));
+  --cr-steer: max(64px, calc(var(--th-wheel) * 0.56));
+  --cr-clear: calc(var(--th-bottom) + var(--cr-steer) + 12px);
+}
+@media (max-width: 599px) and (min-height: 521px) { .th[data-phase="drive"] { --cr-clear: calc(var(--th-bottom) + var(--th-gas-h) + var(--th-aux) + 24px); } }
+.th[data-phase="ride"] { --cr-clear: calc(var(--th-bottom) + var(--th-aux) + 18px); }
+.th .th-radio { flex: none; width: var(--th-aux); min-width: var(--th-aux); height: var(--th-aux); min-height: 0; padding: 0; border-radius: 50%; background: var(--th-surface); color: #fff; border: 1px solid var(--th-line); box-shadow: none; display: grid; place-items: center; }
 .th .th-radio:hover:not(:disabled) { background: #1d2a47; border-color: rgba(255, 255, 255, 0.3); }
 .th .th-radio[data-on="1"] { color: #06210f; background: var(--th-ok); border-color: var(--th-ok); }
 .th .th-radio-float { position: absolute; right: var(--th-r); bottom: calc(var(--th-bottom) + 6px); } /* riding (not steering): there is no pedal row, so it sits in the corner */
+.th-aux > .th-btn { flex: none; white-space: nowrap; } /* the horn, radio and exit buttons keep their size: never squeezed under 44px */
 
-.th .cr, .th .cr-chip { position: absolute; left: var(--th-l); z-index: 3; }
-.th .cr { top: var(--cr-top); width: var(--cr-w); min-width: 0; max-height: max(168px, calc(100dvh - var(--cr-top) - var(--th-bottom) - var(--th-wheel) - 12px)); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; box-sizing: border-box; display: grid; align-content: start; gap: 10px; padding: 12px; border-radius: 18px; background: var(--th-surface); border: 1px solid var(--th-line); color: #fff; box-shadow: 0 16px 36px -14px rgba(0, 0, 0, 0.7); }
-.th[data-phase="ride"] .cr { max-height: max(168px, calc(100dvh - var(--cr-top) - var(--th-bottom) - 12px)); } /* riding: no wheel in the corner, so the panel may be taller */
+.th .cr, .th .cr-chip { position: absolute; left: var(--cr-left); z-index: 3; }
+.th .cr { top: var(--cr-panel-top); width: var(--cr-w); min-width: 0; max-height: max(120px, calc(100dvh - var(--cr-panel-top) - var(--cr-clear))); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; box-sizing: border-box; display: grid; align-content: start; gap: 10px; padding: 12px; border-radius: 18px; background: var(--th-surface); border: 1px solid var(--th-line); color: #fff; box-shadow: 0 16px 36px -14px rgba(0, 0, 0, 0.7); }
 .cr > * { min-width: 0; }
 .cr header { display: flex; align-items: center; gap: 10px; }
-.cr header b { flex: 1; font: 700 0.9rem/1 var(--font-ui); letter-spacing: 0.02em; }
+.cr header b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 0.9rem/1 var(--font-ui); letter-spacing: 0.02em; }
 .th .cr button { min-height: 0; font: inherit; }
 .th .cr-pw, .th .cr-x { flex: none; width: 36px; height: 36px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: #1b2540; color: #fff; border: 1px solid var(--th-line); }
 .th .cr-pw[data-on="1"] { background: var(--th-ok); color: #06210f; border-color: var(--th-ok); }
@@ -32,8 +47,8 @@
 @keyframes cr-bar { 0%, 100% { height: 25%; } 50% { height: 100%; } }
 .cr-spin { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.25); border-top-color: var(--th-amber); animation: cr-rot 0.8s linear infinite; }
 @keyframes cr-rot { to { transform: rotate(360deg); } }
-.cr-ctl { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 8px; }
-.th .cr-ctl button { height: 46px; border-radius: 14px; display: grid; place-items: center; background: #1b2540; color: #fff; border: 1px solid var(--th-line); }
+.cr-ctl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr); gap: 8px; }
+.th .cr-ctl button { height: 46px; min-width: 0; padding: 0; border-radius: 14px; display: grid; place-items: center; background: #1b2540; color: #fff; border: 1px solid var(--th-line); }
 .th .cr-ctl button:hover:not(:disabled) { background: #26345a; }
 .th .cr-ctl .cr-play { background: #fff; color: #161b26; border-color: #fff; }
 .th .cr-ctl button:disabled { opacity: 0.4; }
@@ -83,15 +98,51 @@
   .cr header b { font-size: 1rem; } .cr-txt b { font-size: 1.05rem; } .cr-txt span { font-size: 0.86rem; }
   .cr-list { max-height: min(240px, 34dvh); }
 }
-/* a phone on its side has hardly any height: the panel sits right beside the trip card (as wide as the room before the map), shrinks to the essentials and scrolls; the station list is short */
+/* a phone upright and not very tall (most of them): the panel has a limited slot between the trip card and the pedal stack, so it is a little tighter and scrolls inside that slot, with the station
+   and the play / pause row first so they are never the part that scrolls out of reach */
+@media (max-width: 599px) and (max-height: 760px) and (min-height: 521px) {
+  .th .cr { gap: 8px; padding: 10px; }
+  .cr-screen { min-height: 48px; padding: 8px 10px; }
+}
+/* a short phone upright (320x568, 360x640, 375x667): the slot under the trip card is too small for the whole panel, so while it is open the panel takes the card's place, at the top (the card and
+   Cancel are back as soon as it closes) */
+@media (max-width: 599px) and (max-height: 700px) and (min-height: 521px) {
+  .th { --cr-panel-top: var(--th-top); }
+  .th:has(.cr) .th-info { visibility: hidden; }
+}
+/* a phone on its side has hardly any height. The panel opens beside the trip card (top, to the right of it), as wide as the room before the pedals, and is a two-column grid when there is room
+   (the station on the left; play / volume on the right). It never reaches the pedals (bottom right), the map and speed (top right) or the bottom bar (--th-bottom already clears it). */
 @media (max-height: 520px) and (orientation: landscape) {
-  .th { --cr-w: min(300px, calc(100vw - var(--th-l) - var(--th-r) - var(--th-mini) - min(var(--th-info-w), 44vw - 66px) - 22px)); }
-  .th .cr { top: calc(var(--th-top) + 4px); left: calc(var(--th-l) + min(var(--th-info-w), 44vw - 66px) + 8px); max-height: calc(100dvh - var(--th-top) - 14px); gap: 6px; padding: 9px; }
-  .th[data-phase="ride"] .cr { max-height: calc(100dvh - var(--th-top) - 14px); }
+  .th {
+    --cr-info-w: min(var(--th-info-w), 44vw - 66px);
+    --cr-left: calc(var(--th-l) + var(--cr-info-w) + 8px);
+    --cr-pedals-w: calc(var(--th-aux) + 2 * var(--th-pw) + 20px);
+    --cr-w: min(320px, calc(100vw - var(--cr-left) - var(--th-r) - var(--cr-pedals-w) - 10px));
+  }
+  .th .cr, .th[data-phase="ride"] .cr { top: calc(var(--th-top) + 4px); max-height: calc(100dvh - var(--th-top) - var(--th-bottom) - 4px); gap: 6px; padding: 9px; }
+  .th .cr-chip { top: calc(var(--th-top) + 52px); left: var(--th-l); }
   .cr-list { max-height: min(110px, 26dvh); }
   .cr-screen { min-height: 44px; padding: 6px 10px; }
   .th .cr-ctl button { height: 44px; }
-  .th .cr-chip { top: calc(var(--th-top) + 52px); }
+  .cr-key { display: none !important; }
 }
-@media (max-height: 380px) and (orientation: landscape) { .th .cr { padding: 8px; } .cr-key { display: none !important; } }
+/* roomy landscape phone: two columns (the right one is never narrower than three 44px buttons) */
+@media (max-height: 520px) and (orientation: landscape) and (min-width: 760px) {
+  .th .cr { grid-template-columns: minmax(0, 1fr) minmax(164px, 1.15fr); grid-template-areas: "hd hd" "scr ctl" "scr vol" "note note" "more more" "list list"; column-gap: 10px; align-items: stretch; }
+  .cr header { grid-area: hd; } .cr-screen { grid-area: scr; align-self: stretch; gap: 8px; } .cr-ctl { grid-area: ctl; gap: 6px; } .cr-vol { grid-area: vol; } .cr-note { grid-area: note; }
+  .th .cr-more { grid-area: more; } .cr-list { grid-area: list; }
+}
+/* a very short landscape phone: there is no room beside the card, so while the radio is open it takes the card's place (the card is back as soon as it closes); it stops before the pedals and above the steering buttons */
+@media (max-height: 380px) and (orientation: landscape) {
+  .th { --cr-left: var(--th-l); --cr-w: min(360px, calc(100vw - var(--th-l) - var(--th-r) - var(--cr-pedals-w) - 10px)); }
+  .th:has(.cr) .th-info { visibility: hidden; }
+  .th .cr { max-height: calc(100dvh - var(--th-top) - var(--th-bottom) - var(--cr-steer) - 12px); }
+  .th .cr-chip { top: calc(var(--th-top) + 48px); }
+}
+@media (max-height: 380px) and (orientation: landscape) and (min-width: 540px) {
+  .th .cr { grid-template-columns: minmax(0, 1fr) minmax(164px, 1.15fr); grid-template-areas: "hd ctl" "scr vol" "note note" "more more" "list list"; column-gap: 10px; align-items: stretch; }
+  .cr header { grid-area: hd; justify-content: space-between; } .cr header b { display: none; } /* power and close, the title would only be a few letters wide */
+  .cr-screen { grid-area: scr; gap: 8px; } .cr-ctl { grid-area: ctl; gap: 6px; } .cr-vol { grid-area: vol; } .cr-note { grid-area: note; }
+  .th .cr-more { grid-area: more; } .cr-list { grid-area: list; }
+}
 @media (prefers-reduced-motion: reduce) { .cr-eq[data-live="1"] b, .cr-spin { animation: none; } .cr-eq[data-live="1"] b { height: 70%; } }
