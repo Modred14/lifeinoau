@@ -16,11 +16,26 @@ export const BILLBOARD = {
   CAPTION_MAX: 80,
 };
 
-/** Billboard positions (metres) and the name of the corner they stand on. */
-export const BILLBOARDS = [
-  ["Senate Plaza", 292, 40], ["Library Road", 60, -40], ["Law Corner", 90, -312], ["Student Union Strip", -180.4, 156], ["Moremi Junction", -394, -29.6],
-  ["Alumni Road", -560, -260], ["Halls Row", -780, 120], ["Fajuyi Crossing", -400, 330], ["Ede Road Banks", 20, 560], ["Nightlife Strip", -183.8, 823.2],
-].map(([where, x, z], i) => ({ id: "bb_" + (i + 1), n: i + 1, where, name: `Billboard ${i + 1} · ${where}`, x, z, yaw: 0.7 + (i % 3 - 1) * 0.35 }));
+// Where the ten billboards stand: [the road they are beside, x, z (metres), yaw (the three.js rotation.y of the board; its face looks along (sin yaw, cos yaw))].
+// These are not guesses: tools/oau/place-billboards.mjs finds them on the real road graph (beside a road, never on it, clear of junctions, bridge ends, buildings, lakes, car parks and
+// street furniture, turned toward the traffic, visible from the lane, and spread so every part of the road network has one in view) and writes this block. The rules are in
+// lib3d/billboardSite.js and tests/billboard-sites.test.mjs holds every site to them, so a rebuilt road network that moves a verge shows up as a failing test, not a board in the road.
+// BILLBOARD-SITES:BEGIN (written by tools/oau/place-billboards.mjs; tests/billboard-sites.test.mjs holds every site to the rules in lib3d/billboardSite.js)
+export const BILLBOARD_SITES = [
+  ["Agriculture Road", 1225.1, -325.7, -2.484],
+  ["Technology Road", 860, -449.2, -2.562],
+  ["Arts Road", 372.7, -390.1, -2.495],
+  ["Senate Building Road", 329.7, 132.5, -0.961],
+  ["Architecture Road", -375.6, -320.7, 0.354],
+  ["Mozambique Hall Road", -959.4, -344.8, -2.577],
+  ["ETF Hall Road", -1025.5, 154.9, -0.886],
+  ["Postgraduate Hall Road", -604.2, 41.3, 2.65],
+  ["Postgraduate College Road", 968.6, 197.4, 2.843],
+  ["Pharmacy Road", 390.3, 602.1, 0.671],
+];
+// BILLBOARD-SITES:END
+/** Billboard positions (metres), the road they stand beside, and which way they face. */
+export const BILLBOARDS = BILLBOARD_SITES.map(([where, x, z, yaw], i) => ({ id: "bb_" + (i + 1), n: i + 1, where, name: `Billboard ${i + 1} · ${where}`, x, z, yaw }));
 
 /**
  * Two open grounds the real-map render does not draw, placed in clear space (checked against every building, lake, wood and pitch in the data):

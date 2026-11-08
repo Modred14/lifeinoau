@@ -123,6 +123,7 @@ export function buildRoadFurniture(graph, S, { seed = 11 } = {}) {
   const signG = merged([paint(cyl(0.04, 0.04, 2.4, 0, 5), "#8a8f96"), (() => { const g = new THREE.CylinderGeometry(0.42, 0.42, 0.05, 8); g.rotateX(Math.PI / 2); g.rotateY(Math.PI / 8); g.translate(0, 2.2, 0.05); return paint(g, "#c7312b"); })()]);
   instanced(signG, matV(), signs, (o, it) => yawPlace(o, it));
   group.userData.counts = { lamps: posts, trees: trees.length, signs: signs.length };
+  group.userData.spots = [...taken];   // where every light pole, tree and sign stands, [x, z] in metres: lib3d/billboardSite.js keeps billboards clear of them
   group.userData.dispose = () => { for (const d of disposables) d.dispose?.(); };
   return group;
 }

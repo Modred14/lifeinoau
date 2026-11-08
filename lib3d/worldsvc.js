@@ -7,6 +7,7 @@ import { buildWorldCollision } from "./collide.js";
 import { createNav } from "./walker.js";
 import { buildRoadNet } from "./roadnet.js";
 import { dataUrl } from "./dataUrl.js";
+import { addBillboardCollision } from "./billboardSite.js";
 
 /**
  * The columns of the expressway are solid on the ground (people and ground vehicles cannot walk or drive through one); the deck itself is 10 m up and is not. Columns standing in the lake need
@@ -23,6 +24,7 @@ export function addPierCollision(world, hw) {
 export function buildServices(data, rawGraph) {
   const world = buildWorldCollision(data), graph = buildRoadGraph(rawGraph, { sdf: (x, z) => world.sdf(x, z, 16) });
   addPierCollision(world, rawGraph.expressway);   // after the graph: ground roads are laid out against buildings and water only, the piers were placed clear of them
+  addBillboardCollision(world, data.places);       // the two concrete footings of each billboard are solid (the screen is 8 m up and is not); they stand well clear of every road, so nothing that drives or walks is ever in their way
   const nav = createNav({ world, graph }), net = buildRoadNet(data);
   return { data, world, graph, nav, net };
 }
