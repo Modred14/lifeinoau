@@ -129,7 +129,7 @@ const r4 = row(id4); r4.turnDeadline = new Date(Date.now() - 10_000); const t4 =
 assert.equal(t4.result, "TIMEOUT"); assert.equal(t4.outcome, "LOST"); assert.equal(await total(), START); ok("a player who walks away from an AI match loses on time like in any other match, and the pool goes to the AI's account");
 
 // ---------- draw offers: answered at once; the AI does not give up a good position
-r = await q(A, "TICTACTOE", 0); const id5 = r.id; const d1 = await svc.drawOffer(db, A.uid, { matchId: id5, op: "offer" });
+r = await q(A, "TICTACTOE", 0); const id5 = r.id; const d1 = await svc.drawOffer(db, A.uid, { matchId: id5, choice: "offer" });
 assert.equal(d1.aiAnswer, "declined"); assert.equal(d1.match.drawOffer, null); assert.equal(d1.match.status, "ACTIVE"); ok("a draw offer is answered straight away (declined here: tic-tac-toe has no 'standing'), and no offer is left hanging");
 await svc.resign(db, A.uid, { matchId: id5 });
 

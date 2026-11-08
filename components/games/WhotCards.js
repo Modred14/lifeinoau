@@ -31,9 +31,9 @@ export function WhotCard({ card, back, playable, dim, onClick, disabled, fresh }
 
 /**
  * The whole table. `v` is the engine's view for the player at the bottom. `canAct` is false while the screen is not this player's to use (a finished match, a request in flight).
- * nameOf(seat) and fmt(text) turn seats into names. onPlay(cardId, shape?) and onDraw() send the move.
+ * nameOf(seat) turns a seat into a name. onPlay(cardId, shape?) and onDraw() send the move.
  */
-export function WhotTable({ v, nameOf, fmt, canAct, onPlay, onDraw }) {
+export function WhotTable({ v, nameOf, canAct, onPlay, onDraw }) {
   const [pick, setPick] = useState(null);
   const me = v.seat, foe = 1 - me, myTurn = !!canAct && v.turn === me && !v.done, ok = new Set(myTurn ? v.playable : []);
   const hand = [...v.hand].sort((a, b) => ORDER[a.s] - ORDER[b.s] || a.n - b.n);
@@ -41,7 +41,6 @@ export function WhotTable({ v, nameOf, fmt, canAct, onPlay, onDraw }) {
   const status = v.done ? "Game over." : myTurn
     ? (v.pending ? `Pick ${v.pending.count}! Answer with a ${v.pending.n}, or take them from the market.` : v.playable.length ? "Your turn: play a raised card." : "Nothing to play: tap the market.")
     : `${nameOf(foe)} is playing…`;
-  const lines = v.log.slice(-3);
   return (
     <div className="wh">
       <div className="wh-row">
@@ -65,7 +64,6 @@ export function WhotTable({ v, nameOf, fmt, canAct, onPlay, onDraw }) {
       </div>
 
       <p className="wh-status" data-you={myTurn ? "1" : undefined} role="status" aria-live="polite">{status}</p>
-      {lines.length > 0 && <ul className="wh-log" aria-label="Recent plays">{lines.map((t, i) => <li key={v.moves + "-" + i}>{fmt(t)}</li>)}</ul>}
 
       <div className="wh-row">
         <div className="wh-label"><b>Your cards</b><span>{v.hand.length}</span>{v.hand.length === 1 && !v.done && <span className="wh-last">Last card!</span>}</div>

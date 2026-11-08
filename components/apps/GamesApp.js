@@ -98,7 +98,7 @@ export default function GamesApp({ onHome }) {
   }, [full, practice, leave]);
 
   if (practice) return <div className="gm" data-full="1"><WhotPractice onExit={() => setPractice(false)} /></div>;
-  if (matchId) return <div className="gm" data-full="1"><MatchScreen id={matchId} onExit={leave} onOpen={openMatch} balanceKobo={lobby?.balanceKobo} /></div>;
+  if (matchId) return <div className="gm" data-full="1"><MatchScreen key={matchId} id={matchId} onExit={leave} onOpen={openMatch} balanceKobo={lobby?.balanceKobo} /></div>;
 
   return (
     <div className="gm">

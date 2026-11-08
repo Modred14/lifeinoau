@@ -8,7 +8,6 @@ import { RuleError } from "@/lib/games/errors";
 import { WhotTable } from "./WhotCards";
 
 const nameOf = (s) => (s === 0 ? "You" : "Computer");
-const fmt = (t) => t.replace(/Seat 0 (is|misses|picks)/g, (_, w) => ({ is: "You are", misses: "You miss", picks: "You pick" }[w])).replace(/Seat 0/g, "You").replace(/Seat 1/g, "Computer");
 
 export default function WhotPractice({ onExit }) {
   const [st, setSt] = useState(() => create(Math.random)), [over, setOver] = useState(null), [msg, setMsg] = useState("");
@@ -30,7 +29,7 @@ export default function WhotPractice({ onExit }) {
         <div className="gm-mtitle"><b>Whot</b><small>Practice against the computer · nothing at stake</small></div>
       </header>
       <div className="gm-stage">
-        <WhotTable v={v} nameOf={nameOf} fmt={fmt} canAct={!over} onPlay={(card, shape) => mine(shape ? { type: "play", card, shape } : { type: "play", card })} onDraw={() => mine({ type: "draw" })} />
+        <WhotTable v={v} nameOf={nameOf} canAct={!over} onPlay={(card, shape) => mine(shape ? { type: "play", card, shape } : { type: "play", card })} onDraw={() => mine({ type: "draw" })} />
         {msg && <p className="gm-note" role="alert">{msg}</p>}
       </div>
       {over && (

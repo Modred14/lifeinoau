@@ -8,17 +8,8 @@ import { notifyError } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { gamesGet, gamesPost, clockText, koboNaira, nairaOf, outcomeText } from "@/lib/games/gamesClient";
 import StakePicker, { PrizeLine } from "./StakePicker";
-import LudoBoard from "./LudoBoard";
-import ChessBoard from "./ChessBoard";
-import PoolTable from "./PoolTable";
-import HoopsBoard from "./HoopsBoard";
-import CheckersBoard from "./CheckersBoard";
-import Connect4Board from "./Connect4Board";
-import TicTacToeBoard from "./TicTacToeBoard";
-import WhotBoard from "./WhotBoard";
+import { BOARDS, RESULT_DELAY } from "./boards";
 
-const BOARDS = { LUDO: LudoBoard, CHESS: ChessBoard, POOL: PoolTable, HOOPS: HoopsBoard, CHECKERS: CheckersBoard, CONNECT4: Connect4Board, TICTACTOE: TicTacToeBoard, WHOT: WhotBoard };
-const RESULT_DELAY = { POOL: 2600, HOOPS: 2400, LUDO: 900, CHESS: 700, CHECKERS: 700, CONNECT4: 900, TICTACTOE: 700, WHOT: 1200 };
 
 export default function MatchScreen({ id, onExit, onOpen, balanceKobo }) {
   const [m, setM] = useState(null), [busy, setBusy] = useState(false), [gone, setGone] = useState(null), [tick, setTick] = useState(0), [confirm, setConfirm] = useState(false), [showResult, setShowResult] = useState(false);
@@ -36,7 +27,7 @@ export default function MatchScreen({ id, onExit, onOpen, balanceKobo }) {
     if (!alive.current) return;
     if (r.ok && r.match) apply(r.match); else if (r.status === 404) { setGone("That match is no longer available."); return; }
     const mm = cur.current, hidden = typeof document !== "undefined" && document.hidden;
-    const wait = hidden ? 6000 : !mm ? 1500 : mm.status === "ACTIVE" ? (mm.yourTurn ? 1600 : 900) : mm.rematch?.live ? 1200 : 4000;
+    const wait = hidden ? 6000 : !mm ? 1500 : mm.status === "ACTIVE" ? (mm.yourTurn ? 1600 : 900) : mm.rematch?.live ? 1200 : 2500;
     timer.current = setTimeout(poll, wait);
   }, [id, apply]);
   useEffect(() => { alive.current = true; poll(); return () => { alive.current = false; clearTimeout(timer.current); }; }, [poll]);
@@ -65,6 +56,14 @@ export default function MatchScreen({ id, onExit, onOpen, balanceKobo }) {
     return () => clearTimeout(t);
   }, [over, m?.game]);
   useEffect(() => { if (m?.rematch?.nextId) onOpen?.(m.rematch.nextId); }, [m?.rematch?.nextId, onOpen]);
+  // my draw offer vanished while the match carries on and no move was played (a move changes the version): my rival said no
+  const offerSeen = useRef(null);
+  useEffect(() => {
+    const was = offerSeen.current, now = m ? { offer: m.drawOffer, version: m.version, active: m.status === "ACTIVE" } : null; offerSeen.current = now;
+    if (was?.offer === "mine" && now?.active && now.offer == null && now.version === was.version) toast.info(`${m.opponent.name} declined your draw offer.`);
+  }, [m?.drawOffer, m?.version, m?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+  const offerIn = m?.drawOffer === "theirs";
+  useEffect(() => { if (offerIn) toast.info(`${cur.current?.opponent?.name ?? "Your rival"} offers a draw.`, { id: "draw-offer" }); }, [offerIn]);
 
   if (gone) return <div className="gm-pad"><p className="gm-note">{gone}</p><button type="button" className="gm-btn" onClick={onExit}>Back to games</button></div>;
   if (!m) return <div className="gm-pad gm-center"><i className="gm-spin" aria-hidden="true" /><p className="gm-note">Opening the match…</p><button type="button" className="gm-btn gm-btn-sm" onClick={onExit}>Back to games</button></div>;
@@ -84,9 +83,13 @@ export default function MatchScreen({ id, onExit, onOpen, balanceKobo }) {
         <div className="gm-controls">
           {m.drawOffer === "theirs" ? (
             <div className="gm-offer" role="alert"><span>{m.opponent.name} offers a draw{m.stakeNaira ? ": both wagers go back" : ""}.</span>
-              <button type="button" className="gm-btn gm-btn-sm gm-btn-go" onClick={() => post("draw", { op: "accept" })}>Accept</button><button type="button" className="gm-btn gm-btn-sm" onClick={() => post("draw", { op: "decline" })}>Decline</button></div>
+              <button type="button" className="gm-btn gm-btn-sm gm-btn-go" onClick={() => post("draw", { choice: "accept" })}>Accept</button><button type="button" className="gm-btn gm-btn-sm" onClick={async () => { const r = await post("draw", { choice: "decline" }); if (r && !r.error && !r.failed) toast.info("You declined the draw."); }}>Decline</button></div>
           ) : (
-            <button type="button" className="gm-btn gm-btn-sm" disabled={m.drawOffer === "mine"} onClick={async () => { const r = await post("draw", { op: "offer" }); if (r?.aiAnswer === "declined") toast.info(`${r.aiName ?? "Your opponent"} declined the draw.`); else if (r?.aiAnswer === "accepted") toast.info(`${r.aiName ?? "Your opponent"} accepted the draw.`); else if (r && !r.error && !r.failed) toast.info("Draw offered. Any move you make takes it back."); }}>{m.drawOffer === "mine" ? "Draw offered…" : "Offer a draw"}</button>
+            <button type="button" className="gm-btn gm-btn-sm" onClick={async () => {
+              if (m.drawOffer === "mine") { const r = await post("draw", { choice: "decline" }); if (r && !r.error && !r.failed) toast.info("Draw offer taken back."); return; } // tapping your own offer takes it back
+              const r = await post("draw", { choice: "offer" });
+              if (r?.aiAnswer === "declined") toast.info(`${r.aiName ?? "Your opponent"} declined the draw.`); else if (r?.aiAnswer === "accepted") toast.info(`${r.aiName ?? "Your opponent"} accepted the draw.`); else if (r && !r.error && !r.failed) toast.info(`Draw offered to ${m.opponent.name}. Any move you make takes it back.`);
+            }}>{m.drawOffer === "mine" ? "Draw offered · tap to cancel" : "Offer a draw"}</button>
           )}
           <button type="button" className="gm-btn gm-btn-sm gm-btn-bad" onClick={() => { if (!confirm) { setConfirm(true); setTimeout(() => setConfirm(false), 3500); } else { setConfirm(false); post("resign", {}); } }}>{confirm ? (m.stakeNaira ? `Tap again: lose ${nairaOf(m.stakeNaira)}` : "Tap again to resign") : "Resign"}</button>
         </div>
@@ -96,7 +99,7 @@ export default function MatchScreen({ id, onExit, onOpen, balanceKobo }) {
   );
 }
 
-function PlayerBar({ m, who }) {
+export function PlayerBar({ m, who }) {
   const you = who === "you", name = you ? m.you.name : m.opponent.name, seat = you ? m.seat : 1 - m.seat, turn = m.status === "ACTIVE" && m.turn === seat;
   return (
     <div className="gm-pbar" data-turn={turn ? "1" : undefined} data-you={you ? "1" : undefined}>
@@ -134,7 +137,7 @@ function ResultCard({ m, post, onExit, onOpen, balanceKobo, skew }) {
               <PrizeLine stake={rm.stakeNaira} />
               <div className="gm-row"><button type="button" className="gm-btn gm-btn-go" disabled={busy} onClick={() => run(async () => { const r = await post("rematchReply", { accept: true }); if (r?.started && r.id) onOpen?.(r.id); })}>Accept{rm.stakeNaira ? ` & wager ${nairaOf(rm.stakeNaira)}` : ""}</button><button type="button" className="gm-btn" disabled={busy} onClick={() => run(() => post("rematchReply", { accept: false }))}>Decline</button></div>
             </>)}
-            {rm && !rm.live && !rm.nextId && (<><p className="gm-note">{rm.declined != null ? (rm.declined === m.seat ? "You declined the rematch." : `${m.opponent.name} declined the rematch.`) : "The rematch request ran out of time."}</p>
+            {rm && !rm.live && !rm.nextId && (<><p className="gm-note">{rm.declined != null ? (rm.by === m.seat && rm.declined === m.seat ? "You cancelled the rematch request." : rm.declined === m.seat ? "You declined the rematch." : `${m.opponent.name} declined the rematch.`) : `${m.opponent.name} did not answer the rematch request in time.`}</p>
               <button type="button" className="gm-btn" disabled={busy} onClick={() => run(() => post("rematch", { stakeNaira: stake }))}>Ask again</button></>)}
           </div>
         )}

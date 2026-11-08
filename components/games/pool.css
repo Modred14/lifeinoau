@@ -1,0 +1,42 @@
+/* components/games/pool.css: the 8-ball pool screen. Power on the LEFT of the table, spin on the RIGHT, both as tall as the table; the stick is dragged back on the table itself.
+   Flat colours from the Games app's variables (see games.css). Everything that takes a finger has touch-action: none so aiming never scrolls or zooms the page. */
+.pool { display: grid; gap: 8px; justify-items: center; width: 100%; }
+.pool-groups { display: flex; gap: 10px; width: 100%; font-size: 0.78rem; } .pool-groups > div { flex: 1; display: grid; gap: 4px; padding: 6px 8px; border-radius: 10px; background: var(--g1); }
+.pool-tray { display: flex; gap: 3px; flex-wrap: wrap; min-height: 20px; }
+.pool-mini { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font: 700 0.62rem var(--font-ui); font-style: normal; color: #fff; background: var(--c); } .pool-mini[data-stripe] { background: linear-gradient(#f7f5ee 25%, var(--c) 25% 75%, #f7f5ee 75%); color: #111; } .pool-mini[data-out] { opacity: 0.25; }
+
+/* power | table | spin */
+.pool-row { display: grid; grid-template-columns: 52px minmax(0, 330px) 52px; gap: 8px; justify-content: center; align-items: stretch; width: 100%; max-width: 100%; }
+.pool-wrap { min-width: 0; display: flex; justify-content: center; }
+.pool-cv { display: block; border-radius: 14px; max-width: 100%; cursor: crosshair; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; overscroll-behavior: contain; }
+.pool-side { display: grid; grid-template-rows: auto auto 1fr auto auto; justify-items: center; align-items: center; gap: 6px; padding: 8px 0; border-radius: 12px; background: var(--g1); min-height: 0; font-size: 0.7rem; color: var(--gm); user-select: none; -webkit-user-select: none; }
+.pool-side:first-child { grid-template-rows: auto 1fr auto; } /* power has no "Follow" / "Draw" ends */
+.pool-side[data-off] { opacity: 0.45; }
+.pool-cap { font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; font-size: 0.64rem; }
+.pool-end { font-size: 0.64rem; color: var(--gd); }
+.pool-read { color: var(--gt); font-size: 0.78rem; min-height: 24px; text-align: center; }
+.gm button.pool-spin { padding: 0 6px; border-radius: 8px; background: var(--g2); } .gm button.pool-spin:disabled { background: transparent; cursor: default; }
+
+/* the vertical slider: a wide, finger-sized track with a thumb; the fill grows from `origin` */
+.pool-vs { position: relative; width: 34px; align-self: stretch; min-height: 120px; border-radius: 17px; background: var(--g3); touch-action: none; cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+.pool-vs[data-disabled] { cursor: not-allowed; }
+.pool-vs-fill { position: absolute; left: 6px; right: 6px; border-radius: 11px; background: var(--gg); pointer-events: none; }
+.pool-vs-thumb { position: absolute; left: 50%; width: 30px; height: 12px; margin: 0 0 -6px -15px; border-radius: 6px; background: var(--gt); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); pointer-events: none; }
+
+.pool-ctl { width: min(100%, 420px); display: grid; gap: 8px; } .pool-modes { display: flex; gap: 6px; }
+
+/* full screen (the match screen sets data-full on .gm): the table takes the height that is left; --pw is the table's width. The tall table is about 1.87 times its width,
+   and the two control columns cost 52px each plus the gaps. */
+.gm[data-full] .pool { --pw: max(180px, min(calc(100cqw - 140px), calc((100cqh - 340px) / 1.87), 520px)); }
+.gm[data-full] .pool-row { grid-template-columns: 52px var(--pw) 52px; }
+.gm[data-full] :is(.pool-groups, .pool-ctl) { width: calc(var(--pw) + 120px); max-width: 100%; }
+@media (min-width: 640px) and (min-aspect-ratio: 11/10) { /* wide: the table and its two controls on the left, the rest on the right */
+  .gm[data-full] .pool { --pw: max(180px, min(calc((100cqh - 110px) / 1.87), calc(100cqw - 460px), 560px)); display: grid; grid-template-columns: auto minmax(220px, 320px); column-gap: 16px; align-items: start; justify-items: stretch; }
+  .gm[data-full] .pool > * { grid-column: 2; }
+  .gm[data-full] .pool > .pool-groups { grid-column: 1 / -1; width: auto; }
+  .gm[data-full] .pool > .pool-row { grid-column: 1; grid-row: 2 / span 4; width: auto; }
+  .gm[data-full] .pool .pool-ctl { width: auto; }
+}
+@media (max-height: 520px) and (min-aspect-ratio: 11/10) { /* a phone held sideways: the table is as tall as the screen allows */
+  .gm[data-full] .pool { --pw: max(160px, min(calc((100cqh - 110px) / 1.87), calc(100cqw - 340px), 560px)); }
+}

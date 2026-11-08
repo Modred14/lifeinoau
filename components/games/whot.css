@@ -42,8 +42,6 @@
 .wh-want svg { width: 18px; height: 18px; fill: currentColor; } .wh-want[data-shape="circle"] svg { color: #ff6b6b; } .wh-want[data-shape="triangle"] svg { color: #6fb0ff; } .wh-want[data-shape="cross"] svg { color: #5fd68b; } .wh-want[data-shape="square"] svg { color: #c78bff; } .wh-want[data-shape="star"] svg { color: #ffa34d; }
 .wh-pend { padding: 5px 12px; border-radius: 10px; background: #5b1d24; color: #ffd3d8; font-size: 0.82rem; font-weight: 700; text-align: center; }
 .wh-status { min-height: 1.3em; text-align: center; font-size: 0.86rem; font-weight: 600; color: var(--gt); } .wh-status[data-you] { color: var(--gg); }
-.wh-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; text-align: center; font-size: 0.76rem; color: var(--gd); }
-.wh-log li:last-child { color: var(--gm); }
 .gm .wh-go { min-height: 40px; padding: 8px 16px; border-radius: 12px; background: #f4b942; color: #2a1c00; font-weight: 700; text-align: center; }
 .gm .wh-go:disabled { opacity: 0.4; }
 

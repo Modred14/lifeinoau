@@ -81,7 +81,7 @@ assert.equal(fin.status, "FINISHED"); assert.equal(fin.outcome, "WON"); assert.e
 assert.equal(db.T().ledgerEntry.filter((e) => e.idempotencyKey === `game:payout:${id1}`).length, 1); assert.equal(db.T().gameSeat.length, 0);
 ok("Ada won: she holds ₦11,000, Bola ₦9,000, escrow is empty, exactly one payout entry, both seats freed");
 const late = await svc.move(db, B.uid, { matchId: id1, action: { type: "drop", col: 3 }, requestId: rq() }); assert.equal(late.over, true);
-await svc.resign(db, B.uid, { matchId: id1 }); await svc.drawOffer(db, A.uid, { matchId: id1, op: "offer" });
+await svc.resign(db, B.uid, { matchId: id1 }); await svc.drawOffer(db, A.uid, { matchId: id1, choice: "offer" });
 assert.equal(db.T().ledgerEntry.filter((e) => e.idempotencyKey.startsWith("game:payout:")).length, 1); assert.equal(await bal(A), N(11_000)); ok("moves, resigns and draw offers after the end change nothing and pay nothing");
 let hist = await svc.getHistory(db, A.uid); assert.equal(hist.history[0].outcome, "WON"); assert.equal(hist.history[0].winningsKobo, "200000"); assert.equal(hist.history[0].netKobo, "100000"); assert.equal(hist.history[0].opponent, "Bola");
 hist = await svc.getHistory(db, B.uid); assert.equal(hist.history[0].outcome, "LOST"); assert.equal(hist.history[0].netKobo, "-100000"); ok("history lists game, opponent, wager, result, winnings and net for both players");
@@ -109,16 +109,16 @@ const again = await svc.rematchReply(db, B.uid, { matchId: id1, accept: true, re
 const id2 = rr.id; assert.equal(db.T().gameMatch.find((x) => String(x.id) === id2).mode, "REMATCH");
 
 // ---------- draw by agreement refunds both
-await svc.drawOffer(db, A.uid, { matchId: id2, op: "offer" }); await rejects("accepting an offer that was never made", () => svc.drawOffer(db, A.uid, { matchId: id2, op: "accept" }), /no draw offer/);
+await svc.drawOffer(db, A.uid, { matchId: id2, choice: "offer" }); await rejects("accepting an offer that was never made", () => svc.drawOffer(db, A.uid, { matchId: id2, choice: "accept" }), /no draw offer/);
 let dm = (await svc.getMatch(db, B.uid, id2)).match; assert.equal(dm.drawOffer, "theirs");
-const dr = await svc.drawOffer(db, B.uid, { matchId: id2, op: "accept" }); assert.equal(dr.match.outcome, "DRAW");
+const dr = await svc.drawOffer(db, B.uid, { matchId: id2, choice: "accept" }); assert.equal(dr.match.outcome, "DRAW");
 assert.equal(await bal(A), N(11_000)); assert.equal(await bal(B), N(9_000)); assert.equal(await house(), 0n); assert.equal(db.T().ledgerEntry.filter((e) => e.idempotencyKey.startsWith(`game:refund:${id2}:`)).length, 2); assert.equal(dr.match.payoutKobo, "0");
 ok("an agreed draw returned each player's wager exactly once (no winner)");
 
 // ---------- a draw offer is declined by simply moving
 const f3 = (await ch(A, "Bola", "TICTACTOE", 500)).id; await svc.respond(db, B.uid, { matchId: f3, accept: true, requestId: rq() });
 let t3 = (await svc.getMatch(db, A.uid, f3)).match; const first = t3.yourTurn ? A.uid : B.uid;
-await svc.drawOffer(db, other(first), { matchId: f3, op: "offer" }); await svc.move(db, first, { matchId: f3, action: { type: "mark", cell: 4 }, requestId: rq() });
+await svc.drawOffer(db, other(first), { matchId: f3, choice: "offer" }); await svc.move(db, first, { matchId: f3, action: { type: "mark", cell: 4 }, requestId: rq() });
 t3 = (await svc.getMatch(db, A.uid, f3)).match; assert.equal(t3.drawOffer, null); ok("making a move declined the open draw offer");
 // resign
 const rs = await svc.resign(db, A.uid, { matchId: f3 }); assert.equal(rs.match.outcome, "LOST"); assert.equal(rs.match.result, "FORFEIT"); assert.equal(await bal(B), N(9_500)); assert.equal(await bal(A), N(10_500)); ok("resigning forfeits the pool to the rival (Bola ₦9,500, Ada ₦10,500)");

@@ -67,10 +67,11 @@ const fen = (f, seat = 0) => { const p = chess._t.fromFen(f), st = chess.create(
   chk("checkers: makes the compulsory jump (and plays it out)", r.state.last.caps.length >= 1); }
 
 // ---- sense: ludo
-{ const L = ENGINES.LUDO, st = { ...L.create(() => 0.1), turn: 0, dice: 6, phase: "move", tokens: [[0, 10, 0, 0], [0, 0, 0, 0]] }; chk("ludo: brings a token out of the yard on a six when nothing better is on", botAction("LUDO", st, 0, strong, 1).token !== 1);
-  const st2 = { ...st, dice: 3, tokens: [[5, 20, 0, 0], [0, 0, 0, 0]] }; const mv = botAction("LUDO", st2, 0, strong, 1); chk("ludo: always names a movable token", [0, 1].includes(mv.token));
+{ const L = ENGINES.LUDO, st = { ...L.create(() => 0.1), turn: 0, dice: [6, 1], left: [6, 1], phase: "move", tokens: [[0, 10, 0, 0], [0, 0, 0, 0]] }; chk("ludo: brings a token out of the yard on a six when nothing better is on", botAction("LUDO", st, 0, strong, 1).token !== 1);
+  const st2 = { ...st, dice: [3, 4], left: [3, 4], tokens: [[5, 20, 0, 0], [0, 0, 0, 0]] }; const mv = botAction("LUDO", st2, 0, strong, 1); chk("ludo: always names a movable token and one of its dice", [0, 1].includes(mv.token) && [3, 4].includes(mv.die));
   const st3 = { ...L.create(() => 0.1), turn: 0, dice: null, phase: "roll" }; chk("ludo: rolls when it is time to roll", botAction("LUDO", st3, 0, strong, 1).type === "roll");
-  const st4 = { ...L.create(() => 0.1), turn: 0, dice: 2, phase: "move", tokens: [[55, 3, 0, 0], [20, 0, 0, 0]] }; chk("ludo: takes a token home when it can", botAction("LUDO", st4, 0, strong, 1).token === 0); }
+  const st4 = { ...L.create(() => 0.1), turn: 0, dice: [2, 5], left: [2, 5], phase: "move", tokens: [[55, 3, 0, 0], [20, 0, 0, 0]] }; const m4 = botAction("LUDO", st4, 0, strong, 1); chk("ludo: takes a token home when it can (and spends the die that does it)", m4.token === 0 && m4.die === 2);
+  const st5 = { ...L.create(() => 0.1), turn: 0, dice: 6, phase: "move", tokens: [[0, 10, 0, 0], [0, 0, 0, 0]] }; chk("ludo: a match saved with the old single die still plays", botAction("LUDO", st5, 0, strong, 1).type === "move"); }
 
 let okTiming = true; const chk_ = (c) => { if (!c) okTiming = false; };
 // ---- basketball: the AI's release is a believable shot, and its timing matches what the server will measure

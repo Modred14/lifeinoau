@@ -1,7 +1,7 @@
 // src/app/api/games/route.js
 // The Games app: lobby, matches, moves and wagers. Everything is decided by lib/games/matchService.js; this file only checks the login and the rate limit and picks the call.
 //   GET  ?match=<id>[&since=<version>]  one match (the board as YOU may see it)      GET ?history=1  your results      GET (nothing)  the lobby
-//   POST { op: "challenge" | "respond" | "withdraw" | "queue" | "unqueue" | "move" | "resign" | "draw" | "rematch" | "rematchReply", ... }
+//   POST { op: "challenge" | "respond" | "withdraw" | "queue" | "unqueue" | "move" | "resign" | "draw" (+ choice: offer|accept|decline) | "rematch" | "rematchReply", ... }
 import { PrismaClient } from "@prisma/client";
 import { getUserId } from "@/lib/auth";
 import { allowed, tooMany } from "@/lib/ratelimit";
