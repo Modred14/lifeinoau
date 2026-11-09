@@ -7,6 +7,7 @@
 // (vehicles) and lib3d/collide.js (what is solid). This file draws it: the camera, the avatar, the vehicle models, the guide ribbon, the door, the mini map.
 // The fare is settled with the server in the background the moment the ride stops (o.onArrive); you do not wait for it to step out and walk. Everything you do is local and immediate;
 // what is sent to the server (lib/tripSync.js) never moves you. Metres everywhere inside; the world group scales them to scene units.
+import { drawTumble, endTumble } from "./tumbleDraw.js";
 import * as THREE from "three";
 import { S, EX } from "./campusReal.js";
 import { buildRoadNet, isRoad, walkable, Path } from "./roadnet.js";
@@ -212,7 +213,11 @@ export async function startTrip(env, o) {
     try { const av = await createAvatar(look, gender); if (!alive || mine !== selfTicket) { av.dispose(); return; } world.remove(avatar.root); avatar.dispose(); avatar = av; world.add(av.root); gait = ""; } catch { /* the old body stays */ }
   };
   const yawOf2 = (hx, hz) => Math.atan2(hx, hz);
+  let wasDown = false;
   function drawPerson(dt) {
+    // struck by a vehicle: thrown, sliding, lying, getting up (lib3d/impact.js). The body is the same character, rotated about its centre of mass.
+    if (WK.tumble) { wasDown = true; avatar.root.visible = true; drawTumble(avatar.root, WK.tumble, 0.1); if (gait !== "idle") { gait = "idle"; avatar.play("idle"); avatar.setSpeed?.(1); } return; }
+    if (wasDown) { wasDown = false; endTumble(avatar.root, yawOf2(P.hx, P.hz)); }
     const veh = flow.vehicle, doors = !!vehicle?.doors, sk = doors ? F.seatK ?? 0 : P.seated && veh ? 1 : 0, sp = WK.speed, vehYaw = veh ? veh.yaw ?? veh.ang ?? yawOf2(veh.hx, veh.hz) : 0, onFootYaw = yawOf2(P.hx, P.hz);
     // hidden only while sitting inside a closed car (its glass is dark); visible the whole time the door is open and while stepping in or out
     const inside = sk >= 0.98 && !vehicle?.open && !(doors && F.vehDoorK > 0.03) && ["ride", "drive", "paying"].includes(F.phase);
@@ -301,6 +306,8 @@ export async function startTrip(env, o) {
     const inp = read(dt), viewYaw = camYaw + (inVehNow() ? userYaw : 0), f = { x: Math.sin(viewYaw + Math.PI), z: Math.cos(viewYaw + Math.PI) }, // the stick is relative to the view the player SEES
        r = { x: -f.z, z: f.x }, ax = (inp.fwd - inp.back) * f.x + inp.right * r.x, az = (inp.fwd - inp.back) * f.z + inp.right * r.z, m = Math.min(1, Math.hypot(ax, az));
     traffic.update(dt);
+    // a vehicle hit somebody (an NPC, you, another player): the sound by how hard, and the page told (o.onHit), for a message or a log
+    for (const ev of traffic.sim.takeEvents()) { if (Math.hypot(ev.x - camPt.x, ev.z - camPt.z) < 70) playSound(ev.kind === "launch" ? "crash" : ev.kind === "knockdown" ? "thump" : "bump"); try { o.onHit?.(ev); } catch { /* the page's handler must never stop the trip */ } }
     if (inp.stop) flow.stopAuto(); if (inp.door) flow.pressDoor(); if (inp.goIn) flow.enterNow();
     flow.update(dt, { dx: ax, dz: az, mag: m, run: inp.run, gas: inp.gas, brake: inp.brake, steer: inp.steer, exit: inp.exit, enter: inp.enter, close: inp.close });
     lastPhase = F.phase;

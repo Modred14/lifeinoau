@@ -6,6 +6,7 @@
 // Metres, x east, z south.
 import { Heap } from "./roadgraph.js";
 import { WALK_SPEED } from "../lib/travel.js";
+import { createTumble, stepTumble } from "./impact.js";
 
 export const WALK_R = 0.32;               // the person's radius
 export const NAV_CLEAR = 1.15;            // the planner keeps this far from a wall (the walker itself only needs WALK_R)
@@ -97,7 +98,7 @@ function pointAt(p, s, out) { s = clamp(s, 0, p.len); let i = 1; while (i < p.pt
  */
 export class Walker {
   constructor(world, nav, { x = 0, z = 0, hx = 0, hz = 1, resumeAfter = 1.2 } = {}) {
-    Object.assign(this, { world, nav, x, z, hx, hz, vx: 0, vz: 0, speed: 0, blocked: false, ignore: null, resumeAfter, manualAt: -99, time: 0, off: 0, path: null, ps: 0, goal: null, onDone: null, replans: 0, lastProg: 0, lastProgAt: 0, mode: "idle", failed: null, yieldToPlayer: false });
+    Object.assign(this, { world, nav, x, z, hx, hz, vx: 0, vz: 0, speed: 0, tumble: null, blocked: false, ignore: null, resumeAfter, manualAt: -99, time: 0, off: 0, path: null, ps: 0, goal: null, onDone: null, replans: 0, lastProg: 0, lastProgAt: 0, mode: "idle", failed: null, yieldToPlayer: false });
   }
   /** Starts following a route (see createNav().plan). `goal` {x, z} is where it ends; if the route is blocked the walker plans again from where it stands. */
   follow(route, { goal = null, tolerance = 0.35, ignore = null, onDone = null, yieldToPlayer = false } = {}) {
@@ -116,6 +117,7 @@ export class Walker {
    */
   glide(dt, speed) {
     const P = this.path; if (!P) return false;
+    if (this.tumble) { this._fall(dt); return true; }   // knocked down: the route waits
     this.time += dt; const ox = this.x, oz = this.z, ds = Math.max(0, speed) * dt;
     this.ps = Math.min(P.len, this.ps + ds); const q = pointAt(P, this.ps, {});
     this.x = q.x; this.z = q.z; this.off = 0; this.mode = "auto"; this.lastProg = this.ps; this.lastProgAt = this.time;
@@ -128,7 +130,22 @@ export class Walker {
   }
 
   /** Advances by dt seconds, in steps of at most 1/60 s so the result barely depends on frame rate. input: { dx, dz, mag (0..1), run }. Returns this. */
+  /**
+   * A vehicle has struck the person (the result of lib3d/impact.js vehicleStrike): they are thrown, slide, lie for a moment and get up. Meanwhile the stick, the keys and any route are
+   * ignored (the route is kept and carries on when they are up). `by` is the id of the vehicle, which they pass through for the first moments. Returns the tumble state.
+   */
+  hit(strike, by = null, now = this.time) {
+    this.tumble = createTumble(strike, { x: this.x, z: this.z, hx: this.hx, hz: this.hz }, by, now); this.tumble.ign = new Set([by]);
+    this.vx = this.vz = 0; this.speed = 0; this.blocked = false; return this.tumble;
+  }
+  /** Advances a person who is down by dt seconds. The walk resumes (route and all) when they are on their feet. */
+  _fall(dt) {
+    const t = this.tumble; this.time += dt; this.lastProgAt += dt;   // time spent on the ground is not time spent failing to get anywhere
+    stepTumble(t, dt, this.world, { ignore: t.ign }); this.x = t.x; this.z = t.z; this.vx = this.vz = 0; this.speed = 0; this.manualAt = this.time - this.resumeAfter - 1;
+    if (t.phase === "done") { this.tumble = null; this.mode = "idle"; }
+  }
   step(dt, input = null) {
+    if (this.tumble) { this._fall(dt); return this; }
     const n = Math.max(1, Math.ceil(dt / (1 / 60))), h = dt / n; for (let i = 0; i < n; i++) this._sub(h, input); return this;
   }
   _sub(dt, input) {

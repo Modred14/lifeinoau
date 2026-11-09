@@ -11,6 +11,7 @@
 //   - "hero" vehicles for the player's journey: the same vehicles, with a route, a stopping point and a hold.
 // Metres, x east, z south. A vehicle's position is its centre; `s` is how far along its route that centre is.
 import { boxesOverlap } from "./collide.js";
+import { sweepHit, vehicleStrike, createTumble, stepTumble, canBeStruck, massOf, liftOf, PERSON_R } from "./impact.js";
 import { heightOn } from "./roadgraph.js";
 
 export const KINDS = {
@@ -107,6 +108,12 @@ function nearestOnPath(path, x, z, s0, s1) {
  */
 export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z: 0 }), rnd = Math.random, density = {} }) {
   const D = { ...DENSITY, ...density }, vehicles = [], peds = [], external = new Map(), reserved = new Map(); let nextId = 1, time = 0, spawnCool = 0, pedCool = 0;
+  // ---------- being hit (lib3d/impact.js) ----------
+  // A moving vehicle that touches a person throws them by its own speed and weight. The people who can be hit are the simulation's pedestrians, the player on foot (`persons`: the trip
+  // registers them each frame and is told when they are struck) and anyone else a caller adds (`victims`: the real players drawn by lib3d/traffic.js). One function, strike(), does it for
+  // every vehicle: the player's own car (called by the trip), the traffic (called below, every step) and other players' cars (called by the drawing).
+  const persons = new Map(), victims = [], events = []; const MIN_STRIKE_V = 1.0;   // slower than this a vehicle only touches: walkers and pedestrians are simply kept out of it
+  const note = (e) => { if (events.length < 40) events.push(e); };
   const edgeOf = (laneId) => graph.byEdge.get(graph.lanes[laneId].edge);
   const nLanesOf = (laneId) => Math.max(1, edgeOf(laneId).lanesPerDir);
   const laneWOf = (laneId) => { const e = edgeOf(laneId), n = e.lanesPerDir; return n > 1 ? Math.max(0, (graph.lanes[laneId].off - e.med - e.lw / 2) / (n - 1)) : e.lw ?? LANE_W; };   // lanes in this lane's direction that vehicles may share
@@ -325,7 +332,21 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     }
     return false;
   }
+  /** A struck pedestrian: flight, slide and lying are lib3d/impact.js; when they are back on their feet they walk back to their pavement route (and are put back on it if that takes too long). */
+  function fallPed(p, dt) {
+    const tb = p.tumble; stepTumble(tb, dt, world, { ignore: tb.ign }); p.x = tb.x; p.z = tb.z; p.v = 0;
+    if (tb.phase === "done") { p.tumble = null; p.rejoin = 0.001; p.act = "idle"; }
+  }
+  function rejoinPed(p, dt) {
+    const ee = graph.byEdge.get(p.edge), q = ee.path.at(Math.max(0, Math.min(ee.len, p.s)), {}), off = p.side * (ee.half + ee.sw * (p.lane ?? 0.5)), tx = q.x - q.hz * off, tz = q.z + q.hx * off;
+    const dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz); p.rejoin += dt;
+    if (d < 0.3 || p.rejoin > 8) { p.rejoin = 0; return; }   // close enough, or it is taking too long: the normal walk takes over and puts them on the route
+    const st = Math.min(d, p.speed * dt), r = world ? world.moveCircle(p.x, p.z, (dx / d) * st, (dz / d) * st, PERSON_R, {}) : { x: p.x + (dx / d) * st, z: p.z + (dz / d) * st };
+    p.x = r.x; p.z = r.z; p.hx = dx / d; p.hz = dz / d; p.v = p.speed; p.phase += p.speed * dt * 2.4;
+  }
   function stepPed(p, dt) {
+    if (p.tumble) { fallPed(p, dt); return; }
+    if (p.rejoin) { rejoinPed(p, dt); return; }
     if (p.pause > 0) { p.pause -= dt; p.v = 0; if (p.pause <= 0) { p.nextPause = 15 + rnd() * 30; if (p.arrived) { p.arrived = false; const f = focus(), near = hot.filter((h) => Math.hypot(h.x - f.x, h.z - f.z) < D.spawnMax + 60); p.goal = near.length ? pickHot(near) : null; } } return; }
     p.nextPause -= dt; if (p.nextPause <= 0) { p.pause = 4 + rnd() * 9; p.act = PED_ACTS[Math.floor(rnd() * PED_ACTS.length)]; p.v = 0; return; }
     if (p.goal && Math.hypot(p.x - p.goal.x, p.z - p.goal.z) < 22) { p.pause = 6 + rnd() * 12; p.act = PED_ACTS[Math.floor(rnd() * PED_ACTS.length)]; p.v = 0; p.arrived = true; return; }   // got where they were going: stop and chat, then choose somewhere else
@@ -342,14 +363,47 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     const ee = graph.byEdge.get(p.edge), q = ee.path.at(p.s, {}), off = p.side * (ee.half + ee.sw * (p.lane ?? 0.5)); p.x = q.x - q.hz * off; p.z = q.z + q.hx * off; p.hx = q.hx * p.dir; p.hz = q.hz * p.dir; p.phase += p.speed * dt * 2.4; p.v = p.speed;
   }
 
+  /**
+   * A vehicle has moved from pose b0 to pose b1 ({ x, z, hx, hz, v } with v the signed speed along its heading) during a step: does it hit anyone on the way? Everyone it touches is
+   * thrown (see lib3d/impact.js) and the total change of its speed is returned ({ dv, hits }) for the caller to apply: a person costs a vehicle a few percent of its speed, never a stop.
+   * spec: { len, wid, mass, lift }. by: the vehicle's id (it is ignored by the people it threw for a moment, and cannot hit them again at once). opts.peds = false: only the people the
+   * simulation does not own (the player, other players). The path is swept in small steps, so a vehicle at any speed cannot step over a person between two frames.
+   */
+  function strike(b0, b1, spec, by, opts = {}) {
+    const out = { dv: 0, hits: 0 };
+    if (Math.max(Math.abs(b0.v ?? 0), Math.abs(b1.v ?? 0)) < MIN_STRIKE_V) return out;
+    const hl = spec.len / 2, hw = spec.wid / 2, mx = (b0.x + b1.x) / 2, mz = (b0.z + b1.z) / 2, reach = Math.hypot(b1.x - b0.x, b1.z - b0.z) / 2 + hl + hw + 3;
+    const one = (who, p, vx, vz, can, apply) => {
+      if (Math.abs(p.x - mx) > reach || Math.abs(p.z - mz) > reach || !can) return;
+      const hit = sweepHit(b0, b1, spec.len, spec.wid, { x: p.x, z: p.z }); if (!hit) return;
+      const st = vehicleStrike({ ...hit.box, v: hit.v, mass: spec.mass, lift: spec.lift }, { x: hit.px, z: hit.pz, vx, vz }); if (!st) return;
+      apply(st); out.dv += st.dv; out.hits++;
+      note({ type: "hit", t: time, who, by, x: hit.px, z: hit.pz, closing: st.closing, speed: Math.hypot(st.vx, st.vz), kind: st.kind, severity: st.severity, vehicleSpeed: hit.v });
+    };
+    if (opts.peds !== false) for (const p of peds) {
+      const tb = p.tumble; if (tb && tb.y > 1.6) continue;   // flying over the bonnet
+      one("ped", p, tb ? tb.vx : p.pause > 0 || p.rejoin ? 0 : p.hx * p.v, tb ? tb.vz : p.pause > 0 || p.rejoin ? 0 : p.hz * p.v, canBeStruck(tb, by, time), (st) => {
+        p.tumble = createTumble(st, { x: p.x, z: p.z, hx: p.hx, hz: p.hz }, by, time); p.tumble.ign = new Set([by]); p.pause = 0; p.v = 0; p.rejoin = 0; });
+    }
+    for (const q of persons.values()) one("player", q, q.vx ?? 0, q.vz ?? 0, q.ok !== false && canBeStruck(q.tumble, by, time), (st) => q.onStrike?.(st, by, time));
+    for (const f of victims) { const r = f(b0, b1, spec, by, time, note); if (r) { out.dv += r.dv; out.hits += r.hits; } }
+    return out;
+  }
+  const specOf = (a) => ({ len: a.len, wid: a.wid, mass: massOf(a.kind), lift: liftOf(a.kind) });
+
   /** Advances everything by dt seconds (in steps of at most 1/30 s so the maths stays steady at any frame rate). */
   function update(dt) {
     const n = Math.max(1, Math.ceil(dt / (1 / 30))), h = dt / n, f0 = focus(), farV = D.farAt ** 2, farP = D.farPedAt ** 2;
     for (let i = 0; i < n; i++) {
       time += h; tick++; arbitrate();
       // distant vehicles and people are stepped every other / every fourth tick with the matching longer step: the same motion, a fraction of the work
-      for (const a of vehicles) if (!a.done) { if (a.role === "npc" && !a.kinematic && (a.x - f0.x) ** 2 + (a.z - f0.z) ** 2 > farV) { if ((tick + a.id) % 2 === 0) stepVehicle(a, 2 * h); } else stepVehicle(a, h); }
+      for (const a of vehicles) if (!a.done) {
+        const near = (a.x - f0.x) ** 2 + (a.z - f0.z) ** 2 <= farV, p0 = (a.pv ??= { x: 0, z: 0, hx: 0, hz: 1, v: 0 }); p0.x = a.x; p0.z = a.z; p0.hx = a.hx; p0.hz = a.hz; p0.v = a.v;
+        if (a.role === "npc" && !a.kinematic && !near) { if ((tick + a.id) % 2 === 0) stepVehicle(a, 2 * h); } else stepVehicle(a, h);
+        a.sw = near && a.role === "npc" && a.lvl === 0 && (p0.v >= MIN_STRIKE_V || a.v >= MIN_STRIKE_V);   // only vehicles near the camera, on the ground and moving can hit anyone
+      }
       guardOverlaps();
+      for (const a of vehicles) if (a.sw && !a.done) { const r = strike(a.pv, (a.cv ??= { x: 0, z: 0, hx: 0, hz: 1, v: 0 }, a.cv.x = a.x, a.cv.z = a.z, a.cv.hx = a.hx, a.cv.hz = a.hz, a.cv.v = a.v, a.cv), specOf(a), "veh" + a.id); if (r.dv) a.v = Math.max(0, a.v + r.dv); }
       for (const p of peds) { if ((p.x - f0.x) ** 2 + (p.z - f0.z) ** 2 > farP) { if ((tick + p.id) % 4 === 0) stepPed(p, 4 * h); } else stepPed(p, h); }
     }
     const f = focus();
@@ -385,6 +439,10 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     remove(a) { a.done = true; world?.removeBody("veh" + a.id); const i = vehicles.indexOf(a); if (i >= 0) vehicles.splice(i, 1); },
     /** The player's own car, the player on foot, or anything else vehicles must give way to. */
     setExternal(id, b) { external.set(id, b); }, removeExternal(id) { external.delete(id); },
+    /** Being hit: see strike() above. `persons` are people the simulation does not own (the player on foot): { x, z, vx, vz, tumble, ok, onStrike(strike, by, time) }, refreshed by their owner every frame. */
+    strike, setPerson(id, q) { persons.set(id, q); }, removePerson(id) { persons.delete(id); }, victims, events,
+    /** The hits since the last call (for the sound and the screen), oldest first. */
+    takeEvents() { return events.splice(0); },
     /** Nearest NPC-free check, used to decide where a pickup vehicle may appear. */
     spotFree: freeSpot,
     /** If a vehicle has been stuck behind another driven by the simulation, remove that one (the road ahead of the player's ride must never stay blocked). */

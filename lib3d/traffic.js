@@ -11,6 +11,9 @@ import { headBeamMaterial } from "./vehicleKit.js";
 import { carBodyGeometry, CAR_WHEELS, CAR_WHEEL_R, CAR_COLORS, makeKeke, makeBus, makeVehicle, rollWheels, trafficWheelGeometry } from "./vehicles.js";
 import { ROAD_TOP } from "./roadsurface.js";
 import { createRoadFollower, wheelContacts } from "./vehiclepose.js";
+import { sweepHit, vehicleStrike, createTumble, stepTumble, canBeStruck, massOf, liftOf } from "./impact.js";
+import { drawTumble, endTumble } from "./tumbleDraw.js";
+import { OWN_CAR_MAX } from "../lib/travel.js";
 
 // Entity budgets, within about 250 m of the camera. `cars`/`kekes`/`buses`/`minibuses` are the most of each kind alive at once (campus roads AND expressway together);
 // `ground` and `hw` are the totals wanted on the campus roads and on the expressway (kept higher per metre than any small road); `peds` is the number of walkers (each is a rigged character).
@@ -84,14 +87,14 @@ export function createTraffic({ parent, svc, focus, density = densityFor(), seed
       if (e && ((e.walker && e.key !== key) || e.kind !== kind || (kind === "car" && (e.car !== (t.car ?? "") || e.carColor !== (t.carColor ?? ""))))) { group.remove(e.root); tags?.remove(t.id); if (e.av) e.av.dispose(); if (e.model?.dispose) e.model.dispose(); else e.root.traverse((o) => { if (!e.av || !e.av.root.getObjectById(o.id)) o.geometry?.dispose?.(); }); live.delete(t.id); e = undefined; }
       if (!e) { const model = t.mode === "keke" ? makeKeke() : t.mode === "bus" ? makeBus() : t.mode === "car" ? makeVehicle(t.car || "", t.carColor || undefined) : null, walker = model ? null : makeWalker("#8d5a3b", "#2f62c4", "#1f2f55"), root = model ? model.root : new THREE.Group(), tag = new THREE.Object3D();
         if (walker) { // on foot: the player's own look, drawn like everyone else, replaces the stand-in as soon as it has loaded
-          e = { root, model, walker, tag, key, kind, x: t.x, z: t.z, h: t.h, tx: t.x, tz: t.z, th: t.h, vx: 0, vz: 0, phase: 0, at: now };
+          e = { rid: t.id, root, model, walker, tag, key, kind, x: t.x, z: t.z, h: t.h, tx: t.x, tz: t.z, th: t.h, vx: 0, vz: 0, phase: 0, at: now };
           // A real player is built by createAvatar from exactly their saved look: the same body, skin tone, hair, clothes and size they have in their room and in every building.
           // (Never through npcSpec: that adds random NPC variation, and gives a random person to a player whose look is not set.) If the model cannot load, the built-in
           // character in the same look is used, so the stand-in box figure is only for a character that could not be built at all.
           createAvatar(t.look, t.gender === "F" ? "F" : "M", { lod: false }).then((av) => { if (!live.has(t.id) || live.get(t.id) !== e || gone) { av.dispose(); return; } av.root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.userData.npcMesh = true; } }); /* the avatar owns its meshes: dispose() below must not free the shared model geometry */ e.av = av; e.cur = null; root.add(av.root); }).catch(() => root.add(walker.root));
         }
         tag.position.set(0, model ? model.height + 0.9 : 2.2, 0); root.add(tag); group.add(root); tags?.set(t.id, { name: t.name, anchor: tag }); root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-        e = e ?? { root, model, walker, tag, kind, car: t.car ?? "", carColor: t.carColor ?? "", x: t.x, z: t.z, h: t.h, tx: t.x, tz: t.z, th: t.h, vx: 0, vz: 0, phase: 0, at: now }; live.set(t.id, e); }
+        e = e ?? { rid: t.id, root, model, walker, tag, kind, car: t.car ?? "", carColor: t.carColor ?? "", x: t.x, z: t.z, h: t.h, tx: t.x, tz: t.z, th: t.h, vx: 0, vz: 0, phase: 0, at: now }; live.set(t.id, e); }
       // how fast they are going, from the last two reports: between reports they are drawn carrying on at that velocity (never further than the next report is due), so a car glides
       // instead of lurching every two seconds, and an old report never leaves a ghost driving on for ever
       { const moved = Math.hypot(t.x - e.tx, t.z - e.tz) > 0.05, dtS = (now - (e.chAt ?? now)) / 1000;   // the server may hand back the same report twice: only a NEW position says how fast they go
@@ -111,6 +114,18 @@ export function createTraffic({ parent, svc, focus, density = densityFor(), seed
     c.x = e.x; c.z = e.z; c.hx = Math.sin(e.h); c.hz = Math.cos(e.h); c.v = e.sp ?? 0; c.lv = graph.levelAt(c.x, c.z, c.lv, c.h).lv;
     const r = e.follow.update(c, 1 / 30); e.root.rotation.order = "YXZ"; e.root.position.set(e.x, ROAD_TOP + r.y, e.z); e.root.rotation.set(-r.pitch, e.h, r.roll);
   }
+  // other players on foot can be hit too: a vehicle that sweeps over one of them on this screen throws their drawn figure (the same physics as for you), and slows by what it gave.
+  sim.victims.push((b0, b1, spec, by, time, note) => {
+    let dv = 0, hits = 0;
+    for (const e of live.values()) {
+      if (e.model || (e.tumble && (e.tumble.y > 1.6 || !canBeStruck(e.tumble, by, time)))) continue;
+      const hit = sweepHit(b0, b1, spec.len, spec.wid, { x: e.x, z: e.z }); if (!hit) continue;
+      const st = vehicleStrike({ ...hit.box, v: hit.v, mass: spec.mass, lift: spec.lift }, { x: hit.px, z: hit.pz, vx: e.tumble ? e.tumble.vx : e.vx, vz: e.tumble ? e.tumble.vz : e.vz }); if (!st) continue;
+      e.tumble = createTumble(st, { x: e.x, z: e.z, hx: Math.sin(e.h), hz: Math.cos(e.h) }, by, time); e.tumble.ign = new Set([by]); dv += st.dv; hits++;
+      note({ type: "hit", t: time, who: "remote", by, x: hit.px, z: hit.pz, closing: st.closing, speed: Math.hypot(st.vx, st.vz), kind: st.kind, severity: st.severity, vehicleSpeed: hit.v });
+    }
+    return hits ? { dv, hits } : null;
+  });
   let clock = 0;
   /** Gives each live id a slot in `slots` (and frees the slots of ids that have gone). */
   function assign(slots, ids) { const live = new Set(ids); for (const s of slots) if (s.id != null && !live.has(s.id)) s.id = null; for (const id of ids) if (!slots.some((s) => s.id === id)) { const s = slots.find((x) => x.id == null); if (s) { s.id = id; s.fresh = true; } } }
@@ -138,16 +153,27 @@ export function createTraffic({ parent, svc, focus, density = densityFor(), seed
         const pp = pById.get(s.id); if (s.npc && (!pp || Math.hypot(pp.x - focus().x, pp.z - focus().z) > 60)) { group.remove(s.npc.root); s.npc.dispose(); addNpc(s, av); } else av.dispose(); }); } } }
     for (const s of pedSlots) { const av = s.npc; if (!av) continue; const p = s.id == null ? null : pById.get(s.id);
       if (!p) { av.root.visible = false; continue; }
-      const dist = Math.hypot(p.x - f.x, p.z - f.z); av.root.position.set(p.x, 0.1, p.z); av.root.rotation.y = Math.atan2(p.hx, p.hz);
+      const dist = Math.hypot(p.x - f.x, p.z - f.z);
+      if (p.tumble) { s.down = true; drawTumble(av.root, p.tumble, 0.1); if (s.cur !== "idle" && av.has("idle") && av.play("idle", { fade: 0.1 })) s.cur = "idle"; av.tick(clock, dt, dist); continue; }   // struck by a vehicle: thrown, sliding, lying (lib3d/impact.js)
+      if (s.down) { s.down = false; endTumble(av.root, Math.atan2(p.hx, p.hz)); }
+      av.root.position.set(p.x, 0.1, p.z); av.root.rotation.y = Math.atan2(p.hx, p.hz);
       const moving = p.v > 0.2 && !(p.pause > 0), want = moving ? "walk" : p.pause > 0 ? p.act : "idle";
       if (want !== s.cur && av.has(want) && av.play(want, { fade: 0.35 })) s.cur = want;
       if (moving && s.cur === "walk") av.setSpeed(Math.max(0.5, Math.min(1.7, p.v / WALK_V)));
       av.tick(clock, dt, dist); }
     // real players: slide towards the latest reported spot (they report about every two seconds)
-    for (const e of live.values()) { const k = Math.min(1, dt * 4), px = e.x, pz = e.z, age = Math.min(2.2, (performance.now() - (e.chAt ?? e.at)) / 1000), ex = e.tx + e.vx * age, ez = e.tz + e.vz * age; e.x += (ex - e.x) * k; e.z += (ez - e.z) * k; let dh = ((e.th - e.h + Math.PI * 3) % (Math.PI * 2)) - Math.PI; e.h += dh * k; if (e.model) poseRemote(e); else { e.root.position.set(e.x, 0.05, e.z); e.root.rotation.y = e.h; } const d = Math.hypot(e.x - px, e.z - pz);
+    for (const e of live.values()) {
+      // another player on foot who has been hit by a vehicle (drawn here from what we can see of it: their own screen does the real thing and reports where they end up): thrown, sliding, lying, up again
+      if (e.tumble) { const tb = e.tumble; stepTumble(tb, dt, svc.world, { ignore: tb.ign }); e.x = tb.x; e.z = tb.z; drawTumble(e.root, tb, 0.05); if (e.av && e.cur !== "idle" && e.av.play("idle", { fade: 0.1 })) e.cur = "idle"; e.av?.update(clock, dt); if (tb.phase === "done") { e.tumble = null; endTumble(e.root, e.h); } continue; }
+      const k = Math.min(1, dt * 4), px = e.x, pz = e.z, ph = e.ph ?? e.h, age = Math.min(2.2, (performance.now() - (e.chAt ?? e.at)) / 1000), ex = e.tx + e.vx * age, ez = e.tz + e.vz * age; e.x += (ex - e.x) * k; e.z += (ez - e.z) * k; let dh = ((e.th - e.h + Math.PI * 3) % (Math.PI * 2)) - Math.PI; e.h += dh * k; if (e.model) poseRemote(e); else { e.root.position.set(e.x, 0.05, e.z); e.root.rotation.y = e.h; } const d = Math.hypot(e.x - px, e.z - pz);
       if (e.model) { const spd = d / Math.max(dt, 1e-3), want = spd > 0.4 ? Math.max(-0.6, Math.min(0.6, Math.atan((e.model.wheelbase ?? 2.7) * (dh * k / Math.max(dt, 1e-3)) / spd))) : 0; e.st = (e.st ?? 0) + (want - (e.st ?? 0)) * Math.min(1, dt * 8); rollWheels(e.model, d, e.st); e.model.setBrake?.(e.sp != null && (spd - e.sp) / Math.max(dt, 1e-3) < -1.5 || spd < 0.15); e.sp = spd; }
       else if (e.av) { const v = d / Math.max(dt, 1e-3), want = v > 0.25 ? "walk" : "idle"; if (want !== e.cur && e.av.play(want, { fade: 0.3 })) e.cur = want; if (want === "walk") e.av.setSpeed(Math.max(0.5, Math.min(1.9, v / WALK_V))); e.av.update(clock, dt); e.av.root.position.y = 0.05; }
-      else e.walker.pose((e.phase += d * 2.4), Math.min(1, d / dt / 1.2)); }
+      else e.walker.pose((e.phase += d * 2.4), Math.min(1, d / dt / 1.2));
+      // a vehicle another player drives can hit the person on foot (you, drawn as everyone else is, or someone else): the path it covered on this screen is swept, at the speed it covered it
+      if (e.model) { const hx = Math.sin(e.h), hz = Math.cos(e.h), sx = Math.sin(ph), sz = Math.cos(ph), v = dt > 0 ? ((e.x - px) * hx + (e.z - pz) * hz) / dt : 0, jump = d > Math.max(3, 40 * dt);
+        if (e.seen && !jump && Math.abs(v) >= 1 && Math.abs(v) <= OWN_CAR_MAX * 1.1) sim.strike({ x: px, z: pz, hx: sx, hz: sz, v }, { x: e.x, z: e.z, hx, hz, v }, { len: e.model.length ?? 4.5, wid: e.model.width ?? 1.9, mass: massOf(e.kind, e.car), lift: liftOf(e.kind, e.car) }, "r" + e.rid, { peds: false });
+        e.seen = true; }
+      e.ph = e.h; }
   }
   function dispose() { gone = true; for (const [id, e] of live) { tags?.remove(id); e.av?.dispose(); e.model?.dispose?.(); } for (const s of [...pools.keke, ...pools.bus, ...pools.minibus]) s.model.dispose?.(); for (const s of pedSlots) s.npc?.dispose(); sim.dispose?.(); group.traverse((o) => { if (o.userData.npcMesh || o.isSkinnedMesh || o.geometry?.userData?.shared) return; o.geometry?.dispose?.(); }); disposables.forEach((g) => { if (!g.userData?.shared) g.dispose(); }); bodies.dispose(); wheelsM.dispose(); parent.remove(group); }
   /** For the sound (lib/audio/tripAudio.js): the other real players' vehicles as plain { id, kind, car, x, z, v, h } (their own drawn position and speed). The computer-driven vehicles are read straight from `sim.vehicles`. */

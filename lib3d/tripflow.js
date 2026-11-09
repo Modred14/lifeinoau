@@ -26,6 +26,7 @@ import { createRoadFollower, defaultContacts } from "./vehiclepose.js";
 import { exitSpots, pickDoorSide } from "./carexit.js";
 import { SWING, BACK_SPEED, LEAF_ID, canOpenAt, atThreshold, doorLocal, planDoorOpening, inSwing, swingBlocked, leafBody } from "./doorway.js";
 import { RETARGET_WHY } from "./tripretarget.js";
+import { massOf, liftOf } from "./impact.js";
 
 const ARRIVE_RADIUS = 14, DOOR_OPEN = 0.9, ENTER_SECONDS = 1.4, BACK_TIMEOUT = 2.6, OPEN_HOLD_MAX = 1.6, MANUAL_EXIT_SECONDS = 2.6, PARK_ASSIST_BELOW = 7, CLOSE_AUTO_M = 4.5, ENTER_REACH_M = 3.2;
 const clamp01 = (x) => Math.max(0, Math.min(1, x)), smooth = (x) => { x = clamp01(x); return x * x * (3 - 2 * x); }, lerp = (a, b, k) => a + (b - a) * k;
@@ -43,7 +44,7 @@ export function createTripFlow(env, o) {
   const driven = !!plan.driven, ownCar = mode === "car" && !plan.driven, vehicleTrip = mode !== "trek", kind = plan.kind;
   const walker = new Walker(world, nav, { x: plan.start.x, z: plan.start.z, hx: 0, hz: 1 });
   const S = { phase: "intro", t: 0, time: 0, eta: plan.secs, notice: null, ended: false, entered: false, pay: "none", doorK: 0, boardK: 0, alightK: 0, speed: 0, vehDoorK: 0, vehDoorSide: -1, seatK: 0, exiting: false, canExit: false, canEnter: false, canClose: false,
-    door: "closed", hinge: "left", canOpen: false, canGoIn: false, auto: false, target: 0 };   // door: "closed" | "back" | "opening" | "open" | "closing"
+    door: "closed", hinge: "left", canOpen: false, canGoIn: false, auto: false, target: 0, hits: 0, down: false, struck: 0 };   // door: "closed" | "back" | "opening" | "open" | "closing"
   let free = !!o.free;   // a free drive: your own car on the road with no destination yet (leaving your compound). Nothing is "arrived at" until a place is chosen (retarget).
   let hero = null, own = null, inProf = null, heroT = 0, spawnAt = 0, spawnTries = 0, waitedForVehicle = 0, boardFrom = null, alightTo = null, lastEta = -1, retargeted = false, approachDoor = null, departed = false, alightFrom = null;
   let dframe = null, dBack = null, dHeld = 0, dStall = 0, dT = 0, arrivals = 0, enterSecs = ENTER_SECONDS, enterPts = null;
@@ -116,6 +117,16 @@ export function createTripFlow(env, o) {
     if (!pickExit()) { notice("There is no room to get out here. Move the car and try again."); return; }
     exitAsk = true; S.exiting = true;
   }
+  /**
+   * Did your car hit anyone this frame (a pedestrian, another player on the road)? The whole path of the frame is swept (lib3d/impact.js), so a car at 90 m/s cannot skip over a person
+   * however long the frame; whoever is hit is thrown by the car's speed at that moment and weight, and the car gives up the momentum it passed on (a few percent of its speed).
+   * Only on the ground: high on the expressway or a ramp there is nobody to hit.
+   */
+  function strikePeople(q0) {
+    if (own.h > 0.8 || (Math.abs(q0.v) < 1 && Math.abs(own.v) < 1)) return;
+    const r = sim.strike(q0, { x: own.x, z: own.z, hx: own.hx, hz: own.hz, v: own.v }, { len: own.len, wid: own.wid, mass: massOf(kind, dims?.id), lift: liftOf(kind, dims?.id) }, "own");
+    if (!r.hits) return; const was = own.v; own.v += r.dv; if ((was > 0 && own.v < 0) || (was < 0 && own.v > 0)) own.v = 0; S.hits += r.hits;
+  }
   function driveOwn(dt, inp) {
     if (inp.exit) requestExit();
     let drv = { gas: inp.gas ?? 0, brake: inp.brake ?? 0, steer: inp.steer ?? 0 };
@@ -123,7 +134,9 @@ export function createTripFlow(env, o) {
     if (exitAsk && drv.gas > 0.3) { exitAsk = false; S.exiting = false; }     // you changed your mind: you pressed the gas
     if (exitAsk) drv = gentleStop(own, Math.min(4.5, own.P.brake * 0.6), own.P);
     else if (near && own.v > 0.3 && own.v < PARK_ASSIST_BELOW && !drv.gas) drv.brake = Math.max(drv.brake, 0.4);   // by the drop-off the car helps you park: it eases to a stop if you let go of the gas
+    const q0 = { x: own.x, z: own.z, hx: own.hx, hz: own.hz, v: own.v };
     stepCar(own, drv, dt, ownProbe, own.P); updateLevel(dt); publishOwn();
+    strikePeople(q0);
     return { near, drv };
   }
   /** Where a stopped car's door and the way out are, with the cars and the world as they are now. */
@@ -335,12 +348,15 @@ export function createTripFlow(env, o) {
     S.seatK = 1; S.vehDoorK = 0; person.seated = true; person.seat = seatLocal(); person.visible = true; S.pay = "none"; go("drive");
   }
 
+  const HIT_PHASES = new Set(["intro", "trek", "approach", "afoot", "walk"]);
+  /** The traffic hit the person on foot: they are thrown (lib3d/impact.js), whatever they were doing is paused, and the walk resumes when they are up. */
+  function struckOnFoot(st, by, now) { walker.hit(st, by, now); S.struck++; S.down = true; }
   function update(dt, inp = {}) {
     if (S.ended) return S; dt = Math.min(dt, 0.25); S.time += dt; S.t += dt;
     const walkIn = { dx: inp.dx ?? 0, dz: inp.dz ?? 0, mag: inp.mag ?? 0, run: !!inp.run };
     switch (S.phase) {
       case "intro": walker.step(dt, null); if (S.t >= INTRO_SECONDS) { if (mode === "trek") go("trek"); else startApproach(); } break;
-      case "trek": walker.step(dt, walkIn); if (Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z) < 3.2) { walker.step(0.0001, null); arrive(); } break;
+      case "trek": walker.step(dt, walkIn); if (!walker.tumble && Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z) < 3.2) { walker.step(0.0001, null); arrive(); } break;
       case "approach": {
         if (driven && !hero && S.t >= spawnAt) spawnVehicle();
         if (hero?.kinematic && inProf) { heroT += dt; const q = inProf.at(heroT); sim.placeAlong(hero, q.s, q.v); }
@@ -348,7 +364,7 @@ export function createTripFlow(env, o) {
         if (gs > 0 && walker.following) walker.glide(dt, gs); else walker.step(dt, walkIn);   // a long way to the kerb is walked at the pace that fits the approach time
         if (walker.off > 8 && walker.mode !== "manual" && walker.following) { const r = nav.plan(walker.x, walker.z, approachDoor.x, approachDoor.z); if (r.ok) walker.follow(r, { goal: approachDoor, tolerance: 0.4 }); }
         if (hero) {
-          if (stoppedAtPickup() && (!hero.kinematic || heroT >= plan.tVeh - 0.05)) { if (!retargeted) { retargeted = true; retarget(); } const d = doorStand(); if (Math.hypot(walker.x - d.x, walker.z - d.z) < 0.75) { startBoard(); break; } }
+          if (stoppedAtPickup() && (!hero.kinematic || heroT >= plan.tVeh - 0.05)) { if (!retargeted) { retargeted = true; retarget(); } const d = doorStand(); if (!walker.tumble && Math.hypot(walker.x - d.x, walker.z - d.z) < 0.75) { startBoard(); break; } }
           if (hero.stillFor > 20 && !stoppedAtPickup()) sim.clearAhead(hero);
         }
         waitedForVehicle += dt; if (waitedForVehicle > plan.tVeh + plan.parts.walkIn + 60) { notice("The " + kindName() + " could not get to you. Try again."); end("unavailable"); }
@@ -380,16 +396,16 @@ export function createTripFlow(env, o) {
       case "afoot": { // out of the car, on foot: walk where you like, close the door, or get back in
         walker.step(dt, walkIn); const d = distToCar(walker.x, walker.z);
         if (inp.close || d > CLOSE_AUTO_M) closeAsk = true; if (closeAsk) doorTarget = 0; stepDoor(dt, doorTarget);
-        if (inp.enter && d < ENTER_REACH_M) { startReenter(); break; }
-        if (Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z) < 1.2) { walker.vx = walker.vz = 0; doorTarget = 0; payFare(); go("door"); }
+        if (inp.enter && d < ENTER_REACH_M && !walker.tumble) { startReenter(); break; }
+        if (!walker.tumble && Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z) < 1.2) { walker.vx = walker.vz = 0; doorTarget = 0; payFare(); go("door"); }
         break; }
       case "reenter": {
         walker.step(dt, null); stepDoor(dt, S.vehDoorK);
         if (Math.hypot(walker.x - reTo.x, walker.z - reTo.z) < 0.75) { startBoard(); break; }
         if (!walker.following) { notice("You cannot get to the car door from here."); walker.ignore = null; doorTarget = S.vehDoorK > 0.5 ? 1 : 0; go("afoot"); }
         break; }
-      case "walk": walker.step(dt, walkIn); if (!walker.following && Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z) < 1.2) { walker.vx = walker.vz = 0; go("door"); }
-        else if (!walker.following && walker.failed) { notice("The way to the door is blocked."); end("unreachable"); } break;
+      case "walk": walker.step(dt, walkIn); if (!walker.tumble && !walker.following && Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z) < 1.2) { walker.vx = walker.vz = 0; go("door"); }
+        else if (!walker.tumble && !walker.following && walker.failed) { notice("The way to the door is blocked."); end("unreachable"); } break;
       case "door": doorPhase(dt, walkIn); break;
       case "enter": { // from where they stand, through the doorway, and in (the leaf stays open behind them)
         const k = Math.min(1, S.t / enterSecs), E = enterPts ?? (beginEnter(), enterPts), tot = E.l1 + E.l2 || 1, s = k * tot, d = -B.door.nx, e = -B.door.nz;
@@ -403,6 +419,9 @@ export function createTripFlow(env, o) {
     // the person
     person.x = walker.x; person.z = walker.z; person.hx = walker.hx; person.hz = walker.hz; S.speed = S.phase === "drive" ? own.v : S.phase === "ride" && hero ? hero.v : walker.speed;
     if (!person.seated && S.phase !== "board") sim.setExternal("player", { x: walker.x, z: walker.z, hx: walker.hx, hz: walker.hz, len: 0.6, wid: 0.6, v: walker.speed }); else sim.removeExternal("player");
+    // a person on foot can be hit by a moving vehicle (the traffic's and other players' cars); in the scripted moments (boarding, the door, getting out) nobody is, so none of those can be spoilt
+    S.down = !!walker.tumble;
+    if (!person.seated && person.visible && (HIT_PHASES.has(S.phase) || walker.tumble)) sim.setPerson("player", { x: walker.x, z: walker.z, vx: walker.vx, vz: walker.vz, tumble: walker.tumble, ok: HIT_PHASES.has(S.phase), onStrike: struckOnFoot }); else sim.removePerson("player");
     if (S.time - lastEta > 0.2) { lastEta = S.time; S.eta = etaNow(); }
     return S;
   }
@@ -430,7 +449,7 @@ export function createTripFlow(env, o) {
   function remainMetres() { const ph = S.phase; if (ph === "ride" && hero) return Math.max(0, hero.route.len - hero.s); if (ph === "drive") return free ? 0 : Math.max(0, Math.hypot(own.x - plan.drop.x, own.z - plan.drop.z)); if (ph === "approach") return walker.path ? Math.max(0, walker.path.len - walker.ps) : 0; return Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z); }
 
   function dispose() {
-    S.ended = true; sim.removeExternal("player"); sim.removeExternal("own"); world.removeBody("own"); world.removeBody(LEAF_ID);
+    S.ended = true; sim.removeExternal("player"); sim.removePerson("player"); sim.removeExternal("own"); world.removeBody("own"); world.removeBody(LEAF_ID);
     if (hero) { if (departed) hero.role = "npc"; else sim.remove(hero); }
   }
   if (o.spawn && ownCar) bootDrive(o.spawn);
