@@ -3,7 +3,7 @@
 // It is busy but budgeted: more on the main roads and most on the expressway, fewer on the small roads, and the budget is lighter on phones (densityFor). What moves and where is decided by lib3d/trafficsim.js (vehicles follow lanes on the road
 // graph, give way at junctions and keep their distance); this file only draws it. Metres, x east, z south, y up; nose towards +z like vehicles.js.
 import * as THREE from "three";
-import { createTrafficSim, HOT_KINDS } from "./trafficsim.js";
+import { createTrafficSim, HOT_KINDS, PED_FADE } from "./trafficsim.js";
 import { createNpc, npcSpec } from "./avatar/npc.js";
 import { createAvatar } from "./avatar/loadAvatar.js";
 import { lookKey } from "../lib/look.js";
@@ -37,6 +37,9 @@ export function makeWalker(skin, shirt, trouser) {
 
 const R = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 
+/** How long a real player stays on screen after the last update that listed them (ms). */
+export const TRAVELLER_GRACE = 8000;
+
 /**
  * parent: a group in metres. svc: the world services (lib3d/worldsvc.js: road graph and collision world). focus(): { x, z } the camera's ground point.
  * tags: an optional name-tag layer (lib3d/playerTags.js). Real players on the road get a tag that follows them; the NPC cars and walkers never do.
@@ -64,6 +67,7 @@ export function createTraffic({ parent, svc, focus, density = densityFor(), seed
   const addNpc = (s, av) => { av.root.visible = false; av.root.position.set(0, -50, 0); group.add(av.root); s.npc = av; s.cur = null; };
   const loadNpc = async () => { try { const av = await createNpc(npcSpec(++npcSeq, { role: rnd() < 0.08 ? "staff" : "student" })); if (gone) { av.dispose(); return null; } return av; } catch { return null; } };
   // a pool of characters; the simulation's pedestrians take one each while they are alive
+  const pedDraw = sim.density.pedView - PED_FADE;   // people are drawn to here; the simulation never creates or removes one inside sim.density.pedView in the open, so none is seen to appear or vanish
   const pedSlots = Array.from({ length: nPed }, () => ({ id: null, npc: null, cur: null, loading: false }));
   // the walkers appear as their characters finish loading: one after another (the shared model files are fetched once), so the start of a trip is not one big hitch
   (async () => { for (const s of pedSlots) { if (gone) return; const av = await loadNpc(); if (av) addNpc(s, av); await new Promise((r) => setTimeout(r, 40)); } })();
@@ -80,7 +84,7 @@ export function createTraffic({ parent, svc, focus, density = densityFor(), seed
   function setTravellers(list) {
     const now = performance.now(), seen = new Set();
     for (const t of list) {
-      seen.add(t.id); let e = live.get(t.id);
+      seen.add(t.id); let e = live.get(t.id); if (e) e.lostAt = null;
       const key = lookKey(t.look, t.gender);
       const kind = t.mode === "keke" || t.mode === "bus" || t.mode === "car" ? t.mode : "walk";
       // they changed their look, or got into / out of a vehicle: draw the right body, not the old one
@@ -103,7 +107,9 @@ export function createTraffic({ parent, svc, focus, density = densityFor(), seed
       Object.assign(e, { tx: t.x, tz: t.z, th: t.h, at: now, mode: t.mode });
       tags?.set(t.id, { name: t.name, anchor: e.tag }); // a no-op for the same player; refuses anyone who may not carry a tag
     }
-    for (const [id, e] of live) if (!seen.has(id)) { group.remove(e.root); tags?.remove(id); if (e.av) e.av.dispose(); if (e.model?.dispose) e.model.dispose(); else e.root.traverse((o) => { if (!e.av || !e.av.root.getObjectById(o.id)) o.geometry?.dispose?.(); }); live.delete(id); }
+    // A traveller missing from one update is not gone: the list can skip a player for a moment (a slow report, a busy server, a request that failed). They stay where they last were for TRAVELLER_GRACE, and only a
+    // player who is still missing after that is taken out; their avatar is not thrown away and rebuilt in between.
+    for (const [id, e] of live) if (!seen.has(id) && (e.lostAt ??= now, now - e.lostAt >= TRAVELLER_GRACE)) { group.remove(e.root); tags?.remove(id); if (e.av) e.av.dispose(); if (e.model?.dispose) e.model.dispose(); else e.root.traverse((o) => { if (!e.av || !e.av.root.getObjectById(o.id)) o.geometry?.dispose?.(); }); live.delete(id); }
   }
 
   // A real player's vehicle: the server reports where it is on the map (x, z), not how high, so the height is worked out here from the same road the driver drives on (lib3d/vehiclepose.js): on the
@@ -150,17 +156,17 @@ export function createTraffic({ parent, svc, focus, density = densityFor(), seed
     for (const s of pedSlots) if (s.id != null && !pById.has(s.id)) s.id = null;
     for (const p of peds) if (!pedSlots.some((s) => s.id === p.id)) { const s = pedSlots.find((x) => x.id == null && x.npc); if (s) { s.id = p.id;
       if (!s.loading) { s.loading = true; loadNpc().then((av) => { s.loading = false; if (!av) return; // swap in a new person only if the old one is not being looked at
-        const pp = pById.get(s.id); if (s.npc && (!pp || Math.hypot(pp.x - focus().x, pp.z - focus().z) > 60)) { group.remove(s.npc.root); s.npc.dispose(); addNpc(s, av); } else av.dispose(); }); } } }
+        const pp = pById.get(s.id); if (s.npc && (!pp || Math.hypot(pp.x - focus().x, pp.z - focus().z) >= pedDraw)) { group.remove(s.npc.root); s.npc.dispose(); addNpc(s, av); } else av.dispose(); }); } } }
     for (const s of pedSlots) { const av = s.npc; if (!av) continue; const p = s.id == null ? null : pById.get(s.id);
       if (!p) { av.root.visible = false; continue; }
       const dist = Math.hypot(p.x - f.x, p.z - f.z);
-      if (p.tumble) { s.down = true; drawTumble(av.root, p.tumble, 0.1); if (s.cur !== "idle" && av.has("idle") && av.play("idle", { fade: 0.1 })) s.cur = "idle"; av.tick(clock, dt, dist); continue; }   // struck by a vehicle: thrown, sliding, lying (lib3d/impact.js)
+      if (p.tumble) { s.down = true; drawTumble(av.root, p.tumble, 0.1); if (s.cur !== "idle" && av.has("idle") && av.play("idle", { fade: 0.1 })) s.cur = "idle"; av.tick(clock, dt, dist, { hideAt: pedDraw }); continue; }   // struck by a vehicle: thrown, sliding, lying (lib3d/impact.js)
       if (s.down) { s.down = false; endTumble(av.root, Math.atan2(p.hx, p.hz)); }
       av.root.position.set(p.x, 0.1, p.z); av.root.rotation.y = Math.atan2(p.hx, p.hz);
       const moving = p.v > 0.2 && !(p.pause > 0), want = moving ? "walk" : p.pause > 0 ? p.act : "idle";
       if (want !== s.cur && av.has(want) && av.play(want, { fade: 0.35 })) s.cur = want;
       if (moving && s.cur === "walk") av.setSpeed(Math.max(0.5, Math.min(1.7, p.v / WALK_V)));
-      av.tick(clock, dt, dist); }
+      av.tick(clock, dt, dist, { hideAt: pedDraw }); }
     // real players: slide towards the latest reported spot (they report about every two seconds)
     for (const e of live.values()) {
       // another player on foot who has been hit by a vehicle (drawn here from what we can see of it: their own screen does the real thing and reports where they end up): thrown, sliding, lying, up again

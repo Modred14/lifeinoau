@@ -33,7 +33,11 @@ export function doorPoint(v, kind = v.kind, side = -1) {
 /** A point given in a vehicle's own space ({ x: left+, z: forward+ }) as a point in the world. */
 export function toWorld(v, local) { return { x: v.x + v.hx * local.z + v.hz * local.x, z: v.z + v.hz * local.z - v.hx * local.x }; }
 // vehicles: ambient cars on the campus roads; hwVehicles: on the expressway (kept busier than any small road); peds: walkers. farAt: beyond this many metres from the camera an entity is stepped less often.
-export const DENSITY = { vehicles: 30, hwVehicles: 16, peds: 24, spawnMin: 80, spawnMax: 230, despawn: 320, farAt: 150, farPedAt: 110 };
+// view: inside this many metres of the camera nothing is ever created or removed in the open (an NPC may only come into being, or be taken out, beyond it or where a building hides the spot).
+// pedView: the same for people (they are drawn to pedView - PED_FADE, see traffic.js). Spawning happens in the ring spawnMin..spawnMax, removal beyond `despawn`: both outside `view`.
+export const DENSITY = { vehicles: 30, hwVehicles: 16, peds: 24, view: 250, pedView: 200, hideBelow: 60, pedHideBelow: 45, spawnMin: 60, spawnMax: 340, despawn: 410, farAt: 200, farPedAt: 130 };
+/** Metres inside pedView at which a person stops being drawn (they are far too small to notice by then). */
+export const PED_FADE = 20;
 /** How busy each class of road is, per metre of lane: the main roads carry the most, the small roads a lower but still noticeable flow. */
 export const CLASS_WEIGHT = { local: 0.8, collector: 1.3, arterial: 2.6 };
 /** Where people gather, by kind of place (weights): hostels, shops, the library, the social centre and the town gate are busiest. */
@@ -123,7 +127,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
   const groundPool = makePool((l, e) => l.comp === 0 && l.len > 18 && !l.hw, (e) => CLASS_WEIGHT[e.cls] ?? 1);   // ambient traffic keeps to the campus roads here
   const hwPool = makePool((l, e) => l.comp === 0 && l.hw && String(e.kind).startsWith("express") && l.len > 60, () => 1);   // the expressway's own lanes
   const isHwLane = (id) => { const l = graph.lanes[id]; return l.hw && String(edgeOf(id).kind).startsWith("express"); };
-  const stats = { spawned: 0, despawned: 0, stuckRemoved: 0, maxOverlapFixed: 0, laneChanges: 0 };
+  const stats = { spawned: 0, despawned: 0, stuckRemoved: 0, maxOverlapFixed: 0, laneChanges: 0, extended: 0, removedInView: 0, deadlocksBroken: 0 };
   let tick = 0;
 
   // ---------- where people gather ----------
@@ -132,15 +136,39 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
   const hotEdges = (h) => h.edges ??= graph.edges.filter((e) => e.comp === 0 && e.sw > 0 && e.len > 8 && !e.hw && (e.path.pts ?? []).some((q) => Math.hypot(q[0] - h.x, q[1] - h.z) < 45));
 
   // ---------- routes ----------
-  /** A random drive of at least `minLen` metres starting on `lane` at `s`: at each junction mostly straight on, sometimes a turn, never a U-turn. */
-  function wander(lane, s, minLen = 2200, hw = false) {
-    const segs = [{ kind: "lane", id: lane, s0: s, s1: graph.lanes[lane].len }]; let total = graph.lanes[lane].len - s, cur = lane, guard = 0;
+  // Lanes a vehicle that may not use the expressway (a keke) could never drive out of: every exit is a ramp or the deck, or leads only to such a lane. Routing and spawning keep it off them,
+  // so no drive ever strands it (the cause of vehicles that "ran out of road" and had to be removed).
+  const trapNoHw = new Set();
+  { const exits = (id) => graph.lanes[id].out.map((c) => graph.conns[c]).filter((c) => graph.lanes[c.to].comp === 0 && !graph.lanes[c.to].hw);
+    for (const l of graph.lanes) if (l.comp === 0 && !l.hw && !exits(l.id).length) trapNoHw.add(l.id);
+    for (let changed = true; changed;) { changed = false; for (const l of graph.lanes) if (l.comp === 0 && !l.hw && !trapNoHw.has(l.id) && exits(l.id).every((c) => trapNoHw.has(c.to))) { trapNoHw.add(l.id); changed = true; } } }
+  /**
+   * Extends a drive with random choices until it is at least `minLen` metres: at each junction mostly straight on, sometimes a turn, never a U-turn unless the road ends (a dead end is a turning place,
+   * not the end of the drive). Ramps and the deck are ordinary roads for everything but a keke (`noHw`): the traffic of the campus and of the expressway is one flow, so a vehicle that takes a ramp stays in the world.
+   */
+  function grow(segs, cur, total, minLen, noHw) {
+    let guard = 0;
     while (total < minLen && guard++ < 80) {
-      const outs = graph.lanes[cur].out.map((c) => graph.conns[c]).filter((c) => c.kind !== "uturn" && graph.lanes[c.to].comp === 0 && (hw ? isHwLane(c.to) : !graph.lanes[c.to].hw)); if (!outs.length) break;
-      const w = outs.map((c) => (c.kind === "straight" ? 0.58 : 0.21)), sum = w.reduce((a, b) => a + b, 0); let r = rnd() * sum, pick = outs[0]; for (let i = 0; i < outs.length; i++) { r -= w[i]; if (r <= 0) { pick = outs[i]; break; } }
+      const all = graph.lanes[cur].out.map((c) => graph.conns[c]).filter((c) => graph.lanes[c.to].comp === 0 && !((noHw) && (graph.lanes[c.to].hw || trapNoHw.has(c.to)))), plain = all.filter((c) => c.kind !== "uturn"), outs = plain.length ? plain : all; if (!outs.length) break;
+      const w = outs.map((c) => (c.kind === "straight" ? 0.58 : c.kind === "uturn" ? 1 : 0.21)), sum = w.reduce((a, b) => a + b, 0); let r = rnd() * sum, pick = outs[0]; for (let i = 0; i < outs.length; i++) { r -= w[i]; if (r <= 0) { pick = outs[i]; break; } }
       segs.push({ kind: "conn", id: pick.id }); const nl = graph.lanes[pick.to]; segs.push({ kind: "lane", id: nl.id, s0: 0, s1: nl.len }); total += pick.len + nl.len; cur = nl.id;
     }
-    return graph.makeRoute(segs);
+    return segs;
+  }
+  /** A random drive of at least `minLen` metres starting on `lane` at `s`. */
+  function wander(lane, s, minLen = 2200, noHw = false) {
+    return graph.makeRoute(grow([{ kind: "lane", id: lane, s0: s, s1: graph.lanes[lane].len }], lane, graph.lanes[lane].len - s, minLen, noHw));
+  }
+  /**
+   * Keeps an ambient vehicle's drive going: when little of its route is left, the rest of the route it already has is kept exactly as it is (same lane, same turns, same position) and more is added
+   * at the far end. So a vehicle never reaches "the end" in front of anyone: it simply carries on, over the junctions, the ramps and the deck, like a driver with somewhere to go.
+   */
+  function extendRoute(a) {
+    const segs = a.route.segs, sg = segs[a.si], last = segs[segs.length - 1]; if (!sg || sg.kind !== "lane" || last.kind !== "lane" || a.res != null) return false;
+    const keep = segs.slice(a.si).map((q, i) => (q.kind === "lane" ? { kind: "lane", id: q.id, s0: q.s0, s1: q.s1 } : { kind: "conn", id: q.id })), off = a.s - sg.start;
+    const total = a.route.len - sg.start, noHw = KINDS[a.kind].noHw, n0 = keep.length, grown = grow(keep, last.id, total, Math.max(2200, total + 1500), noHw); if (grown.length === n0) return false;   // (grow adds to `keep` itself)
+    const route = graph.makeRoute(grown); if (!route) return false;
+    a.route = route; a.s = off; a.si = 0; a.nextConn = null; a.stopLine = null; pose(a); stats.extended++; return true;
   }
   const pickKind = (hw = false) => {
     const have = {}; for (const v of vehicles) if (v.role === "npc" && !v.custom && !v.done) have[v.kind] = (have[v.kind] ?? 0) + 1;
@@ -169,6 +197,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     const P = a.route.path, sf = Math.min(P.len, a.s + a.len * 0.3), sr = Math.max(0, a.s - a.len * 0.3), p = shifted(a, P.at(a.s, {}), a.s), f = shifted(a, P.at(sf, {}), sf), r = shifted(a, P.at(sr, {}), sr);
     a.x = p.x; a.z = p.z; let hx = f.x - r.x, hz = f.z - r.z; const l = Math.hypot(hx, hz); if (l > 1e-3) { a.hx = hx / l; a.hz = hz / l; } else { a.hx = p.hx; a.hz = p.hz; } a.yaw = Math.atan2(a.hx, a.hz);
     const sg = a.route.segs[a.si]; if (sg.kind === "lane") { a.laneId = sg.id; a.laneS = sg.s0 + (a.s - sg.start); } else { a.laneId = graph.conns[sg.id].to; a.laneS = 0; }
+    a.hw = !!graph.lanes[a.laneId].hw;   // on the deck or a ramp right now (counts and spawning follow where a vehicle IS, so one that drives up a ramp is still the same inhabitant)
     const e = edgeOf(a.laneId); a.y = e.h0 === e.h1 ? e.h0 : heightOn(e, graph.lanes[a.laneId].dir ? e.len - a.laneS : a.laneS); a.lvl = a.y > 2 ? 1 : 0;
     // the pitch of a vehicle on a slope: its axles (about 0.29 of its length either side of the middle) both on the road, so its tyres touch it instead of floating at one end and sinking at the other
     if (e.h0 === e.h1) a.pitch = 0; else { const dir = graph.lanes[a.laneId].dir, hAt = (s) => heightOn(e, dir ? e.len - Math.max(0, Math.min(e.len, s)) : Math.max(0, Math.min(e.len, s))), L = a.len * 0.29; a.pitch = Math.atan2(hAt(a.laneS + L) - hAt(a.laneS - L), 2 * L); a.y = (hAt(a.laneS + L) + hAt(a.laneS - L)) / 2; }   // the deck is a different level: nothing on it can touch anything below
@@ -183,6 +212,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
   function leaderOf(a) {
     const H = Math.min(60, 10 + a.v * 3.4), P = a.route.path; let best = null; probe.hl = a.len / 2; probe.hw = a.wid / 2 + 0.1;
     const consider = (b, bLen, bWid, bv, bhx, bhz) => {
+      if (a.pass?.has(b.id)) return;   // see stepVehicle: a vehicle this one has been let through
       if ((b.lvl ?? (b.y > 2 ? 1 : 0)) !== a.lvl) return;   // the deck and the ground never meet
       const dx = b.x - a.x, dz = b.z - a.z; if (dx * dx + dz * dz > (H + a.len + bLen) ** 2) return;
       const behind = dx * a.hx + dz * a.hz < -0.2, B = { x: b.x, z: b.z, hx: bhx, hz: bhz, hl: bLen / 2, hw: bWid / 2 };
@@ -210,6 +240,14 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     bodyConf.set(key, v); return v;
   };
   const conflictsWithReserved = (conn, a) => { for (const b of vehicles) { if (b === a || b.res == null || b.done) continue; if (b.res === conn.id) continue; if (conn.conflicts.includes(b.res) || (graph.conns[b.res].node === conn.node && bodiesConflict(a.kind, conn.id, b.kind, b.res))) return true; } return false; };
+  // The cause of the junction gridlock: a vehicle that had to wait stopped on the end of its lane, right in the path of a turn that another vehicle had already started (the end of one arm lies within
+  // a car's width of the turn from the next). The turning car then could not finish the turn because the waiting one was in the way, and the waiting one would not move until the turning car had cleared:
+  // for ever. So a vehicle that has to wait stops short of any such turn that is already under way.
+  // Nobody takes a turn ahead of the vehicle in front of them in the same lane: a car stuck in the queue must not hold the junction's reservation while the one at the head of the queue, which is the one that
+  // has to go first, waits for it (it would wait for a car that is behind it).
+  const queuedBehind = (a) => { const l = a.lead?.who; return !!l && l.laneId === a.laneId && l.res == null && !l.done && l.s > a.s && vehicles.includes(l) && a.lead.gap < 14; };
+  const HOLD_BACK = 7.5;
+  const heldBack = (a) => { for (const b of vehicles) { if (b === a || b.res == null || b.done) continue; if (graph.conns[b.res].lanesNear.includes(a.laneId)) return true; } return false; };
   // a vehicle still waiting at the end of a neighbouring lane that this connector sweeps past: let whoever has waited longer go first (a strict order, so nobody waits in a circle)
   const blockedByWaiting = (conn, a) => { const mine = a.waitSince ?? Infinity; for (const b of vehicles) { if (b === a || b.done || b.res != null) continue; const sg = b.route.segs[b.si]; if (sg.kind !== "lane" || !conn.lanesNear.includes(sg.id)) continue; if (b.laneS < graph.lanes[sg.id].len - 7) continue; const theirs = b.waitSince ?? Infinity; if (theirs < mine || (theirs === mine && b.id < a.id)) return true; } return false; };
   // would my body, driven through this turn, touch any vehicle that is already there? (a long bus waiting in a turn reaches back across the next arm)
@@ -241,15 +279,17 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
       if (a.done) continue; const sg = a.route.segs[a.si];
       // release a reservation once the rear of the vehicle has left the connector (or if the route no longer contains it)
       if (a.res != null) { const k = a.route.segs.findIndex((q) => q.kind === "conn" && q.id === a.res); if (k < 0 || (a.si > k && a.s - a.len / 2 > a.route.segs[k].end + 0.2)) a.res = null; }
+      // a car that took the turn's reservation but is still in its lane, stopped behind a vehicle that has not (the one at the head of the queue must go first): give it back
+      if (a.res != null && sg.kind === "lane" && a.stillFor > 2 && a.lead?.who && a.lead.who.laneId === a.laneId && a.lead.who.res == null && vehicles.includes(a.lead.who)) a.res = null;
       const nxt = a.route.segs[a.si + 1]; a.nextConn = null; a.stopLine = null;
       if (sg.kind === "lane" && nxt?.kind === "conn" && a.res == null) { const dist = nxt.start - (a.s + a.len / 2); if (dist < 36) { a.nextConn = nxt; a.stopLine = nxt.start; asking.push(a); } }
     }
     asking.sort((p, q) => (p.waitSince ?? 1e9) - (q.waitSince ?? 1e9) || p.id - q.id);
     for (const a of asking) {
       const conn = graph.conns[a.nextConn.id], dist = a.nextConn.start - (a.s + a.len / 2), waited = a.waitSince == null ? 0 : time - a.waitSince;
-      const ok = !conflictsWithReserved(conn, a) && !blockedByWaiting(conn, a) && (waited > 30 || (!exitBlocked(a, a.nextConn) && !sweepBlocked(a, a.nextConn)));
+      const ok = !conflictsWithReserved(conn, a) && !blockedByWaiting(conn, a) && !queuedBehind(a) && (waited > 30 || (!exitBlocked(a, a.nextConn) && !sweepBlocked(a, a.nextConn)));
       if (ok) { a.res = conn.id; a.waitSince = null; a.stopLine = null; }
-      else { if (a.waitSince == null && dist < 14) a.waitSince = time; if (dist < (a.v * a.v) / (2 * 7) + 0.4 && a.v > 2) { a.res = conn.id; a.waitSince = null; a.stopLine = null; /* it could not stop even braking as hard as it can: it is committed, so carry on through */ } }
+      else { if (a.waitSince == null && dist < 14) a.waitSince = time; if (heldBack(a)) a.stopLine = a.nextConn.start - HOLD_BACK; if (dist < (a.v * a.v) / (2 * 7) + 0.4 && a.v > 2) { a.res = conn.id; a.waitSince = null; a.stopLine = null; /* it could not stop even braking as hard as it can: it is committed, so carry on through */ } }
     }
   }
 
@@ -281,7 +321,19 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     if (a.hold) v0 = 0;
     // the nearest obstacle: a vehicle or person ahead, a junction I am not allowed into, or the end of my route / my stopping place
     let gap = Infinity, vl = 0, s0 = S0;
-    const lead = leaderOf(a); a.lead = lead; if (lead) { gap = lead.gap; vl = lead.v; }
+    let lead = leaderOf(a);
+    // Safety net behind the prevention above. Two kinds of lock can still form between vehicles that are already in each other's way, and in both nobody can ever move, so one of the two is let through the other:
+    //  - a vehicle part-way through its turn, stopped by one that is only WAITING at its stop line for this very turn to clear;
+    //  - two vehicles that each take the other for "the one in front" (side by side after a lane change, or meeting on a narrow lane): the one with the higher id gives way by ignoring the other.
+    // They brush past for a moment instead of both standing still for ever. Nothing is ever deleted to clear a jam.
+    if (a.pass) { for (const id of a.pass) { const ib = vehicles.find((q) => q.id === id); if (!ib || ib.done || Math.hypot(ib.x - a.x, ib.z - a.z) > 14) a.pass.delete(id); } if (!a.pass.size) a.pass = null; }
+    if (lead?.who && a.stillFor > 3 && vehicles.includes(lead.who) && !a.pass?.has(lead.who.id)) {
+      const b = lead.who, turnLock = a.res != null && a.stillFor > 4 && b.res == null && b.stopLine != null, mutual = b.lead?.who === a && b.stillFor > 3 && a.id > b.id;
+      // a chain that has stood for 8 s because of a vehicle in ANOTHER lane (arms of a junction, or lanes of a wide road, whose boxes overlap): that is geometry, not a queue, so let it pass
+      const crossLane = b.laneId !== a.laneId && a.stillFor > 8 && b.stillFor > 8;
+      if (turnLock || mutual || crossLane) { (a.pass ??= new Set()).add(b.id); stats.deadlocksBroken++; lead = leaderOf(a); }
+    }
+    a.lead = lead; if (lead) { gap = lead.gap; vl = lead.v; }
     // slide across to the lane it has chosen (only on the open stretch of a lane; see latAt), and think about overtaking a few times a second
     { const sg = route.segs[a.si]; if (sg.kind === "lane") { const tgt = Math.min(a.sub, nLanesOf(sg.id) - 1) * laneWOf(sg.id), d = tgt - a.lat, st = 1.4 * dt; a.lat += Math.max(-st, Math.min(st, d)); } if ((tick + a.id) % 12 === 0) considerLaneChange(a); }
     if (a.stopLine != null) { const g = a.stopLine - front - 0.4; if (g < gap) { gap = g; vl = 0; s0 = 0.6; } }
@@ -294,39 +346,56 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     if (endFront != null) ds = Math.min(ds, Math.max(0, endFront - a.s)); a.s += ds;
     if (a.v < 0.08) a.stillFor += dt; else a.stillFor = 0;
     pose(a);
-    if (a.role === "npc" && a.s >= route.len - a.len) a.done = true;
+    if (a.role === "npc" && a.s >= route.len - a.len) {
+      // Reaching the end of a drive is not the end of the vehicle: ambient traffic carries on (the drive is normally extended long before this, see extendRoute). Only a vehicle nobody can see, or one that was
+      // sent somewhere on purpose (a pickup), is finished here; one that cannot be extended in view just stops where it is until it can.
+      if (a.custom) a.done = true; else if (!extendRoute(a)) { if (!seen(a.x, a.z, focus(), D.view, D.hideBelow, a.lvl)) a.done = true; else { a.s = Math.min(a.s, route.len - a.len); a.v = 0; } }
+    }
   }
   function setBodies() { if (!world) return; for (const a of vehicles) if (a.lvl === 0) world.setBody("veh" + a.id, { x: a.x, z: a.z, hx: a.hx, hz: a.hz, hl: a.len / 2, hw: a.wid / 2, kind: a.kind, vehicle: a }); else world.removeBody("veh" + a.id); }   // on the deck: no body on the ground for walkers to bump into
   function guardOverlaps() { // a safety net, not the mechanism: if two boxes ever overlap, the one behind stops dead
     for (let i = 0; i < vehicles.length; i++) for (let j = i + 1; j < vehicles.length; j++) {
-      const a = vehicles[i], b = vehicles[j]; if (a.done || b.done || a.lvl !== b.lvl) continue; if (Math.abs(a.x - b.x) > 8 || Math.abs(a.z - b.z) > 8) continue;
+      const a = vehicles[i], b = vehicles[j]; if (a.done || b.done || a.lvl !== b.lvl || a.pass?.has(b.id) || b.pass?.has(a.id)) continue; if (Math.abs(a.x - b.x) > 8 || Math.abs(a.z - b.z) > 8) continue;
       const A = { x: a.x, z: a.z, hx: a.hx, hz: a.hz, hl: a.len / 2, hw: a.wid / 2 }, B = { x: b.x, z: b.z, hx: b.hx, hz: b.hz, hl: b.len / 2, hw: b.wid / 2 };
       if (boxesOverlap(A, B, 0.05)) { stats.maxOverlapFixed++; const behind = ((b.x - a.x) * a.hx + (b.z - a.z) * a.hz) > 0 ? a : b; behind.v = 0; }
     }
   }
 
+  // ---------- what the player can see ----------
+  // The one rule that stops NPCs popping in and out: inside D.view metres of the camera nothing is created and nothing is removed in the open. Beyond it (or, past `hideBelow` metres,
+  // where a building stands between the camera and the spot) an NPC can come into being or be taken out and nobody can see it happen. `occluded` is a straight look from the camera's ground point.
+  // Hidden only if a building stands in the way of the line to the spot AND of the lines to a point 2.5 m either side of it (a car is wider than its centre line, and a ray can graze a wall's corner).
+  const occ = (x, z, f) => { if (!world?.raycast) return false; const dx = x - f.x, dz = z - f.z, l = Math.hypot(dx, dz) || 1, px = (-dz / l) * 2.5, pz = (dx / l) * 2.5; return world.raycast(f.x, f.z, x, z) != null && world.raycast(f.x, f.z, x + px, z + pz) != null && world.raycast(f.x, f.z, x - px, z - pz) != null; };
+  /** Could someone at the camera see (x, z)? `view` is the radius they can see to; `hideBelow` the distance from which a building in the way hides it. */
+  // The deck (lvl 1) stands above the roofs: nothing on the ground hides it, so there only the distance counts.
+  function seen(x, z, f, view = D.view, hideBelow = D.hideBelow, lvl = 0) { const d = Math.hypot(x - f.x, z - f.z); if (d > view) return false; if (lvl === 1 || d < hideBelow) return true; return !occ(x, z, f); }
+
   // ---------- spawning ----------
   const freeSpot = (x, z, r, lvl = 0) => { for (const b of vehicles) if (!b.done && b.lvl === lvl && Math.hypot(b.x - x, b.z - z) < r) return false; if (lvl === 0) { for (const b of external.values()) if (Math.hypot(b.x - x, b.z - z) < r + 6) return false; } return true; };
   const pedNear = (x, z, r) => { for (const q of peds) if (Math.hypot(q.x - x, q.z - z) < r) return true; return false; };   // ambient spawning only: a pickup vehicle clears its own spot
-  function trySpawn(hw = false) {
+  /** `prime`: the world is being filled for the first time (a trip has just begun, or the camera jumped across the map): anywhere not right on top of the player will do, as the road is just being laid out. */
+  function trySpawn(hw = false, prime = false) {
     const f = focus(), pool = hw ? hwPool : groundPool; if (!pool.arr.length) return false;
-    for (let k = 0; k < (hw ? 40 : 14); k++) {
+    for (let k = 0; k < (hw ? 60 : 30); k++) {
       const l = pickFrom(pool), s = rnd() * l.len, p = l.path.at(s, {}), d = Math.hypot(p.x - f.x, p.z - f.z), lvl = hw ? 1 : 0;
-      if (d < D.spawnMin || d > D.spawnMax || !freeSpot(p.x, p.z, hw ? 38 : 28, lvl) || (!hw && pedNear(p.x, p.z, 5))) continue;   // never on top of a person
-      const kind = pickKind(hw); if (!kind) return false; const route = wander(l.id, s, hw ? 3000 : 2200, hw); if (!route) continue;
+      if (d < (prime ? 45 : D.spawnMin) || d > D.spawnMax || !freeSpot(p.x, p.z, hw ? 38 : 28, lvl) || (!hw && pedNear(p.x, p.z, 5))) continue;   // never on top of a person
+      if (!prime && d <= D.view && seen(p.x, p.z, f, D.view, D.hideBelow, lvl)) continue;   // never where the player can watch it appear
+      const kind = pickKind(hw); if (!kind) return false; if (KINDS[kind].noHw && trapNoHw.has(l.id)) continue; const route = wander(l.id, s, hw ? 3000 : 2200, !!KINDS[kind].noHw); if (!route) continue;
       const n = nLanesOf(l.id), sub = Math.floor(rnd() * n), a = make(kind, route, { v: 0, hw, sub, lat: sub * laneWOf(l.id) });
+      if (!prime && Math.hypot(a.x - f.x, a.z - f.z) <= D.view && seen(a.x, a.z, f, D.view, D.hideBelow, lvl)) { vehicles.pop(); stats.spawned--; continue; }   // its lane offset put it where it can be seen: not here
       a.v = hw ? a.cruise * 0.85 : Math.min(KINDS[kind].cruise[0], 6); return true;   // on the expressway they are already up to speed
     }
     return false;
   }
   const pickHot = (list) => { let r = rnd() * list.reduce((t, h) => t + h.w, 0); for (const h of list) { r -= h.w; if (r <= 0) return h; } return list[0]; };
-  function spawnPed() {
+  function spawnPed(prime = false) {
     const f = focus(), near = hot.filter((h) => { const d = Math.hypot(h.x - f.x, h.z - f.z); return d > 20 && d < D.spawnMax + 60; });
     for (let k = 0; k < 16; k++) {
       let e, goal = null;
       if (near.length && rnd() < 0.7) { goal = pickHot(near); const es = hotEdges(goal); if (!es.length) continue; e = es[Math.floor(rnd() * es.length)]; }
       else { const w = graph.edges; e = w[Math.floor(rnd() * w.length)]; if (e.comp !== 0 || !(e.sw > 0) || e.len <= 20 || e.hw) continue; }
-      const s = rnd() * e.len, p = e.path.at(s, {}), d = Math.hypot(p.x - f.x, p.z - f.z); if (d < 30 || d > D.spawnMax) continue;
+      const s = rnd() * e.len, p = e.path.at(s, {}), d = Math.hypot(p.x - f.x, p.z - f.z); if (d < 25 || d > D.spawnMax) continue;
+      if (!prime && d <= D.pedView && seen(p.x, p.z, f, D.pedView, D.pedHideBelow)) continue;   // a person never appears where the player is looking
       if (!freeSpot(p.x, p.z, 1.2, 0)) continue;
       peds.push({ id: nextId++, edge: e.id, s, dir: rnd() < 0.5 ? 1 : -1, side: rnd() < 0.5 ? 1 : -1, lane: 0.2 + rnd() * 0.6, speed: 1.0 + rnd() * 0.6, v: 1, pause: 0, nextPause: 3 + rnd() * 14, act: "idle", x: p.x, z: p.z, hx: 1, hz: 0, phase: rnd() * 6, tint: rnd(), goal: goal ?? (near.length ? pickHot(near) : null), k: 0 }); return true;
     }
@@ -392,6 +461,15 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
   const specOf = (a) => ({ len: a.len, wid: a.wid, mass: massOf(a.kind), lift: liftOf(a.kind) });
 
   /** Advances everything by dt seconds (in steps of at most 1/30 s so the maths stays steady at any frame rate). */
+  // The first fill of the world (a trip has just begun) or a jump of the camera across the map: the traffic is laid out around the player straight away, anywhere not on top of them, instead of trickling in
+  // where it can be watched. It is done a few vehicles per frame (`priming`) so that no single frame pays for all of it.
+  let primed = false, priming = 0; const lastF = { x: 0, z: 0 };
+  function fillStep() {
+    let g = 0, w = 0; for (const v of vehicles) if (v.role === "npc" && !v.custom && !v.done) { if (v.hw) w++; else g++; }
+    let k = 0; while (k++ < 3 && (g < D.vehicles || w < D.hwVehicles)) { if (w < D.hwVehicles && trySpawn(true, true)) w++; else if (g < D.vehicles && trySpawn(false, true)) g++; }
+    for (let q = 0; q < 3 && peds.length < D.peds; q++) spawnPed(true);
+    return g < D.vehicles || w < D.hwVehicles || peds.length < D.peds;
+  }
   function update(dt) {
     const n = Math.max(1, Math.ceil(dt / (1 / 30))), h = dt / n, f0 = focus(), farV = D.farAt ** 2, farP = D.farPedAt ** 2;
     for (let i = 0; i < n; i++) {
@@ -404,16 +482,21 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
       }
       guardOverlaps();
       for (const a of vehicles) if (a.sw && !a.done) { const r = strike(a.pv, (a.cv ??= { x: 0, z: 0, hx: 0, hz: 1, v: 0 }, a.cv.x = a.x, a.cv.z = a.z, a.cv.hx = a.hx, a.cv.hz = a.hz, a.cv.v = a.v, a.cv), specOf(a), "veh" + a.id); if (r.dv) a.v = Math.max(0, a.v + r.dv); }
+      if ((tick & 15) === 0) for (const a of vehicles) if (!a.done && a.role === "npc" && !a.custom && !a.kinematic && a.route.len - a.s < 600) extendRoute(a);
       for (const p of peds) { if ((p.x - f0.x) ** 2 + (p.z - f0.z) ** 2 > farP) { if ((tick + p.id) % 4 === 0) stepPed(p, 4 * h); } else stepPed(p, h); }
     }
     const f = focus();
     for (const a of vehicles) {
       if (a.done || a.role !== "npc") continue; const far = Math.hypot(a.x - f.x, a.z - f.z);
-      if (far > D.despawn) a.done = true; else if (a.stillFor > 50 && far > 40) { a.done = true; stats.stuckRemoved++; }
+      if (far > D.despawn) a.done = true;   // beyond the view, well outside it: nobody can see this
+      else if (a.stillFor > 50 && far > D.hideBelow && !seen(a.x, a.z, f, D.view, D.hideBelow, a.lvl)) { a.done = true; stats.stuckRemoved++; }   // a jam that somehow outlived the fixes, cleared where it cannot be watched
     }
     for (let i = vehicles.length - 1; i >= 0; i--) if (vehicles[i].done) { world?.removeBody("veh" + vehicles[i].id); stats.despawned++; vehicles.splice(i, 1); }
     for (let i = peds.length - 1; i >= 0; i--) if (Math.hypot(peds[i].x - f.x, peds[i].z - f.z) > D.despawn) peds.splice(i, 1);
     setBodies();
+    if (!primed || Math.hypot(f.x - lastF.x, f.z - lastF.z) > D.view) { primed = true; priming = 240; }
+    lastF.x = f.x; lastF.z = f.z;
+    if (priming > 0) { priming--; if (!fillStep()) priming = 0; }
     spawnCool -= dt;
     if (spawnCool <= 0) {
       let g = 0, w = 0; for (const v of vehicles) if (v.role === "npc" && !v.custom && !v.done) { if (v.hw) w++; else g++; }
@@ -422,7 +505,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
       while (tries-- > 0) { if (w < D.hwVehicles && trySpawn(true)) w++; else if (g < D.vehicles && trySpawn(false)) g++; }
       spawnCool = 0.12 + rnd() * 0.3;
     }
-    pedCool -= dt; if (pedCool <= 0 && peds.length < D.peds) { let k = Math.min(3, D.peds - peds.length); while (k-- > 0) spawnPed(); pedCool = 0.25; }
+    pedCool -= dt; if (pedCool <= 0 && peds.length < D.peds) { let k = Math.min(3, D.peds - peds.length); while (k-- > 0) spawnPed(false); pedCool = 0.25; }
   }
 
   return {
