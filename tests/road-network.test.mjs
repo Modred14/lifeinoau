@@ -5,11 +5,12 @@
 //   3. driving it at top speed: the surface is there at every step, with no steps in height and no wrong level, for every vehicle; and the deck is long enough to reach top speed and stop
 //   4. people and ambient traffic never see the deck; the meshes build cleanly
 import fs from "node:fs";
-import { buildRoadGraph, carMask, LV_GROUND, LV_DECK, heightOn } from "../lib3d/roadgraph.js";
+import { buildRoadGraph, carMask, carMaskAt, LV_GROUND, LV_DECK, LV_RAMP, heightOn } from "../lib3d/roadgraph.js";
 import { buildServices } from "../lib3d/worldsvc.js";
 import { withExtras } from "../lib3d/mapExtras.js";
 import { planTrip } from "../lib3d/tripplan.js";
 import { buildRoadMeshes } from "../lib3d/roadmesh.js";
+import { deckHeight } from "../lib3d/highwaytails.js";
 import { buildHighwayMeshes } from "../lib3d/highwaymesh.js";
 import { buildRoadFurniture } from "../lib3d/roadfurniture.js";
 import { isSimple, area, inside } from "../lib3d/roadjunction.js";
@@ -43,10 +44,11 @@ chk("a strip of pavement is kept beside the buildings wherever the road is not s
 
 // ---- 2. the expressway ----
 chk("the expressway is long (over 4 km) and three lanes each way with a median", X && X.len > 4000 && X.lanes === 3 && X.med >= 1 && X.half >= 14 && X.shoulder >= 2);
-{ let turn = 0, worst = 0; const P = X.deck; for (let i = 1; i < P.length - 1; i++) { const a = Math.atan2(P[i][1] - P[i - 1][1], P[i][0] - P[i - 1][0]), b = Math.atan2(P[i + 1][1] - P[i][1], P[i + 1][0] - P[i][0]); let d = Math.abs(b - a); if (d > Math.PI) d = 2 * Math.PI - d; turn += d; worst = Math.max(worst, d); }
-  chk("it is predominantly straight: " + (turn * 57.3).toFixed(0) + " deg of turning in total, at most " + (worst * 57.3).toFixed(2) + " deg at any point", turn * 57.3 < 45 && worst * 57.3 < 1.5); }
+{ let turn = 0, worst = 0; const P0 = X.deck, cum = [0]; for (let i = 1; i < P0.length; i++) cum.push(cum[i - 1] + Math.hypot(P0[i][0] - P0[i - 1][0], P0[i][1] - P0[i - 1][1])); const P = P0.filter((_, i) => cum[i] >= X.main[0] - 1 && cum[i] <= X.main[1] + 1); for (let i = 1; i < P.length - 1; i++) { const a = Math.atan2(P[i][1] - P[i - 1][1], P[i][0] - P[i - 1][0]), b = Math.atan2(P[i + 1][1] - P[i][1], P[i + 1][0] - P[i][0]); let d = Math.abs(b - a); if (d > Math.PI) d = 2 * Math.PI - d; turn += d; worst = Math.max(worst, d); }
+  chk("the straight part of the deck (between the two tails) is predominantly straight: " + (turn * 57.3).toFixed(0) + " deg of turning in total, at most " + (worst * 57.3).toFixed(2) + " deg at any point", turn * 57.3 < 45 && worst * 57.3 < 1.5); }
 const deck = X.deckEdges.map((d) => ({ ...G.edges.find((e) => e.id === d.id), s0: d.s0, s1: d.s1 }));
-chk("the deck is one continuous chain of edges at one height (" + deck.length + " edges)", deck.length >= 3 && deck.every((e, i) => e.h0 === X.H && e.h1 === X.H && (i === 0 || (deck[i - 1].b === e.a && Math.abs(deck[i - 1].s1 - e.s0) < 1e-6))) && Math.abs(deck.at(-1).s1 - X.len) < 1 && deck[0].s0 === 0);
+chk("the deck is one continuous chain of edges from one touchdown to the other (" + deck.length + " edges): at deck height except the two descents, which start and end at the ground; heights and distances join up", deck.length >= 5 && deck.every((e, i) => (i === 0 || (deck[i - 1].b === e.a && Math.abs(deck[i - 1].s1 - e.s0) < 1e-6 && deck[i - 1].h1 === e.h0)) && (e.kind === "express-descent" ? Math.min(e.h0, e.h1) === 0 && Math.max(e.h0, e.h1) === X.H : e.h0 === X.H && e.h1 === X.H)) && Math.abs(deck.at(-1).s1 - X.len) < 1 && deck[0].s0 === 0 && deck[0].kind === "express-descent" && deck.at(-1).kind === "express-descent");
+chk("the deck has no dead end and no end barrier: every node of the deck chain has a road on both sides (the two ends are touchdowns that carry straight on as ground road)", !G.nodes.some((n) => n.fixedOnly && n.deg === 1) && X.grounds && ["west", "east"].every((k) => { const t = G.nodes[X.grounds[k].touch]; return t.deg === 2 && t.tdown && t.h === 0 && t.edges.some((id) => G.byEdge.get(id).hw) && t.edges.some((id) => !G.byEdge.get(id).hw); }));
 const ramps = G.edges.filter((e) => e.mask & 4);
 chk("there are entry and exit ramps at both interchanges, each climbing the full deck height at under 4 percent", X.ramps.length === 6 && X.ramps.every((r) => r.grade < 0.04) && ramps.every((e) => Math.abs(e.h1 - e.h0) === X.H));
 chk("every ramp meets a ground node at one end and a deck node at the other", ramps.every((e) => { const a = G.nodes[e.a], b = G.nodes[e.b]; return (a.h === 0 && b.h === X.H) || (a.h === X.H && b.h === 0); }));
@@ -57,18 +59,18 @@ chk("the deck is not used by traffic or people on the ground (ambient traffic ha
 const T = (s) => { let lo = 0; const P = X.deck; let acc = 0; for (let i = 1; i < P.length; i++) { const d = Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]); if (acc + d >= s) { const t = (s - acc) / d; const hx = (P[i][0] - P[i - 1][0]) / d, hz = (P[i][1] - P[i - 1][1]) / d; return { x: P[i - 1][0] + (P[i][0] - P[i - 1][0]) * t, z: P[i - 1][1] + (P[i][1] - P[i - 1][1]) * t, hx, hz }; } acc += d; void lo; } const q = P.at(-1); return { x: q[0], z: q[1], hx: 1, hz: 0 }; };
 for (const [name, lat] of [["the outer lane", X.med + 2.5 * X.lane], ["the inner lane", X.med + 0.5 * X.lane], ["the left carriageway", -(X.med + 1.5 * X.lane)]]) {
   let miss = 0, jump = 0, wrong = 0, prevH = null; const out = {}, m = carMask(1), STEP = 1.5;
-  for (let s = X.apron; s < X.len - X.apron; s += STEP) {
-    const q = T(s), x = q.x - q.hz * lat, z = q.z + q.hx * lat, r = G.surfaceAt(x, z, out, m, X.H);
-    if (r.cls !== 1) miss++; if (Math.abs(r.h - X.H) > 0.03) wrong++; if (prevH != null && Math.abs(r.h - prevH) > 0.05) jump++; prevH = r.h;
+  for (let s = 0; s <= X.len; s += STEP) {
+    const q = T(s), x = q.x - q.hz * lat, z = q.z + q.hx * lat, hh = deckHeight(X, s), r = G.surfaceAt(x, z, out, m, hh);
+    if (r.cls !== 1) miss++; if (Math.abs(r.h - hh) > 0.12) wrong++; if (prevH != null && Math.abs(r.h - prevH) > 0.12) jump++; prevH = r.h;
   }
-  chk("driving " + name + " end to end at 325 km/h: the surface is under the car at every step (" + miss + " gaps), always at deck height (" + wrong + "), no steps in height (" + jump + ")", !miss && !wrong && !jump);
+  chk("driving " + name + " from one touchdown to the other (tails and descents included): the surface is under the car at every step (" + miss + " gaps), at the height the deck has there, to 12 cm (" + wrong + " wrong), no steps in height (" + jump + ")", !miss && !wrong && !jump);
 }
-{ let lvWrong = 0, peopleSee = 0, prev = 1; const out = {}; for (let s = X.apron + 50; s < X.len - X.apron; s += 25) { const q = T(s), l = G.levelAt(q.x - q.hz * 5, q.z + q.hx * 5, prev, X.H); if (l.lv !== 1) lvWrong++; prev = l.lv; if (G.surfaceAt(q.x - q.hz * 5, q.z + q.hx * 5, out, LV_GROUND).edge >= 0 && G.surfaceAt(q.x - q.hz * 5, q.z + q.hx * 5, out, LV_GROUND).cls === 1 && G.byId?.(out.edge)?.hw) peopleSee++; }
+{ let lvWrong = 0, peopleSee = 0, prev = 1; const out = {}; for (let s = X.main[0] + 50; s < X.main[1]; s += 25) { const q = T(s), l = G.levelAt(q.x - q.hz * 5, q.z + q.hx * 5, prev, X.H); if (l.lv !== 1) lvWrong++; prev = l.lv; if (G.surfaceAt(q.x - q.hz * 5, q.z + q.hx * 5, out, LV_GROUND).edge >= 0 && G.surfaceAt(q.x - q.hz * 5, q.z + q.hx * 5, out, LV_GROUND).cls === 1 && G.byId?.(out.edge)?.hw) peopleSee++; }
   chk("a car on the deck is on level 1 all along it, and people (ground mask) never meet the deck (" + lvWrong + "/" + peopleSee + ")", !lvWrong && !peopleSee); }
 { let miss = 0, jump = 0; for (const r of X.ramps) { let prevH = null; const out = {}; const e = G.edges.find((q) => q.id === r.id), P = e.path;
     for (let s = 0; s <= P.len; s += 1) { const q = P.at(s, {}), a = G.surfaceAt(q.x, q.z, out, carMask(r.kind === "on" ? 0 : 1), heightOn(e, s)); if (a.cls !== 1) miss++; if (prevH != null && Math.abs(a.h - prevH) > 0.2) jump++; prevH = a.h; } }
   chk("every ramp is drivable end to end, with the height rising smoothly (" + miss + " gaps, " + jump + " steps)", !miss && !jump); }
-{ const room = X.len - 2 * X.apron + X.apron, rows = [];
+{ const MAIN = X.main[1] - X.main[0], room = MAIN - 80, rows = [];
   for (const id of Object.keys(V)) {
     const P = carProfile(id), car = createCar(); let d = 0, t = 0, d95 = null;
     for (; t < 400; t += 1 / 60) { const x0 = car.x, z0 = car.z; stepCar(car, { gas: 1, brake: 0, steer: 0 }, 1 / 60, null, P); d += Math.hypot(car.x - x0, car.z - z0); if (d95 == null && car.v >= 0.95 * P.vmax) { d95 = d; break; } }
@@ -76,8 +78,22 @@ for (const [name, lat] of [["the outer lane", X.med + 2.5 * X.lane], ["the inner
     rows.push({ id, d95, b, top: Math.round(P.vmax * 3.6) });
   }
   const fast = rows.filter((r) => r.top >= 300);
-  chk("every vehicle reaches 95% of its top speed and can stop within the deck (worst: " + rows.reduce((a, r) => (r.d95 + r.b > a.d95 + a.b ? r : a)).id + " needs " + Math.round(Math.max(...rows.map((r) => r.d95 + r.b))) + " m of " + Math.round(X.len) + " m)", rows.every((r) => r.d95 != null && r.d95 + r.b < X.len - X.apron));
+  chk("every vehicle reaches 95% of its top speed and can stop within the deck (worst: " + rows.reduce((a, r) => (r.d95 + r.b > a.d95 + a.b ? r : a)).id + " needs " + Math.round(Math.max(...rows.map((r) => r.d95 + r.b))) + " m of " + Math.round(MAIN) + " m)", rows.every((r) => r.d95 != null && r.d95 + r.b < MAIN - 80));
   chk("the supercars (" + fast.map((r) => r.id + " " + r.top).join(", ") + " km/h) get to 95% of top speed on the deck with a clear run left (" + fast.map((r) => Math.round(r.d95)).join(", ") + " m)", fast.length >= 1 && fast.every((r) => r.d95 < room * 0.75)); }
+
+// ---- 3b. the tails: from the campus road up onto the deck and back down again, without a barrier, step or gap ----
+for (const k of ["west", "east"]) {
+  const g = X.grounds[k], laneTo = (edge, node) => G.lanes.filter((l) => l.edge === edge && l.to === node), laneFrom = (edge, node) => G.lanes.filter((l) => l.edge === edge && l.to !== node);
+  const deckEdges = X.deckEdges.map((d) => ({ ...G.byEdge.get(d.id), s0: d.s0, s1: d.s1 })), mainEdge = deckEdges.find((e) => e.kind === "express" && e.s0 >= X.main[0] - 1 && e.s1 <= X.main[1] + 1), tailEdge = deckEdges.find((e) => e.kind === "express" && (k === "west" ? e.s1 <= X.main[0] + 1 : e.s0 >= X.main[1] - 1));
+  const drive = (r) => { let miss = 0, jump = 0, prevH = null, hmax = 0, h = prevH ?? 0; const out = {}, P = r.path; h = G.byEdge.get(G.lanes[r.segs[0].id].edge).h0; for (let s = 0; s <= P.len; s += 1) { const q = P.at(s, {}), a = G.surfaceAt(q.x, q.z, out, carMaskAt(h > 5 ? 1 : 0, h), h); if (a.cls !== 1) { miss++; continue; } if (Math.abs(a.h - h) > 0.15) jump++; h = a.h; hmax = Math.max(hmax, h); } return { miss, jump, hmax, len: P.len }; };
+  const up = laneTo(g.c2, g.taper).flatMap((a) => laneTo(mainEdge.id, G.nodes[mainEdge.b].id).concat(laneFrom(mainEdge.id, G.nodes[mainEdge.a].id)).map((b) => G.route(a.id, 1, b.id, 1)).filter(Boolean)).sort((x, y) => x.len - y.len)[0];
+  const down = tailEdge && laneTo(tailEdge.id, tailEdge.b).flatMap((a) => laneTo(g.c2, g.target).map((b) => G.route(a.id, 1, b.id, 1)).filter(Boolean)).sort((x, y) => x.len - y.len)[0];
+  const U = up && drive(up), D = down && drive(down);
+  chk("the " + k + " tail: a car can drive from the campus road onto the deck (" + (U ? Math.round(U.len) + " m, " + U.miss + " gaps, " + U.jump + " steps, up to " + U.hmax.toFixed(1) + " m" : "NO ROUTE") + ")", !!U && U.miss === 0 && U.jump === 0 && U.hmax > X.H - 0.5);
+  chk("the " + k + " tail: and from the deck back down to the campus road (" + (D ? Math.round(D.len) + " m, " + D.miss + " gaps, " + D.jump + " steps" : "NO ROUTE") + ")", !!D && D.miss === 0 && D.jump === 0);
+}
+{ const ds = X.deckEdges.filter((d) => d.descent).map((d) => G.byEdge.get(d.id)), grade = Math.max(...ds.map((e) => { let m = 0; for (let s = 1; s <= e.len; s += 1) m = Math.max(m, Math.abs(heightOn(e, s) - heightOn(e, s - 1))); return m; }));
+  chk("each descent is " + X.summary.descent + " m long, comes down smoothly (steepest " + (grade * 100).toFixed(1) + " %, gentler than the interchange ramps), and is a ramp level edge both a car on the ground and a car on the deck can use", ds.length === 2 && ds.every((e) => e.mask === LV_RAMP && e.len > 320) && grade < 0.04); }
 
 // ---- 4. the meshes ----
 { const a = buildRoadMeshes(G, 0.1), b = buildHighwayMeshes(X, 0.1); let tri = 0, bad2 = 0, hmax = 0; for (const grp of [a, b]) grp.traverse((o) => { const p = o.geometry?.attributes.position?.array; if (!p) return; tri += p.length / 9; for (let i = 0; i < p.length; i++) if (!Number.isFinite(p[i])) bad2++; if (grp === b) for (let i = 1; i < p.length; i += 3) hmax = Math.max(hmax, p[i] * 10); });
@@ -93,20 +109,20 @@ const world = buildWorldCollision(svc.data), GS = buildRoadGraph(raw, { sdf: (x,
     // the mouth of the arm (its two corners at the cut) must lie on the polygon's outline: that is what makes the ribbon and the polygon meet with no gap
     for (const sgn of [-1, 1]) { const x = q.x - q.hz * sgn * e.half, z = q.z + q.hx * sgn * e.half; let d = Infinity; const P = n.J.asph.poly; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const ax = P[j][0], az = P[j][1], dx = P[i][0] - ax, dz = P[i][1] - az, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1))); d = Math.min(d, Math.hypot(x - ax - dx * t, z - az - dz * t)); } if (d > 0.05) off++; } } }
   chk("every road's ribbon meets its junction polygon exactly: both corners of every mouth are on the polygon (" + off + " off of " + tot * 2 + ")", off === 0); }
-{ // no holes: sample the carriageway of every road, and every junction, and look for the asphalt triangle that covers each point
+{ // no holes (inside a taper the road is narrower than its edge, so there only what the surface calls road must be drawn): sample the carriageway of every road, and every junction, and look for the asphalt triangle that covers each point
   const grp = buildRoadMeshes(GS, 0.1), asp = grp.getObjectByName("road-asphalt"), sho = grp.getObjectByName("road-shoulder"), med = grp.getObjectByName("road-median"), S = 0.1;
   const tris = []; for (const m of [asp, sho, med]) { const p = m?.geometry.attributes.position.array; if (!p) continue; for (let i = 0; i < p.length; i += 9) tris.push([p[i] / S, p[i + 2] / S, p[i + 3] / S, p[i + 5] / S, p[i + 6] / S, p[i + 8] / S]); }
   const C = 12, grid = new Map(), key = (i, j) => i * 100003 + j; tris.forEach((t, k) => { const x0 = Math.min(t[0], t[2], t[4]), x1 = Math.max(t[0], t[2], t[4]), z0 = Math.min(t[1], t[3], t[5]), z1 = Math.max(t[1], t[3], t[5]); for (let a = Math.floor(x0 / C); a <= Math.floor(x1 / C); a++) for (let b = Math.floor(z0 / C); b <= Math.floor(z1 / C); b++) { const q = key(a, b); if (!grid.has(q)) grid.set(q, []); grid.get(q).push(k); } });
   const covered = (x, z) => { for (const k of grid.get(key(Math.floor(x / C), Math.floor(z / C))) ?? []) { const t = tris[k], d = (t[3] - t[5]) * (t[0] - t[4]) + (t[4] - t[2]) * (t[1] - t[5]); if (!d) continue; const a = ((t[3] - t[5]) * (x - t[4]) + (t[4] - t[2]) * (z - t[5])) / d, b = ((t[5] - t[1]) * (x - t[4]) + (t[0] - t[4]) * (z - t[5])) / d, c = 1 - a - b, e = -1e-3; if (a >= e && b >= e && c >= e) return true; } return false; };
   let pts = 0, holes = 0; const first = [];
-  for (const e of GS.edges) { if (e.hw || e.foot) continue; for (let s = 0.5; s < e.len; s += 2) { const q = e.path.at(s, {}); for (const lat of [-0.9, -0.5, 0, 0.5, 0.9]) { const off = lat * (e.half - 0.1), x = q.x - q.hz * off, z = q.z + q.hx * off; pts++; if (!covered(x, z)) { holes++; if (first.length < 3) first.push(e.id + "@" + Math.round(x) + "," + Math.round(z)); } } } }
+  for (const e of GS.edges) { if (e.hw || e.foot) continue; for (let s = 0.5; s < e.len; s += 2) { const q = e.path.at(s, {}); for (const lat of [-0.9, -0.5, 0, 0.5, 0.9]) { const off = lat * (e.half - 0.1), x = q.x - q.hz * off, z = q.z + q.hx * off; if (e.tz && (s < e.tz.a || s > e.len - e.tz.b) && GS.surfaceAt(x, z, {}).cls !== 1) continue; pts++; if (!covered(x, z)) { holes++; if (first.length < 3) first.push(e.id + "@" + Math.round(x) + "," + Math.round(z) + "(s" + s.toFixed(0) + "/" + e.len.toFixed(0) + " lat" + lat + ")"); } } } }
   for (const n of GS.nodes) { if (!n.J || n.fixedOnly || !n.deg) continue; for (let a = 0; a < 16; a++) for (const r of [0, 0.4 * n.radius]) { const x = n.x + Math.cos(a) * r, z = n.z + Math.sin(a) * r; pts++; if (!covered(x, z)) { holes++; if (first.length < 3) first.push("node" + n.id); } } }
   chk("the asphalt mesh has no holes: every one of " + pts + " sample points across every road and junction is under a triangle (" + holes + " holes " + first.join(" ") + ")", holes === 0);
   // sidewalks: the pavement mesh covers the strip beside every road that has one
   const pav = grp.getObjectByName("road-pavement").geometry.attributes.position.array, ptri = []; for (let i = 0; i < pav.length; i += 9) ptri.push([pav[i] / S, pav[i + 2] / S, pav[i + 3] / S, pav[i + 5] / S, pav[i + 6] / S, pav[i + 8] / S]);
   const pg = new Map(); ptri.forEach((t, k) => { const x0 = Math.min(t[0], t[2], t[4]), x1 = Math.max(t[0], t[2], t[4]), z0 = Math.min(t[1], t[3], t[5]), z1 = Math.max(t[1], t[3], t[5]); for (let a = Math.floor(x0 / C); a <= Math.floor(x1 / C); a++) for (let b = Math.floor(z0 / C); b <= Math.floor(z1 / C); b++) { const q = key(a, b); if (!pg.has(q)) pg.set(q, []); pg.get(q).push(k); } });
   const pcov = (x, z) => { for (const k of pg.get(key(Math.floor(x / C), Math.floor(z / C))) ?? []) { const t = ptri[k], d = (t[3] - t[5]) * (t[0] - t[4]) + (t[4] - t[2]) * (t[1] - t[5]); if (!d) continue; const a = ((t[3] - t[5]) * (x - t[4]) + (t[4] - t[2]) * (z - t[5])) / d, b = ((t[5] - t[1]) * (x - t[4]) + (t[0] - t[4]) * (z - t[5])) / d, c = 1 - a - b; if (a >= -1e-3 && b >= -1e-3 && c >= -1e-3) return true; } return false; };
-  let pp = 0, ph = 0; for (const e of GS.edges) { if (e.hw || e.foot || e.sw < 1) continue; for (let s = 1; s < e.len; s += 3) { const q = e.path.at(s, {}); for (const sgn of [-1, 1]) { const off = sgn * (e.half + e.sw * 0.5), x = q.x - q.hz * off, z = q.z + q.hx * off; pp++; if (!pcov(x, z)) ph++; } } }
+  let pp = 0, ph = 0; for (const e of GS.edges) { if (e.hw || e.foot || e.sw < 1) continue; for (let s = 1; s < e.len; s += 3) { const q = e.path.at(s, {}); if (e.tz && (s < e.tz.a + 3 || s > e.len - e.tz.b - 3)) continue; for (const sgn of [-1, 1]) { const off = sgn * (e.half + e.sw * 0.5), x = q.x - q.hz * off, z = q.z + q.hx * off; pp++; if (!pcov(x, z)) ph++; } } }
   chk("the sidewalks are continuous: the pavement mesh covers the middle of the pavement strip along every road (" + ph + " gaps in " + pp + " samples)", ph === 0);
   grp.userData.dispose(); }
 { // a car footprint swept along every junction turn and every lane stays on the asphalt (the car can never be stopped by an invisible edge)

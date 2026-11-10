@@ -135,6 +135,7 @@ export function shapeRamps(ex, edges) {
   // where a ramp leaves or joins, the deck's parapet has a gap (the mesh leaves it open): the drivable width is open there too
   for (const e of edges) if (e.hw && e.rail > 0 && e.kind !== "ramp" && e.ds1 > e.ds0) { const g = (ex.ramps ?? []).filter((r) => r.gap && r.gap[1] >= e.ds0 && r.gap[0] <= e.ds1).map((r) => ({ s0: r.gap[0], s1: r.gap[1], side: r.gap[2] })); if (g.length) e.gaps = g; }
   for (const e of edges) {
+    if (e.kind === "express-descent") { e.ha = 0; e.hb = e.len; continue; }      // a descent climbs over its whole length (highwaytails.js uses the same profile)
     if (e.kind !== "ramp" || e.h0 === e.h1) continue;
     const r = ex.ramps?.find((q) => q.id === e.id), lim = ex.half + (r?.half ?? e.half) + 1.0, up = e.h1 > e.h0, at = {};
     // the first point along the edge, from the deck end, that is clear of the deck's footprint: the climb must be done there (rising ramp: its last such point is where it ends)
@@ -158,7 +159,7 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
     // an edge with `fixed` is designed, not found (the expressway and its ramps): its geometry and cross-section are exactly as given and are never nudged or measured against buildings
     if (e.fixed) {
       const path = new Path(pts), F = e.fixed, lv = e.lv ?? 0;
-      edges.push({ id: e.id, a: e.a, b: e.b, path, len: path.len, half: F.half, sw: F.sw ?? 0, med: F.med ?? 0, lanesPerDir: F.lanes ?? 1, lw: F.lane ?? XS.lane, shoulder: F.shoulder ?? 0, laneOff: F.laneOff ?? null, oneWay: !!e.oneWay, cls: e.kind ?? "express", kind: e.kind ?? "express", hw: !!e.hw, lv, mask: maskOfLv(lv), h0: e.h0 ?? 0, h1: e.h1 ?? e.h0 ?? 0, comp: e.comp ?? 0, lanes: [null, null], rawHalf: F.half, clr: Infinity, foot: false, struct: e.struct ?? null,
+      edges.push({ id: e.id, rural: !!e.rural, a: e.a, b: e.b, path, len: path.len, half: F.half, sw: F.sw ?? 0, med: F.med ?? 0, lanesPerDir: F.lanes ?? 1, lw: F.lane ?? XS.lane, shoulder: F.shoulder ?? 0, laneOff: F.laneOff ?? null, oneWay: !!e.oneWay, cls: e.kind ?? "express", kind: e.kind ?? "express", hw: !!e.hw, lv, mask: maskOfLv(lv), h0: e.h0 ?? 0, h1: e.h1 ?? e.h0 ?? 0, comp: e.comp ?? 0, lanes: [null, null], rawHalf: F.half, clr: Infinity, foot: false, struct: e.struct ?? null,
         ds0: e.s0 ?? 0, ds1: e.s1 ?? 0, rail: F.rail ?? (e.kind === "ramp" ? DECK.rampParapet : e.hw ? DECK.parapet : 0), endInset: F.endInset ?? (e.kind === "express-end" ? DECK.endStop : 0) });   // rail: the parapet (not drivable); endInset: where the drivable surface stops short of a dead end (the end barrier)
       continue;
     }
@@ -176,7 +177,7 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
     const foot = clr < XS.minDrivableClearance;
     const X = foot ? { half: 0, med: 0, lanes: 1, shoulder: 0, laneW: XS.lane } : crossSection(cls, Math.max(avail - XS.frontage, Math.min(avail, XS.minHalf)), rawHalf), half = X.half;   // keep a strip of pavement against the buildings: people step out of a car onto it, and doors open onto it
     let sw = foot ? Math.max(1.0, Math.min(XS.pavement, clr - 0.3)) : Math.min(XS.pavement, Math.max(0, avail - half)); if (!foot && sw < XS.minPavement) sw = 0;
-    (foot ? foots : edges).push({ id: e.id, a: e.a, b: e.b, path, len: path.len, half, sw, med: X.med, lanesPerDir: X.lanes, lw: X.laneW, shoulder: X.shoulder, laneOff: null, oneWay: false, cls, kind: cls, hw: false, lv: 0, mask: LV_GROUND, h0: 0, h1: 0, comp: e.comp ?? 0, lanes: [null, null], rawHalf, clr, foot });
+    (foot ? foots : edges).push({ id: e.id, rural: !!e.rural, a: e.a, b: e.b, path, len: path.len, half, sw, med: X.med, lanesPerDir: X.lanes, lw: X.laneW, shoulder: X.shoulder, laneOff: null, oneWay: false, cls, kind: cls, hw: false, lv: 0, mask: LV_GROUND, h0: 0, h1: 0, comp: e.comp ?? 0, lanes: [null, null], rawHalf, clr, foot });
   }
   const byId = new Map([...edges, ...foots].map((e) => [e.id, e]));
   for (const e of edges) {
@@ -187,6 +188,9 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
   for (const n of nodes) n.deg = n.edges.length;
   // ---- junction polygons (lib3d/roadjunction.js): where the roads meet, one polygon per layer; the road ribbons start where it ends ----
   const jstat = buildJunctions(nodes, byId);
+  // Where a wide road narrows to a narrower one (a taper node), the drawn road IS the junction polygon over the cut zone at each side, which is narrower than the wide road's capsule: the surface
+  // query must follow the polygon there, not the capsule, so that what is drawn, what a car may drive on and what people see all agree.
+  for (const nd of nodes) if (nd.taper && nd.J && !nd.J.asph.disc) for (const id of nd.edges) { const e = byId.get(id); if (!e || e.hw) continue; e.tz ??= { a: 0, b: 0 }; if (e.a === nd.id) e.tz.a = nd.J.asph.cut.get(e.id * 2) ?? 0; if (e.b === nd.id) e.tz.b = nd.J.asph.cut.get(e.id * 2 + 1) ?? 0; }
   shapeRamps(raw.expressway, edges);
   // The END of a designed road that leads nowhere (the deck's two ends) is a flat cut across the road, `endInset` metres short of the last point, where the end barrier stands: not a half-circle
   // (every segment of a road is measured as a capsule, which would carry the road on past the barrier for a whole carriageway's width). Stored as planes: a point on the outer side of one is not road.
@@ -289,6 +293,7 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
   const patches = [];
   for (const c of conns) {
     if (nodes[c.node].fixedOnly && nodes[c.node].deg === 1) continue;   // the dead end of the deck: the deck covers the turning area, and the U-turn's patch would reach past the end barrier
+    { const nd = nodes[c.node]; if (nd.tdown || (nd.fixedOnly && nd.deg === 2) || (nd.taper && nd.J && !nd.J.asph.disc)) continue; }   // a touchdown carries straight on, and at a taper the junction polygon alone is the road (what is drawn is what is driven on)
     const ef = byId.get(lanes[c.from].edge), et = byId.get(lanes[c.to].edge), half = (ef.hw || et.hw ? Math.min(ef.half, et.half) : Math.max(ef.half, et.half)) + 0.4, P = c.path.pts, mk = lanes[c.from].mask | lanes[c.to].mask, pe = { id: -(c.id + 1), half, sw: 0, med: 0, mask: mk, h0: nodes[c.node].h, h1: nodes[c.node].h, comp: lanes[c.from].comp, conn: c.id, path: c.path }; byId.set(pe.id, pe); patches.push(pe);
     // the whole turn is swept, from the stop line to the next lane: a driver cuts corners, and must never meet an invisible edge
     for (let i = 0; i < P.length - 1; i += 2) {
@@ -330,6 +335,7 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
       if (list) for (const sg of list) {
         const e = byId.get(sg.e); if (!(e.mask & mask)) continue; const { d, t } = segDist(sg, x, z); if (hRef === hRef && Math.abs(segH(e, sg, t) - hRef) > LEVEL_GAP) continue;
         if (e.cuts && beyondEnd(e, x, z)) continue;
+        if (e.tz) { const sd = sg.s0 + t * sg.len; if (sd < e.tz.a || sd > e.len - e.tz.b) continue; }     // inside a taper: the junction polygon below decides
         let k = 0; while (k < nc && CAND[k].e !== e) k++;
         if (k < nc) { const c = CAND[k]; if (d < c.d) { c.sg = sg; c.t = t; c.d = d; } continue; }
         if (nc < CAND.length) { const c = CAND[nc++]; c.e = e; c.sg = sg; c.t = t; c.d = d; }
@@ -352,7 +358,7 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
       const nl = nhash.get(key(Math.floor(x / CELL), Math.floor(z / CELL)));
       if (nl) for (const n of nl) { if (!(n.mask & mask) || (hRef === hRef && Math.abs(n.h - hRef) > LEVEL_GAP)) continue; const d = Math.hypot(x - n.x, z - n.z), J = n.J;
         // the junction's own polygon (the same one that is drawn): carriageway inside the asphalt, pavement inside the pavement polygon
-        if (d <= n.radius || (J && inside(J.asph.poly, x, z))) { out.cls = 1; if (out.edge < 0) out.edge = n.edges[0]; out.d = Math.min(out.d, d); if (!best) out.h = n.h; } else if (out.cls !== 1 && !bestPav && (J ? inside(J.pave.poly, x, z) : d <= n.radius + XS.pavement)) bestPav = { d, e: byId.get(n.edges[0]) }; }
+        if ((d <= n.radius && !(n.taper && J && !J.asph.disc)) || (J && inside(J.asph.poly, x, z))) { out.cls = 1; if (out.edge < 0) out.edge = n.edges[0]; out.d = Math.min(out.d, d); if (!best) out.h = n.h; } else if (out.cls !== 1 && !bestPav && (J ? inside(J.pave.poly, x, z) : d <= n.radius + XS.pavement)) bestPav = { d, e: byId.get(n.edges[0]) }; }
       if (out.cls === 0 && bestPav) { out.cls = 2; out.edge = bestPav.e.id; out.d = bestPav.d; out.half = bestPav.e.half; out.sw = bestPav.e.sw; }
       return out;
     },
@@ -490,7 +496,7 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
     for (const [node, sFromA] of [[nodes[e.a], true], [nodes[e.b], false]]) {
       if (node.deg < 3 || e.len < 38) continue; const c = Math.min(0.42 * e.len - 2, mouth(e, node) + XS.crossingGap + 1.7); add(sFromA ? c : e.len - c);
     }
-    if (e.len > 150) add(e.len / 2);
+    if (e.len > 150 && !e.rural) add(e.len / 2);     // (a rural road, like the expressway's ground connectors, has nothing beside it to cross to)
   }
   G.crossings = crossings;
   const chash = new Map(); crossings.forEach((c, i) => { for (let a = Math.floor((c.x - 12) / CELL); a <= Math.floor((c.x + 12) / CELL); a++) for (let b = Math.floor((c.z - 12) / CELL); b <= Math.floor((c.z + 12) / CELL); b++) { const k = key(a, b); if (!chash.has(k)) chash.set(k, []); chash.get(k).push(i); } });

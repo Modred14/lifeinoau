@@ -8,6 +8,9 @@ import { createNav } from "./walker.js";
 import { buildRoadNet } from "./roadnet.js";
 import { dataUrl } from "./dataUrl.js";
 import { addBillboardCollision } from "./billboardSite.js";
+import { planFurniture } from "./furnitureplan.js";
+import { woodlandTrees, addWoodlandCollision } from "./woodland.js";
+import { addFurnitureCollision, addEmbankmentCollision } from "./structuresolid.js";
 
 /**
  * The columns of the expressway are solid on the ground (people and ground vehicles cannot walk or drive through one); the deck itself is 10 m up and is not. Columns standing in the lake need
@@ -15,7 +18,8 @@ import { addBillboardCollision } from "./billboardSite.js";
  */
 export function addPierCollision(world, hw) {
   if (!hw) return 0; let n = 0;
-  for (const p of hw.piers ?? []) if (!p.water) { world.addPost(p.x, p.z, Math.hypot(hw.pierSpec.col[0], hw.pierSpec.col[1]) / 2, { kind: "pier" }); n++; }
+  const [m0, m1] = hw.main ?? [-Infinity, Infinity];   // the straight deck is the main alignment; the tails beyond the rim are `outer` (they lie outside the map: lib3d/walker.js keeps them out of its grid's extent)
+  for (const p of hw.piers ?? []) if (!p.water) { world.addPost(p.x, p.z, Math.hypot(hw.pierSpec.col[0], hw.pierSpec.col[1]) / 2, p.s < m0 || p.s > m1 ? { kind: "pier", outer: true } : { kind: "pier" }); n++; }
   for (const p of hw.rampPiers ?? []) { world.addPost(p.x, p.z, 1.1, { kind: "pier" }); n++; }
   return n;
 }
@@ -25,6 +29,9 @@ export function buildServices(data, rawGraph) {
   const world = buildWorldCollision(data), graph = buildRoadGraph(rawGraph, { sdf: (x, z) => world.sdf(x, z, 16) });
   addPierCollision(world, rawGraph.expressway);   // after the graph: ground roads are laid out against buildings and water only, the piers were placed clear of them
   addBillboardCollision(world, data.places);       // the two concrete footings of each billboard are solid (the screen is 8 m up and is not); they stand well clear of every road, so nothing that drives or walks is ever in their way
+  // Street furniture and the low parts of ramps and descents are solid too. The furniture is planned once, here, from the finished graph; the meshes (lib3d/roadfurniture.js) are built from the same plan, so what
+  // stands in the street is exactly what cannot be walked or driven through. (Planned before its own posts exist, so the plan does not see them.)
+  graph.furniturePlan = planFurniture(graph); addFurnitureCollision(world, graph.furniturePlan); addEmbankmentCollision(world, graph); addWoodlandCollision(world, woodlandTrees(data), graph);
   const nav = createNav({ world, graph }), net = buildRoadNet(data);
   return { data, world, graph, nav, net };
 }

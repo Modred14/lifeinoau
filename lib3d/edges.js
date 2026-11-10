@@ -25,8 +25,8 @@ export function mergeRuns(edges, gap = 2) {
 }
 
 /** data: map data, S: metres to scene units, color: road colour. Returns { group, dispose }. */
-export function buildEdges(data, S, { color = "#343b46", keepOut = [] } = {}) {
-  const b = data.bounds, group = new THREE.Group(), runs = mergeRuns(rimEdges(data.roads, b)), pos = [], col = [], idx = [], c = new THREE.Color(color), stubs = [];
+export function buildEdges(data, S, { color = "#343b46", keepOut = [], joins = [] } = {}) {
+  const b = data.bounds, group = new THREE.Group(), runs = mergeRuns(rimEdges(data.roads, b)).filter((r) => !joins.some(([x, z]) => (r.side === "E" || r.side === "W" ? Math.abs(x - r.at) < 15 && z > r.a - 5 && z < r.b + 5 : Math.abs(z - r.at) < 15 && x > r.a - 5 && x < r.b + 5))), pos = [], col = [], idx = [], c = new THREE.Color(color), stubs = [];
   for (const r of runs) {
     const width = r.b - r.a, mid = (r.a + r.b) / 2, L = width < 30 ? 420 : 160, tip = width < 30 ? 0.7 : 0.45, sign = r.side === "E" || r.side === "S" ? 1 : -1, horiz = r.side === "E" || r.side === "W";
     const P = (along, out) => (horiz ? [r.at + sign * out, along] : [along, r.at + sign * out]); // [x, z] metres

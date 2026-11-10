@@ -57,9 +57,10 @@ const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
  * layer on that arm and d how much wider than the asphalt it is (the fillets shrink by that much, they are concentric). Returns { poly, cut: [per arm], rmax } or null when the construction fails.
  */
 export const diag = { why: "" };
-export function junctionPolygon(node, arms) {
+export function junctionPolygon(node, arms, { taper = false } = {}) {
   const n = arms.length; if (n < 2) return null; diag.why = "";
   const A = arms.map((a, k) => { const p0 = a.at(0), p1 = a.at(Math.min(8, a.len * 0.45)); let ux = p1.x - p0.x, uz = p1.z - p0.z; const l = hyp(ux, uz) || 1; ux /= l; uz /= l; return { ...a, k, ux, uz, rx: -uz, rz: ux, th: Math.atan2(uz, ux), cap: Math.min(MAX_CUT, a.len * 0.45), need: 0.5 }; });
+  if (taper) for (const a of A) a.need = a.cap;       // a taper: the two mouths are as far apart as the roads allow, so the width changes over the longest, gentlest slope
   const order = [...A.keys()].sort((p, q) => A[p].th - A[q].th), corners = [];
   for (let m = 0; m < n; m++) {
     const i = A[order[m]], j = A[order[(m + 1) % n]]; if (n === 2 && m === 1 && i === j) break;
@@ -109,14 +110,23 @@ export function buildJunctions(nodes, byId, { skip = (e) => e.hw } = {}) {
     nd.J = null; const ends = [];
     for (const id of nd.edges) { const e = byId.get(id); if (!e || skip(e)) continue; if (e.a === nd.id) ends.push({ e, end: 0 }); if (e.b === nd.id) ends.push({ e, end: 1 }); }
     if (!ends.length) continue;
-    const J = {};
+    if (ends.length === 1 && nd.edges.some((id) => byId.get(id)?.hw)) { nd.tdown = true; continue; }   // a touchdown (the deck comes down to a ground road): the two carry straight on, so no round cap or disc is drawn over the deck's last metres
+    // A node flagged `taper` (where a wide road narrows to a narrower one: the expressway's ground road, lib3d/highway.js attachTails) gets a TAPER polygon that changes the width over the longest, gentlest
+    // slope the roads allow, not a disc as wide as the wider road (which would bulge over the narrower one). If any layer's polygon cannot be built the node keeps the disc.
+    let taper = ends.length === 2 && !!nd.taper, J = {};
+    for (let attempt = 0; attempt < 2; attempt++) {
+    J = {};
     for (const [name, spec] of Object.entries(LAYERS)) {
       const key = ends.map(({ e, end }) => e.id * 2 + end), arms = ends.map(({ e, end }) => { const { w, d } = spec(e); return { cls: e.cls, len: e.len, w, d, at: (s) => (end === 0 ? e.path.at(s, {}) : (() => { const q = e.path.at(e.len - s, {}); return { x: q.x, z: q.z, hx: -q.hx, hz: -q.hz }; })()) }; });
-      let r = ends.length >= 3 ? junctionPolygon(nd, arms) : null, disc = false;   // a bend (two roads) or a dead end needs no polygon: round joins and a cap are exact
+      let r = ends.length >= 3 ? junctionPolygon(nd, arms) : taper ? junctionPolygon(nd, arms, { taper: true }) : null, disc = false;   // a bend (two roads) or a dead end needs no polygon: round joins and a cap are exact
       if (!r && globalThis.process?.env?.DBGJ && name === "asph") console.error(`J node ${nd.id} deg${ends.length} (${Math.round(nd.x)},${Math.round(nd.z)}) ${diag.why} arms:` + ends.map(({ e, end }) => `${e.cls[0]}${Math.round(e.len)}m w${e.half}`).join(" "));
       // a cramped junction gets a disc about as wide as its typical road, not its widest
       if (!r) { const ws = arms.map((a) => a.w).sort((p, q) => p - q), R = ends.length >= 3 ? Math.min(ws.at(-1), ws[Math.floor(ws.length / 2)] * 1.1) + 0.2 : ws.at(-1) + 0.2; r = { poly: circle(nd.x, nd.z, R), cut: arms.map(() => 0), rmax: R }; disc = true; if (ends.length >= 3) discs++; } else polys++;
       J[name] = { poly: r.poly, cut: new Map(key.map((k, i) => [k, r.cut[i]])), rmax: r.rmax, disc };
+    }
+    if (!taper) break;
+    if (Object.values(J).every((l) => !l.disc)) { nd.taper = true; break; }
+    taper = false; nd.taper = false; discs++;     // a taper that could not be built: back to the disc
     }
     nd.J = J;
   }

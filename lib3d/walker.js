@@ -17,7 +17,7 @@ const SQ2 = Math.SQRT2;
  * world: a CollisionWorld. graph: a road graph (for pavement / carriageway / crossing costs), or null. The grid is filled in lazily, only where a search looks.
  */
 export function createNav({ world, graph = null }) {
-  let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const p of world.polys) { x0 = Math.min(x0, p.bb[0]); x1 = Math.max(x1, p.bb[2]); z0 = Math.min(z0, p.bb[1]); z1 = Math.max(z1, p.bb[3]); }
+  let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const p of world.polys) { if (p.tag?.outer || p.tag?.soft !== undefined) continue; x0 = Math.min(x0, p.bb[0]); x1 = Math.max(x1, p.bb[2]); z0 = Math.min(z0, p.bb[1]); z1 = Math.max(z1, p.bb[3]); }
   for (const n of graph?.nodes ?? []) { x0 = Math.min(x0, n.x); x1 = Math.max(x1, n.x); z0 = Math.min(z0, n.z); z1 = Math.max(z1, n.z); }
   x0 = Math.floor(x0 - 120); z0 = Math.floor(z0 - 120); x1 = Math.ceil(x1 + 120); z1 = Math.ceil(z1 + 120);
   const nx = Math.ceil((x1 - x0) / CELL), nz = Math.ceil((z1 - z0) / CELL), clear = new Uint8Array(nx * nz), cls = new Uint8Array(nx * nz), surf = {};

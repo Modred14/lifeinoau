@@ -103,9 +103,19 @@ const lShape = (x, z, w, d) => { const a = x - w / 2, b = x + w / 2, c = z - d /
  * Returns the real map data with the extra places added: new footprints, new places, billboard entries.
  * Pure: the loaded JSON is not changed. Safe to call twice (the second call returns the data untouched).
  */
+/**
+ * Two buildings the west interchange's off-ramp ran through (the ramp's lower end is at ground height, and a car on it was stopped by the building's wall). Their footprints are trimmed back to the ramp's
+ * carriageway and parapet plus 1.5 m, keeping about 82 % of each; found by tools/oau/trim-buildings.mjs and checked by tests/world-obstructions.test.mjs. Keyed by building id (the OSM footprint it replaces).
+ */
+export const BUILDING_TRIMS = {
+  553: [[-529.3, 730.6], [-529.3, 738.9], [-518.6, 735.3], [-515.1, 741.2], [-517.3, 746.9], [-516.9, 747], [-515.5, 747.4], [-511.8, 748.4], [-509.5, 749], [-498.2, 751.7], [-497.3, 749.5], [-508, 723.5]],
+  556: [[-522.2, 760], [-523.4, 760.2], [-524.5, 764.9], [-528.2, 757.2], [-556.6, 743.9], [-593.2, 761.4], [-593.2, 763.7], [-580.2, 792.1], [-576.6, 792.1], [-568.3, 787.4], [-576.6, 769.6], [-575.5, 766.1], [-544.7, 751.9], [-535.2, 772], [-524.5, 768.5], [-523.4, 763.7], [-518.6, 764.9], [-518, 761.9]],
+};
+
+const polyArea = (P) => { let a = 0; for (let i = 0, j = P.length - 1; i < P.length; j = i++) a += (P[j][0] + P[i][0]) * (P[j][1] - P[i][1]); return Math.abs(a / 2); };
 export function withExtras(data) {
   if (data.extrasAdded) return data;
-  const buildings = [...data.buildings], places = [...data.places];
+  const buildings = data.buildings.map((b) => (BUILDING_TRIMS[b.id] ? { ...b, pts: BUILDING_TRIMS[b.id].map((p) => p.slice()), area: Math.round(polyArea(BUILDING_TRIMS[b.id])), trimmed: true } : b)), places = [...data.places];
   let next = buildings.reduce((m, q) => Math.max(m, q.id), -1) + 1;
   for (const e of BUILDINGS) {
     if (places.some((p) => p.id === e.id)) continue;

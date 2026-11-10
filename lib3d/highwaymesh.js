@@ -7,6 +7,7 @@ import * as THREE from "three";
 import { heightOn } from "./roadgraph.js";
 import { ROAD_TOP, DECK } from "./roadsurface.js";
 import { glowMaterial } from "./glow.js";
+import { deckHeight } from "./highwaytails.js";
 
 const COL = { deck: "#3a3f47", shoulder: "#4a4f56", concrete: "#a9aca8", mark: "#ece9dd", edge: "#e6c34a", under: "#7d8083", rail: "#b9bcc0", lamp: "#8a8e93" };
 
@@ -50,6 +51,17 @@ function sweep(T, line, s0, s1, prof, hAt, step = 8, skip = null) {
     prev = row;
   }
 }
+/** Like sweep, but the profile may depend on the station: profAt(s, h) gives the rows for that station (the parapet and the median barrier taper away as the deck comes down to the ground). */
+function sweepP(T, line, s0, s1, profAt, hAt, step = 8, skip = null) {
+  const n = Math.max(1, Math.ceil((s1 - s0) / step)); let prev = null;
+  for (let i = 0; i <= n; i++) {
+    const s = s0 + ((s1 - s0) * i) / n, q = line.at(s), h = hAt(s), row = profAt(s, h).map(([l, dy]) => { const p = off(q, l); return [p[0], h + dy, p[1]]; });
+    if (prev && !(skip && skip(s - (s1 - s0) / n / 2))) for (let j = 0; j < row.length - 1; j++) T.quad(prev[j], prev[j + 1], row[j + 1], row[j]);
+    prev = row;
+  }
+}
+/** How much of its full height a parapet or barrier keeps at deck height h: all of it from 2.5 m up, none within 0.3 m of the ground, so the deck meets the ground with no raised edge. */
+export const taperK = (h) => Math.max(0, Math.min(1, (h - 0.3) / 2.2));
 const dashes = (T, line, s0, s1, l, w, hAt, dash = 4.5, gap = 7.5, dy = 0.03) => { for (let s = s0; s + dash < s1; s += dash + gap) sweep(T, line, s, s + dash, [[l - w / 2, dy], [l + w / 2, dy]], hAt, 2.5); };
 
 /** A box standing at (x, z) with its long side along (hx, hz): width across, depth along, from y0 up to y1. */
@@ -63,7 +75,7 @@ export function buildHighwayMeshes(ex, S) {
   const g = new THREE.Group(); g.name = "expressway"; g.position.y = ROAD_TOP * S;   // the whole structure stands on the asphalt of a trip (lib3d/roadsurface.js): a ramp starts exactly on the road, and the deck is at ROAD_TOP + H, which is where the car's tyres are
   const H = ex.H, half = ex.half, med = ex.med, L = ex.len;
   const line = new Line(ex.deck), scale = line.len / L || 1;      // the polyline is a hair different from the arc the descriptor was measured on
-  const hD = () => H, ds = (s) => Math.min(line.len, s * scale);
+  const hD = (s) => deckHeight(ex, s / scale), ds = (s) => Math.min(line.len, s * scale);
   const deckA = new Tris(S), deckS = new Tris(S), conc = new Tris(S), mk = new Tris(S), edgeM = new Tris(S), under = new Tris(S), rail = new Tris(S);
   const gaps = ex.ramps.filter((r) => r.gap).map((r) => ({ s0: r.gap[0], s1: r.gap[1], side: r.gap[2] }));
   const inGap = (s, side) => gaps.some((q) => q.side === side && s >= q.s0 && s <= q.s1);
@@ -75,18 +87,13 @@ export function buildHighwayMeshes(ex, S) {
     sweep(deckA, line, 0, line.len, [[Math.min(inner, lanesOuter), 0], [Math.max(inner, lanesOuter), 0]], hD, step);
     sweep(deckS, line, 0, line.len, [[Math.min(lanesOuter, outer), 0], [Math.max(lanesOuter, outer), 0]], hD, step);
   }
-  // the two aprons have no median: pave across it
-  for (const [a, b] of [[0, ex.apron], [L - ex.apron, L]]) sweep(deckA, line, ds(a), ds(b), [[-med, 0], [med, 0]], hD, step);
 
-  // ---- median: a concrete barrier (New Jersey section) along the middle, between the aprons
-  const mA = ds(ex.apron), mB = ds(L - ex.apron);
-  sweep(conc, line, mA, mB, [[-med, 0], [-med * 0.7, 0.35], [-med * 0.45, 0.85], [med * 0.45, 0.85], [med * 0.7, 0.35], [med, 0]], hD, step);
-  // end of the median, a sloped nose
-  for (const [s, dir] of [[mA, -1], [mB, 1]]) { const q = line.at(s), a = off(q, -med), b = off(q, med), c = off(q, med * 0.45), d = off(q, -med * 0.45), t = [q.x + q.hx * dir * 0, q.z]; void t; conc.quad([a[0], H, a[1]], [b[0], H, b[1]], [c[0], H + 0.85, c[1]], [d[0], H + 0.85, d[1]]); }
+  // ---- median: a concrete barrier (New Jersey section) all along the middle. It tapers down with the deck and is a flat concrete strip at the ground, where the road's own median takes over.
+  sweepP(conc, line, 0, line.len, (s, h) => { const k = taperK(h); return [[-med, 0], [-med * 0.7, 0.35 * k], [-med * 0.45, 0.85 * k], [med * 0.45, 0.85 * k], [med * 0.7, 0.35 * k], [med, 0]]; }, hD, step);
 
   // ---- markings
   for (const sg of [-1, 1]) {
-    sweep(edgeM, line, mA, mB, [[sg * (med + 0.35) - 0.08, 0.03], [sg * (med + 0.35) + 0.08, 0.03]], hD, step);               // yellow line beside the median
+    sweep(edgeM, line, 0, line.len, [[sg * (med + 0.35) - 0.08, 0.03], [sg * (med + 0.35) + 0.08, 0.03]], hD, step);               // yellow line beside the median
     sweep(mk, line, 0, line.len, [[sg * (half - shw) - 0.1, 0.03], [sg * (half - shw) + 0.1, 0.03]], hD, step);              // white edge line at the shoulder
     for (let k = 1; k < ex.lanes; k++) dashes(mk, line, 0, line.len, sg * (med + k * lane), 0.14, hD);
   }
@@ -94,32 +101,30 @@ export function buildHighwayMeshes(ex, S) {
   // ---- parapets (concrete, both sides; open where a ramp leaves or joins), and the metal rail above them
   for (const sg of [-1, 1]) {
     const o = sg * half, i = sg * (half - par), top = 0.95;
-    sweep(conc, line, 0, line.len, [[i, 0], [i, top], [o, top], [o, 0]], hD, step, (s) => inGap(s / scale, sg));
+    sweepP(conc, line, 0, line.len, (s, h) => { const t = top * taperK(h); return [[i, 0], [i, t], [o, t], [o, 0]]; }, hD, step, (s) => inGap(s / scale, sg) || taperK(hD(s)) < 0.02);   // none where the deck is at the ground
     // the rail posts and the rail itself on top of the parapet
-    sweep(rail, line, 0, line.len, [[sg * (half - par / 2), top + 0.55], [sg * (half - par / 2), top + 0.65]], hD, step, (s) => inGap(s / scale, sg));
-    for (let s = 4; s < line.len; s += 4) { const sv = s / scale; if (inGap(sv, sg)) continue; const q = line.at(s), p = off(q, sg * (half - par / 2)); box(rail, p[0], p[1], q.hx, q.hz, 0.12, 0.12, H + top, H + top + 0.7); }
+    sweep(rail, line, 0, line.len, [[sg * (half - par / 2), top + 0.55], [sg * (half - par / 2), top + 0.65]], hD, step, (s) => inGap(s / scale, sg) || taperK(hD(s)) < 0.999);
+    for (let s = 4; s < line.len; s += 4) { const sv = s / scale; if (inGap(sv, sg)) continue; const hh = hD(s); if (taperK(hh) < 0.999) continue; const q = line.at(s), p = off(q, sg * (half - par / 2)); box(rail, p[0], p[1], q.hx, q.hz, 0.12, 0.12, hh + top, hh + top + 0.7); }
   }
 
   // ---- girder under the deck: side faces and a flat soffit, with the parapet outer face continued down
-  sweep(under, line, 0, line.len, [[-half, 0], [-half + 1.2, -gird], [half - 1.2, -gird], [half, 0]], hD, step);
-  // end barriers across the two ends
-  // (a solid block DECK.endStop thick, as the drivable surface in lib3d/roadgraph.js stops at its inner face: a car stops against it)
-  for (const [s, f] of [[0, 1], [line.len, -1]]) { const q = line.at(s); box(conc, q.x + q.hx * f * DECK.endStop / 2, q.z + q.hz * f * DECK.endStop / 2, q.hx, q.hz, half * 2, DECK.endStop, H, H + 1.1); }
+  sweepP(under, line, 0, line.len, (s, h) => { const g = Math.min(gird, Math.max(0.05, h)); return [[-half, 0], [-half + 1.2 * g / gird, -g], [half - 1.2 * g / gird, -g], [half, 0]]; }, hD, step);   // the girder never goes below the ground: at the foot of a descent it is a flat slab on it
+  // (there are no end barriers: both ends of the deck come down to the ground and carry on as roads, lib3d/highwaytails.js)
 
   // ---- T-piers: a column and a cross-head under the girder; wider spans over the lake are the same shape with a taller column
   const colW = ex.pierSpec.col[0], colD = ex.pierSpec.col[1], headW = ex.pierSpec.head[0], headD = ex.pierSpec.head[1], headBottom = H - gird - 1.6;
   const piers = new Tris(S);
-  for (const p of ex.piers) { box(piers, p.x, p.z, p.hx, p.hz, colW, colD, -ROAD_TOP, headBottom); box(piers, p.x, p.z, p.hx, p.hz, headW, headD, headBottom, H - gird); }
+  for (const p of ex.piers) { const ph = p.h ?? H, hb = ph - gird - 1.6; box(piers, p.x, p.z, p.hx, p.hz, colW, colD, -ROAD_TOP, hb); box(piers, p.x, p.z, p.hx, p.hz, headW, headD, hb, ph - gird); }
 
   // ---- lamp posts in the median: pole and a double arm, every ~40 m
   // The heads are a mesh of their own (userData.lampHead) that glows at night, and each spills a pool of light on the deck beneath it (userData.lampPool): campusReal.js sets both from the night level.
   const lamps = new Tris(S), lampHeads = new Tris(S), POOL_ALONG = 50, POOL_ACROSS = 12, pools = [];   // the pools are longer than the 42 m between lamps, so they overlap; 12 m across keeps each on its own carriageway
-  for (const [x, z] of ex.lamps) {
+  for (const [x, z, lh = H] of ex.lamps) {
     let best = 0, bd = 1e12; for (let i = 0; i < line.P.length; i++) { const d = (line.P[i].x - x) ** 2 + (line.P[i].z - z) ** 2; if (d < bd) { bd = d; best = i; } }
-    const q = line.at(line.s[best]); box(lamps, x, z, q.hx, q.hz, 0.35, 0.35, H, H + 11); box(lamps, x, z, q.hx, q.hz, 14, 0.25, H + 10.7, H + 10.95);
+    const q = line.at(line.s[best]); box(lamps, x, z, q.hx, q.hz, 0.35, 0.35, lh, lh + 11); box(lamps, x, z, q.hx, q.hz, 14, 0.25, lh + 10.7, lh + 10.95);
     for (const sg of [-1, 1]) {
-      const p = off(q, sg * 6.2); box(lampHeads, p[0], p[1], q.hx, q.hz, 0.6, 1.1, H + 10.45, H + 10.7);
-      const a = POOL_ALONG / 2, c = POOL_ACROSS / 2; pools.push([[-c, -a, 0, 0], [c, -a, 1, 0], [c, a, 1, 1], [-c, a, 0, 1]].map(([u, w, tu, tv]) => [p[0] + -q.hz * u + q.hx * w, p[1] + q.hx * u + q.hz * w, tu, tv]));
+      const p = off(q, sg * 6.2); box(lampHeads, p[0], p[1], q.hx, q.hz, 0.6, 1.1, lh + 10.45, lh + 10.7);
+      const a = POOL_ALONG / 2, c = POOL_ACROSS / 2; { const quad = [[-c, -a, 0, 0], [c, -a, 1, 0], [c, a, 1, 1], [-c, a, 0, 1]].map(([u, w, tu, tv]) => [p[0] + -q.hz * u + q.hx * w, p[1] + q.hx * u + q.hz * w, tu, tv]); quad.y = lh + 0.07; pools.push(quad); }
     }
   }
 
@@ -137,20 +142,20 @@ export function buildHighwayMeshes(ex, S) {
   }
   for (const p of ex.rampPiers) box(rampPi, p.x, p.z, p.hx, p.hz, 2.4, 1.8, -ROAD_TOP, Math.max(0.5, p.h - 1.6));
 
-  const add = (t, c, o) => { const m = t.mesh(c, o); if (m) g.add(m); };
-  add(deckA, COL.deck, { rough: 0.95, offset: 1 }); add(deckS, COL.shoulder, { rough: 0.95, offset: 1 });
-  add(ramp, COL.deck, { rough: 0.95, offset: 1 }); add(rampS, COL.shoulder, { rough: 0.95, offset: 1 });
-  add(mk, COL.mark, { rough: 0.8, offset: 3, shadow: false }); add(edgeM, COL.edge, { rough: 0.8, offset: 3, shadow: false }); add(rampM, COL.mark, { rough: 0.8, offset: 3, shadow: false });
-  add(conc, COL.concrete, { rough: 0.92 }); add(rampC, COL.concrete, { rough: 0.92 });
-  add(under, COL.under, { rough: 0.95 }); add(rampU, COL.under, { rough: 0.95 });
-  add(piers, COL.concrete, { rough: 0.95 }); add(rampPi, COL.concrete, { rough: 0.95 });
-  add(rail, COL.rail, { rough: 0.4, metal: 0.6 }); add(lamps, COL.lamp, { rough: 0.5, metal: 0.5 });
+  const add = (name, t, c, o) => { const m = t.mesh(c, o); if (m) { m.name = "hw-" + name; g.add(m); } };
+  add("deckA", deckA, COL.deck, { rough: 0.95, offset: 1 }); add("deckS", deckS, COL.shoulder, { rough: 0.95, offset: 1 });
+  add("ramp", ramp, COL.deck, { rough: 0.95, offset: 1 }); add("rampS", rampS, COL.shoulder, { rough: 0.95, offset: 1 });
+  add("mk", mk, COL.mark, { rough: 0.8, offset: 3, shadow: false }); add("edgeM", edgeM, COL.edge, { rough: 0.8, offset: 3, shadow: false }); add("rampM", rampM, COL.mark, { rough: 0.8, offset: 3, shadow: false });
+  add("conc", conc, COL.concrete, { rough: 0.92 }); add("rampC", rampC, COL.concrete, { rough: 0.92 });
+  add("under", under, COL.under, { rough: 0.95 }); add("rampU", rampU, COL.under, { rough: 0.95 });
+  add("piers", piers, COL.concrete, { rough: 0.95 }); add("rampPi", rampPi, COL.concrete, { rough: 0.95 });
+  add("rail", rail, COL.rail, { rough: 0.4, metal: 0.6 }); add("lamps", lamps, COL.lamp, { rough: 0.5, metal: 0.5 });
   const heads = lampHeads.mesh("#f4e9b8", { rough: 0.4, shadow: false });   // the lit lamp heads: dark by day, glowing as the night level rises
   if (heads) { heads.material.emissive.set("#ffcf70"); heads.material.emissiveIntensity = 0; heads.userData.lampHead = true; g.add(heads); }
   const poolMat = glowMaterial(0xffc46b); poolMat.side = THREE.DoubleSide;   // (no canvas, as in the node tests: no glow texture, so no pools)
   if (poolMat.map && pools.length) {
-    const pos = new Float32Array(pools.length * 18), uv = new Float32Array(pools.length * 12), y = (H + 0.07) * S;   // just above the deck's paint
-    pools.forEach((qd, i) => { [0, 1, 2, 0, 2, 3].forEach((k, j) => { const v = qd[k]; pos.set([v[0] * S, y, v[1] * S], i * 18 + j * 3); uv.set([v[2], v[3]], i * 12 + j * 2); }); });
+    const pos = new Float32Array(pools.length * 18), uv = new Float32Array(pools.length * 12);   // just above the deck's paint
+    pools.forEach((qd, i) => { [0, 1, 2, 0, 2, 3].forEach((k, j) => { const v = qd[k]; pos.set([v[0] * S, qd.y * S, v[1] * S], i * 18 + j * 3); uv.set([v[2], v[3]], i * 12 + j * 2); }); });
     const pg = new THREE.BufferGeometry(); pg.setAttribute("position", new THREE.BufferAttribute(pos, 3)); pg.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
     const pm = new THREE.Mesh(pg, poolMat); pm.userData.lampPool = true; pm.renderOrder = 1; pm.frustumCulled = false; g.add(pm);
   }

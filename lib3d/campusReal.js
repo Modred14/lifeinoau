@@ -5,7 +5,8 @@
 import * as THREE from "three";
 import { ROAD_COLORS } from "./roadmesh.js";
 import { acquireRoadScene } from "./roadAssets.js";
-import { corridorKeepOut } from "./highway.js";
+import { corridorKeepOut, connectorKeepOut, tailJoins } from "./highway.js";
+import { woodlandTrees, treeOnRoad } from "./woodland.js";
 import { SCENE_S, TRIP_LOWER, ROAD_LAYER_Y } from "./roadsurface.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { buildGround } from "./ground.js";
@@ -46,9 +47,9 @@ export function buildRealCampus(data, meta = {}) {
   const x0 = b.x0 * S, x1 = b.x1 * S, z0 = b.z0 * S, z1 = b.z1 * S;
   // ---- ground: patchy grass and sand that fades into the sky-blue at its rim, so the map ends softly (ground.js). Water stays blue. ----
   const ground = buildGround(data, S); root.add(ground);
-  const rimKeep = data.places.filter((p) => p.x < b.x0 + 60 || p.x > b.x1 - 60 || p.z < b.z0 + 60 || p.z > b.z1 - 160).map((p) => [p.x, p.z, 60]).concat(corridorKeepOut());
+  const rimKeep = data.places.filter((p) => p.x < b.x0 + 60 || p.x > b.x1 - 60 || p.z < b.z0 + 60 || p.z > b.z1 - 160).map((p) => [p.x, p.z, 60]).concat(corridorKeepOut(), connectorKeepOut());
   let roadFlat = null, roadSurface = null, highway = null, furniture = null, roadScene = null, tripOn = false;
-  const edges = buildEdges(data, S, { keepOut: rimKeep }); root.add(edges.group); // roads that run off the map, and a belt of trees along its rim
+  const edges = buildEdges(data, S, { keepOut: rimKeep, joins: tailJoins() }); root.add(edges.group); // roads that run off the map, and a belt of trees along its rim
   for (const m of [flat(data.areas.park, "#5aa064", 0.03, { layer: 2 }), flat(data.areas.sports, "#4c9a68", 0.035, { layer: 2 }), flat(data.areas.wood, "#2f6b3b", 0.04, { layer: 2 }),
     flat(data.areas.pitch, "#2fb98a", 0.06, { layer: 3 }), flat(data.areas.water, "#2f6f95", 0.05, { layer: 3, rough: 0.15, metal: 0.2 }), flat(data.areas.parking, "#46505c", 0.06, { layer: 3 }), (roadFlat = flat(data.roads, "#343b46", 0.08, { layer: 4 }))]) if (m) root.add(m);
 
@@ -76,9 +77,7 @@ export function buildRealCampus(data, meta = {}) {
 
   // ---- trees: only inside the wooded area the map actually shows ----
   let forest = null;
-  const rnd = rngOf(7), trees = [];
-  for (const w of data.areas.wood) { const xs = w.pts.map((p) => p[0]), zs = w.pts.map((p) => p[1]), ax = Math.min(...xs), bx = Math.max(...xs), az = Math.min(...zs), bz = Math.max(...zs);
-    for (let t = 0; t < 4000 && trees.length < 900; t++) { const x = ax + rnd() * (bx - ax), z = az + rnd() * (bz - az); if (inPoly(x, z, w.pts) && !trees.some((q) => Math.hypot(q[0] - x, q[1] - z) < 8)) trees.push([x, z, 0.8 + rnd() * 0.9]); } }
+  const trees = woodlandTrees(data);   // (lib3d/woodland.js: the same list the collision world makes solid)
   if (trees.length) { const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.1, 0.14, 1.0, 6), new THREE.MeshStandardMaterial({ color: "#4a3426" }), trees.length), crown = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.75, 0), new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 1, flatShading: true }), trees.length), d = new THREE.Object3D(), c = new THREE.Color();
     trees.forEach(([x, z, k], i) => { d.position.set(x * S, 0.5 * k, z * S); d.scale.setScalar(k); d.updateMatrix(); trunk.setMatrixAt(i, d.matrix); d.position.set(x * S, 1.5 * k, z * S); d.updateMatrix(); crown.setMatrixAt(i, d.matrix); crown.setColorAt(i, c.set("#2f6b3b").lerp(new THREE.Color("#4f8f3f"), rnd())); });
     trunk.castShadow = crown.castShadow = true; root.add(trunk, crown); forest = { trees, trunk, crown }; }
@@ -134,7 +133,7 @@ export function buildRealCampus(data, meta = {}) {
   const clearForest = (graph) => {
     if (!forest) return; const { trees: T, trunk: tk, crown: cr } = forest, d = new THREE.Object3D(), surf = {}, c = new THREE.Color();
     T.forEach(([x, z, k], i) => {
-      const blocked = graph && [[0, 0], [2.2, 0], [-2.2, 0], [0, 2.2], [0, -2.2]].some(([dx, dz]) => graph.surfaceAt(x + dx, z + dz, surf).cls !== 0);
+      const blocked = treeOnRoad(graph, x, z, surf);
       const kk = blocked ? 0.0001 : k; d.rotation.set(0, 0, 0); d.scale.setScalar(kk); d.position.set(x * S, 0.5 * kk, z * S); d.updateMatrix(); tk.setMatrixAt(i, d.matrix); d.position.set(x * S, 1.5 * kk, z * S); d.updateMatrix(); cr.setMatrixAt(i, d.matrix);
     }); void c; tk.instanceMatrix.needsUpdate = cr.instanceMatrix.needsUpdate = true;
   };

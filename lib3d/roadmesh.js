@@ -95,15 +95,16 @@ function arrow(soup, x, z, hx, hz, turn = 0) {
  */
 export function buildRoadMeshes(graph, S, y = ROAD_LAYER_Y) {
   const pav = new Soup(S), kerb = new Soup(S), asp = new Soup(S), sho = new Soup(S), med = new Soup(S), mk = new Soup(S), yel = new Soup(S), mY = new Soup(S), mK = new Soup(S);
+  const tp = (n) => n.taper && n.J && !n.J.asph.disc;      // a taper node: the polygon is the whole road there, so the wider road's ribbon must not run on through it
   const cutOf = (n, e, end, layer) => n.J?.[layer].cut.get(e.id * 2 + end) ?? 0;
   for (const e of [...graph.edges, ...graph.foots]) {
     if (e.hw) continue;
     const na = graph.nodes[e.a], nb = graph.nodes[e.b], ca = { asph: cutOf(na, e, 0, "asph"), kerb: cutOf(na, e, 0, "kerb"), pave: cutOf(na, e, 0, "pave") }, cb = { asph: cutOf(nb, e, 1, "asph"), kerb: cutOf(nb, e, 1, "kerb"), pave: cutOf(nb, e, 1, "pave") };
-    const range = (layer, h, soup) => { const s0 = ca[layer], s1 = e.len - cb[layer]; if (s1 - s0 < 0.05) return; soup.ribbon(sampleRange(e.path, s0, s1, 3), h, s0 < 0.05, e.len - s1 < 0.05); };
+    const range = (layer, h, soup) => { const s0 = ca[layer], s1 = e.len - cb[layer]; if (s1 - s0 < 0.05) return; soup.ribbon(sampleRange(e.path, s0, s1, 3), h, s0 < 0.05 && !na.tdown, e.len - s1 < 0.05 && !nb.tdown); };
     if (e.foot) { pav.ribbon(sampleRange(e.path, 0, e.len, 3), Math.max(0.8, e.sw)); continue; }
     range("pave", e.half + e.sw, pav); range("kerb", e.half + 0.25, kerb); range("asph", e.half, asp);
     // the stretch of each arm between the node and the mouth: the road runs right up to the node (it is carriageway there for the surface query too), and the polygon adds the corners
-    for (const [layer, h, soup] of [["pave", e.half + e.sw, pav], ["kerb", e.half + 0.25, kerb], ["asph", e.half, asp]]) { if (ca[layer] > 0.05) soup.ribbon(sampleRange(e.path, 0, ca[layer], 3), h, false, false); if (cb[layer] > 0.05) soup.ribbon(sampleRange(e.path, e.len - cb[layer], e.len, 3), h, false, false); }
+    for (const [layer, h, soup] of [["pave", e.half + e.sw, pav], ["kerb", e.half + 0.25, kerb], ["asph", e.half, asp]]) { if (ca[layer] > 0.05 && !tp(na)) soup.ribbon(sampleRange(e.path, 0, ca[layer], 3), h, false, false); if (cb[layer] > 0.05 && !tp(nb)) soup.ribbon(sampleRange(e.path, e.len - cb[layer], e.len, 3), h, false, false); }
     // markings stop short of the junctions at each end: the zebra crossing and the stop line come first
     const open = (n, c) => (n.deg >= 3 && !n.J?.asph.disc ? c.asph + XS.stopGap + 1.2 : n.deg >= 3 ? n.radius + 4 : 0.3), s0 = open(na, ca), s1 = e.len - open(nb, cb), W = 0.12;
     const m0 = ca.asph, m1 = e.len - cb.asph;                                                // the median, the shoulders and the kerb run right up to the junction's mouth
@@ -134,7 +135,8 @@ export function buildRoadMeshes(graph, S, y = ROAD_LAYER_Y) {
     for (const [soup, layer] of [[pav, "pave"], [kerb, "kerb"], [asp, "asph"]]) soup.polygon(n.J[layer].poly);
     if (n.J.asph.disc && n.deg >= 3) { /* the disc is the polygon: nothing more to add */ }
   }
-  for (const p of graph.patches) { if (p.h0 > 0.4 || !(p.mask & 1)) continue; const e0 = graph.lanes[graph.conns[p.conn].from], n = graph.nodes[graph.conns[p.conn].node]; if (n.J && !n.J.asph.disc) continue; const P = sampleRange(p.path, 0, p.path.len, 1.6); asp.ribbon(P, p.half); }   // only a disc junction needs the swept corner; a polygon already has its kerb returns
+  // (a touchdown carries straight on, so it has no swept corner to draw)
+  for (const p of graph.patches) { if (p.h0 > 0.4 || !(p.mask & 1)) continue; const e0 = graph.lanes[graph.conns[p.conn].from], n = graph.nodes[graph.conns[p.conn].node]; if ((n.J && !n.J.asph.disc) || n.tdown) continue; const P = sampleRange(p.path, 0, p.path.len, 1.6); asp.ribbon(P, p.half); }   // only a disc junction needs the swept corner; a polygon already has its kerb returns
   // stop lines across the lane at the end of each approach to a junction
   for (const l of graph.lanes) {
     if (l.hw || graph.nodes[l.to].deg < 3 || l.len < 6) continue; const e = graph.byEdge.get(l.edge), a = l.path.at(l.len - 0.5, {}), nx = -a.hz, nz = a.hx, dirW = e.half - (e.med ?? 0), w = dirW / 2 - 0.15, d = 0.2;

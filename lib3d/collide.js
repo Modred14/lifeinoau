@@ -54,12 +54,12 @@ export class CollisionWorld {
   sdf(x, z, max = 40) {
     const pi = this.inside(x, z);
     if (pi >= 0) { const p = this.polys[pi]; let best = 1e9; for (let k = 0; k < p.count; k++) best = Math.min(best, this._seg(this.E[p.first + k], x, z)[0]); return -best; }
-    let best = max; this._near(x, z, max, (id) => { const d = this._seg(this.E[id], x, z)[0]; if (d < best) best = d; }); return best;
+    let best = max; this._near(x, z, max, (id) => { const e = this.E[id], tg = e.poly >= 0 ? this.polys[e.poly].tag : e.tag, d = this._seg(e, x, z)[0] + (tg?.soft ?? 0); if (d < best) best = d; }); return best;   // (a `soft` solid, such as a street light or a tree on a pavement, counts as that much further away: the planner may route people past it, but it is as solid as any wall to everything that moves)
   }
   /** True if a circle of radius r at (x, z) touches a static solid. */
-  blockedAt(x, z, r = 0) { if (this.inside(x, z) >= 0) return true; let hit = false; this._near(x, z, r, (id) => { if (!hit && this._seg(this.E[id], x, z)[0] < r) hit = true; }); return hit; }
+  blockedAt(x, z, r = 0, vehicle = false) { if (this.inside(x, z) >= 0) return true; let hit = false; this._near(x, z, r, (id) => { if (hit) return; if (vehicle) { const e = this.E[id], tg = e.poly >= 0 ? this.polys[e.poly].tag : e.tag; if (tg?.foot) return; } if (this._seg(this.E[id], x, z)[0] < r) hit = true; }); return hit; }   // `vehicle`: ignore what only stops people on foot (the walls round the low part of a ramp, which a car drives along the top of)
   /** Does a vehicle-sized box (three circles along its length) touch a static solid? */
-  boxBlocked(x, z, hx, hz, hl, hw, margin = 0) { const r = hw + margin, n = Math.max(2, Math.ceil((2 * hl) / (hw * 1.5))); for (let i = 0; i < n; i++) { const u = -hl + hw + (i * (2 * hl - 2 * hw)) / (n - 1); if (this.blockedAt(x + hx * u, z + hz * u, r)) return true; } return false; }
+  boxBlocked(x, z, hx, hz, hl, hw, margin = 0) { const r = hw + margin, n = Math.max(2, Math.ceil((2 * hl) / (hw * 1.5))); for (let i = 0; i < n; i++) { const u = -hl + hw + (i * (2 * hl - 2 * hw)) / (n - 1); if (this.blockedAt(x + hx * u, z + hz * u, r, true)) return true; } return false; }
 
   /** Pushes a circle (x, z, r) out of everything solid. Returns { x, z, hit, nx, nz } (nx, nz is the average direction it was pushed). */
   pushOut(x, z, r, { ignore = null, bodies = true } = {}) {
