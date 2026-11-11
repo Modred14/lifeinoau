@@ -77,7 +77,7 @@ export function buildRealCampus(data, meta = {}) {
 
   // ---- trees: only inside the wooded area the map actually shows ----
   let forest = null;
-  const trees = woodlandTrees(data);   // (lib3d/woodland.js: the same list the collision world makes solid)
+  const trees = woodlandTrees(data), rnd = rngOf(7);   // (lib3d/woodland.js: the same list the collision world makes solid; rnd only varies the leaf colour, so it cannot move a tree)
   if (trees.length) { const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.1, 0.14, 1.0, 6), new THREE.MeshStandardMaterial({ color: "#4a3426" }), trees.length), crown = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.75, 0), new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 1, flatShading: true }), trees.length), d = new THREE.Object3D(), c = new THREE.Color();
     trees.forEach(([x, z, k], i) => { d.position.set(x * S, 0.5 * k, z * S); d.scale.setScalar(k); d.updateMatrix(); trunk.setMatrixAt(i, d.matrix); d.position.set(x * S, 1.5 * k, z * S); d.updateMatrix(); crown.setMatrixAt(i, d.matrix); crown.setColorAt(i, c.set("#2f6b3b").lerp(new THREE.Color("#4f8f3f"), rnd())); });
     trunk.castShadow = crown.castShadow = true; root.add(trunk, crown); forest = { trees, trunk, crown }; }
