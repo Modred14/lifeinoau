@@ -3,6 +3,8 @@
   "candidates": [
     { "id": "bbc-world-service", "name": "BBC World Service", "country": "United Kingdom", "genre": "News", "url": "https://stream.live.vc.bbcmedia.co.uk/bbc_world_service", "homepage": "https://www.bbc.co.uk/sounds/play/live:bbc_world_service" },
     { "id": "somafm-groove-salad", "name": "SomaFM Groove Salad", "country": "United States", "genre": "Downtempo", "url": "https://ice1.somafm.com/groovesalad-128-mp3", "homepage": "https://somafm.com/groovesalad/" },
+    { "id": "somafm-seven-inch-soul", "name": "SomaFM Seven Inch Soul", "country": "United States", "genre": "Soul · Funk", "url": "https://ice1.somafm.com/7soul-128-mp3", "homepage": "https://somafm.com/7soul/" },
+    { "id": "somafm-fluid", "name": "SomaFM Fluid", "country": "United States", "genre": "Instrumental hip-hop", "url": "https://ice1.somafm.com/fluid-128-mp3", "homepage": "https://somafm.com/fluid/" },
     { "id": "radio-paradise", "name": "Radio Paradise", "country": "United States", "genre": "Eclectic", "url": "https://stream.radioparadise.com/mp3-128", "homepage": "https://radioparadise.com" },
     { "id": "nts-1", "name": "NTS Radio 1", "country": "United Kingdom", "genre": "Eclectic", "url": "https://stream-relay-geo.ntslive.net/stream", "homepage": "https://www.nts.live" },
     { "id": "kexp", "name": "KEXP 90.3 Seattle", "country": "United States", "genre": "Indie", "url": "https://kexp.streamguys1.com/kexp128.mp3", "homepage": "https://www.kexp.org" }

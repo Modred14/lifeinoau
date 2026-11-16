@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && node tools/radio/verify-stations.mjs --write --soft && next build",
     "start": "next start",
     "seed": "node prisma/seed.js",
     "test": "node tests/run-all.mjs",
     "realtime": "node --env-file=.env realtime/server.js",
     "test:chat": "node tests/e2e/chat.e2e.mjs",
+    "test:radio": "node tests/e2e/radio.e2e.mjs",
+    "radio:verify": "node tools/radio/verify-stations.mjs --write",
     "build:roads": "node tools/oau/dump-merged.mjs /tmp/oau-merged.json && python3 tools/oau/roadgraph.py /tmp/oau-merged.json tools/oau/roadgraph.raw.json && node tools/oau/refine-roads.mjs"
   },
   "dependencies": {

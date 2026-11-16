@@ -2,19 +2,19 @@
 // GET /api/radio/meta?id=<station id>  ->  { title, name }   what is playing on a radio station right now.
 // The browser cannot read a stream's track information from an <audio> element, so this reads it for the player: it opens the station's stream asking for its metadata
 // (lib/radio/icy.js), reads just the first block, and closes the connection. Safety rules, because this makes the server open a URL:
-//   - the id must be one of OUR stations (public/data/radio-stations.json): the URL is never taken from the request, so this cannot be pointed at anything else,
+//   - the id must be one of OUR stations (public/data/radio-stations.json, bundled at build): the URL is never taken from the request, so this cannot be pointed at anything else,
 //   - you must be logged in, the answer is cached for 20 s per station (so any number of players cost one upstream request per station per 20 s),
 //   - 6 s timeout, at most ~70 KB read, and a station with no track information is remembered for 10 minutes and not asked again.
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { getUserId } from "@/lib/auth";
 import { cleanStations } from "@/lib/radio/stations";
+import stationFile from "@/public/data/radio-stations.json";   // imported, so it is bundled with the function: on Vercel, files in public/ are not guaranteed to be on the function's disk
 import { parseStreamTitle, readIcyBlock } from "@/lib/radio/icy";
 export const dynamic = "force-dynamic";
 const cache = (globalThis.__radioMeta ??= new Map());   // id -> { at, ttl, body }
 const NONE = { title: "", name: "" };
 
-async function stations() { try { return cleanStations(JSON.parse(await readFile(path.join(process.cwd(), "public", "data", "radio-stations.json"), "utf8"))); } catch { return []; } }
+const STATIONS = cleanStations(stationFile);
+async function stations() { return STATIONS; }
 
 export async function GET(req) {
   if (!(await getUserId())) return Response.json({ error: "Please log in." }, { status: 401 });

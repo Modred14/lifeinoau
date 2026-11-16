@@ -4,6 +4,7 @@
 //   node tools/radio/verify-stations.mjs                 check every candidate in tools/radio/candidates.json and print a report (changes nothing)
 //   node tools/radio/verify-stations.mjs --write         ...and put the ones that pass into public/data/radio-stations.json (existing entries are re-checked too)
 //   node tools/radio/verify-stations.mjs --check         re-check the stations already in the game (use it on a schedule: streams move and die) and exit 1 if any failed
+//   --soft                                              for the Vercel build: never fails the deploy, and never replaces the committed list with an empty one (see package.json "build")
 //   --allow-http                                         accept http:// streams (they cannot play on the https site: the game skips them, so this is only for testing)
 //
 // What "works" means: the server answers 200, within 10 s sends at least 16 KB, and those bytes really ARE audio (an MP3 frame, ADTS AAC or an Ogg page: not an HTML page, a
@@ -54,10 +55,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const byId = new Map(); for (const s of [...existing, ...cands]) byId.set(s.id, { ...(byId.get(s.id) ?? {}), ...s });
   const all = [...byId.values()]; if (!all.length) { console.log("Nothing to check: add stations to tools/radio/candidates.json."); process.exit(0); }
   const pass = [], fail = [];
-  for (const s of all) { const r = await check(s, { allowHttp: args.has("--allow-http") }); console.log(`${r.ok ? "PASS" : "FAIL"}  ${s.id.padEnd(22)} ${r.ok ? `${r.format} · ${r.meta === "icy" ? "track info" + (r.title ? ` ("${r.title.slice(0, 40)}")` : "") : "no track info"}` : r.why}`);
-    if (r.ok) { const clean = cleanStation({ ...s, format: r.format, meta: r.meta, verifiedAt: new Date().toISOString().slice(0, 10) }); if (clean) pass.push(clean); else fail.push([s.id, "incomplete entry (needs id, name, url)"]); } else fail.push([s.id, r.why]); }
+  const results = await Promise.all(all.map((s) => check(s, { allowHttp: args.has("--allow-http") })));   // all streams at once: the whole check takes about one timeout, not one per station
+  all.forEach((s, i) => { const r = results[i]; console.log(`${r.ok ? "PASS" : "FAIL"}  ${s.id.padEnd(22)} ${r.ok ? `${r.format} · ${r.meta === "icy" ? "track info" + (r.title ? ` ("${r.title.slice(0, 40)}")` : "") : "no track info"}` : r.why}`);
+    if (r.ok) { const clean = cleanStation({ ...s, format: r.format, meta: r.meta, verifiedAt: new Date().toISOString().slice(0, 10) }); if (clean) pass.push(clean); else fail.push([s.id, "incomplete entry (needs id, name, url)"]); } else fail.push([s.id, r.why]); });
   console.log(`\n${pass.length} stream(s) work, ${fail.length} do not.`);
+  if (args.has("--soft") && !pass.length) { console.log("WARNING: no stream passed (is this machine offline?). Keeping public/data/radio-stations.json as it is; the radio will use whatever is in it."); process.exit(0); }
   if (args.has("--write")) { fs.writeFileSync(OUT, JSON.stringify({ _readme: read(OUT)._readme, stations: pass }, null, 2) + "\n"); console.log(`Wrote ${pass.length} station(s) to public/data/radio-stations.json (failed ones are left out).`); }
   else if (pass.length) console.log("Run again with --write to add the working ones to the game.");
-  process.exit(args.has("--check") && fail.length ? 1 : 0);
+  process.exit(args.has("--check") && !args.has("--soft") && fail.length ? 1 : 0);
 }
