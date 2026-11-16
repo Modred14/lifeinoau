@@ -29,6 +29,18 @@ Cheapest long-term route: pick a provider that has a free tier (Groq and Google 
 
 Set these on the **website** (Vercel). The realtime server does not need them.
 
+### 1b. Server-side hearing (recommended, optional)
+
+The browser's own speech recognition (`SpeechRecognition`) only exists in Chrome, Edge and Safari, depends on Google's/Apple's speech service, and is blocked or unreliable in Brave, Firefox and some Android browsers. If you set a speech-to-text model, the game records each thing the player says (from the **same** microphone stream, no second one) and the server transcribes it. It is used when the browser has no recognition, when the browser's recognition is blocked or keeps failing, or when the microphone is loud but nothing is being recognised.
+
+| Variable | Meaning |
+|---|---|
+| `VOICE_STT_MODEL` | a speech-to-text model on an OpenAI-compatible `/audio/transcriptions` endpoint (e.g. one of Groq's Whisper models: check the provider's current model list). **This is what switches it on** |
+| `VOICE_STT_API_KEY` | optional; defaults to `VOICE_LLM_API_KEY` |
+| `VOICE_STT_BASE_URL` | optional; defaults to `VOICE_LLM_BASE_URL` |
+
+On Vercel an utterance is one short request (capped at 2 MB, under Vercel's 4.5 MB request limit) to `POST /api/voice/transcribe?callId=...`; it is login-protected, tied to the player's own answered call and rate limited.
+
 ### 2. Her voice
 
 **Default (free, no key): the player's own device voice.** The browser's built-in text-to-speech speaks each sentence. The game picks the best installed English female voice for Mummy (Nigerian English first, then British, preferring "Natural" / "Neural" voices) and a male one for Daddy. How warm it sounds depends on the device: Windows 11 with Edge, and recent iPhones and Androids, have good voices; older devices sound more robotic.
@@ -72,7 +84,7 @@ Call controls: mute, speaker, end call and the call timer. States shown: Connect
 
 ## What is limited by browsers
 
-* **Speech recognition** uses the browser's built-in engine (`SpeechRecognition`). It streams while the player talks, but it works in **Chrome, Edge and Safari** only. **Firefox cannot do voice calls**; the call explains this instead of starting. In Chrome the audio is processed by Google's speech service, so the player needs an internet connection and, on first use, microphone permission.
+* **Speech recognition** uses the browser's built-in engine (`SpeechRecognition`). It streams while the player talks, but it works in **Chrome, Edge and Safari** only. **Firefox has no built-in recognition**: with `VOICE_STT_MODEL` set it uses the server's hearing; without it the call is a written call and the screen says why. In Chrome the audio is processed by Google's speech service, so the player needs an internet connection and, on first use, microphone permission.
 * **"Speaker"** cannot switch between earpiece and loudspeaker on the web (browsers do not allow it). The Speaker button changes the loudness of her voice.
 * **Phones**: mobile browsers only play sound that follows a tap, which is why sound is unlocked in the call button's tap. If the browser still blocks it, the screen shows a "Tap to hear Mummy" button. Voice calls need the screen on; the game asks the phone to keep it awake during a call.
 * **Echo**: use headphones for the best interruption experience. On speakerphone, echo cancellation in the browser handles most of it, and the game also ignores words that match what she is currently saying.
@@ -85,9 +97,9 @@ Call controls: mute, speaker, end call and the call timer. States shown: Connect
 * `lib/voice/session.js` the call state machine: listening, interrupting, mute, timeouts, retries
 * `lib/voice/speaker.js`, `lib/voice/client.js` her voice output, the microphone, the streaming client
 * `lib/voice/playerVoice.js`, `lib/voice/rtcRelay.js` voice between players (WebRTC, and the server-side relay)
-* `src/app/api/voice/{status,parent,speak}/route.js` the server endpoints
+* `src/app/api/voice/{status,parent,speak,transcribe}/route.js` the server endpoints
 * `components/VoiceCall.js`, `components/voice-call.css` the call screen
-* `tests/voice.test.mjs` the automated tests
+* `tests/voice.test.mjs`, `tests/voice-stt.test.mjs` the automated tests
 
 ## Checking it by hand
 

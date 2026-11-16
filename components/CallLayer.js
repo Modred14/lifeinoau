@@ -22,6 +22,7 @@ import { Icon } from "./Icon";
 import VoiceCall, { PlayerVoicePanel } from "./VoiceCall"; // the live voice call with Mummy / Daddy, and the voice of a call between players
 import { rtcLink } from "@/lib/chat";
 import * as playerVoice from "@/lib/voice/playerVoice";
+import { voiceStatus } from "@/lib/voice/client";
 import "./phone.css"; // the call is drawn inside the same handset as the phone (frame, status bar, notch, home bar), so it reuses those rules
 import "./call-layer.css";
 
@@ -166,6 +167,8 @@ function Result({ c, onDone }) {
 }
 
 const HOME_LINES = { dialing: "Connecting…", calling: "Calling…", ringing: "Ringing…", answered: "Picked up", declined: "Call declined", noanswer: "No answer", talking: "Connected", ended: "Call ended" };
+// Said out loud on the screen when a call that was picked up could not be a live voice call, so a written reply is never mistaken for a conversation.
+const NO_VOICE = { unavailable: "Live voice is not switched on for this game yet, so this was a short written call.", unsupported: "This browser cannot do live voice calls. Use Chrome, Edge or Safari for a spoken conversation." };
 function HomeCall({ ui }) {
   const r = ui.result, c = r?.call, gift = BigInt(r?.giftKobo ?? 0), talking = ["talking", "ended"].includes(ui.phase), over = ui.phase === "ended" || ui.phase === "declined" || ui.phase === "noanswer";
   const o = c?.outcome;
@@ -175,6 +178,7 @@ function HomeCall({ ui }) {
       <p className={`cx-kind${ui.phase === "talking" ? " cx-live" : ""}`} aria-live="polite">{ui.phase === "talking" && <span className="cx-dot" aria-hidden="true" />}{HOME_LINES[ui.phase]}</p>
       <h2>{ui.name}</h2>
       {talking && c?.line && <p className="cx-quote">{c.line}</p>}
+      {talking && ui.novoice && <p className="cx-sub" role="status">{NO_VOICE[ui.novoice]}</p>}
       {ui.phase === "noanswer" && <p className="cx-sub">{c.line}</p>}
       {ui.phase === "declined" && <p className="cx-sub">{c.line}</p>}
       {talking && gift > 0n && <p className="cx-big cx-gift" aria-live="polite">+{naira(gift)}</p>}
@@ -193,6 +197,7 @@ export default function CallLayer() {
   busyRef.current = !!active;
   useEffect(() => (ready ? startCallPolling(() => busyRef.current) : undefined), [ready]);
   useTick(!!(active || ui), 250);
+  useEffect(() => { if (ready) voiceStatus(); }, [ready]); // know whether live voice is set up BEFORE the player taps Call, so that very tap can unlock sound
   useEffect(() => playerVoice.wire(rtcLink), []); // the voice of calls between players rides on the chat connection
   useEffect(() => { playerVoice.sync(active); }, [active?.id, active?.status, active?.role]); // starts when the call is answered, stops the moment it is not
   const id = active?.id ?? null;

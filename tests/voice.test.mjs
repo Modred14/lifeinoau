@@ -43,10 +43,10 @@ assert.equal(isEcho("", "anything"), true); assert.equal(isEcho("hello", ""), fa
 assert.ok(endOfTurnMs("yes") > endOfTurnMs("I need some money for books."), "a short unfinished phrase waits longer");
 
 // ---------- provider ----------
-assert.deepEqual(publicStatus(voiceConfig({})), { available: false, speech: null }, "no key = not available, never pretended");
+assert.deepEqual(publicStatus(voiceConfig({})), { available: false, speech: null, stt: null }, "no key = not available, never pretended");
 const env = { VOICE_LLM_API_KEY: "k", VOICE_LLM_BASE_URL: "https://x.test/v1/", VOICE_LLM_MODEL: "m" };
-assert.deepEqual(publicStatus(voiceConfig(env)), { available: true, speech: "browser" });
-assert.deepEqual(publicStatus(voiceConfig({ ...env, VOICE_TTS_API_KEY: "t", VOICE_TTS_BASE_URL: "https://t.test", VOICE_TTS_MODEL: "tts", VOICE_TTS_VOICE_MUMMY: "w" })), { available: true, speech: "server" });
+assert.deepEqual(publicStatus(voiceConfig(env)), { available: true, speech: "browser", stt: null });
+assert.deepEqual(publicStatus(voiceConfig({ ...env, VOICE_TTS_API_KEY: "t", VOICE_TTS_BASE_URL: "https://t.test", VOICE_TTS_MODEL: "tts", VOICE_TTS_VOICE_MUMMY: "w" })), { available: true, speech: "server", stt: null });
 assert.equal(voiceConfig(env).llmBase, "https://x.test/v1", "trailing slash removed");
 assert.ok(!JSON.stringify(publicStatus(voiceConfig(env))).includes("k\""), "the key never reaches the browser");
 const sse = (...deltas) => new Response(new ReadableStream({ start(c) { for (const d of deltas) c.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ delta: { content: d } }] })}\n\n`)); c.enqueue(new TextEncoder().encode("data: [DONE]\n\n")); c.close(); } }), { status: 200 });
