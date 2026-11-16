@@ -50,6 +50,13 @@ const T_HEAD = 1.3, S0 = 2.0, PED_W = 0.6, PED_ACTS = ["phone", "talk", "lookAro
  * smoothly for whatever is `gap` metres ahead (moving at `vl`), never harder than it must. `gap` = Infinity means a clear road.
  * The simulation, and the journey-time estimate in tripplan.js, both call this, so what is promised on screen is what the vehicle does.
  */
+/**
+ * Are two vehicles on the same level, i.e. can their bodies meet? The old test compared the coarse `lvl` flag (y > 2 m = deck), which splits a ramp in two at 2 m: two cars in the same ramp lane, one
+ * at 1.99 m and one at 2.01 m, were "on different levels" and neither saw the other, so they drove through each other. Vehicles on one lane always share a level; otherwise it is the difference in height
+ * that decides (the ground and the deck are 10 m apart; the surfaces of a ramp and the road it joins are within a metre or two near the foot).
+ */
+export const LEVEL_SEP = 3.0;
+export const sameLevel = (a, b) => a.laneId === b.laneId || Math.abs((a.y ?? 0) - (b.y ?? 0)) < LEVEL_SEP;
 export function idmAccel(v, v0, aMax, brake, gap = Infinity, vl = 0, s0 = S0) {
   let acc = aMax * (1 - Math.pow(v / Math.max(0.5, v0), 4));
   if (gap < Infinity) { const sStar = s0 + Math.max(0, v * T_HEAD + (v * (v - vl)) / (2 * Math.sqrt(aMax * brake))); acc -= aMax * (sStar / Math.max(0.05, gap)) ** 2; }
@@ -213,7 +220,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     const H = Math.min(60, 10 + a.v * 3.4), P = a.route.path; let best = null; probe.hl = a.len / 2; probe.hw = a.wid / 2 + 0.1;
     const consider = (b, bLen, bWid, bv, bhx, bhz) => {
       if (a.pass?.has(b.id)) return;   // see stepVehicle: a vehicle this one has been let through
-      if ((b.lvl ?? (b.y > 2 ? 1 : 0)) !== a.lvl) return;   // the deck and the ground never meet
+      if (!sameLevel(a, b)) return;   // the deck and the ground never meet
       const dx = b.x - a.x, dz = b.z - a.z; if (dx * dx + dz * dz > (H + a.len + bLen) ** 2) return;
       const behind = dx * a.hx + dz * a.hz < -0.2, B = { x: b.x, z: b.z, hx: bhx, hz: bhz, hl: bLen / 2, hw: bWid / 2 };
       for (let k = 0; k <= H; k += 1.2) {
@@ -256,7 +263,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     const P = a.route.path; sweepBox.hl = a.len / 2; sweepBox.hw = a.wid / 2;
     for (let sc = Math.max(a.s, nxt.start - 1); sc <= nxt.end + a.len / 2; sc += 1.2) {
       if (sc > P.len) break; P.at(sc, sweepAt); sweepBox.x = sweepAt.x; sweepBox.z = sweepAt.z; sweepBox.hx = sweepAt.hx; sweepBox.hz = sweepAt.hz;
-      for (const b of vehicles) { if (b === a || b.done || b.lvl !== a.lvl) continue; if (Math.abs(b.x - sweepBox.x) > 8 || Math.abs(b.z - sweepBox.z) > 8) continue; if (boxesOverlap(sweepBox, { x: b.x, z: b.z, hx: b.hx, hz: b.hz, hl: b.len / 2, hw: b.wid / 2 }, -0.2)) return true; }
+      for (const b of vehicles) { if (b === a || b.done || !sameLevel(a, b)) continue; if (Math.abs(b.x - sweepBox.x) > 8 || Math.abs(b.z - sweepBox.z) > 8) continue; if (boxesOverlap(sweepBox, { x: b.x, z: b.z, hx: b.hx, hz: b.hz, hl: b.len / 2, hw: b.wid / 2 }, -0.2)) return true; }
       // the player's own car is not under the junction rules, so give way to it: where it is now, and where it will be in a moment at its present speed
       for (const [id, b] of external) { if ((b.len ?? 0) < 2 || a.ignoreExt?.has(id)) continue; const reach = Math.min(40, Math.max(0, b.v ?? 0) * 3.5) + (b.len ?? 4) / 2;
         if (Math.abs(b.x - sweepBox.x) > 9 + reach || Math.abs(b.z - sweepBox.z) > 9 + reach) continue; if (boxesOverlap(sweepBox, { x: b.x + (b.hx ?? 0) * reach / 2, z: b.z + (b.hz ?? 1) * reach / 2, hx: b.hx ?? 0, hz: b.hz ?? 1, hl: reach, hw: (b.wid ?? 1.8) / 2 }, -0.3)) return true; }
@@ -269,7 +276,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     const P = a.route.path; exitBox.hl = a.len / 2 + 0.3; exitBox.hw = a.wid / 2;
     for (let k = a.len / 2 + 0.5; k <= a.len + 6; k += 1.5) {
       const sc = nxt.end + k; if (sc > P.len) break; P.at(sc, exitAt); exitBox.x = exitAt.x; exitBox.z = exitAt.z; exitBox.hx = exitAt.hx; exitBox.hz = exitAt.hz;
-      for (const b of vehicles) { if (b === a || b.done || b.lvl !== a.lvl) continue; if (Math.abs(b.x - exitBox.x) > 9 || Math.abs(b.z - exitBox.z) > 9) continue; if (boxesOverlap(exitBox, { x: b.x, z: b.z, hx: b.hx, hz: b.hz, hl: b.len / 2, hw: b.wid / 2 }, 0.1)) return true; }
+      for (const b of vehicles) { if (b === a || b.done || !sameLevel(a, b)) continue; if (Math.abs(b.x - exitBox.x) > 9 || Math.abs(b.z - exitBox.z) > 9) continue; if (boxesOverlap(exitBox, { x: b.x, z: b.z, hx: b.hx, hz: b.hz, hl: b.len / 2, hw: b.wid / 2 }, 0.1)) return true; }
     }
     return false;
   };
@@ -297,7 +304,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
   // Is the lane `sub` beside/around `a` free from 14 m behind to 28 m ahead (more behind when the one behind is faster)?
   function laneFree(a, sub) {
     for (const b of vehicles) {
-      if (b === a || b.done || b.laneId !== a.laneId || b.lvl !== a.lvl) continue;
+      if (b === a || b.done || b.laneId !== a.laneId) continue;
       const lw = laneWOf(a.laneId), lat = Math.max(b.lat, b.sub * lw); if (Math.abs(lat - sub * lw) > 2.4 && Math.abs(b.lat - sub * lw) > 2.4) continue;
       const d = b.laneS - a.laneS; if (d > -(a.len + 8 + Math.max(0, b.v - a.v) * 2.5) && d < b.len + 24 + Math.max(0, a.v - b.v) * 1.5) return false;
     }
@@ -330,7 +337,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     if (lead?.who && a.stillFor > 3 && vehicles.includes(lead.who) && !a.pass?.has(lead.who.id)) {
       const b = lead.who, turnLock = a.res != null && a.stillFor > 4 && b.res == null && b.stopLine != null, mutual = b.lead?.who === a && b.stillFor > 3 && a.id > b.id;
       // a chain that has stood for 8 s because of a vehicle in ANOTHER lane (arms of a junction, or lanes of a wide road, whose boxes overlap): that is geometry, not a queue, so let it pass
-      const crossLane = b.laneId !== a.laneId && a.stillFor > 8 && b.stillFor > 8;
+      const crossLane = b.laneId !== a.laneId && a.stillFor > (a.y > 2 || b.y > 2 ? 40 : 8) && b.stillFor > (a.y > 2 || b.y > 2 ? 40 : 8);   // on the deck and ramps a merge is resolved by waiting for a gap: a car is only let through another after a very long lock (40 s), not after 8 s
       if (turnLock || mutual || crossLane) { (a.pass ??= new Set()).add(b.id); stats.deadlocksBroken++; lead = leaderOf(a); }
     }
     a.lead = lead; if (lead) { gap = lead.gap; vl = lead.v; }
@@ -355,7 +362,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
   function setBodies() { if (!world) return; for (const a of vehicles) if (a.lvl === 0) world.setBody("veh" + a.id, { x: a.x, z: a.z, hx: a.hx, hz: a.hz, hl: a.len / 2, hw: a.wid / 2, kind: a.kind, vehicle: a }); else world.removeBody("veh" + a.id); }   // on the deck: no body on the ground for walkers to bump into
   function guardOverlaps() { // a safety net, not the mechanism: if two boxes ever overlap, the one behind stops dead
     for (let i = 0; i < vehicles.length; i++) for (let j = i + 1; j < vehicles.length; j++) {
-      const a = vehicles[i], b = vehicles[j]; if (a.done || b.done || a.lvl !== b.lvl || a.pass?.has(b.id) || b.pass?.has(a.id)) continue; if (Math.abs(a.x - b.x) > 8 || Math.abs(a.z - b.z) > 8) continue;
+      const a = vehicles[i], b = vehicles[j]; if (a.done || b.done || !sameLevel(a, b) || a.pass?.has(b.id) || b.pass?.has(a.id)) continue; if (Math.abs(a.x - b.x) > 8 || Math.abs(a.z - b.z) > 8) continue;
       const A = { x: a.x, z: a.z, hx: a.hx, hz: a.hz, hl: a.len / 2, hw: a.wid / 2 }, B = { x: b.x, z: b.z, hx: b.hx, hz: b.hz, hl: b.len / 2, hw: b.wid / 2 };
       if (boxesOverlap(A, B, 0.05)) { stats.maxOverlapFixed++; const behind = ((b.x - a.x) * a.hx + (b.z - a.z) * a.hz) > 0 ? a : b; behind.v = 0; }
     }

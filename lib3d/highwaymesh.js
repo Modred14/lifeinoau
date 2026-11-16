@@ -137,7 +137,8 @@ export function buildHighwayMeshes(ex, S) {
     sweep(ramp, rl, sv0, sv1, [[-hw + 0.4, 0], [hw - 0.4, 0]], hOf, 5);
     sweep(rampS, rl, sv0, sv1, [[-hw, 0], [-hw + 0.4, 0]], hOf, 5); sweep(rampS, rl, sv0, sv1, [[hw - 0.4, 0], [hw, 0]], hOf, 5);
     sweep(rampM, rl, sv0, sv1, [[-hw + 0.4 - 0.08, 0.03], [-hw + 0.4 + 0.08, 0.03]], hOf, 5); sweep(rampM, rl, sv0, sv1, [[hw - 0.4 - 0.08, 0.03], [hw - 0.4 + 0.08, 0.03]], hOf, 5);
-    for (const sg of [-1, 1]) sweep(rampC, rl, sv0, sv1, [[sg * hw, -0.2], [sg * hw, 0.95], [sg * (hw - DECK.rampParapet), 0.95], [sg * (hw - DECK.rampParapet), 0]], hOf, 5);
+    // the parapet tapers away as the ramp comes down to the ground (the same taperK as the deck's), so no concrete wall stands in a road where a ramp meets one
+    for (const sg of [-1, 1]) sweepP(rampC, rl, sv0, sv1, (s, h) => { const t = 0.95 * taperK(h); return [[sg * hw, -0.2 * Math.min(1, t / 0.95)], [sg * hw, t], [sg * (hw - DECK.rampParapet), t], [sg * (hw - DECK.rampParapet), 0]]; }, hOf, 5, (s) => taperK(hOf(s)) < 0.02);
     sweep(rampU, rl, sv0, sv1, [[-hw, 0], [-hw + 0.8, -1.4], [hw - 0.8, -1.4], [hw, 0]], hOf, 5);
   }
   for (const p of ex.rampPiers) box(rampPi, p.x, p.z, p.hx, p.hz, 2.4, 1.8, -ROAD_TOP, Math.max(0.5, p.h - 1.6));
