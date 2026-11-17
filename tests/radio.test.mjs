@@ -11,7 +11,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // ---- stations ----
 const good = { id: "demo-fm", name: "Demo FM", url: "https://example.com/live.mp3", format: "mp3", meta: "icy", verifiedAt: "2026-11-01" };
 ok("a verified station is accepted", cleanStation(good)?.id === "demo-fm");
-ok("a station that was never verified is not", cleanStation({ ...good, verifiedAt: "" }) === null);
+ok("a station that has not been stamped by the stream check yet is still listed (verifiedAt is optional)", cleanStation({ ...good, verifiedAt: "" })?.id === "demo-fm" && cleanStation({ ...good, verifiedAt: undefined })?.verifiedAt === "");
 ok("no id, no name, a bad URL, a non-http URL or one with a password are all rejected", [{ ...good, id: "" }, { ...good, name: "" }, { ...good, url: "nope" }, { ...good, url: "ftp://x/y" }, { ...good, url: "https://u:p@x.com/a" }, { ...good, id: "Has Space" }].every((s) => cleanStation(s) === null));
 ok("duplicates are dropped and bad entries skipped, order kept", cleanStations({ stations: [good, { ...good, name: "Again" }, null, { id: "b", name: "B", url: "https://b.com/s", verifiedAt: "x" }] }).map((s) => s.id).join() === "demo-fm,b");
 ok("nonsense input gives an empty list, not an error", cleanStations(null).length === 0 && cleanStations({ stations: "x" }).length === 0 && cleanStations({}).length === 0);

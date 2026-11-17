@@ -1,4 +1,65 @@
 {
-  "_readme": "Only stations that passed tools/radio/verify-stations.mjs belong here (it fills this file in). Add candidates to tools/radio/candidates.json and run: node tools/radio/verify-stations.mjs --write",
-  "stations": []
+  "_readme": "The stations players get. Streams are public listening streams the stations publish; confirm each station's terms. The build (tools/radio/verify-stations.mjs --write --soft) opens every stream, stamps the working ones with verifiedAt and track-info support, and removes any that are definitely gone. Add candidates in tools/radio/candidates.json.",
+  "stations": [
+    {
+      "id": "somafm-groove-salad",
+      "name": "SomaFM Groove Salad",
+      "country": "United States",
+      "genre": "Downtempo",
+      "url": "https://ice1.somafm.com/groovesalad-128-mp3",
+      "format": "mp3",
+      "homepage": "https://somafm.com/groovesalad/",
+      "meta": "none"
+    },
+    {
+      "id": "somafm-seven-inch-soul",
+      "name": "SomaFM Seven Inch Soul",
+      "country": "United States",
+      "genre": "Soul · Funk",
+      "url": "https://ice1.somafm.com/7soul-128-mp3",
+      "format": "mp3",
+      "homepage": "https://somafm.com/7soul/",
+      "meta": "none"
+    },
+    {
+      "id": "somafm-fluid",
+      "name": "SomaFM Fluid",
+      "country": "United States",
+      "genre": "Instrumental hip-hop",
+      "url": "https://ice1.somafm.com/fluid-128-mp3",
+      "format": "mp3",
+      "homepage": "https://somafm.com/fluid/",
+      "meta": "none"
+    },
+    {
+      "id": "radio-paradise",
+      "name": "Radio Paradise",
+      "country": "United States",
+      "genre": "Eclectic",
+      "url": "https://stream.radioparadise.com/mp3-128",
+      "format": "mp3",
+      "homepage": "https://radioparadise.com",
+      "meta": "none"
+    },
+    {
+      "id": "nts-1",
+      "name": "NTS Radio 1",
+      "country": "United Kingdom",
+      "genre": "Eclectic",
+      "url": "https://stream-relay-geo.ntslive.net/stream",
+      "format": "mp3",
+      "homepage": "https://www.nts.live",
+      "meta": "none"
+    },
+    {
+      "id": "kexp",
+      "name": "KEXP 90.3 Seattle",
+      "country": "United States",
+      "genre": "Indie",
+      "url": "https://kexp.streamguys1.com/kexp128.mp3",
+      "format": "mp3",
+      "homepage": "https://www.kexp.org",
+      "meta": "none"
+    }
+  ]
 }

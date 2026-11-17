@@ -54,13 +54,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const existing = read(OUT).stations ?? [], cands = args.has("--check") ? [] : (read(CAND).candidates ?? []).filter((c) => c && c.url);
   const byId = new Map(); for (const s of [...existing, ...cands]) byId.set(s.id, { ...(byId.get(s.id) ?? {}), ...s });
   const all = [...byId.values()]; if (!all.length) { console.log("Nothing to check: add stations to tools/radio/candidates.json."); process.exit(0); }
-  const pass = [], fail = [];
+  const pass = [], fail = [], out = [], soft = args.has("--soft"), had = new Set(existing.map((e) => e.id));
+  const dead = (why) => /^HTTP (404|410)\b/.test(why) || /not MP3, AAC or Ogg/.test(why);   // definitely gone, as opposed to a network hiccup, a timeout or a region block
   const results = await Promise.all(all.map((s) => check(s, { allowHttp: args.has("--allow-http") })));   // all streams at once: the whole check takes about one timeout, not one per station
   all.forEach((s, i) => { const r = results[i]; console.log(`${r.ok ? "PASS" : "FAIL"}  ${s.id.padEnd(22)} ${r.ok ? `${r.format} · ${r.meta === "icy" ? "track info" + (r.title ? ` ("${r.title.slice(0, 40)}")` : "") : "no track info"}` : r.why}`);
-    if (r.ok) { const clean = cleanStation({ ...s, format: r.format, meta: r.meta, verifiedAt: new Date().toISOString().slice(0, 10) }); if (clean) pass.push(clean); else fail.push([s.id, "incomplete entry (needs id, name, url)"]); } else fail.push([s.id, r.why]); });
+    if (r.ok) { const clean = cleanStation({ ...s, format: r.format, meta: r.meta, verifiedAt: new Date().toISOString().slice(0, 10) }); if (clean) { pass.push(clean); out.push(clean); } else fail.push([s.id, "incomplete entry (needs id, name, url)"]); } else { fail.push([s.id, r.why]); if (soft && had.has(s.id) && !dead(r.why)) { const kept = cleanStation(s); if (kept) { out.push(kept); console.log(`      kept ${s.id}: the failure may be temporary (${r.why})`); } } } });
   console.log(`\n${pass.length} stream(s) work, ${fail.length} do not.`);
   if (args.has("--soft") && !pass.length) { console.log("WARNING: no stream passed (is this machine offline?). Keeping public/data/radio-stations.json as it is; the radio will use whatever is in it."); process.exit(0); }
-  if (args.has("--write")) { fs.writeFileSync(OUT, JSON.stringify({ _readme: read(OUT)._readme, stations: pass }, null, 2) + "\n"); console.log(`Wrote ${pass.length} station(s) to public/data/radio-stations.json (failed ones are left out).`); }
+  if (args.has("--write")) { fs.writeFileSync(OUT, JSON.stringify({ _readme: read(OUT)._readme, stations: out }, null, 2) + "\n"); console.log(`Wrote ${out.length} station(s) to public/data/radio-stations.json (${pass.length} verified now; stations that are definitely gone are left out).`); }
   else if (pass.length) console.log("Run again with --write to add the working ones to the game.");
   process.exit(args.has("--check") && !args.has("--soft") && fail.length ? 1 : 0);
 }

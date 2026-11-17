@@ -146,6 +146,12 @@ async function suite(label, contextOptions, mobile) {
   await until("recovered", async () => (await rs()).status === "playing", 8000); ok("when the network comes back (online event) the radio recovers by itself, with no button press", await advances());
   ok("...still only one stream", (await stats()).a + (await stats()).b === 1);
 
+  // a station that is down or blocked: it must say so within seconds (not after half a minute), and the player can still pick another or retry
+  await fetch(BASE + "/__refuse?on=1"); await fetch(BASE + "/__drop"); await page.waitForTimeout(100);
+  const t0 = Date.now(); await press("pickB");
+  await until("unavailable", async () => (await rs()).status === "error", 6000); ok("a station that never makes a sound is reported unavailable within a few seconds (its message tells the player what to do)", Date.now() - t0 < 4000 && /isn't available/.test(await page.evaluate(() => R.getRadio().error)), `${Date.now() - t0} ms`);
+  await fetch(BASE + "/__refuse?on=0"); await press("pickA"); await until("another station works", async () => (await rs()).status === "playing" && (await rs()).station === "test-a"); ok("picking another station afterwards works, with one stream only", (await advances()) && (await stats()).a + (await stats()).b === 1);
+
   // power off closes everything
   await press("off"); await until("all closed", async () => { const s = await stats(); return s.a + s.b === 0; }); ok("switching the radio off closes the stream", (await rs()).status === "off");
   ok("no page errors or console errors during the whole run", errors.length === 0, errors.join(" | "));
