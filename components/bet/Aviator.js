@@ -3,7 +3,8 @@
 // Tapping Bet shows a short loading screen while the server takes the bet; the plane only takes off once the server has answered, so the animation
 // never waits on the network (the flight's clock is the server's, handed over with the answer). Your stake leaves your wallet at once and comes back
 // if the bet is refused; tapping Cash out shows your win at once. The server is the only referee, and if it disagrees (the plane had already gone)
-// the win is taken back and the screen says why. The crash point stays on the server until the flight is over: nothing on screen is guessed.
+// the win is taken back and the screen says why. The server decides the crash point ONCE, before take-off, and sends it with the round (id, start time, crash point). This screen never
+// calculates, guesses or changes it: it only walks the shared curve up to that number and stops exactly on it (lib/bet/aviatorSync.js).
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -12,7 +13,8 @@ import { call } from "@/lib/client";
 import { game, run, cash, canAfford } from "@/lib/gameStore";
 import { toast } from "@/lib/toast";
 import { setServerNow, playSound, money, moneyK } from "@/lib/bet/betClient";
-import { centiAt, secAt, payout, fmtX, tier, MIN_STAKE, MAX_STAKE, RTP } from "@/lib/bet/aviatorMath.js";
+import { secAt, payout, fmtX, tier, capCenti, K, MIN_STAKE, MAX_STAKE, RTP } from "@/lib/bet/aviatorMath.js";
+import { makeFlight, frameCenti, accept } from "@/lib/bet/aviatorSync.js";
 
 const QUICK = [100, 500, 1000, 5000];
 const NAMES = ["Tolu", "Chika", "Dami", "Ayo", "Fisayo", "Emeka", "Bisi", "Kunle", "Zainab", "Obi", "Temi", "Seyi", "Amaka", "Yusuf"];
@@ -24,11 +26,10 @@ function makeSims() {
   return names.map((n, i) => ({ name: n.slice(0, 2) + "***" + Math.floor(rnd(1, 9)), stake: [200, 300, 500, 1000, 2000, 5000, 10000][Math.floor(rnd(0, 7))], target: Math.min(60, Math.max(1.1, RTP / (1 - Math.random()))), i }));
 }
 
-/** A flight on this screen, built from the server's round. The plane's clock starts where the server's clock is NOW (its age at the moment it answered,
- *  plus about half the trip back), so the multiplier on screen is the one the server will pay at. Nothing here is guessed: no round, no flight. */
+/** A flight on this screen, built from the server's round (see makeFlight). Nothing here is guessed: no valid round, no flight. */
 function flightFrom(round, serverNow, rtt = 0) {
-  const age = Math.max(0, serverNow - round.startedAt) + Math.min(400, rtt / 2), stakeKobo = BigInt(round.stakeKobo);
-  return { id: round.id, t0: performance.now() - age, stake: Number(stakeKobo / 100n), stakeKobo, autoCenti: round.autoCenti, cashed: null, crash: null, sims: makeSims(), link: true };
+  const x = makeFlight(round, serverNow, performance.now(), rtt);
+  return x && { ...x, sims: makeSims() };
 }
 
 function paint(cv, f, t, w, h, dpr) {
@@ -43,9 +44,9 @@ function paint(cv, f, t, w, h, dpr) {
   for (let x = x0; x <= w - 12; x += 11) { ctx.beginPath(); ctx.arc(x, y0, 1.4, 0, 7); ctx.fill(); }
   for (let y = y0; y >= 14; y -= 11) { ctx.beginPath(); ctx.arc(x0, y, 1.4, 0, 7); ctx.fill(); }
 
-  const live = f && !f.done, crashed = !!f?.crashShown, secs = live ? ((crashed ? f.crashAt : t) - f.t0) / 1000 : 0, m = crashed ? f.crash / 100 : centiAt(secs) / 100;
+  const live = f && !f.done, crashed = !!f?.crashShown, shown = live ? (crashed ? f.crash : frameCenti(t - f.t0, f.crash)) : 100, secs = live ? (crashed ? secAt(f.crash) : Math.min(secAt(f.crash), (t - f.t0) / 1000)) : 0, m = shown / 100;
   const T = Math.max(6, secs * 1.12), M = Math.max(1.6, m * 1.12);
-  const pt = (s) => [x0 + (s / T) * Wp, y0 - ((Math.exp(0.065 * s) - 1) / (M - 1)) * Hp];
+  const pt = (s) => [x0 + (s / T) * Wp, y0 - ((Math.exp(K * s) - 1) / (M - 1)) * Hp];
   let head = [x0, y0], ang = -0.25;
   if (live && secs > 0.02) {
     const N = 70, pts = []; for (let i = 0; i <= N; i++) pts.push(pt((secs * i) / N));
@@ -73,7 +74,7 @@ function paint(cv, f, t, w, h, dpr) {
   if (!f || f.done) { ctx.fillStyle = "#8793a6"; ctx.font = `600 15px ${ff}`; ctx.fillText("Place a bet to take off", mid[0], mid[1]); return; }
   const big = f.cashed && !crashed ? "#f4b942" : crashed ? "#f0455a" : "#ffffff";
   if (crashed) { ctx.fillStyle = "#f0455a"; ctx.font = `700 15px ${ff}`; ctx.fillText("FLEW AWAY", mid[0], mid[1] - 36); }
-  ctx.fillStyle = big; ctx.font = `700 58px ${ff}`; ctx.fillText(m.toFixed(2) + "x", mid[0], mid[1]);
+  ctx.fillStyle = big; ctx.font = `700 58px ${ff}`; ctx.fillText(fmtX(shown), mid[0], mid[1]);
 }
 
 export default function Aviator({ active }) {
@@ -83,32 +84,33 @@ export default function Aviator({ active }) {
   const [boot, setBoot] = useState("loading"), [bootErr, setBootErr] = useState(""), [prep, setPrep] = useState(null), [slow, setSlow] = useState(false); // boot: loading | ready | error. prep: a bet is with the server and the plane has not taken off yet
 
   const f = fl.current, flying = f && !f.done && !f.crashShown;
-  const nowCenti = () => (f ? (f.crashShown ? f.crash : centiAt((performance.now() - f.t0) / 1000)) : 100);
+  const nowCenti = () => (f ? (f.crashShown ? f.crash : frameCenti(performance.now() - f.t0, f.crash)) : 100);
 
-  const finishRound = useCallback((x, crash) => { // the crash value is known: the plane will fly away when its own clock reaches it
-    if (x.crash) return;
-    x.crash = crash; x.crashAt = x.t0 + secAt(crash) * 1000;
-  }, []);
-  const settleFrom = useCallback((x, r) => { // r = a settled round from the server
-    if (r.status === "WON" && !x.cashed) { // an automatic cash-out: the server paid it, show it
-      x.cashed = { centi: r.cashCenti, payout: BigInt(r.payoutKobo), pending: false };
-      game.pushDone(cash(BigInt(r.payoutKobo))); game.scheduleRefresh(); playSound("coin");
+  const settleFrom = useCallback((x, r, now = false) => { // r = this flight's settled round from the server. Its crash point is the one the screen already has.
+    x.settled = true;
+    if (r.status === "WON" && !x.cashed) { // an automatic cash-out: the server paid it. It is shown when the plane on this screen reaches that multiplier, so the screen never gets ahead of itself.
+      x.autoWin = r;
+      if (now) applyAutoWin(x);
     }
-    finishRound(x, r.crashCenti);
-  }, [finishRound]);
+  }, []);
+  function applyAutoWin(x) {
+    const r = x.autoWin; if (!r || x.cashed) return;
+    x.autoWin = null; x.cashed = { centi: r.cashCenti, payout: BigInt(r.payoutKobo), pending: false };
+    game.pushDone(cash(BigInt(r.payoutKobo))); game.scheduleRefresh(); playSound("coin");
+  }
 
   // ask the server how the flight is going (twice a second while the plane is up)
   const check = useCallback(async () => {
-    const x = fl.current; if (!x || x.done || x.crash || x.checking) return;
-    x.checking = true;
+    const x = fl.current; if (!x || x.done || x.settled || x.checking) return;
+    x.checking = true; const seq = ++x.seq;
     const r = await call("/api/bet/aviator"); x.checking = false;
     if (fl.current !== x) return;
-    if (r.failed) { x.misses = (x.misses ?? 0) + 1; if (x.misses >= 2 && x.link) { x.link = false; rerender(); } return; } // the plane keeps flying on the server's clock; the screen says the link is down
+    if (r.failed) { x.misses = (x.misses ?? 0) + 1; if (x.misses >= 2 && x.link) { x.link = false; rerender(); } return; } // the plane keeps flying on its own clock; the screen says the link is down
     x.misses = 0; if (!x.link) { x.link = true; rerender(); }
     setServerNow(r.now);
+    if (!accept(x, { round: r.round, last: r.last, now: r.now, seq })) return; // late, repeated, out-of-order or another round's answer: ignored
     if (r.history) setHist(r.history);
-    // Only the result of THIS flight settles it. Before the server has taken the bet, "last" is the PREVIOUS flight: using it would end the new
-    // plane at the old crash point and pay out the old win a second time.
+    // Only the result of THIS flight settles it. Before the server has taken the bet, "last" is the PREVIOUS flight: using it would pay the old win a second time.
     if (!r.round && r.last && x.id && r.last.id === x.id) settleFrom(x, r.last);
   }, [settleFrom, rerender]);
 
@@ -143,15 +145,17 @@ export default function Aviator({ active }) {
       if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
       const p = performance.now();
       if (x && !x.done) {
-        if (x.crash && !x.crashShown && p >= x.crashAt) { // flies away now
-          x.crashShown = p; x.crashAt = Math.min(x.crashAt, p); playSound(x.cashed ? "pop" : "warn");
+        if (!x.crashShown && p >= x.crashAt) { // reached the server's crash point: flies away now, on exactly that number
+          x.crashShown = p; playSound(x.cashed ? "pop" : "warn");
           if (!x.cashed) toast.info(`Flew away at ${fmtX(x.crash)}`, { id: "avcrash" });
           setHist((h0) => [{ id: x.id ?? String(p), crashCenti: x.crash, won: !!x.cashed, cashCenti: x.cashed?.centi ?? null }, ...h0.filter((e) => e.id !== x.id)].slice(0, 24));
           rerender();
         }
-        if (x.crashShown && p - x.crashShown > 3200) { x.done = true; rerender(); }
+        if (x.autoWin && frameCenti(p - x.t0, x.crash) >= x.autoWin.cashCenti) applyAutoWin(x);
+        if (x.crashShown && x.autoWin) applyAutoWin(x);
+        if (x.crashShown && p - x.crashShown > 3200) { if (!x.settled) game.scheduleRefresh(); x.done = true; rerender(); }
         // the plane reached the auto cash-out: ask the server to confirm it straight away
-        if (!x.crash && !x.cashed && x.autoCenti && centiAt((p - x.t0) / 1000) >= x.autoCenti && !x.autoAsked) { x.autoAsked = true; x.checking = false; check(); }
+        if (!x.crashShown && !x.cashed && x.autoCenti && Math.min(x.autoCenti, capCenti(x.stakeKobo)) < x.crash && frameCenti(p - x.t0, x.crash) >= Math.min(x.autoCenti, capCenti(x.stakeKobo)) && !x.autoAsked) { x.autoAsked = true; x.checking = false; check(); }
       }
       paint(c, x, p, w, h, dpr);
       if (p - last > 110) { last = p; if (x && !x.done) rerender(); }
@@ -161,7 +165,7 @@ export default function Aviator({ active }) {
   }, [active, check, rerender]);
 
   useEffect(() => { // check on the flight about twice a second
-    poll.current = setInterval(() => { const x = fl.current; if (x && !x.done && !x.crash) check(); }, 400);
+    poll.current = setInterval(() => { const x = fl.current; if (x && !x.done && !x.settled) check(); }, 400);
     return () => clearInterval(poll.current);
   }, [check]);
 
@@ -222,7 +226,7 @@ export default function Aviator({ active }) {
       if (r.failed) continue;
       setServerNow(r.now);
       if (r.round && r.round.id === x.id) { x.cashed = null; toast.dismiss("avwin"); toast.error("Your cash-out did not go through. Try again.", { id: "avwin" }); rerender(); return; } // still in the air: it never arrived
-      if (r.last && r.last.id === x.id) { x.cashed = null; toast.dismiss("avwin"); settleFrom(x, r.last); if (x.cashed) toast.success(`Cashed out at ${fmtX(x.cashed.centi)}: +${moneyK(x.cashed.payout - x.stakeKobo)}`, { id: "avwin" }); game.scheduleRefresh(); rerender(); return; }
+      if (r.last && r.last.id === x.id) { x.cashed = null; toast.dismiss("avwin"); settleFrom(x, r.last, true); if (x.cashed) toast.success(`Cashed out at ${fmtX(x.cashed.centi)}: +${moneyK(x.cashed.payout - x.stakeKobo)}`, { id: "avwin" }); game.scheduleRefresh(); rerender(); return; }
     }
   }
 
@@ -237,12 +241,11 @@ export default function Aviator({ active }) {
     if (res.failed && (res.unknown || res.offline || res.timedOut)) return confirmCash(x); // outcome unknown: ask the server, never guess
     if (res.failed || res.round?.status === "LOST") { // too late (or refused): the win is taken back and the real crash shows
       toast.dismiss("avwin");
-      x.cashed = null; if (res.round?.crashCenti) finishRound(x, res.round.crashCenti);
+      x.cashed = null; // the real crash point is the one this screen already has
     } else if (res.round?.status === "WON") {
       x.cashed = { centi: res.round.cashCenti, payout: BigInt(res.round.payoutKobo), pending: false };
       playSound("coin");
       toast.success(`Cashed out at ${fmtX(res.round.cashCenti)}: +${moneyK(BigInt(res.round.payoutKobo) - x.stakeKobo)}`, { id: "avwin" });
-      finishRound(x, res.round.crashCenti);
     } else if (res.replayed) { // an earlier try of this cash-out went through (its answer was lost): the real numbers come from the next check
       x.cashed = { ...x.cashed, pending: false };
       toast.info("Cashed out. Your balance is refreshing.", { id: "avwin" });
@@ -251,8 +254,8 @@ export default function Aviator({ active }) {
     rerender();
   }
   function cashOut() {
-    const x = fl.current; if (!x || x.crash || x.cashed || x.done) return;
-    const centi = centiAt((performance.now() - x.t0) / 1000), pay = payout(x.stakeKobo, centi);
+    const x = fl.current; if (!x || x.crashShown || x.cashed || x.done) return;
+    const centi = frameCenti(performance.now() - x.t0, x.crash), pay = payout(x.stakeKobo, centi);
     x.cashed = { centi, payout: pay, pending: true };
     toast.pending(`Cashing out at ${fmtX(centi)}…`, { id: "avwin" }); // the win is only announced once the server has confirmed it was not too late
     rerender();
@@ -261,7 +264,7 @@ export default function Aviator({ active }) {
 
   const centi = nowCenti(), live = f && !f.done;
   const locked = !!prep || boot !== "ready"; // the controls wait while the round is loading or being taken
-  const canCash = f && !f.crashShown && !f.crash && !f.cashed, waitingAuto = f && f.autoAsked && !f.cashed && !f.crash;
+  const canCash = f && !f.crashShown && !f.cashed, waitingAuto = f && f.autoAsked && !f.cashed && !f.crashShown;
   const adj = (m) => setStake((s) => Math.max(MIN_STAKE, Math.min(MAX_STAKE, Math.round(m(Number(s) || 0)))));
 
   return (
@@ -332,7 +335,7 @@ export default function Aviator({ active }) {
         <h4>Players <small>simulated</small></h4>
         {!(f?.sims?.length) && <p className="av-feed-empty">Other players join when you take off.</p>}
         {(f?.sims ?? makeSims0).map((s) => {
-          const limit = f?.crash ? f.crash - 1 : centi, out = f && s.target * 100 <= limit && f && !f.done, lost = f && f.crashShown && !out;
+          const limit = f?.crashShown ? f.crash - 1 : centi, out = f && s.target * 100 <= limit && f && !f.done, lost = f && f.crashShown && !out;
           return (
             <div key={s.name} className={`pl${out ? " won" : lost ? " lost" : ""}`}>
               <span className="pl-a">{s.name[0]}</span><span className="pl-n">{s.name}</span><span className="pl-b num">{money(s.stake)}</span>

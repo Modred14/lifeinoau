@@ -83,7 +83,7 @@ try {
 
   // ---- aviator ----
   clock += 10 * MIN; const startBal = bal();
-  const b1 = await A.aviatorBet(db, "u1", { stakeNaira: 1000, requestId: req() }); assert.ok(b1.ok && !("crashCenti" in b1.round), "the crash point is never sent while the plane is up");
+  const b1 = await A.aviatorBet(db, "u1", { stakeNaira: 1000, requestId: req() }); assert.ok(b1.ok && Number.isInteger(b1.round.crashCenti) && b1.round.crashCenti >= 100, "the crash point is decided once and sent with the round, as whole hundredths");
   assert.equal(bal(), startBal - N(1000), "the stake leaves at once");
   const fly = T.casinoRound[0]; fly.crashCenti = 500; // pin the secret crash at 5.00x for the test
   e = await err(A.aviatorBet(db, "u1", { stakeNaira: 1000, requestId: req() })); assert.ok(e && e.status === 409, "one plane at a time");
