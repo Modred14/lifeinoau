@@ -140,6 +140,15 @@ def main():
     for p in O['places']:
         if p['id'] not in matched: continue
         q = matched[p['id']]; bi = q.get('building'); x, z = q['label'][0] / PX, q['label'][1] / PX
+        if bi is None:   # the new map gives some places only a label and a door: take the building that contains the label (or door), else the nearest one within 15 m
+            for pt in (Point(x, z), Point(q['door'][0] / PX, q['door'][1] / PX) if q.get('door') else None):
+                if pt is None: continue
+                hit = [i for i in btree.query(pt) if bpoly[i].contains(pt)]
+                if not hit:
+                    near = sorted((bpoly[i].distance(pt), i) for i in btree.query(pt.buffer(15)))
+                    hit = [near[0][1]] if near and near[0][0] <= 15 else []
+                if hit: bi = int(hit[0]); break
+            if bi is None: report.setdefault('noBuilding', []).append(p['id'])
         rec = {k: v for k, v in p.items() if k not in ('osmLabel', 'offmap', 'unnamed')}
         rec.update({'src': 'osm', 'conf': 'named-in-osm', 'x': round(x, 1), 'z': round(z, 1), 'bid': bi, 'snapPx': 0.0}); places.append(rec)
         if bi is not None: claimed.add(bi); B[bi]['place'] = p['id']

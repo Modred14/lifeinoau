@@ -4,7 +4,7 @@
 //
 //   node tools/oau/place-billboards.mjs            print the chosen sites and how each one fares
 //   --data=path --graph=path   use another map / road graph (default: public/data/oau-campus.json and oau-roadgraph.json)      --json=path   also write the chosen sites as JSON
-//   node tools/oau/place-billboards.mjs --write    also rewrite the BILLBOARD_SITES block in lib3d/mapExtras.js
+//   node tools/oau/place-billboards.mjs --write    also rewrite the OSM billboard sites in lib3d/mapLayout.js
 //
 // Run it again after `npm run build:roads` (new roads can move the verge). The search is deterministic: the same roads give the same sites.
 import fs from "node:fs";
@@ -72,9 +72,10 @@ let closest = Infinity; for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j
 console.log(`closest two boards: ${closest} m apart (rule: ${RULES.spacing})`);
 
 if (arg("json")) { fs.writeFileSync(arg("json"), JSON.stringify(rows.map((r) => ({ n: r.n, id: "bb_" + r.n, where: r.where, x: r.x, z: r.z, yaw: r.yaw, road: r.cls, edge: r.edge, anchorM: r.anchorM })), null, 1) + "\n"); console.log("wrote " + arg("json")); }
-if (WRITE) {
-  const file = url("../../lib3d/mapExtras.js"); let src = fs.readFileSync(file, "utf8");
-  const block = `// BILLBOARD-SITES:BEGIN (written by tools/oau/place-billboards.mjs; tests/billboard-sites.test.mjs holds every site to the rules in lib3d/billboardSite.js)\nexport const BILLBOARD_SITES = [\n${rows.map((r) => `  [${JSON.stringify(r.where)}, ${r.x}, ${r.z}, ${r.yaw}],`).join("\n")}\n];\n// BILLBOARD-SITES:END`;
-  const re = /\/\/ BILLBOARD-SITES:BEGIN[\s\S]*?\/\/ BILLBOARD-SITES:END/; if (!re.test(src)) { console.error("markers not found in lib3d/mapExtras.js"); process.exit(1); }
-  fs.writeFileSync(file, src.replace(re, () => block)); console.log("lib3d/mapExtras.js updated");
+if (WRITE) {   // writes the sites of the map in use (lib3d/mapLayout.js LAYOUT) into its entry of mapLayout.js
+  const file = url("../../lib3d/mapLayout.js"); let src = fs.readFileSync(file, "utf8");
+  const which = src.match(/export const LAYOUT = "(\w+)";/)[1], list = `[\n${rows.map((r) => `      [${JSON.stringify(r.where)}, ${r.x}, ${r.z}, ${r.yaw}],`).join("\n")}\n    ]`;
+  if (which !== "osm") { console.error("--write only rewrites the OSM entry; the active map is " + which + " (node tools/oau/use-map.mjs osm)"); process.exit(1); }
+  const re = /(osm: \{[\s\S]*?)billboardSites: \[[\s\S]*?\],   \/\/ BILLBOARD-SITES-OSM/; if (!re.test(src)) { console.error("marker not found in lib3d/mapLayout.js"); process.exit(1); }
+  fs.writeFileSync(file, src.replace(re, (_, pre) => `${pre}billboardSites: ${list},   // BILLBOARD-SITES-OSM`)); console.log("lib3d/mapLayout.js updated (osm billboard sites)");
 }

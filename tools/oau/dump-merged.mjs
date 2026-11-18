@@ -7,7 +7,7 @@ import crypto from "node:crypto";
 import { withExtras } from "../../lib3d/mapExtras.js";
 import { mapFile } from "./mapfile.mjs";
 
-const out = process.argv[2] || "/tmp/oau-merged.json", src = process.argv[3] || mapFile();
+const out = process.argv[2] || "oau-merged.json", src = process.argv[3] || mapFile();
 const d = withExtras(JSON.parse(fs.readFileSync(src, "utf8")));
 const merged = { bounds: d.bounds, buildings: d.buildings.map((b) => ({ id: b.id, pts: b.pts })), roads: d.roads, water: (d.areas && d.areas.water) || [] };
 merged.inputHash = crypto.createHash("sha1").update(JSON.stringify(merged)).digest("hex");

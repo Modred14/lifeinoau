@@ -13,7 +13,9 @@
     "test:chat": "node tests/e2e/chat.e2e.mjs",
     "test:radio": "node tests/e2e/radio.e2e.mjs",
     "radio:verify": "node tools/radio/verify-stations.mjs --write",
-    "build:roads": "node tools/oau/dump-merged.mjs /tmp/oau-merged.json && python3 tools/oau/roadgraph.py /tmp/oau-merged.json tools/oau/roadgraph.raw.json && node tools/oau/refine-roads.mjs"
+    "map:use": "node tools/oau/use-map.mjs",
+    "map:import": "sh tools/oau/import-campus.sh",
+    "build:roads": "node tools/oau/build-roads.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

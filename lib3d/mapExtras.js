@@ -1,4 +1,5 @@
 // lib3d/mapExtras.js
+import { ACTIVE as ACTIVE_LAYOUT } from "./mapLayout.js";
 // Game places the OpenStreetMap render does not show: Ojaja, Akintola, the Postgraduate hall, six faculty buildings, Floor O, the three clubs and the ten billboards.
 // They are merged onto the real map data when it loads (withExtras), so public/data/oau-campus.json stays exactly as the generator wrote it.
 // Positions are GAME PLACEMENTS in the same metre grid as the real data (x east, z south). Each one was checked to sit clear of every
@@ -20,20 +21,7 @@ export const BILLBOARD = {
 // These are not guesses: tools/oau/place-billboards.mjs finds them on the real road graph (beside a road, never on it, clear of junctions, bridge ends, buildings, lakes, car parks and
 // street furniture, turned toward the traffic, visible from the lane, and spread so every part of the road network has one in view) and writes this block. The rules are in
 // lib3d/billboardSite.js and tests/billboard-sites.test.mjs holds every site to them, so a rebuilt road network that moves a verge shows up as a failing test, not a board in the road.
-// BILLBOARD-SITES:BEGIN (written by tools/oau/place-billboards.mjs; tests/billboard-sites.test.mjs holds every site to the rules in lib3d/billboardSite.js)
-export const BILLBOARD_SITES = [
-  ["Agriculture Road", 1225.1, -325.7, -2.484],
-  ["Technology Road", 860, -449.2, -2.562],
-  ["Arts Road", 372.7, -390.1, -2.495],
-  ["Senate Building Road", 329.7, 132.5, -0.961],
-  ["Architecture Road", -375.6, -320.7, 0.354],
-  ["Mozambique Hall Road", -959.4, -344.8, -2.577],
-  ["ETF Hall Road", -1025.5, 154.9, -0.886],
-  ["Postgraduate Hall Road", -604.2, 41.3, 2.65],
-  ["Postgraduate College Road", 968.6, 197.4, 2.843],
-  ["Pharmacy Road", 390.3, 602.1, 0.671],
-];
-// BILLBOARD-SITES:END
+export const BILLBOARD_SITES = ACTIVE_LAYOUT.billboardSites;   // per map, in lib3d/mapLayout.js (tools/oau/place-billboards.mjs --write rewrites the OSM entry)
 /** Billboard positions (metres), the road they stand beside, and which way they face. */
 export const BILLBOARDS = BILLBOARD_SITES.map(([where, x, z, yaw], i) => ({ id: "bb_" + (i + 1), n: i + 1, where, name: `Billboard ${i + 1} · ${where}`, x, z, yaw }));
 
