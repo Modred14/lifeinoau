@@ -54,9 +54,22 @@ export const GROUNDS = {
   religious: { id: "religious_ground", name: "Religious Ground", x0: -54, x1: -8, z0: 164, z1: 236, gate: -31, churches: CHURCHES },
 };
 
+/**
+ * The grounds and churches for one map. The rectangles above are in the OLD traced map's metres. The OpenStreetMap map carries `meta.groundOffsets` ({ motion: [dx, dz], religious: [dx, dz] }, written by
+ * tools/oau/import_campus.py: where each ground fits clear of the new map's buildings, roads and lake), and every rectangle and church is shifted by its ground's offset, so the layout inside a ground never changes.
+ */
+export function groundsFor(data) {
+  const off = data?.meta?.groundOffsets; if (!off) return { motion: GROUNDS.motion, religious: GROUNDS.religious, churches: CHURCHES };
+  const [mx, mz] = off.motion ?? [0, 0], [rx, rz] = off.religious ?? [0, 0], r = GROUNDS.religious;
+  const churches = CHURCHES.map((c) => ({ ...c, x: +(c.x + rx).toFixed(1), z: +(c.z + rz).toFixed(1) }));
+  const m = GROUNDS.motion;
+  return { motion: { ...m, x0: m.x0 + mx, x1: m.x1 + mx, z0: m.z0 + mz, z1: m.z1 + mz }, religious: { ...r, x0: r.x0 + rx, x1: r.x1 + rx, z0: r.z0 + rz, z1: r.z1 + rz, gate: r.gate + rx, churches }, churches };
+}
+
 // Buildings made for the places that have no footprint on the real map. w x d metres around the centre, h metres tall.
+const churchBuilding = (c) => ({ id: c.id, name: c.name, kind: "worship", tier: 3, x: c.x, z: c.z, w: c.w, d: c.d, h: c.h, wall: "#efe9d8", roof: c.roof });
 const BUILDINGS = [
-  ...CHURCHES.map((c) => ({ id: c.id, name: c.name, kind: "worship", tier: 3, x: c.x, z: c.z, w: c.w, d: c.d, h: c.h, wall: "#efe9d8", roof: c.roof })),
+  ...CHURCHES.map((c) => churchBuilding(c)),
   { id: "h_ojaja", name: "Ojaja", kind: "hostel", tier: 1, x: -628, z: 1030, w: 60, d: 26, h: 16, shape: "L", wall: "#e9e2d0", roof: "#6b5a46" },
   { id: "h_akintola", name: "Akintola Hall", kind: "hostel", tier: 1, x: 1000, z: -230, w: 52, d: 22, h: 12 },
   { id: "h_pg", name: "Murtala Muhammed Postgraduate Hall", kind: "hostel", tier: 1, x: -740, z: -20, w: 48, d: 20, h: 11 },
@@ -118,14 +131,15 @@ export function withExtras(data) {
   const legacy = !data.meta?.oldToNew;   // BUILDING_TRIMS is keyed by the OLD traced map's building ids: it must never touch the OpenStreetMap map (tools/oau/import_campus.py sets meta.oldToNew)
   const buildings = data.buildings.map((b) => (legacy && BUILDING_TRIMS[b.id] ? { ...b, pts: BUILDING_TRIMS[b.id].map((p) => p.slice()), area: Math.round(polyArea(BUILDING_TRIMS[b.id])), trimmed: true } : b)), places = [...data.places];
   let next = buildings.reduce((m, q) => Math.max(m, q.id), -1) + 1;
-  for (const e of BUILDINGS) {
+  const GR = groundsFor(data), GROUNDS_HERE = { motion: GR.motion, religious: GR.religious };
+  for (const e of [...GR.churches.map(churchBuilding), ...BUILDINGS.filter((b) => !b.id.startsWith("church_"))]) {
     if (places.some((p) => p.id === e.id)) continue;
     const pts = (e.shape === "L" ? lShape : rect)(e.x, e.z, e.w, e.d).map(([x, z]) => [+x.toFixed(1), +z.toFixed(1)]);
     buildings.push({ id: next, pts, area: Math.round(e.w * e.d * (e.shape === "L" ? 0.75 : 1)), h: e.h, hSrc: "game-placement", wall: e.wall, roof: e.roof, neon: e.neon });
     places.push({ id: e.id, name: e.name, kind: e.kind, tier: e.tier, src: "game-placement", conf: "game", x: e.x, z: e.z, bid: next, snapPx: 0 });
     next++;
   }
-  for (const g of Object.values(GROUNDS)) if (!places.some((p) => p.id === g.id)) places.push({ id: g.id, name: g.name, kind: g.id === "motion_ground" ? "sports" : "worship", tier: 2, src: "game-placement", conf: "game", x: +((g.x0 + g.x1) / 2).toFixed(1), z: +((g.z0 + g.z1) / 2).toFixed(1), bid: null, snapPx: 0 });
+  for (const g of Object.values(GROUNDS_HERE)) if (!places.some((p) => p.id === g.id)) places.push({ id: g.id, name: g.name, kind: g.id === "motion_ground" ? "sports" : "worship", tier: 2, src: "game-placement", conf: "game", x: +((g.x0 + g.x1) / 2).toFixed(1), z: +((g.z0 + g.z1) / 2).toFixed(1), bid: null, snapPx: 0 });
   for (const b of BILLBOARDS) if (!places.some((p) => p.id === b.id)) places.push({ id: b.id, name: b.name, kind: "billboard", tier: 2, src: "game-placement", conf: "game", x: b.x, z: b.z, bid: null, snapPx: 0, board: b.n, yaw: b.yaw });
   // enterable places with no building on the map: they take the unclaimed building beside them, or get a small one (see ENTRANCES)
   const claimed = new Set(places.filter((p) => p.bid != null).map((p) => p.bid));
@@ -140,5 +154,5 @@ export function withExtras(data) {
   // The map shows one unnamed medical building exactly where the game puts the Health Centre (between Alumni Hall and Awolowo Hall), so it takes that name.
   const mi = places.findIndex((p) => p.id === "medical_unnamed"); if (mi >= 0 && !places.some((p) => p.id === "health_centre")) places[mi] = { ...places[mi], id: "health_centre", name: "Health Centre", unnamed: false, conf: "game" };
   const have = new Set(places.map((p) => p.id));
-  return { ...data, grounds: GROUNDS, buildings, places, gameOnly: data.gameOnly.filter((g) => !have.has(g.id)), extrasAdded: true };
+  return { ...data, grounds: GROUNDS_HERE, buildings, places, gameOnly: data.gameOnly.filter((g) => !have.has(g.id)), extrasAdded: true };
 }
