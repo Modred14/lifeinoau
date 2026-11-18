@@ -636,5 +636,29 @@
   "bio_gardens",
   "pit_theatre",
   "zoo"
- ]
+ ],
+ "grounds": {
+  "motion": {
+   "centre": [
+    1773.2,
+    739.2
+   ],
+   "movedFromTransformM": 260.0,
+   "offset": [
+    1712.2,
+    721.2
+   ]
+  },
+  "religious": {
+   "centre": [
+    1614.7,
+    864.3
+   ],
+   "movedFromTransformM": 180.0,
+   "offset": [
+    1645.7,
+    664.3
+   ]
+  }
+ }
 }
