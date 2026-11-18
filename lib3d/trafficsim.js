@@ -12,7 +12,8 @@
 // Metres, x east, z south. A vehicle's position is its centre; `s` is how far along its route that centre is.
 import { boxesOverlap } from "./collide.js";
 import { sweepHit, vehicleStrike, createTumble, stepTumble, canBeStruck, massOf, liftOf, PERSON_R } from "./impact.js";
-import { heightOn } from "./roadgraph.js";
+import { heightOnLane } from "./roadgraph.js";
+import { AXLES } from "./vehicleDims.js";
 
 export const KINDS = {
   // doorZ: where the passenger door is along the vehicle (metres from the middle, nose is +); seat: where a passenger sits, in the vehicle's own space
@@ -198,6 +199,27 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     return Math.min(a.lat, (nLanesOf(sg.id) - 1) * laneWOf(sg.id)) * k * k * (3 - 2 * k);
   }
   const shifted = (a, pt, sc) => { const l = latAt(a, sc); if (l) { pt.x += pt.hz * l; pt.z -= pt.hx * l; } return pt; };
+  // ---- the ride: how high a vehicle sits and how far it tilts, from where its tyres really are ----
+  // The road under a point `sc` metres along a vehicle's route: on a lane, the height of the road AT THAT POINT OF THE EDGE (a lane's own distance is not the edge's: it is trimmed back from the junctions,
+  // see heightOnLane); across a junction, eased from where the lane before it ends to where the lane after it starts, so a vehicle never steps up or down on entering a ramp.
+  const connH = [];
+  const connEnds = (c) => connH[c.id] ??= [heightOnLane(graph.lanes[c.from], edgeOf(c.from), graph.lanes[c.from].len), heightOnLane(graph.lanes[c.to], edgeOf(c.to), 0)];
+  function routeHeight(a, sc) {
+    const segs = a.route.segs; let i = Math.min(a.si, segs.length - 1);
+    while (i > 0 && sc < segs[i].start) i--; while (i < segs.length - 1 && sc > segs[i].end) i++;
+    const sg = segs[i];
+    if (sg.kind === "lane") { const L = graph.lanes[sg.id]; return heightOnLane(L, edgeOf(sg.id), Math.max(0, Math.min(L.len, sg.s0 + (sc - sg.start)))); }
+    const h = connEnds(graph.conns[sg.id]); if (h[0] === h[1]) return h[0];
+    const t = sg.len > 1e-6 ? Math.max(0, Math.min(1, (sc - sg.start) / sg.len)) : 0; return h[0] + (h[1] - h[0]) * t * t * (3 - 2 * t);
+  }
+  /** Sets a.y (the road height under the vehicle's origin) and a.pitch (+ nose up) so that the REAR and the FRONT axle both stand on the road, whatever the slope, crest or dip. A flat road (the ground, the deck) costs nothing. */
+  function ride(a, sg) {
+    const ax = AXLES[a.kind] ?? AXLES.car, sc = a.s;
+    if (sg.kind === "lane") { const e = edgeOf(sg.id); if (e.h0 === e.h1 && sc + ax[1] <= sg.end && sc + ax[0] >= sg.start) { a.y = e.h0; a.pitch = 0; return; } }   // wholly on a level lane: nothing to work out
+    const hF = routeHeight(a, sc + ax[1]), hR = routeHeight(a, sc + ax[0]), wb = ax[1] - ax[0];
+    a.pitch = Math.atan2(hF - hR, wb); a.y = hR + ((hF - hR) * -ax[0]) / wb;   // the plane through both axles, read at the origin
+  }
+
   /** Where the vehicle is and which way its body points (from a point behind its centre to one in front, so it swings through a curve like a real one). */
   function pose(a) {
     while (a.si < a.route.segs.length - 1 && a.s >= a.route.segs[a.si].end) a.si++;
@@ -205,9 +227,7 @@ export function createTrafficSim({ graph, world = null, focus = () => ({ x: 0, z
     a.x = p.x; a.z = p.z; let hx = f.x - r.x, hz = f.z - r.z; const l = Math.hypot(hx, hz); if (l > 1e-3) { a.hx = hx / l; a.hz = hz / l; } else { a.hx = p.hx; a.hz = p.hz; } a.yaw = Math.atan2(a.hx, a.hz);
     const sg = a.route.segs[a.si]; if (sg.kind === "lane") { a.laneId = sg.id; a.laneS = sg.s0 + (a.s - sg.start); } else { a.laneId = graph.conns[sg.id].to; a.laneS = 0; }
     a.hw = !!graph.lanes[a.laneId].hw;   // on the deck or a ramp right now (counts and spawning follow where a vehicle IS, so one that drives up a ramp is still the same inhabitant)
-    const e = edgeOf(a.laneId); a.y = e.h0 === e.h1 ? e.h0 : heightOn(e, graph.lanes[a.laneId].dir ? e.len - a.laneS : a.laneS); a.lvl = a.y > 2 ? 1 : 0;
-    // the pitch of a vehicle on a slope: its axles (about 0.29 of its length either side of the middle) both on the road, so its tyres touch it instead of floating at one end and sinking at the other
-    if (e.h0 === e.h1) a.pitch = 0; else { const dir = graph.lanes[a.laneId].dir, hAt = (s) => heightOn(e, dir ? e.len - Math.max(0, Math.min(e.len, s)) : Math.max(0, Math.min(e.len, s))), L = a.len * 0.29; a.pitch = Math.atan2(hAt(a.laneS + L) - hAt(a.laneS - L), 2 * L); a.y = (hAt(a.laneS + L) + hAt(a.laneS - L)) / 2; }   // the deck is a different level: nothing on it can touch anything below
+    ride(a, sg); a.lvl = a.y > 2 ? 1 : 0;   // the deck is a different level: nothing on it can touch anything below
   }
 
   // ---------- obstacles ----------

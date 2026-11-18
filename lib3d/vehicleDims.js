@@ -16,3 +16,14 @@ export const VEHICLE_DIMS = {
   keke:              { length: 2.78,  width: 1.3,   height: 1.72,  wheelbase: 1.95 },
   bus:               { length: 6.075, width: 1.882, height: 2.254, wheelbase: 4.12 },
 };
+
+// WHERE THE TYRES ARE, along the vehicle: z of the rear and the front axle in metres from the model's origin (the nose is +z), for what the traffic draws (lib3d/traffic.js: the instanced car,
+// the keke, the bus and the shortened bus that is the minibus). The traffic simulation puts a vehicle on a slope from these (lib3d/trafficsim.js pose): the ride that puts the rear axle and the
+// front axle both on the road, instead of a guess at 0.29 of the length. tests/vehicle-ground.test.mjs checks them against the real models, so they cannot drift from what is drawn.
+// (The keke's single front wheel is at z = 1 and its pair at -0.95; the minibus is the bus body with its body and wheel positions shortened to 4.7 / 6.08 along z.)
+export const AXLES = {
+  car:     [-1.33,  1.445],
+  keke:    [-0.95,  1.0],
+  bus:     [-2.052, 2.066],
+  minibus: [-1.586, 1.597],
+};

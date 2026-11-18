@@ -72,6 +72,18 @@ export function climbFrac(s, a, b) {
 }
 /** Height of a road at distance s along it. A ramp climbs over [ha, hb] (see shapeRamps); an edge without them (a flat one, or a plain ramp description) eases over its whole length. */
 export const heightOn = (e, s) => (e.h0 === e.h1 ? e.h0 : e.h0 + (e.h1 - e.h0) * (e.ha === undefined ? ease5(s / (e.len || 1)) : climbFrac(s, e.ha, e.hb)));
+/**
+ * Where on its EDGE a point `ls` metres along one of the edge's LANES is, as the distance along the edge's centreline (what heightOn, ha and hb are measured in).
+ * A lane is the stretch of the road between the junction trims (lane.trimA at the end it starts from, lane.trimB at the end it runs to), and it is offset sideways from the centreline, so
+ * its own distance is NOT the edge's distance: on a ramp trimmed 15 to 25 m at each end, reading the height at `ls` put every vehicle that much too far down the climb (a metre too low going up,
+ * a metre too high coming down: sunk into the ramp, or hovering over it). The lane's length is scaled onto the centreline span between the trims (a lane on the inside of a bend is a little shorter).
+ */
+export const laneEdgeS = (lane, edgeLen, ls) => {
+  const span = Math.max(0, edgeLen - lane.trimA - lane.trimB), u = lane.len > 1e-6 ? Math.max(0, Math.min(span, (ls * span) / lane.len)) : 0;
+  return lane.dir ? edgeLen - lane.trimA - u : lane.trimA + u;
+};
+/** The road surface height (m above the asphalt) at `ls` metres along `lane` of edge `e`: the height the ramp is DRAWN at (lib3d/highwaymesh.js) and the player's tyres meet (surfaceAt). */
+export const heightOnLane = (lane, e, ls) => (e.h0 === e.h1 ? e.h0 : heightOn(e, laneEdgeS(lane, e.len, ls)));
 const CELL = 24;
 /** Is (x, z) inside the polygon, or within `r` metres of its outline? */
 const nearPoly = (P, x, z, r) => { if (inside(P, x, z)) return true; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const ax = P[j][0], az = P[j][1], dx = P[i][0] - ax, dz = P[i][1] - az, l2 = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)); if (Math.hypot(x - ax - dx * t, z - az - dz * t) < r) return true; } return false; };
