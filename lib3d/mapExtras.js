@@ -115,7 +115,8 @@ export const BUILDING_TRIMS = {
 const polyArea = (P) => { let a = 0; for (let i = 0, j = P.length - 1; i < P.length; j = i++) a += (P[j][0] + P[i][0]) * (P[j][1] - P[i][1]); return Math.abs(a / 2); };
 export function withExtras(data) {
   if (data.extrasAdded) return data;
-  const buildings = data.buildings.map((b) => (BUILDING_TRIMS[b.id] ? { ...b, pts: BUILDING_TRIMS[b.id].map((p) => p.slice()), area: Math.round(polyArea(BUILDING_TRIMS[b.id])), trimmed: true } : b)), places = [...data.places];
+  const legacy = !data.meta?.oldToNew;   // BUILDING_TRIMS is keyed by the OLD traced map's building ids: it must never touch the OpenStreetMap map (tools/oau/import_campus.py sets meta.oldToNew)
+  const buildings = data.buildings.map((b) => (legacy && BUILDING_TRIMS[b.id] ? { ...b, pts: BUILDING_TRIMS[b.id].map((p) => p.slice()), area: Math.round(polyArea(BUILDING_TRIMS[b.id])), trimmed: true } : b)), places = [...data.places];
   let next = buildings.reduce((m, q) => Math.max(m, q.id), -1) + 1;
   for (const e of BUILDINGS) {
     if (places.some((p) => p.id === e.id)) continue;
