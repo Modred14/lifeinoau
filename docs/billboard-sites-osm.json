@@ -91,22 +91,22 @@
   "n": 9,
   "id": "bb_9",
   "where": "Ede Road Banks",
-  "x": 1538.8,
-  "z": 1290.5,
-  "yaw": -1.877,
-  "road": "collector",
-  "edge": 139,
-  "anchorM": 242
+  "x": 1625.3,
+  "z": 2401.1,
+  "yaw": 0.221,
+  "road": "local",
+  "edge": 352,
+  "anchorM": 169
  },
  {
   "n": 10,
   "id": "bb_10",
   "where": "Nightlife Strip",
-  "x": 1337.5,
-  "z": 1564.8,
-  "yaw": 0.375,
-  "road": "local",
-  "edge": 375,
-  "anchorM": 142
+  "x": 1352.8,
+  "z": 1392.6,
+  "yaw": -1.96,
+  "road": "collector",
+  "edge": 143,
+  "anchorM": 103
  }
 ]

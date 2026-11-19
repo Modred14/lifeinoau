@@ -58,8 +58,8 @@ export const LAYOUTS = {
       ["Alumni Road", 936.3, 302.2, 2.277],
       ["Halls Row", 435.7, 255.5, 2.311],
       ["Fajuyi Crossing", 608.7, 919, 2.934],
-      ["Ede Road Banks", 1538.8, 1290.5, -1.877],
-      ["Nightlife Strip", 1337.5, 1564.8, 0.375],
+      ["Ede Road Banks", 1625.3, 2401.1, 0.221],
+      ["Nightlife Strip", 1352.8, 1392.6, -1.96],
     ],   // BILLBOARD-SITES-OSM
   },
 };
