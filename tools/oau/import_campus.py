@@ -82,6 +82,23 @@ def main():
         if g.area < 20: continue
         roads.append({'pts': [[round(x, 1), round(z, 1)] for x, z in g.exterior.coords[:-1]],
                       'holes': [[[round(x, 1), round(z, 1)] for x, z in h.coords[:-1]] for h in g.interiors if Polygon(h).area >= 4]})
+    # ---- set buildings back from roads. OpenStreetMap houses stand right on the kerb; the game's road builder needs the centreline to keep 2.7 m clear of every wall (lib3d/roadgraph.js XS.minDrivableClearance) and
+    # drops a road that does not, which splits the network. Every footprint is cut back to max(half the road width + 3 m, 6 m) from each road centreline (the old map got this from hand-made BUILDING_TRIMS).
+    # A footprint left under 12 m2 is dropped; one that is cut in two keeps its larger piece. Building ids are renumbered; `remap` carries the OSM index to the new id.
+    carve = unary_union([LineString(pts_m(r['pts'])).buffer(max(r['w'] / 2.0 + 3.0, 6.0), cap_style=2, join_style=1, resolution=4) for r in N['roads'] if r['kind'] == 'road'])
+    nB, remap, cut_n, drop_n = [], {}, 0, 0
+    for b in B:
+        poly = Polygon(b['pts']).buffer(0)
+        if poly.intersects(carve):
+            rest = poly.difference(carve)
+            parts = [g for g in (rest.geoms if hasattr(rest, 'geoms') else [rest]) if g.geom_type == 'Polygon' and g.area >= 12]
+            if not parts: drop_n += 1; continue
+            g = max(parts, key=lambda q: q.area).simplify(0.2)
+            if g.area < poly.area - 0.5: cut_n += 1
+            b = dict(b, pts=[[round(x, 1), round(z, 1)] for x, z in g.exterior.coords[:-1]], area=int(round(g.area)))
+        remap[b['id']] = len(nB); b = dict(b, id=len(nB)); nB.append(b)
+    report_carve = {'buildingsCutBack': cut_n, 'buildingsDropped': drop_n, 'kept': len(nB)}
+    B = nB; bpoly = [Polygon(b['pts']).buffer(0) for b in B]; btree = STRtree(bpoly)
     # ---- areas
     areas = {'water': [], 'pitch': [], 'sports': [], 'park': [], 'wood': [], 'parking': []}
     kmap = {'water': 'water', 'parking': 'parking', 'field': 'pitch', 'grass': 'park'}
@@ -112,8 +129,9 @@ def main():
     obst = [(g, 6.0) for g in bpoly] + [(road_u, 6.0)] + [(g, 4.0) for g in apoly]
     obst_geoms = [g for g, _ in obst]; otree = STRtree(obst_geoms); omargin = {id(g): m for g, m in obst}
     frame = box(25, 25, W - 25, Hh - 25)
-    def clear(poly):
+    def clear(poly, need_road=False):
         if not frame.contains(poly): return False
+        if need_road and road_u.distance(poly) > 16: return False   # a building the game sends cars to must be within 16 m of a road (its door needs one)
         for i in otree.query(poly.buffer(8)):
             g = obst_geoms[i]
             if g.distance(poly) < omargin[id(g)]: return False
@@ -121,25 +139,25 @@ def main():
     def rect(x, z, w, d, ang=0.0):
         r = box(x - w / 2, z - d / 2, x + w / 2, z + d / 2)
         return r
-    def find_spot(x, z, w, d):
+    def find_spot(x, z, w, d, need_road=False):
         """nearest spot to (x, z) where a w x d rectangle is clear; deterministic spiral over 4 m steps."""
         x = min(max(x, 40), W - 40); z = min(max(z, 40), Hh - 40)
-        if clear(rect(x, z, w, d)): return x, z, 0.0
+        if clear(rect(x, z, w, d), need_road): return x, z, 0.0
         for rad in range(4, 900, 4):
             n = max(8, int(2 * math.pi * rad / 8))
             for k in range(n):
                 t = 2 * math.pi * k / n; cx, cz = x + rad * math.cos(t), z + rad * math.sin(t)
-                if clear(rect(cx, cz, w, d)): return cx, cz, float(rad)
+                if clear(rect(cx, cz, w, d), need_road): return cx, cz, float(rad)
         raise RuntimeError('no clear spot near %s,%s' % (x, z))
 
     # the game's own sizes for extras with a fixed footprint (mapExtras.js BUILDINGS): w, d, h
 
-    places, newb, report = [], [], {'transform': {'scale': round(scale, 4), 'rotDeg': round(rot, 3), 'shift': [round(tr[1].real, 1), round(tr[1].imag, 1)], 'pairs': len(pairs), 'medianErrM': round(med, 1), 'p90ErrM': round(p90, 1)}, 'matched': {}, 'game': {}, 'dropped': sorted(DROP)}
+    places, newb, report = [], [], {'transform': {'scale': round(scale, 4), 'rotDeg': round(rot, 3), 'shift': [round(tr[1].real, 1), round(tr[1].imag, 1)], 'pairs': len(pairs), 'medianErrM': round(med, 1), 'p90ErrM': round(p90, 1)}, 'matched': {}, 'game': {}, 'dropped': sorted(DROP), 'carve': report_carve}
     old_b = {b['id']: b for b in O['buildings']}
     claimed = set()
     for p in O['places']:
         if p['id'] not in matched: continue
-        q = matched[p['id']]; bi = q.get('building'); x, z = q['label'][0] / PX, q['label'][1] / PX
+        q = matched[p['id']]; bi = remap.get(q.get('building')) if q.get('building') is not None else None; x, z = q['label'][0] / PX, q['label'][1] / PX
         if bi is None:   # the new map gives some places only a label and a door: take the building that contains the label (or door), else the nearest one within 15 m
             for pt in (Point(x, z), Point(q['door'][0] / PX, q['door'][1] / PX) if q.get('door') else None):
                 if pt is None: continue
@@ -160,7 +178,7 @@ def main():
             xs = [q[0] for q in ob['pts']]; zs = [q[1] for q in ob['pts']]; w, d = max(xs) - min(xs), max(zs) - min(zs)
         else: w, d = 20.0, 14.0
         w = min(max(w, 8), 70); d = min(max(d, 6), 45)
-        x, z = T(p['x'], p['z']); cx, cz, moved = find_spot(x, z, w, d)
+        x, z = T(p['x'], p['z']); cx, cz, moved = find_spot(x, z, w, d, True)
         h = ob['h'] if ob else 8.0
         pts = [[round(cx - w / 2, 1), round(cz - d / 2, 1)], [round(cx + w / 2, 1), round(cz - d / 2, 1)], [round(cx + w / 2, 1), round(cz + d / 2, 1)], [round(cx - w / 2, 1), round(cz + d / 2, 1)]]
         nb = {'id': nid, 'pts': pts, 'area': int(round(w * d)), 'h': float(h), 'hSrc': 'game-placement', 'place': p['id']}

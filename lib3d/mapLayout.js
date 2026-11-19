@@ -43,11 +43,11 @@ export const LAYOUTS = {
       // a full diamond where two collectors cross under the deck at s = 2200 m: the big junction (6 roads) on the south-west side, and a new junction 110 m up the collector on the north-east side
       { id: "campus", name: "Campus interchange", sides: ["N", "S"], north: { road: [1682, 2683], dist: 110 }, south: { at: [1583, 2834], tol: 8 } },
     ],
-    // Each tail turns the deck round outside the map on to a return line that ends at a road that leaves the map's rim: (0, 236) on the west rim, and (1849.5, 3236.5) on the south rim.
+    // Each tail turns the deck round outside the map on to a return line that ends at a road that leaves the map's rim: (0, 73.1) on the west rim, and (1849.5, 3236.5) on the south rim.
     // R and side are the smallest total length found for the 330 m descent (tools/oau/design-expressway-tails.mjs).
     tails: {
-      west: { side: 1, R: 270, ret: { q: [0, 235.5], h: [1, 0] }, touch: [-100, 235.5], ground: [-55, 235.5], target: [0, 235.5], via: [], bend: 120 },
-      east: { side: 1, R: 580, ret: { q: [1849.5, 3236.5], h: [0, -1] }, touch: [1849.5, 3336.5], ground: [1849.5, 3291.5], target: [1849.5, 3236.5], via: [], bend: 120 },
+      west: { side: 1, R: 340, ret: { q: [0, 73.1], h: [1, 0] }, touch: [-100, 73.1], ground: [-55, 73.1], target: [0, 73.1], via: [], bend: 120 },
+      east: { side: 1, R: 600, ret: { q: [1849.5, 3236.5], h: [0, -1] }, touch: [1849.5, 3336.5], ground: [1849.5, 3291.5], target: [1849.5, 3236.5], via: [], bend: 120 },
     },
     billboardSites: [
       ["Senate Plaza", 1764, 562, -0.913],

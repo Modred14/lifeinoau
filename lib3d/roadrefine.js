@@ -168,7 +168,7 @@ export function refineRoadNetwork(raw, data, { sdf = null, log = () => {} } = {}
   // ---- 1. class of every road (before anything changes, from the polygon width the generator measured) ----
   for (const e of edges) { e.cls = e.w >= REFINE.arterialWidth ? "arterial" : e.w >= 9.8 ? "collector" : "local"; }
   // the north-east ring road is made of express-width pieces joined by one ordinary-width one; it is one road
-  const EXTRA_ARTERIAL = [10];
+  const EXTRA_ARTERIAL = data?.meta?.oldToNew ? [] : [10];   // an edge id of the OLD map's graph: never applied to the OpenStreetMap map (where id 10 is something else)
   for (const e of edges) if (EXTRA_ARTERIAL.includes(e.id)) e.cls = "arterial";
 
   // ---- 2. straighten ----
@@ -238,6 +238,31 @@ export function refineRoadNetwork(raw, data, { sdf = null, log = () => {} } = {}
       if (e.a === e.b || d[e.a] < 3 || d[e.b] < 3) continue; const L = plen(e.pts), chord = hyp(e.pts.at(-1)[0] - e.pts[0][0], e.pts.at(-1)[1] - e.pts[0][1]); if (chord / L < 0.9) continue;
       if (e.cls === "local" && L >= 150) { e.cls = "collector"; report.upgraded++; } else if (e.cls === "collector" && L >= 260 && (e.clr ?? 0) >= 11) { e.cls = "arterial"; report.upgraded++; }
     } }
+
+  // ---- 3d. close dead ends: a street that stops in the middle of nowhere is joined to the nearest other road when a straight link of at most CLOSE_MAX m keeps CLOSE_CLR m clear of every wall (the
+  // OpenStreetMap map has real cul-de-sacs; the game wants none). A dead end with no clear link stays. The link is a new junction on the other road. Rim ends are roads leaving the map and are left alone.
+  if (sdf && data?.meta?.oldToNew) {   // OpenStreetMap map only: the legacy graph stays exactly as baked
+    const CLOSE_MAX = 140, CLOSE_CLR = 4.0;   // the game drops a road whose centreline is under 2.7 m from a wall (XS.minDrivableClearance); 4 m leaves margin
+    report.closed = [];
+    for (let pass = 0; pass < 8; pass++) {
+      const live = edges.filter((e) => !e.__off), d0 = degrees(nodes, live); let did = false;
+      for (const n of nodes) {
+        if (d0[n.id] !== 1 || n.rim) continue; const own = live.find((e) => e.a === n.id || e.b === n.id); if (!own || own.a === own.b) continue;
+        let best = null;
+        for (const e of live) { if (e === own) continue; for (let i = 0; i < e.pts.length - 1; i++) {
+          const a = e.pts[i], b = e.pts[i + 1], dx = b[0] - a[0], dz = b[1] - a[1], t = Math.max(0, Math.min(1, ((n.x - a[0]) * dx + (n.z - a[1]) * dz) / (dx * dx + dz * dz || 1))), qx = a[0] + t * dx, qz = a[1] + t * dz, dd = hyp(qx - n.x, qz - n.z);
+          if (dd >= 12 && dd <= CLOSE_MAX && (!best || dd < best.dd)) best = { dd, e, i, qx, qz }; } }
+        if (!best) continue; let lo = Infinity; for (let s2 = 4; s2 < best.dd - 2; s2 += 2) lo = Math.min(lo, sdf(n.x + (best.qx - n.x) * s2 / best.dd, n.z + (best.qz - n.z) * s2 / best.dd)); if (lo < CLOSE_CLR) continue;
+        // the junction on the other road
+        const e = best.e, na = nodes[e.a], nb = nodes[e.b]; let jn;
+        if (hyp(best.qx - na.x, best.qz - na.z) < 5) jn = e.a; else if (hyp(best.qx - nb.x, best.qz - nb.z) < 5) jn = e.b;
+        else { jn = nodes.length; nodes.push({ id: jn, x: best.qx, z: best.qz, rim: false, comp: 0 }); const tail = { ...e, id: Math.max(...edges.map((q) => q.id)) + 1, a: jn, pts: [[best.qx, best.qz], ...e.pts.slice(best.i + 1)] }; delete tail.__off; e.pts = [...e.pts.slice(0, best.i + 1), [best.qx, best.qz]]; e.b = jn; edges.push(tail); }
+        edges.push({ id: Math.max(...edges.map((q) => q.id)) + 1, a: n.id, b: jn, pts: [[n.x, n.z], [nodes[jn].x, nodes[jn].z]], w: own.w, clr: Math.round(lo * 10) / 10, comp: 0, cls: own.cls });
+        report.closed.push({ node: n.id, at: [Math.round(n.x), Math.round(n.z)], link: Math.round(best.dd), clear: Math.round(lo * 10) / 10 }); did = true; break;
+      }
+      if (!did) break;
+    }
+  }
 
   // ---- 4. renumber ----
   edges = edges.filter((e) => !e.__off); const deg = degrees(nodes, edges), used = nodes.filter((n, i) => deg[i] > 0), remap = new Map(used.map((n, i) => [n.id, i]));
