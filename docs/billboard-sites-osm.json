@@ -25,66 +25,66 @@
   "n": 3,
   "id": "bb_3",
   "where": "Law Corner",
-  "x": 1108.4,
-  "z": 338.7,
-  "yaw": 0.372,
-  "road": "local",
-  "edge": 316,
-  "anchorM": 380
+  "x": 1307.9,
+  "z": 565.6,
+  "yaw": 2.018,
+  "road": "collector",
+  "edge": 36,
+  "anchorM": 220
  },
  {
   "n": 4,
   "id": "bb_4",
   "where": "Student Union Strip",
-  "x": 1851.6,
-  "z": 1111.9,
-  "yaw": 2.203,
+  "x": 1851.1,
+  "z": 1108,
+  "yaw": 2.199,
   "road": "collector",
-  "edge": 328,
-  "anchorM": 595
+  "edge": 334,
+  "anchorM": 593
  },
  {
   "n": 5,
   "id": "bb_5",
   "where": "Moremi Junction",
-  "x": 792,
-  "z": 695.4,
-  "yaw": -0.119,
-  "road": "collector",
-  "edge": 43,
-  "anchorM": 295
+  "x": 760.5,
+  "z": 602.8,
+  "yaw": -2.608,
+  "road": "local",
+  "edge": 324,
+  "anchorM": 299
  },
  {
   "n": 6,
   "id": "bb_6",
   "where": "Alumni Road",
-  "x": 575.3,
-  "z": 315.2,
-  "yaw": -2.56,
-  "road": "arterial",
-  "edge": 360,
-  "anchorM": 333
+  "x": 936.3,
+  "z": 302.2,
+  "yaw": 2.277,
+  "road": "local",
+  "edge": 316,
+  "anchorM": 61
  },
  {
   "n": 7,
   "id": "bb_7",
   "where": "Halls Row",
-  "x": 169.3,
-  "z": 543,
-  "yaw": -0.355,
+  "x": 435.7,
+  "z": 255.5,
+  "yaw": 2.311,
   "road": "local",
-  "edge": 325,
-  "anchorM": 408
+  "edge": 365,
+  "anchorM": 163
  },
  {
   "n": 8,
   "id": "bb_8",
   "where": "Fajuyi Crossing",
-  "x": 608.1,
-  "z": 918.1,
+  "x": 608.7,
+  "z": 919,
   "yaw": 2.934,
   "road": "local",
-  "edge": 105,
+  "edge": 104,
   "anchorM": 376
  },
  {
@@ -95,7 +95,7 @@
   "z": 1290.5,
   "yaw": -1.877,
   "road": "collector",
-  "edge": 138,
+  "edge": 139,
   "anchorM": 242
  },
  {
@@ -106,7 +106,7 @@
   "z": 1564.8,
   "yaw": 0.375,
   "road": "local",
-  "edge": 374,
-  "anchorM": 106
+  "edge": 375,
+  "anchorM": 142
  }
 ]

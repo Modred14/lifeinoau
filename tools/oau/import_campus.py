@@ -31,6 +31,11 @@ EQUIV = {
 }
 # game-only places the user wants placed by the transform + a clear-of-buildings check (never matched to a real building)
 FORCE_GAME = {'h_pg', 'h_akintola', 'h_ojaja', 'club_quantum', 'club_0203', 'club_divas'}
+# per-place shifts (m) applied AFTER the clear-spot search, when the shifted rectangle is still clear: at AFKIT's first spot the car's drop-off lands on a street-furniture cell the walking planner
+# cannot cross, so no car trip could reach it (checked with tripplan.planTrip: every shift of +12, +22, +34 or -20 m along z works, no shift does not)
+import os
+SHIFT = {}
+NUDGE_Z = {'afkit': float(os.environ.get('AFKIT_NUDGE_Z', '30'))}   # start-point nudge (m, z) before the clear-spot search. At AFKIT's first spot the car's drop-off lands on a street-furniture cell the walking planner cannot cross, so no car trip could reach it; +30 m is the first of 30, -34, 45, -48 checked with tripplan.planTrip that works for every origin tried
 # the user asked for these to be dropped
 DROP = {'pit_theatre', 'bio_gardens', 'zoo'}
 # laid out separately (they are rectangles in mapExtras.js GROUNDS) or re-placed by tools/oau/place-billboards.mjs: not handled here
@@ -178,7 +183,9 @@ def main():
             xs = [q[0] for q in ob['pts']]; zs = [q[1] for q in ob['pts']]; w, d = max(xs) - min(xs), max(zs) - min(zs)
         else: w, d = 20.0, 14.0
         w = min(max(w, 8), 70); d = min(max(d, 6), 45)
-        x, z = T(p['x'], p['z']); cx, cz, moved = find_spot(x, z, w, d, True)
+        x, z = T(p['x'], p['z']); z += NUDGE_Z.get(p['id'], 0.0); cx, cz, moved = find_spot(x, z, w, d, True)
+        for sx, sz in SHIFT.get(p['id'], []):
+            if clear(rect(cx + sx, cz + sz, w, d), True): cx, cz = cx + sx, cz + sz; break
         h = ob['h'] if ob else 8.0
         pts = [[round(cx - w / 2, 1), round(cz - d / 2, 1)], [round(cx + w / 2, 1), round(cz - d / 2, 1)], [round(cx + w / 2, 1), round(cz + d / 2, 1)], [round(cx - w / 2, 1), round(cz + d / 2, 1)]]
         nb = {'id': nid, 'pts': pts, 'area': int(round(w * d)), 'h': float(h), 'hSrc': 'game-placement', 'place': p['id']}

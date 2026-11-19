@@ -227,6 +227,24 @@ export function refineRoadNetwork(raw, data, { sdf = null, log = () => {} } = {}
   // a road that snakes (more than 110 degrees of turning on a short run) is straightened as far as the walls allow, and the change is undone if it takes a place away from its road
   for (const e of edges) { if (e.__off) continue; const L = plen(e.pts); if (L < 50 || totalTurn(e.pts) * 57.3 < 110) continue;
     for (const [eps, dev] of [[[8, 6, 4], 12], [[12, 9, 7, 5], 18], [[16, 12, 9], 26]]) { const keep = e.pts, sm = straighten(keep, e.cls, { sdf, eps, maxDev: dev }); if (!sm || totalTurn(sm) >= totalTurn(keep) * 0.7) continue; e.pts = sm; if (worse(access(mainOnly()), base0)) { e.pts = keep; continue; } report.uncurled = (report.uncurled ?? 0) + 1; break; } }
+  // ---- 3a2. tight bends (OpenStreetMap map only). A road cannot be drawn wider than its bend is round: where the bend radius is under the road's half width the inner edge folds over and the asphalt has a hole.
+  // A bend under 7 m is re-fitted with long straight runs (the same fitter as above, the change undone if a place loses its road). A cul-de-sac loop (a road that returns to its own junction) becomes a short
+  // dead-end stub to the far side of the loop, which the dead-end pass below then tries to join to a neighbouring road.
+  if (data?.meta?.oldToNew) {
+    const minRadius = (P) => { const q = [P[0]]; for (let i = 1; i < P.length; i++) { let a = q.at(-1), b = P[i], d = hyp(b[0] - a[0], b[1] - a[1]); while (d >= 4) { const t = 4 / d, n = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; q.push(n); a = n; d = hyp(b[0] - a[0], b[1] - a[1]); } }
+      let lo = Infinity; for (let i = 1; i < q.length - 1; i++) { const [a, b, c] = [q[i - 1], q[i], q[i + 1]], ab = hyp(b[0] - a[0], b[1] - a[1]), bc = hyp(c[0] - b[0], c[1] - b[1]), ca = hyp(a[0] - c[0], a[1] - c[1]), ar = Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2; if (ar > 1e-6) lo = Math.min(lo, ab * bc * ca / (4 * ar)); } return lo; };
+    report.relaxed = [];
+    for (const e of edges) {
+      if (e.__off) continue;
+      if (e.a === e.b) {   // a loop: keep the first half out and stop at its far side
+        const n0 = nodes[e.a]; let far = null, fd = 0; for (const p of e.pts) { const d = hyp(p[0] - n0.x, p[1] - n0.z); if (d > fd) { fd = d; far = p; } }
+        if (!far || fd < 15) continue; const keep = { pts: e.pts, b: e.b }, nid = nodes.length; nodes.push({ id: nid, x: far[0], z: far[1], rim: false, comp: 0 }); e.pts = [[n0.x, n0.z], [far[0], far[1]]]; e.b = nid;
+        if (worse(access(mainOnly()), base0)) { e.pts = keep.pts; e.b = keep.b; nodes.pop(); continue; } report.relaxed.push({ id: e.id, loopToStub: Math.round(fd) }); continue;
+      }
+      if (e.pts.length < 3 || plen(e.pts) < 20) continue; const r0 = minRadius(e.pts); if (!(r0 < 7)) continue;
+      for (const [eps, dev] of [[[6, 4], 8], [[8, 6, 4], 12], [[12, 9, 7, 5], 18], [[16, 12, 9], 26]]) { const keep = e.pts, sm = straighten(keep, e.cls, { sdf, eps, maxDev: dev }); if (!sm || !(minRadius(sm) > r0 + 0.5)) continue; e.pts = sm; if (worse(access(mainOnly()), base0)) { e.pts = keep; continue; } report.relaxed.push({ id: e.id, from: Math.round(r0 * 10) / 10, to: Math.round(minRadius(sm) * 10) / 10 }); break; }
+    }
+  }
   // a big road must not have a corner in it: any vertex sharper than 25 degrees gets a gentle arc (when it fits clear of the walls)
   for (const e of edges) { if (e.__off || e.cls !== "arterial" || plen(e.pts) < 100) continue; let sharp = 0; for (let i = 1; i < e.pts.length - 1; i++) { const a = Math.atan2(e.pts[i][1] - e.pts[i - 1][1], e.pts[i][0] - e.pts[i - 1][0]), b = Math.atan2(e.pts[i + 1][1] - e.pts[i][1], e.pts[i + 1][0] - e.pts[i][0]); let d = Math.abs(b - a); if (d > Math.PI) d = TAU - d; sharp = Math.max(sharp, d); }
     if (sharp * 57.3 > 25) { const sm = straighten(e.pts, "arterial", { sdf, eps: [10, 7, 5], maxDev: 14 }); if (sm) e.pts = sm; } }
