@@ -2,7 +2,6 @@
 // One entry point for every character in the game (the player, NPCs, the creator preview).
 // It uses a rigged GLB body when one is installed and otherwise the built-in character, and both give the same API.
 import * as THREE from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { SKIN_TONES, COLORS, cleanLook } from "../../lib/look.js";
 import { checkWear, legacyFields, FINISHES } from "../../lib/wardrobe.js";
@@ -23,58 +22,29 @@ import { createAnimator, createFace, resolveClip } from "./animation.js";
 import { buildIdleEmoteClip } from "./idleEmote.js";
 import { npcClips } from "./npcClips.js";
 import { activityClips } from "./activityClips.js";
+import { acquireGltf, hasAsset } from "../assets/index.js";
 
-const loader = new GLTFLoader(),
-  gltfCache = new Map(),
-  exists = new Map();
 const HEIGHT = { short: 0.95, average: 1, tall: 1.06 };
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Asks the server whether an asset exists. true / false only when the server gave a definite answer (200, or 404 / 410 / an HTML page standing in for a missing file);
- *  null when it could not be asked at all (offline, interrupted, a 5xx). A host that does not answer HEAD is asked for one byte instead. */
-async function probe(url) {
-  for (let i = 0; i < 2; i++) {
-    try {
-      let r = await fetch(url, { method: "HEAD" });
-      if (r.status === 405 || r.status === 501) r = await fetch(url, { headers: { Range: "bytes=0-0" } });
-      if (r.ok || r.status === 206) return !/text\/html/.test(r.headers.get("content-type") ?? "");
-      if (r.status === 404 || r.status === 410) return false;
-    } catch {
-      /* offline or interrupted: ask once more */
-    }
-    if (i === 0) await wait(300);
+/** True when the model file is installed. The asset manifest (generated from public/ at build time, see assets.config.mjs) is the list of what exists, so there is nothing to ask the
+ *  server: no HEAD request per file, and a file that is not in the manifest is definitely not installed (the built-in character is used instead). */
+const lost = new Set(); // files the server answered "not found" for although the manifest lists them (deleted by hand, a broken deployment): not asked for again this session
+const available = (url) => hasAsset(url) && !lost.has(url);
+const isGone = (e) => e?.status === 404 || e?.status === 410;
+
+/** The shared, parsed model at `url` (lib3d/assets/gltf.js: downloaded once, saved for the next visit, parsed once, shared by every character). The handle is kept in `handles`
+ *  so the character gives it back when it is disposed; nothing a handle holds can be evicted while a character is using it. A failed load is not cached, so asking again really tries again. */
+const loadGltf = async (url, handles, priority) => {
+  try {
+    const h = await acquireGltf(url, { priority });
+    handles.push(h);
+    return h.value;
+  } catch (e) {
+    if (isGone(e)) lost.add(url); // a definite "not found" is remembered; a dropped connection is not (that is what used to leave a player in a different-looking body until they reloaded)
+    throw e;
   }
-  return null;
-}
-
-/** The remembered answer of probe(). Only definite answers are remembered: a dropped connection must never make an installed model look "missing" for the rest of the session
- *  (that is what used to leave a player on a different-looking built-in body until they reloaded). */
-function status(url) {
-  if (!exists.has(url))
-    exists.set(
-      url,
-      probe(url).then((s) => {
-        if (s === null) exists.delete(url);
-        return s;
-      }),
-    );
-  return exists.get(url);
-}
-/** True only when the asset is known to be installed. */
-const available = async (url) => (await status(url)) === true;
-
-/** Loads a model once and shares it. A failed load is forgotten, so asking again really tries again. */
-const loadGltf = (url) => {
-  if (!gltfCache.has(url))
-    gltfCache.set(
-      url,
-      loader.loadAsync(url).catch((e) => {
-        gltfCache.delete(url);
-        throw e;
-      }),
-    );
-  return gltfCache.get(url);
 };
 
 /** Bones from REQUIRED_BONES that a model is missing (empty array = the skeleton is valid). */
@@ -213,10 +183,10 @@ export function attachToBone(base, object, boneName) {
 }
 
 /** The URL to load: the lighter crowd copy when asked for and installed, otherwise the full-detail file. */
-async function resolveUrl(url, lod) {
+function resolveUrl(url, lod) {
   if (lod) {
     const l = lodUrl(url);
-    if (await available(l)) return l;
+    if (available(l)) return l;
   }
   return url;
 }
@@ -227,6 +197,21 @@ async function resolveUrl(url, lod) {
  * the load throws, and createAvatar tries again instead of quietly swapping the player's body.
  */
 async function loadModel(look, gender, opt = {}) {
+  const handles = [];
+  let kept = false;
+  try {
+    const m = await buildModel(look, gender, opt, handles);
+    if (m) { m.release = () => handles.splice(0).forEach((h) => h.release()); kept = true; }
+    return m;
+  } catch (e) {
+    if (isGone(e)) return null; // a required file is definitely not there: the built-in character is used, in the same look
+    throw e;
+  } finally {
+    if (!kept) handles.splice(0).forEach((h) => h.release()); // not used (missing part, wrong skeleton, failed download): give the shared models back
+  }
+}
+
+async function buildModel(look, gender, opt, handles) {
   // Everything the look needs is asked for at once (a phone on a slow connection used to wait for each file in turn).
   // Store clothes (look.wear): the top and bottom come from the garment meshes of the models they were authored in. No wear = the whole starter outfit model.
   const fit = checkWear(look.wear, gender), fitted = fit.ok ? fit.parts : null;
@@ -238,26 +223,28 @@ async function loadModel(look, gender, opt = {}) {
     ...outfitSlots,
     ...(look.acc ?? []).map((a) => [a, a]),
   ];
-  const [baseUrl, ...found] = await Promise.all([
+  const [baseUrl, ...found] = [
     resolveUrl(BASES[gender], opt.lod),
     ...slots.map(([slot, id]) => resolveUrl(partUrl(slot, id, gender), opt.lod)),
-  ]);
-  const states = await Promise.all([baseUrl, ...found].map(status));
+  ];
+  const states = [baseUrl, ...found].map(available); // true / false: the manifest knows exactly what is installed
   if (states[0] === false) return null; // no body installed
   const wanted = []; // the parts to fit, in the order of the look
   for (let i = 0; i < slots.length; i++) {
     const slot = slots[i][0], st = states[i + 1];
     if (REQUIRED_SLOTS.includes(slot)) {
       if (st === false) return null; // a look without its hair or outfit part uses the built-in character
-      wanted.push([slot, found[i], slots[i][2] ?? null]); // known to exist, or unknown (then the load below decides)
+      wanted.push([slot, found[i], slots[i][2] ?? null]);
     } else if (st === true) wanted.push([slot, found[i], null]); // accessories are optional
   }
-  const libraryUrl = (await available(ANIM_LIBRARY)) ? ANIM_LIBRARY : null;
+  const libraryUrl = available(ANIM_LIBRARY) ? ANIM_LIBRARY : null;
+  const priority = opt.npc ? 2 : 1; // the player's own body before the crowd's
   const [gltf, library, ...loadedParts] = await Promise.all([
-    loadGltf(baseUrl),
-    libraryUrl ? loadGltf(libraryUrl).catch((e) => { console.warn("shared animation library unavailable:", e); return null; }) : null,
-    ...wanted.map(([, u]) => loadGltf(u)),
+    loadGltf(baseUrl, handles, priority),
+    libraryUrl ? loadGltf(libraryUrl, handles, priority).catch((e) => { console.warn("shared animation library unavailable:", e); return null; }) : null,
+    ...wanted.map(([slot, u]) => loadGltf(u, handles, priority).catch((e) => { if (isGone(e) && !REQUIRED_SLOTS.includes(slot)) return null; throw e; })), // an accessory that is gone is simply left off
   ]);
+  for (let i = wanted.length - 1; i >= 0; i--) if (!loadedParts[i]) { wanted.splice(i, 1); loadedParts.splice(i, 1); }
   const root = SkeletonUtils.clone(gltf.scene),
     problems = missingBones(root);
   if (problems.length) {
@@ -406,6 +393,7 @@ function wrapModel(m, look, gender) {
     setExpression: (n) => m.face.setExpression(n),
     dispose() {
       m.animator.dispose();
+      m.release?.(); // let go of the shared models (they stay cached, and are only freed once nobody holds them)
       // The geometry and textures are shared with every other copy of the same cached model, so they stay. Only what was made for this one character is freed.
       m.root.traverse((o) => (Array.isArray(o.material) ? o.material : [o.material]).forEach((x) => x?.userData?.owned && x.dispose()));
     },

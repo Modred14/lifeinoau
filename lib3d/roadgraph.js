@@ -10,7 +10,7 @@
 //     sees the levels it asks for (the default is the ground), so people, ambient traffic and pick-ups never meet the deck, while a car on it asks for the deck. heightAt() gives the height.
 // Metres, x east, z south, like the rest of lib3d. Heading (hx, hz); the right-hand side of a heading is (-hz, hx).
 import { Path } from "./roadnet.js";
-import { dataUrl } from "./dataUrl.js";
+import { loadJson } from "./assets/index.js";
 import { buildJunctions, inside } from "./roadjunction.js";
 import { DECK } from "./roadsurface.js";
 
@@ -519,4 +519,4 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
 
 /** Loads the generated graph (browser). A failed load is not cached, so a retry can succeed. */
 let cache;
-export const loadRoadGraph = () => (cache ??= fetch(dataUrl("oau-roadgraph.json")).then((r) => { if (!r.ok) throw new Error("road graph " + r.status); return r.json(); }).then(buildRoadGraph).catch((e) => { cache = undefined; throw e; }));
+export const loadRoadGraph = () => (cache ??= loadJson("/data/oau-roadgraph.json", { priority: 0 }).then(buildRoadGraph).catch((e) => { cache = undefined; throw e; }));

@@ -79,7 +79,7 @@ const Req = globalThis.Request;
 globalThis.Request = class extends Req { constructor(u, i) { super(typeof u === "string" && u.startsWith("/") ? "http://localhost" + u : u, i); } };
 let net = { online: true, headStatus: null, missing: new Set(), log: [] };
 globalThis.fetch = async (input, init = {}) => {
-  const url = String(input?.url ?? input).replace(/^https?:\/\/[^/]+/, ""), method = init.method ?? input?.method ?? "GET";
+  const url = String(input?.url ?? input).replace(/^https?:\/\/[^/]+/, "").replace(/\?.*$/, ""), /* a static host ignores the ?v=<hash> on asset URLs */ method = init.method ?? input?.method ?? "GET";
   net.log.push(method + " " + url);
   if (!net.online) throw new TypeError("network down");
   if (method === "HEAD" && net.headStatus) return new Response(null, { status: net.headStatus });
@@ -90,7 +90,8 @@ globalThis.fetch = async (input, init = {}) => {
 const reset = (over = {}) => { net = { online: true, headStatus: null, missing: new Set(), log: [], ...over }; };
 // Each scenario gets its own copy of the loader (its own memory of what exists and what was downloaded), as a fresh page load would have.
 let copies = 0;
-const freshLoader = async () => (await import(`../lib3d/avatar/loadAvatar.js?copy=${++copies}`)).createAvatar;
+const { resetAssets } = await import("../lib3d/assets/index.js"); // the asset system is shared by the whole page (that is its point), so a "fresh page load" resets it too
+const freshLoader = async () => { resetAssets(); return (await import(`../lib3d/avatar/loadAvatar.js?copy=${++copies}`)).createAvatar; };
 let createAvatar = await freshLoader();
 
 /** What a character looks like, as plain text: every mesh with its materials and colours, and the body's scale. Equal text = drawn the same. */

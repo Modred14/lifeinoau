@@ -6,7 +6,7 @@ import { buildRoadGraph } from "./roadgraph.js";
 import { buildWorldCollision } from "./collide.js";
 import { createNav } from "./walker.js";
 import { buildRoadNet } from "./roadnet.js";
-import { dataUrl } from "./dataUrl.js";
+import { loadJson } from "./assets/index.js";
 import { addBillboardCollision } from "./billboardSite.js";
 import { planFurniture } from "./furnitureplan.js";
 import { woodlandTrees, addWoodlandCollision } from "./woodland.js";
@@ -42,7 +42,7 @@ let cache = null, rawFetch = null;
  * A failed fetch is not remembered, so a retry can succeed.
  */
 export function fetchRoadGraphRaw() {
-  return (rawFetch ??= fetch(dataUrl("oau-roadgraph.json")).then((r) => { if (!r.ok) throw new Error("road graph " + r.status); return r.json(); }).catch((e) => { rawFetch = null; throw e; }));
+  return (rawFetch ??= loadJson("/data/oau-roadgraph.json", { priority: 0 }).catch((e) => { rawFetch = null; throw e; }));
 }
 
 /** The shared services for this map data (browser). Fetches the road graph the first time (or uses the one already on its way); later calls return the same promise. */

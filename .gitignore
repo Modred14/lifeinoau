@@ -53,3 +53,6 @@ AGENT.md
 setup.sh
 **/node_modules/
 **/dist/
+
+# copied from node_modules/three by scripts/copy-draco.mjs at build time
+/public/draco/
