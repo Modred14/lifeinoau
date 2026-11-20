@@ -15,8 +15,11 @@ const hot = (data.places ?? []).filter((p) => p.x != null && HOT_KINDS[p.kind] &
 const make = (f, seed = 7) => createTrafficSim({ graph: g, world, focus: () => f, rnd: rng(seed), density: { vehicles: 70, hwVehicles: 44, peds: 60, hotspots: hot, limits: { car: 80, keke: 10, bus: 8, minibus: 12 } } });
 const hidden = (f, x, z, min, lvl = 0) => { if (lvl === 1 || Math.hypot(x - f.x, z - f.z) < min) return false; const dx = x - f.x, dz = z - f.z, l = Math.hypot(dx, dz), px = (-dz / l) * 2.5, pz = (dx / l) * 2.5; return [[0, 0], [px, pz], [-px, -pz]].every(([a, b]) => world.raycast(f.x, f.z, x + a, z + b) != null); };
 
+// The three places are the expressway's two interchanges and the middle of the map. They were fixed points on the old map ((63, 730), (0, 100), (-493, 759)); they are found from the map in use.
+const rampFocus = (ic) => { const r = raw.expressway.ramps.find((q) => q.ic === ic) ?? raw.expressway.ramps[0], p = r.pts[r.pts.length >> 1]; return { x: p[0], z: p[1] }; };
+const centre = { x: (data.bounds.x0 + data.bounds.x1) / 2, z: (data.bounds.z0 + data.bounds.z1) / 2 };
 // 1. over ten minutes at three places, with the player standing still: nothing is removed or created in the open, and no jam survives
-for (const [name, f] of [["campus interchange", { x: 63, z: 730 }], ["city centre", { x: 0, z: 100 }], ["west interchange", { x: -493, z: 759 }]]) {
+for (const [name, f] of [["campus interchange", rampFocus("campus")], ["city centre", centre], ["west interchange", rampFocus("west")]]) {
   const sim = make(f); let prev = new Map(), seenV = new Set(), seenP = new Set(), vanished = 0, appeared = 0, pAppeared = 0, longest = 0;
   for (let i = 0; i < 30 * 600; i++) {
     sim.update(1 / 30); const t = i / 30, cur = new Map(sim.vehicles.filter((v) => v.role === "npc").map((v) => [v.id, v]));
@@ -54,7 +57,7 @@ for (const [name, f] of [["campus interchange", { x: 63, z: 730 }], ["city centr
 
 // 3. a keke is never put where it could be stranded or sent on the expressway; others do use the ramps
 {
-  const sim = make({ x: -493, z: 759 }); let kekes = 0, ramp = 0;
+  const sim = make(rampFocus("west")); let kekes = 0, ramp = 0;
   for (let i = 0; i < 30 * 400; i++) { sim.update(1 / 30); if (i % 15) continue; for (const v of sim.vehicles) { if (v.role !== "npc") continue; if (v.kind === "keke") { kekes++; assert.ok(!g.lanes[v.laneId].hw, "a keke on the expressway or a ramp"); } else if (g.byEdge.get(g.lanes[v.laneId].edge).kind === "ramp") ramp++; } }
   assert.ok(kekes > 0 && ramp > 0, "kekes were seen, and other vehicles took the ramps");
   ok(`kekes stay off the deck (${kekes} samples); ${ramp} samples of other vehicles on ramps`);

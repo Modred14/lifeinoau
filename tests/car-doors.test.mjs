@@ -17,7 +17,10 @@ const read = (f) => JSON.parse(fs.readFileSync(new URL("../public/data/" + f, im
 const svc = buildServices(withExtras(read("oau-campus.json")), read("oau-roadgraph.json"));
 const places = svc.data.places.filter((p) => p.x != null);
 let seed = 5; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
-let plan = null; for (let i = 0; i < 60 && !plan; i++) { const p = planTrip(svc, { from: places[(i * 7) % places.length], to: places[(i * 13 + 5) % places.length], mode: "car", driver: false }); if (p.ok && p.route?.len > 500) plan = p; }
+// The driver below holds full throttle for three seconds and steers by pure pursuit, so it can only be asked to drive a trip that starts straight: no bend of more than 17 degrees in the first 220 m of the route (it later brakes from 15 m/s)
+// (a car at 10 m/s cannot take a street corner, on any map; on the old map the first trip found happened to start straight).
+const startsStraight = (p) => { const q = p.route.path.pts; let acc = 0, a0 = null, worst = 0; for (let k = 1; k < q.length && acc < 220; k++) { const dx = q[k][0] - q[k - 1][0], dz = q[k][1] - q[k - 1][1]; acc += Math.hypot(dx, dz); const a = Math.atan2(dx, dz); if (a0 === null) a0 = a; worst = Math.max(worst, Math.abs(Math.atan2(Math.sin(a - a0), Math.cos(a - a0)))); } return worst < 0.3; };
+let plan = null; for (let i = 0; i < 400 && !plan; i++) { const p = planTrip(svc, { from: places[(i * 7) % places.length], to: places[(i * 13 + 5) % places.length], mode: "car", driver: false }); if (p.ok && p.route?.len > 500 && startsStraight(p)) plan = p; }
 assert.ok(plan, "a car trip to test with");
 const sim = createTrafficSim({ graph: svc.graph, world: svc.world, focus: () => plan.start ?? places[0], rnd });
 const notices = []; let end = null, paid = 0;
@@ -59,7 +62,8 @@ ok("brake slows it", (() => { const v = car.v; for (let i = 0; i < 20; i++) tick
 car.v = 15; ok("it is going fast", car.v >= 14.5);
 tick({ exit: true }); ok("too fast to get out: refused with a message, still driving", S.phase === "drive" && !S.exiting && notices.some((m) => /slow down/i.test(m)));
 until(() => car.v < 8, 10, () => drv(car, { brake: 1 })); tick(drv(car, { exit: true })); ok("exit requested at a safe speed: the car is braking itself to a stop", S.exiting || S.phase !== "drive");
-let prev = car.v, maxDecel = 0; while (S.phase === "drive") { tick(drv(car, {})); maxDecel = Math.max(maxDecel, (prev - car.v) / DT); prev = car.v; if (flow.state.time > 4000) break; }
+// (the last frame, where the car's final 0.3 m/s is set to rest, is not braking and is left out of the deceleration)
+let prev = car.v, maxDecel = 0; while (S.phase === "drive") { tick(drv(car, {})); if (car.v > 0) maxDecel = Math.max(maxDecel, (prev - car.v) / DT); prev = car.v; if (flow.state.time > 4000) break; }
 ok("it stopped at a steady rate, not instantly", maxDecel < 8); ok("then the exit sequence starts", S.phase === "exit"); ok("the car is stopped before the door opens", car.v === 0);
 const box = { x: car.x, z: car.z, hx: car.hx, hz: car.hz, len: car.len, wid: car.wid }, carAt = { x: car.x, z: car.z, ang: car.ang };
 const seats = []; while (S.phase === "exit") { tick({ gas: 1, steer: 1 }); seats.push({ seat: S.seatK, door: S.vehDoorK }); ok("the car stays still while you climb out", car.x === carAt.x && car.z === carAt.z && car.ang === carAt.ang); }
