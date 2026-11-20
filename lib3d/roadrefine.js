@@ -257,6 +257,18 @@ export function refineRoadNetwork(raw, data, { sdf = null, log = () => {} } = {}
       if (e.cls === "local" && L >= 150) { e.cls = "collector"; report.upgraded++; } else if (e.cls === "collector" && L >= 260 && (e.clr ?? 0) >= 11) { e.cls = "arterial"; report.upgraded++; }
     } }
 
+  // ---- 3c2. rim forks (OpenStreetMap map only). Where a road meets the frame the skeleton forks into little Y branches 1 to 10 m long, each ending at its own rim node. A lane is trimmed 3 m at each end, so an
+  // edge that short has no lane at all (tests/vehicle-ground.test.mjs). Every such branch is cut off; the junction it hung from becomes the road's end at the rim.
+  if (data?.meta?.oldToNew) {
+    report.rimForks = 0;
+    for (let again = true; again;) {
+      again = false; const live = edges.filter((e) => !e.__off), d0 = degrees(nodes, live);
+      for (const e of live) {
+        if (e.hw || plen(e.pts) >= 10) continue; const aLeaf = d0[e.a] === 1 && nodes[e.a].rim, bLeaf = d0[e.b] === 1 && nodes[e.b].rim; if (aLeaf === bLeaf) continue;
+        const J = aLeaf ? e.b : e.a; e.__off = true; if (d0[J] - 1 <= 1) nodes[J].rim = true; report.rimForks++; again = true; break;
+      }
+    }
+  }
   // ---- 3d. close dead ends: a street that stops in the middle of nowhere is joined to the nearest other road when a straight link of at most CLOSE_MAX m keeps CLOSE_CLR m clear of every wall (the
   // OpenStreetMap map has real cul-de-sacs; the game wants none). A dead end with no clear link stays. The link is a new junction on the other road. Rim ends are roads leaving the map and are left alone.
   if (sdf && data?.meta?.oldToNew) {   // OpenStreetMap map only: the legacy graph stays exactly as baked
