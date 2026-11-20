@@ -18,6 +18,7 @@
     "build:roads": "node tools/oau/build-roads.mjs"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.1.1",
     "@phosphor-icons/react": "^2.1.10",
     "@prisma/client": "^6.19.3",
     "bcryptjs": "^3.0.3",

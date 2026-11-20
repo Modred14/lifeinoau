@@ -20,6 +20,9 @@ export default {
   poweredByHeader: false,
   env: { NEXT_PUBLIC_DATA_V: DATA_V },
   agentRules: false,
+  serverExternalPackages: ["@napi-rs/canvas"], // native image library used by the campaign flyer renderer (lib/flyerRender.js)
+  // the flyer renderer reads the real logo and the vendored brand fonts from disk: make sure they are shipped with the route that draws it
+  outputFileTracingIncludes: { "/api/sug/flyer": ["./public/logo.png", "./lib/flyer-assets/**/*"] },
   compress: true,
   experimental: { cpus: 2, optimizePackageImports: ["@phosphor-icons/react"] }, // load only the icons that are used, not the whole icon pack
   async headers() {

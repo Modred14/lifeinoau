@@ -16,6 +16,7 @@ import { useLive, useDo, Countdown, when, nairaN, Note, Empty, Section } from ".
 import SugGovernment from "./SugGovernment";
 import SugAssembly from "./SugAssembly";
 import SugAdmin from "./SugAdmin";
+import SugFlyer from "./SugFlyer";
 import "./sug-app.css";
 
 const TIMETABLE = [["announcedAt", "Election announced"], ["registrationOpensAt", "Registration opens"], ["campaignStartsAt", "Registration closes, campaign begins"], ["votingStartsAt", "Voting opens"], ["votingEndsAt", "Voting closes"]];
@@ -50,7 +51,7 @@ function Eligibility({ me }) {
 }
 
 function MyCandidacy({ me, cycle, doIt }) {
-  const c = me.candidacy;
+  const c = me.candidacy, [flyer, setFlyer] = useState(false);
   if (!c) return null;
   const can = c.status === "ACTIVE" && ["REGISTRATION", "CAMPAIGN"].includes(cycle.stage);
   async function out() {
@@ -63,7 +64,10 @@ function MyCandidacy({ me, cycle, doIt }) {
       <b>{c.title}</b>
       <p>“{c.slogan}”</p>
       <span className="sg-pill" data-s={c.status}>{c.status === "ACTIVE" ? "On the ballot" : c.status === "WON" ? "Elected" : c.status === "LOST" ? "Not elected" : c.status === "WITHDRAWN" ? "Withdrawn" : "Disqualified"}</span>
+      {c.faculty ? <small>{c.faculty}</small> : null}
+      {c.canFlyer ? <button type="button" className="go sg-flyer-btn" onClick={() => setFlyer(true)}>Generate Campaign Flyer</button> : null}
       {can ? <button type="button" className="danger" onClick={out}>Withdraw</button> : null}
+      {flyer ? <SugFlyer onClose={() => setFlyer(false)} /> : null}
     </div>
   );
 }
@@ -72,8 +76,8 @@ function RegisterSheet({ d, onClose, doIt }) {
   const [f, setF] = useState({ position: "", slogan: "", intro: "", manifesto: "", promises: "" });
   const [busy, setBusy] = useState(false);
   const L = d.config.limits, set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
-  const race = d.races.find((r) => r.position === f.position);
-  const missing = !f.position ? "Choose the position you want." : f.slogan.trim().length < 3 ? "Add a slogan." : f.intro.trim().length < 10 ? "Introduce yourself in a sentence or two." : f.manifesto.trim().length < 30 ? "Your manifesto needs a little more (at least 30 characters)." : !f.promises.trim() ? "Add at least one promise." : "";
+  const race = d.races.find((r) => r.position === f.position), cats = d.config.categories, order = d.config.categoryOrder;
+  const missing = !f.position ? "Choose the position you want." : race && !race.eligible ? race.notEligibleWhy[0] : f.slogan.trim().length < 3 ? "Add a slogan." : f.intro.trim().length < 10 ? "Introduce yourself in a sentence or two." : f.manifesto.trim().length < 30 ? "Your manifesto needs a little more (at least 30 characters)." : !f.promises.trim() ? "Add at least one promise." : "";
   async function go() {
     if (missing) return toast.error(missing);
     const fee = naira(d.cycle.nominationFeeKobo);
@@ -95,10 +99,19 @@ function RegisterSheet({ d, onClose, doIt }) {
         <label>Position
           <select value={f.position} onChange={set("position")}>
             <option value="">Choose a position</option>
-            {d.races.map((r) => <option key={r.position} value={r.position}>{r.title}{r.seats > 1 ? ` (${r.seats} seats)` : ""}</option>)}
+            {order.map((k) => { const rs = d.races.filter((r) => r.category === k); return rs.length ? <optgroup key={k} label={cats[k].label}>{rs.map((r) => <option key={r.position} value={r.position} disabled={!r.eligible}>{r.title}{r.faculty ? ` · ${r.faculty.replace(/^Faculty of /i, "")}` : ""}{r.seats > 1 ? ` (${r.seats} seats)` : ""}{r.eligible ? "" : " (not eligible)"}</option>)}</optgroup> : null; })}
           </select>
         </label>
-        {race ? <p className="sg-hint">{race.about} Spending cap: {nairaN(race.group === "EXECUTIVE" ? Number(BigInt(d.cycle.spendCapExecKobo) / 100n) : Number(BigInt(d.cycle.spendCapAssemblyKobo) / 100n))}.{race.pay ? ` Pay in office: ${race.pay}.` : ""}</p> : null}
+        {race ? (
+          <div className="sg-card">
+            <b>{race.title}{race.faculty ? `, ${race.faculty}` : ""}</b><small>{cats[race.category].label}</small>
+            <p className="sg-hint">{race.about}</p>
+            <h4>Who can stand</h4>
+            <ul className="sg-elig">{race.eligibility.map((x) => <li key={x}>{x}</li>)}</ul>
+            {race.eligible ? <Note tone="good">You meet the requirements for this position.</Note> : <Note tone="warn" title="You cannot stand for this position">{race.notEligibleWhy.join(" ")}</Note>}
+            <p className="sg-hint">Spending cap: {nairaN(race.group === "ASSEMBLY" ? Number(BigInt(d.cycle.spendCapAssemblyKobo) / 100n) : Number(BigInt(d.cycle.spendCapExecKobo) / 100n))}.{race.pay ? ` Pay in office: ${race.pay}.` : ""} After you register you can generate your campaign flyer.</p>
+          </div>
+        ) : null}
         <label>Slogan <small>{f.slogan.length}/{L.slogan}</small><input type="text" value={f.slogan} maxLength={L.slogan} onChange={set("slogan")} placeholder="A line students will remember" /></label>
         <label>About you <small>{f.intro.length}/{L.intro}</small><textarea rows={3} value={f.intro} maxLength={L.intro} onChange={set("intro")} placeholder="Who you are and why you are standing" /></label>
         <label>Manifesto <small>{f.manifesto.length}/{L.manifesto}</small><textarea rows={6} value={f.manifesto} maxLength={L.manifesto} onChange={set("manifesto")} placeholder="What you will do in office" /></label>
@@ -122,16 +135,18 @@ function RaceRow({ r, me, onOpen }) {
 }
 
 function Election({ d, load, onOpen }) {
-  const doIt = useDo("/api/sug", load), [reg, setReg] = useState(false);
+  const doIt = useDo("/api/sug", load), [reg, setReg] = useState(false), [cat, setCat] = useState(null);
   if (!d.cycle)
     return (
       <div className="sg-stack">
         <div className="sg-banner" data-stage="NONE"><small>Students' Union Government</small><h2>No election is running</h2>
           <p>{d.next?.announceAt ? `The next election will be announced on ${when(d.next.announceAt)}.` : "The next election will be announced by the Union."}</p></div>
-        <Note title="How it works">One election fills 12 races: nine executive posts, the Speaker, the Deputy Speaker and 30 Honourable Members. The Clerk is appointed afterwards, not elected.</Note>
+        <Note title="How it works">An election has three categories: university administration, the Students' Union Government (nine executive posts, the Speaker, the Deputy Speaker and 30 Honourable Members) and your faculty's representatives. The Clerk is appointed afterwards, not elected.</Note>
       </div>
     );
-  const { cycle, me } = d, ex = d.races.filter((r) => r.group === "EXECUTIVE"), asm = d.races.filter((r) => r.group === "ASSEMBLY");
+  const { cycle, me } = d, cats = d.config.categories, order = d.config.categoryOrder.filter((k) => d.races.some((r) => r.category === k));
+  const active = cat && order.includes(cat) ? cat : me.candidacy?.category && order.includes(me.candidacy.category) ? me.candidacy.category : order[0];
+  const inCat = d.races.filter((r) => r.category === active), ex = inCat.filter((r) => r.group === "EXECUTIVE"), asm = inCat.filter((r) => r.group === "ASSEMBLY");
   return (
     <div className="sg-stack">
       <Banner cycle={cycle} />
@@ -139,8 +154,16 @@ function Election({ d, load, onOpen }) {
       <MyCandidacy me={me} cycle={cycle} doIt={doIt} />
       {me.canRegister ? <button type="button" className="go sg-cta" onClick={() => setReg(true)}>Stand for office · {naira(cycle.nominationFeeKobo)}</button> : !me.candidacy && me.registerWhy ? <Note tone="info">{me.registerWhy}</Note> : null}
       <Section title="Timetable" hint="All times are game time (West Africa Time)."><Timetable cycle={{ ...cycle, termStartsAt: null }} /></Section>
-      <Section title="Executive" hint="One winner each.">{ex.map((r) => <RaceRow key={r.position} r={r} me={me} onOpen={onOpen} />)}</Section>
-      <Section title="Student Representative Assembly" hint="The Speaker, the Deputy Speaker and 30 Honourable Members.">{asm.map((r) => <RaceRow key={r.position} r={r} me={me} onOpen={onOpen} />)}</Section>
+      <div className="sg-chips sg-cat" role="tablist" aria-label="Election category">
+        {order.map((k) => <button key={k} type="button" role="tab" aria-selected={active === k} className={active === k ? "on" : ""} onClick={() => setCat(k)}>{cats[k].label}</button>)}
+      </div>
+      {active ? <p className="sg-hint">{cats[active].hint}</p> : null}
+      {active === "SUG" ? (
+        <>
+          <Section title="Executive" hint="One winner each.">{ex.map((r) => <RaceRow key={r.position} r={r} me={me} onOpen={onOpen} />)}</Section>
+          <Section title="Student Representative Assembly" hint="The Speaker, the Deputy Speaker and 30 Honourable Members.">{asm.map((r) => <RaceRow key={r.position} r={r} me={me} onOpen={onOpen} />)}</Section>
+        </>
+      ) : <Section title={cats[active]?.label ?? "Races"} hint={active === "FACULTY" ? "Your faculty's races. Students of other faculties cannot stand or vote here." : "One winner each."}>{inCat.map((r) => <RaceRow key={r.position} r={r} me={me} onOpen={onOpen} />)}</Section>}
       {reg ? <RegisterSheet d={d} doIt={doIt} onClose={() => setReg(false)} /> : null}
     </div>
   );
@@ -152,7 +175,7 @@ function Strength({ v }) {
 }
 
 function Candidate({ c, ctx, doIt, load }) {
-  const [more, setMore] = useState(false);
+  const [more, setMore] = useState(false), [flyer, setFlyer] = useState(false);
   const { race, home } = ctx, me = home.me, round = me.round;
   const inRace = race.status !== "RUNOFF" || !race.tieIds || race.tieIds.includes(c.id);
   const voted = round === 2 ? home.races.find((r) => r.position === race.position)?.votedRunoff : home.races.find((r) => r.position === race.position)?.voted;
@@ -187,7 +210,9 @@ function Candidate({ c, ctx, doIt, load }) {
       <div className="sg-actions">
         {canPledge ? <button type="button" onClick={() => doIt({ action: "pledge", candidateId: c.id }, { ok: `You pledged to support ${c.who.name}.`, key: `sug:pledge:${c.id}` })}>Pledge support</button> : c.iPledged ? <span className="sg-pill" data-s="VOTED">You pledged</span> : null}
         {canVote ? <button type="button" className="go" onClick={vote}>Vote</button> : null}
+        {c.isMe && home.me.candidacy?.canFlyer ? <button type="button" onClick={() => setFlyer(true)}>Generate Campaign Flyer</button> : null}
       </div>
+      {flyer ? <SugFlyer onClose={() => setFlyer(false)} /> : null}
     </article>
   );
 }
