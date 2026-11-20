@@ -1057,6 +1057,7 @@ model SugCandidate {
   events       SugCampaignEvent[]
   expenses     SugExpense[]
   supporters   SugSupport[]
+  photo        SugCandidatePhoto?
 
   @@unique([cycleId, characterId])
   @@index([raceId, status])
@@ -1097,6 +1098,23 @@ model SugResult {
 
   @@unique([raceId, candidateId])
   @@index([cycleId])
+}
+
+// A candidate's campaign photograph, used only to draw their campaign flyer (lib/sugFlyer.js). One per candidacy. The server validates it and stores a
+// re-encoded JPEG (no metadata); only its owner can read it back. Added by migration 20261120000000_sug_university_faculty_flyer.
+model SugCandidatePhoto {
+  candidateId Int          @id
+  characterId String
+  mime        String       @default("image/jpeg")
+  bytes       Bytes
+  sizeBytes   Int
+  width       Int
+  height      Int
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @default(now()) @updatedAt
+  candidate   SugCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([characterId])
 }
 
 // Something a candidate did to win support: a speech, a rally, meeting students, a message, posters, publicity, a debate.

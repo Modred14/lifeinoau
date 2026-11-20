@@ -4,9 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "node scripts/copy-draco.mjs && node scripts/assets-manifest.mjs",
     "dev": "next dev",
-    "build": "prisma generate && node tools/radio/verify-stations.mjs --write --soft && node scripts/copy-draco.mjs && node scripts/assets-manifest.mjs && node scripts/check-assets.mjs && next build",
+    "build": "prisma generate && node tools/radio/verify-stations.mjs --write --soft && next build",
     "start": "next start",
     "seed": "node prisma/seed.js",
     "test": "node tests/run-all.mjs",
@@ -14,11 +13,10 @@
     "test:chat": "node tests/e2e/chat.e2e.mjs",
     "test:radio": "node tests/e2e/radio.e2e.mjs",
     "radio:verify": "node tools/radio/verify-stations.mjs --write",
-    "build:roads": "node tools/oau/dump-merged.mjs /tmp/oau-merged.json && python3 tools/oau/roadgraph.py /tmp/oau-merged.json tools/oau/roadgraph.raw.json && node tools/oau/refine-roads.mjs",
-    "assets:build": "node scripts/assets-manifest.mjs",
-    "assets:check": "node scripts/assets-manifest.mjs --check && node scripts/check-assets.mjs"
+    "build:roads": "node tools/oau/dump-merged.mjs /tmp/oau-merged.json && python3 tools/oau/roadgraph.py /tmp/oau-merged.json tools/oau/roadgraph.raw.json && node tools/oau/refine-roads.mjs"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.1.1",
     "@phosphor-icons/react": "^2.1.10",
     "@prisma/client": "^6.19.3",
     "bcryptjs": "^3.0.3",

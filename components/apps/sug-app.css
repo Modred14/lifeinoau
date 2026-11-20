@@ -105,3 +105,17 @@
 .sg-sheet-in header { display: flex; align-items: center; justify-content: space-between; }
 .sg-sheet-in header h3 { margin: 0; font: 700 1.1rem var(--font-head); }
 @media (prefers-reduced-motion: no-preference) { .sg-meter i, .sg-bar i { transition: width 0.4s ease; } }
+/* ---- campaign flyer maker (components/apps/SugFlyer.js) ---- */
+.sg-flyer { gap: 12px; }
+.sg-fl-msg { font: 800 0.95rem var(--font-head); line-height: 1.3; letter-spacing: 0.01em; word-break: break-word; }
+.sg-fl-frame { position: relative; aspect-ratio: 4 / 5; width: 100%; max-width: 360px; margin: 0 auto; border-radius: 14px; overflow: hidden; background: #14532d; }
+.sg-fl-frame img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.sg-fl-empty, .sg-fl-busy { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; color: #f2f6fe; font-weight: 700; }
+.sg-fl-busy { background: rgba(5, 46, 22, 0.72); }
+.sg-fl-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sg-fl-actions .go { grid-column: 1 / -1; }
+.sg-fl-err { color: var(--bad, #b42318); font-weight: 600; }
+.sg-flyer-btn { justify-self: start; }
+.sg-cat { display: flex; gap: 6px; flex-wrap: wrap; }
+.sg-cat button { flex: 1 1 auto; }
+.sg-elig { margin: 0; padding-left: 18px; color: var(--muted); font-size: 0.84rem; line-height: 1.45; }
