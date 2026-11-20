@@ -3,7 +3,7 @@
 """Converts the OpenStreetMap campus (campus.json + building-heights.json from the campus-archive branch) into the schema the game already loads
 (public/data/oau-campus.json), so roadgraph.py, refine-roads.mjs, the 3D map and every test stay as they are.
 
-    python3 tools/oau/import_campus.py --campus /path/campus.json --heights /path/building-heights.json --old public/data/oau-campus.legacy.json --out public/data/oau-campus.json
+    python3 tools/oau/import_campus.py --campus /path/campus.json --heights /path/building-heights.json --old /tmp/legacy-merged.json --out tools/oau/maps/osm/oau-campus.json
     needs: numpy, shapely   (offline tool only)
 
 What it does
@@ -91,9 +91,14 @@ def main():
     # drops a road that does not, which splits the network. Every footprint is cut back to max(half the road width + 3 m, 6 m) from each road centreline (the old map got this from hand-made BUILDING_TRIMS).
     # A footprint left under 12 m2 is dropped; one that is cut in two keeps its larger piece. Building ids are renumbered; `remap` carries the OSM index to the new id.
     carve = unary_union([LineString(pts_m(r['pts'])).buffer(max(r['w'] / 2.0 + 3.0, 6.0), cap_style=2, join_style=1, resolution=4) for r in N['roads'] if r['kind'] == 'road'])
-    nB, remap, cut_n, drop_n = [], {}, 0, 0
+    frame_box = box(0, 0, W, Hh); nB, remap, cut_n, drop_n = [], {}, 0, 0
     for b in B:
         poly = Polygon(b['pts']).buffer(0)
+        if not frame_box.contains(poly):   # a footprint that crosses the edge of the frame is cut at the frame: nothing of the map lies outside it
+            poly = poly.intersection(frame_box)
+            pieces = [g for g in (poly.geoms if hasattr(poly, 'geoms') else [poly]) if g.geom_type == 'Polygon' and g.area >= 12]
+            if not pieces: drop_n += 1; continue
+            poly = max(pieces, key=lambda q: q.area); b = dict(b, pts=[[round(x, 1), round(z, 1)] for x, z in poly.exterior.coords[:-1]], area=int(round(poly.area)))
         if poly.intersects(carve):
             rest = poly.difference(carve)
             parts = [g for g in (rest.geoms if hasattr(rest, 'geoms') else [rest]) if g.geom_type == 'Polygon' and g.area >= 12]
@@ -174,7 +179,10 @@ def main():
             if bi is None: report.setdefault('noBuilding', []).append(p['id'])
         rec = {k: v for k, v in p.items() if k not in ('osmLabel', 'offmap', 'unnamed')}
         rec.update({'src': 'osm', 'conf': 'named-in-osm', 'x': round(x, 1), 'z': round(z, 1), 'bid': bi, 'snapPx': 0.0}); places.append(rec)
-        if bi is not None: claimed.add(bi); B[bi]['place'] = p['id']
+        if bi is not None:
+            claimed.add(bi); B[bi]['place'] = p['id']
+            ob0 = old_b.get(p.get('bid'))
+            if ob0 and str(ob0.get('hSrc', '')).startswith('published'): B[bi]['h'] = ob0['h']; B[bi]['hSrc'] = ob0['hSrc']   # a height from a published source (the Senate: 24 m, 8 floors, MAGG 2025) beats an OpenStreetMap tag
         report['matched'][p['id']] = q['name']
     nid = len(B)
     for p in game:

@@ -1,6 +1,6 @@
 // tools/oau/dump-merged.mjs
 // Writes the input tools/oau/roadgraph.py reads: the campus map with the game's extra buildings merged in (withExtras), its road polygons and its water.
-//   node tools/oau/dump-merged.mjs /tmp/oau-merged.json [path/to/campus.json]     (default map: public/data/oau-campus.json, or oau-campus.legacy.json when OAU_MAP=legacy)
+//   node tools/oau/dump-merged.mjs /tmp/oau-merged.json [path/to/campus.json]     (default map: public/data/oau-campus.json, or tools/oau/maps/legacy/oau-campus.json when OAU_MAP=legacy)
 // RECREATED: the original of this file was missing from the repository (npm run build:roads called it). It is checked by reproducing the committed tools/oau/roadgraph.raw.json from the old map.
 import fs from "node:fs";
 import crypto from "node:crypto";

@@ -28,6 +28,7 @@ export function trustNote(p) {
   if (p.conf === "game") return "Placed for gameplay; the real position is unknown.";
   if (p.conf === "approximate") return "Approximate position from a screenshot reference.";
   if (p.conf === "named-in-osm-render") return "Named in the OpenStreetMap screenshot; position is unverified.";
+  if (p.conf === "named-in-osm") return "Named in OpenStreetMap: the building outline is mapped data (ODbL); the name is as mapped there.";
   return "Building footprint from the map reference; identity is unverified.";
 }
 /** A building with no name on the map is still a place you can go to. It is called after the nearest named place, e.g. "Building near Alumni Hall". Null for an id that is not a building. */

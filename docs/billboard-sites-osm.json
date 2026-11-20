@@ -7,7 +7,7 @@
   "z": 348.2,
   "yaw": 0.63,
   "road": "collector",
-  "edge": 14,
+  "edge": 10,
   "anchorM": 343
  },
  {
@@ -18,7 +18,7 @@
   "z": 579.9,
   "yaw": -0.913,
   "road": "collector",
-  "edge": 26,
+  "edge": 22,
   "anchorM": 212
  },
  {
@@ -29,7 +29,7 @@
   "z": 565.6,
   "yaw": 2.018,
   "road": "collector",
-  "edge": 36,
+  "edge": 32,
   "anchorM": 220
  },
  {
@@ -40,7 +40,7 @@
   "z": 1290.5,
   "yaw": -1.877,
   "road": "collector",
-  "edge": 139,
+  "edge": 129,
   "anchorM": 550
  },
  {
@@ -51,7 +51,7 @@
   "z": 700,
   "yaw": -0.119,
   "road": "collector",
-  "edge": 43,
+  "edge": 39,
   "anchorM": 302
  },
  {
@@ -62,7 +62,7 @@
   "z": 302.2,
   "yaw": 2.277,
   "road": "local",
-  "edge": 316,
+  "edge": 289,
   "anchorM": 61
  },
  {
@@ -73,7 +73,7 @@
   "z": 255.5,
   "yaw": 2.311,
   "road": "local",
-  "edge": 365,
+  "edge": 338,
   "anchorM": 163
  },
  {
@@ -84,7 +84,7 @@
   "z": 1136.3,
   "yaw": -0.06,
   "road": "local",
-  "edge": 373,
+  "edge": 346,
   "anchorM": 456
  },
  {
@@ -95,7 +95,7 @@
   "z": 2333.2,
   "yaw": 0.262,
   "road": "collector",
-  "edge": 163,
+  "edge": 153,
   "anchorM": 321
  },
  {
@@ -106,7 +106,7 @@
   "z": 2671,
   "yaw": -1.536,
   "road": "collector",
-  "edge": 203,
+  "edge": 187,
   "anchorM": 378
  }
 ]
