@@ -50,16 +50,16 @@ export const LAYOUTS = {
       east: { side: 1, R: 600, ret: { q: [1849.5, 3236.5], h: [0, -1] }, touch: [1849.5, 3336.5], ground: [1849.5, 3291.5], target: [1849.5, 3236.5], via: [], bend: 120 },
     },
     billboardSites: [
-      ["Senate Plaza", 1764, 562, -0.913],
-      ["Library Road", 1553.1, 341.9, -0.922],
+      ["Senate Plaza", 1594.3, 348.2, 0.63],
+      ["Library Road", 1762, 579.9, -0.913],
       ["Law Corner", 1307.9, 565.6, 2.018],
-      ["Student Union Strip", 1851.1, 1108, 2.199],
-      ["Moremi Junction", 760.5, 602.8, -2.608],
+      ["Student Union Strip", 1538.8, 1290.5, -1.877],
+      ["Moremi Junction", 786, 700, -0.119],
       ["Alumni Road", 936.3, 302.2, 2.277],
       ["Halls Row", 435.7, 255.5, 2.311],
-      ["Fajuyi Crossing", 608.7, 919, 2.934],
-      ["Ede Road Banks", 1625.3, 2401.1, 0.221],
-      ["Nightlife Strip", 1352.8, 1392.6, -1.96],
+      ["Fajuyi Crossing", 651.4, 1136.3, -0.06],
+      ["Ede Road Banks", 1860.4, 2333.2, 0.262],
+      ["Nightlife Strip", 729.9, 2671, -1.536],
     ],   // BILLBOARD-SITES-OSM
   },
 };

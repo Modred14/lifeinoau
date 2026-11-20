@@ -44,22 +44,24 @@ if (found.length < BILLBOARD.COUNT) { console.error("not enough valid sites"); p
 
 // A site on an arterial or collector gets +70 so that most boards stand on roads that carry traffic (tests/billboard-sites.test.mjs).
 // ---- 2. one board for each of the ten places the boards are named after ----
-// Each board has an ANCHOR (a place, or the middle of a group of places). The board goes to the best-scoring valid site near its anchor: the search starts 200 m out and widens by 100 m until a site exists that keeps
+// Each board has an ANCHOR (a place, or the middle of a group of places). The board goes to the best-scoring valid site within 560 m of its anchor (then 900, 1600 m if there is none) that keeps
 // RULES.spacing from the boards already chosen. Order matters (bb_1 first), so the boards named after the busiest places are never crowded out by the later ones. Score = the site's sight-line score, minus 0.15 per metre from the anchor.
 const GROUP = { halls: ["h_awo", "h_angola", "h_mozambique"], banks: ["ecobank", "wema_bank", "first_bank", "zenith_bank", "access_bank"], clubs: ["club_quantum", "club_0203", "club_divas"] };
 const INTENTS = [
   { label: "Senate Plaza", at: ["senate"] }, { label: "Library Road", at: ["library"] }, { label: "Law Corner", at: ["f_law"] }, { label: "Student Union Strip", at: ["sub"] },
   { label: "Moremi Junction", at: ["h_moremi"] }, { label: "Alumni Road", at: ["h_alumni"] }, { label: "Halls Row", at: GROUP.halls }, { label: "Fajuyi Crossing", at: ["h_fajuyi"] },
-  { label: "Ede Road Banks", fixed: [1550, 2250] }, { label: "Nightlife Strip", at: GROUP.clubs },
+  { label: "Ede Road Banks", fixed: [1550, 2250] }, { label: "Nightlife Strip", fixed: [800, 2300] },
 ];
 const N = BILLBOARD.COUNT, byId = new Map(data.places.map((p) => [p.id, p]));
+// Nightlife Strip and Ede Road Banks are TOWN places (the clubs and the road out of town), not campus ones: on this map the town is the large settlement in the south, so the two boards are anchored there
+// (Nightlife in the south-west, Ede Road in the south-east: tests/billboard-sites.test.mjs wants every quarter of the road network covered), not at the clubs and banks on the north campus.
 // Ede Road is the road out of town, not a campus place: on this map the town is the large settlement in the south, so this board is anchored there (fixed point) rather than at the banks on campus
 for (const it of INTENTS) { if (it.fixed) { [it.x, it.z] = it.fixed; continue; } const ps = it.at.map((id) => byId.get(id)).filter((p) => p && p.x != null); if (!ps.length) { console.error("no place for " + it.label + ": " + it.at.join(", ")); process.exit(1); } it.x = ps.reduce((t, p) => t + p.x, 0) / ps.length; it.z = ps.reduce((t, p) => t + p.z, 0) / ps.length; }
 found.sort((a, b2) => b2.score - a.score || a.x - b2.x || a.z - b2.z);
 const sites = [];
 for (const it of INTENTS) {
   let pickOne = null;
-  for (let R = 200; R <= 1600 && !pickOne; R += 100) for (const c of found) { const d = Math.hypot(c.x - it.x, c.z - it.z); if (d > R || !sites.every((q) => Math.hypot(q.x - c.x, q.z - c.z) >= RULES.spacing)) continue; const v = c.score - 0.15 * d + (c.cls === "arterial" || c.cls === "collector" ? 70 : 0); if (!pickOne || v > pickOne.v) pickOne = { c, v, d }; }
+  for (const R of [560, 900, 1600]) if (!pickOne) for (const c of found) { const d = Math.hypot(c.x - it.x, c.z - it.z); if (d > R || !sites.every((q) => Math.hypot(q.x - c.x, q.z - c.z) >= RULES.spacing)) continue; const v = c.score - 0.15 * d + (c.cls === "arterial" || c.cls === "collector" ? 70 : 0); if (!pickOne || v > pickOne.v) pickOne = { c, v, d }; }
   if (!pickOne) { console.error("no valid site for " + it.label); process.exit(1); }
   sites.push({ ...pickOne.c, anchorM: Math.round(pickOne.d) });
 }
