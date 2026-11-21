@@ -16,4 +16,5 @@ run(process.execPath, ["tools/oau/dump-merged.mjs", tmp]);
 run(py[0], [...py[1], "tools/oau/roadgraph.py", tmp, "tools/oau/roadgraph.raw.json"]);
 run(process.execPath, ["tools/oau/refine-roads.mjs"]);
 run(process.execPath, ["tools/oau/attach-tails.mjs"]);
+run(process.execPath, ["tools/oau/use-map.mjs", "--save"]);   // keep the result as this map's own copy, so switching map and back never loses it
 console.log("\nroad build done: public/data/oau-roadgraph.json");

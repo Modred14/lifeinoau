@@ -178,7 +178,9 @@ def main():
                 if hit: bi = int(hit[0]); break
             if bi is None: report.setdefault('noBuilding', []).append(p['id'])
         rec = {k: v for k, v in p.items() if k not in ('osmLabel', 'offmap', 'unnamed')}
-        rec.update({'src': 'osm', 'conf': 'named-in-osm', 'x': round(x, 1), 'z': round(z, 1), 'bid': bi, 'snapPx': 0.0}); places.append(rec)
+        rec.update({'src': 'osm', 'conf': 'named-in-osm', 'x': round(x, 1), 'z': round(z, 1), 'bid': bi, 'snapPx': 0.0})
+        if q.get('door'): rec['door'] = [round(q['door'][0] / PX, 1), round(q['door'][1] / PX, 1)]   # the entrance the map gives (lib3d/roadnet.js doorOf follows it)
+        places.append(rec)
         if bi is not None:
             claimed.add(bi); B[bi]['place'] = p['id']
             ob0 = old_b.get(p.get('bid'))
