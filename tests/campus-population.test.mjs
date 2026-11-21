@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import { roll } from "../lib/rng.js";
 import { BASE_POPULATION, ARRIVAL_MIN, ARRIVAL_MAX, ENTRY_COOLDOWN_MS, entryCooldownMs, dayKey, arrivalSize, populationOf, formatPeople, formatCount } from "../lib/campusPopulation.js";
-import { createPopulationFeed, createEntryReporter } from "../lib/populationFeed.js";
+import { createPopulationFeed, createEntryReporter, RETRY_MS } from "../lib/populationFeed.js";
+import { getPopulation, recordEntry, isMissingTable } from "../lib/campusPopulationService.js";
 const ok = (m) => console.log("OK  ", m);
 
 // the arrival: always 11..22, whole, and both ends really happen
@@ -43,5 +44,28 @@ ok("the entry cool-down is 30 minutes unless a sensible CAMPUS_ENTRY_COOLDOWN_MI
   assert.equal(await r("c2"), "sent"); assert.equal(posts, 3); assert.equal(await r(""), "skip");
   const blocked = createEntryReporter({ post: async () => ({ ok: true }), store: { get() { throw new Error("denied"); }, set() { throw new Error("denied"); } } }); assert.equal(await blocked("c9"), "sent");
   ok("the entry is reported once per visit; a failed try is repeated; blocked storage cannot break it (the server's cool-down is the real guard)");
+}
+// a failed fetch is retried soon (the header must not stay empty until the next 2-minute poll), with a longer wait each time, and stops once there is a number
+{
+  const link = { on: () => () => {} }, timers = []; let fails = 3;
+  const f = createPopulationFeed({ link, load: async () => (fails-- > 0 ? { failed: true } : { people: 5100, at: 5 }), setTick: () => 1, clearTick: () => {}, setTimer: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimer: () => {} });
+  f.acquire(); await new Promise((r) => setTimeout(r, 5)); assert.equal(f.people(), null); assert.equal(timers.length, 1); assert.equal(timers[0].ms, RETRY_MS[0]);
+  timers[0].fn(); await new Promise((r) => setTimeout(r, 5)); assert.equal(timers[1].ms, RETRY_MS[1]);
+  timers[1].fn(); await new Promise((r) => setTimeout(r, 5)); assert.equal(timers[2].ms, RETRY_MS[2]);
+  timers[2].fn(); await new Promise((r) => setTimeout(r, 5)); assert.equal(f.people(), 5100); assert.equal(timers.length, 3, "no more retries once the number is there");
+  ok("a failed fetch is retried after 3 s, 10 s, 30 s and then the number appears; no retries after that");
+}
+// the database does not have the campus tables yet (migration not applied): the header still answers instead of failing, and nothing is claimed as counted
+{
+  const missing = Object.assign(new Error('relation "CampusArrivalDay" does not exist'), { code: "42P01" });
+  assert.ok(isMissingTable(missing) && isMissingTable({ code: "P2021" }) && isMissingTable({ meta: { code: "42P01" } }) && !isMissingTable(new Error("connection refused")));
+  const db = { $queryRaw: async (st) => { if (st.join("?").includes("CampusArrivalDay")) throw missing; return [{ n: 7 }]; }, $transaction: async () => { throw missing; } };
+  const origErr = console.error; console.error = () => {};
+  try {
+    const p = await getPopulation(db, { registeredTtlMs: 0 }); assert.equal(p.people, 5007); assert.equal(p.arrivals, 0);
+    const r = await recordEntry(db, "u1", { registeredTtlMs: 0 }); assert.equal(r.counted, false); assert.equal(r.reason, "not-migrated"); assert.equal(r.people, 5007);
+    await assert.rejects(getPopulation({ $queryRaw: async () => { throw new Error("connection refused"); } }, { registeredTtlMs: 0 }), /connection refused/); // real errors are still errors
+  } finally { console.error = origErr; }
+  ok("without the migration the header still shows 5,000 + registered accounts and nothing is counted; other database errors still surface");
 }
 console.log("DONE");
