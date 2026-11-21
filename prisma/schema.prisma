@@ -1450,3 +1450,20 @@ model PhoneLine {
   characterId String   @id
   seenAt      DateTime
 }
+
+// ---- Simulated campus population (the number in the header; see docs/CAMPUS-POPULATION.md) ----
+// SIMULATED data only. It is kept apart from every real count (registered accounts, active-player analytics) and nothing here is ever read by, or written into, them.
+// One row per calendar day in the game's time zone (lib/campus-clock.js, West Africa Time): the random arrivals added so far that day. A new day is a new row, so the reset needs no job.
+model CampusArrivalDay {
+  day       String   @id @db.VarChar(10) // "2026-11-20", the date in the game's time zone
+  arrivals  Int      @default(0) // the simulated arrivals added today (11 to 22 for each counted entry)
+  entries   Int      @default(0) // how many game entries were counted today (to audit the total)
+  updatedAt DateTime @default(now())
+}
+
+// The last COUNTED game entry of each player. A new entry counts only once the cool-down since this time has passed, decided atomically, so a refresh, a retry,
+// a second tab or a repeated request can never add another arrival. No relation on purpose: this is bookkeeping for the simulation, not part of the player's data.
+model CampusEntry {
+  userId      String   @id
+  lastEntryAt DateTime
+}

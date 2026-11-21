@@ -5,6 +5,7 @@
 // World coordinates: x = cell - w/2, z = cell - d/2 (the room is centred on the origin); the lawn's top is at y = GROUND.
 import * as THREE from "three";
 import { plotFor, PLOT_RULES } from "../lib/plot.js";
+import { homeStyle } from "../lib/homeStyle.js";
 import { createHolder } from "./modelCache.js";
 
 export const GROUND = -0.36;
@@ -17,7 +18,7 @@ const hits = (r, x, z, w, d) => x < r.x1 && x + w > r.x0 && z < r.z1 && z + d > 
  * position, material and shadow flags. Call release() (or dispose the group with room.js's dispose(), which does) when the plot goes.
  */
 export function buildPlot(room, { mat, tree }) {
-  const P = plotFor(room), W = room.w, D = room.d, g = new THREE.Group(), trees = [], R = PLOT_RULES, hold = createHolder();
+  const P = plotFor(room), st = homeStyle(room), W = room.w, D = room.d, g = new THREE.Group(), trees = [], R = PLOT_RULES, hold = createHolder();
   const boxGeo = (w, h, d) => hold.get(`plot:box:${w}|${h}|${d}`, () => new THREE.BoxGeometry(w, h, d), { priority: 1 });
   const icoGeo = (r, detail) => hold.get(`plot:ico:${r}|${detail}`, () => new THREE.IcosahedronGeometry(r, detail), { priority: 1 });
   g.userData.release = hold.releaseAll;
@@ -26,7 +27,7 @@ export function buildPlot(room, { mat, tree }) {
     grass: mat("#8fb592", { roughness: 1 }), lawn: mat("#a3c9a3", { roughness: 1 }), lawn2: mat("#98c09a", { roughness: 1 }),
     paving: mat("#a2a39e"), pavingJoint: mat("#8b8c87"), path: mat("#d3cab6", { roughness: 0.95 }), garageFloor: mat("#8b8f8e"), concrete: mat("#bdb9ab", { roughness: 1 }),
     asphalt: mat("#3e4446", { roughness: 0.95 }), line: mat("#ece6cf"), kerb: mat("#c9c6bb"), pavement: mat("#c2bfb3"), verge: mat("#8fb592", { roughness: 1 }),
-    wall: mat("#e6dfd0"), cap: mat("#f6f2e7"), garageWall: mat("#ddd6c8"), roof: mat("#4b5962"), door: mat("#6b747a", { metalness: 0.3, roughness: 0.5 }), trim: mat("#f5f1e7"),
+    wall: mat(st.fence), cap: mat(st.trim), garageWall: mat(st.garage), roof: mat(st.roofColor), door: mat("#6b747a", { metalness: 0.3, roughness: 0.5 }), trim: mat("#f5f1e7"),
     post: mat("#2b2f3a"), lamp: mat("#ffd98a", { emissive: "#ffcc67", emissiveIntensity: 1.1 }), hedge: mat("#4f7f4f", { roughness: 1 }), hedge2: mat("#5f9358", { roughness: 1 }),
     nWall: mat("#d9cfc0"), nRoof: mat("#7b6a5a"), nGlass: mat("#8fb2c4", { roughness: 0.3 }),
   };

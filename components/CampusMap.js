@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import { ICON_OF } from "../lib3d/landmarks.js";
 import { loadCampusData, placeMeta } from "../lib3d/campusData.js";
 import { Icon } from "./Icon";
+import OccupancyBadge from "./OccupancyBadge";
+import { occupancy } from "@/lib/occupancyClient";
 import { playSound } from "@/lib/sound";
 import { call } from "@/lib/client";
 import { selectTags } from "../lib3d/destinations.js";
@@ -66,7 +68,7 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
           lab = new CSS2DRenderer(); lab.domElement.style.cssText = "position:absolute;inset:0;pointer-events:none;overflow:hidden"; host.appendChild(lab.domElement);
           const list = campus.places.map((L) => { const el = document.createElement("div"); el.style.pointerEvents = "auto"; const o = new CSS2DObject(el); o.position.copy(L.pos); stage.scene.add(o); return { id: L.id, el, o, L, w: labelWidth(L.name, L.tier), roofY: L.pos.y - ROOF_LIFT }; });
           list.sort((a, b) => a.L.tier - b.L.tier); setMounts(list.map(({ id, el }) => ({ id, el, L: campus.places.find((p) => p.id === id) })));
-          const kick = { n: 30 }; /* frames the tags are redrawn for even if the camera is still (first paint, resize) */ const size = () => { lab.setSize(box.current.clientWidth, box.current.clientHeight); kick.n = 30; }; size(); ro = new ResizeObserver(size); ro.observe(box.current);
+          const kick = { n: 30 }; /* frames the tags are redrawn for even if the camera is still (first paint, resize, a building's head count changing) */ off.push(occupancy.subscribe(() => { kick.n = 30; })); const size = () => { lab.setSize(box.current.clientWidth, box.current.clientHeight); kick.n = 30; }; size(); ro = new ResizeObserver(size); ro.observe(box.current);
           const v = new stage.THREE.Vector3(); let frame = 0; let tagLow = false; const tagState = new Map(), items = list.map((it) => ({ id: it.id, tier: it.L.tier, x: it.L.x / SC, z: it.L.z / SC, y: (it.L.pos?.y ?? 3) / SC, bid: it.L.bid, w: it.w }));
           // on a trip: name tags of the places near the traveller (lib3d/destinations.js decides which), a click on one sends the trip there
           const tripTags = () => {
@@ -82,7 +84,8 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
             if (tagLow) { tagLow = false; for (const it of list) it.o.position.y = it.L.pos.y; kick.n = 30; } // the trip is over: the map's labels go back up over the roofs
             for (const it of list) it.el.style.opacity = ""; // nearest-first by tier: show a label only if it is on screen, near enough for its tier, and clear of the ones already shown
             const w = box.current.clientWidth, h = box.current.clientHeight, dist = stage.camera.position.distanceTo(stage.controls.target), maxTier = box.current.dataset.labels === "off" ? 0 : dist > 300 ? 1 : dist > 120 ? 2 : 3, taken = [];
-            for (const it of list) { const isSel = it.id === sel.current; let show = isSel || it.L.tier <= maxTier;
+            const labelsOn = box.current.dataset.labels !== "off";
+            for (const it of list) { const isSel = it.id === sel.current; let show = isSel || it.L.tier <= maxTier || (labelsOn && occupancy.count(it.id) > 0); // a building with somebody inside keeps its tag, so its "N people inside" can be read from afar
               v.copy(it.L.pos).project(stage.camera); if (v.z > 1 || Math.abs(v.x) > 1.08 || Math.abs(v.y) > 1.08) show = false;
               if (show) { const sx = (v.x * 0.5 + 0.5) * w, sy = (-v.y * 0.5 + 0.5) * h, r = [sx - it.w / 2, sy - 20, sx + it.w / 2, sy + 4]; if (!isSel && taken.some((t) => r[0] < t[2] && r[2] > t[0] && r[1] < t[3] && r[3] > t[1])) show = false; else taken.push(r); }
               it.el.style.visibility = show ? "visible" : "hidden"; it.el.style.zIndex = isSel ? 9 : 4 - it.L.tier; } };
@@ -104,6 +107,8 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
   useEffect(() => { const a = api.current; if (!a) return; a.campus.setSelected(selectedId); if (selectedId && !noFly.current) { const p = a.campus.resolve(selectedId)?.pos; if (p) a.stage.flyTo(p.x, 0, p.z, 60, 1.0); } noFly.current = false; }, [selectedId, mounts]);
 
   useEffect(() => { const a = api.current; if (a) a.campus.setYou(youId); }, [youId, mounts]);
+  // the live head count of every building ("3 people inside"): asked for while the interactive map is on screen, dropped when it leaves
+  useEffect(() => (interactive ? occupancy.acquire() : undefined), [interactive]);
   // the player changed their look in Settings while on a trip: the character on the road changes with it
   const me = useGame()?.character, meKey = me ? lookKey(me.look, me.gender) : "";
   useEffect(() => { if (me) tripRef.current?.setLook?.(me.look, me.gender); }, [meKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -185,7 +190,7 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
       </>)}
       {mounts.map(({ id, el, L }) => createPortal(
         <button type="button" className="bl" data-kind={L.kind} data-tier={L.tier} data-approx={L.approx ? "true" : "false"} aria-pressed={selectedId === id} aria-label={L.name + (L.approx ? " (approximate position)" : "")} onClick={() => { hold(); if (box.current?.dataset.trip) tagGo(id); else onSelect?.(id); }}>
-          <Icon name={ICON_OF[L.kind] ?? "town"} size={L.tier === 1 ? 16 : 13} /><span>{L.name}</span></button>, el, id))}
+          <Icon name={ICON_OF[L.kind] ?? "town"} size={L.tier === 1 ? 16 : 13} /><span>{L.name}</span><OccupancyBadge id={id} /></button>, el, id))}
     </div>
   );
 }

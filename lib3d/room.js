@@ -28,6 +28,7 @@ import {
 import { ITEMS, sizeOf, isOutdoor, canGoOutside, isFixture } from "../lib/furniture.js";
 import { plotFor, lawnBox } from "../lib/plot.js";
 import { buildPlot, GROUND } from "./plot3d.js";
+import { buildHouseShell, entranceOf, HOLE_W } from "./houseShell.js";
 import { createCompoundFleet } from "./compoundFleet.js";
 import { CELL_M } from "./compoundUnits.js";
 import { planEntry, planExit, routeFromTo, walkWorld, safeSpotNear, spotStillValid, WALK_R } from "./compoundWalk.js";
@@ -405,7 +406,8 @@ export function createRoomScene(container, cb = {}) {
   tap.position.y = 0.04;
   scene.add(tap);
 
-  let builtShape = "",
+  let shell = null, extMix = 0, outing = false, lastOut = null, // the house's exterior (roof, storeys, cladding), how much of it is shown, and "the player pressed GO OUTSIDE and is on the way out"
+    builtShape = "",
     finishItems = [],
     room = null,
     theme = null,
@@ -486,6 +488,8 @@ export function createRoomScene(container, cb = {}) {
       if (grime > 0.55) { const bag = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 10), mat("#1d2026", { roughness: 0.5 })); bag.scale.set(1, 0.85, 0.9); bag.position.set(W / 2 - 0.55, 0.24, -D / 2 + 0.5); bag.castShadow = true; world.add(bag); const knot = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 6), mat("#1d2026")); knot.position.set(W / 2 - 0.55, 0.55, -D / 2 + 0.5); world.add(knot); }
     }
     // walls: each is a group standing on the floor edge, local +z points into the room
+    const entrance = entranceOf(room);
+    shell?.dispose(); shell = buildHouseShell(room, WALL_H); world.add(shell.group);
     const defs = {
       N: [0, -D / 2, 0, W + 0.48],
       S: [0, D / 2, Math.PI, W + 0.48],
@@ -497,32 +501,33 @@ export function createRoomScene(container, cb = {}) {
       g.position.set(x, 0, z);
       g.rotation.y = rot;
       world.add(g);
-      const body = new THREE.Mesh(
-        new THREE.BoxGeometry(len, WALL_H, 0.24),
-        mat(theme.wall, { roughness: 0.92 }),
-      );
-      body.name = "room-wall-surface";
-      body.material.userData.defaultColor = body.material.color.clone();
-      body.position.set(0, WALL_H / 2, -0.12);
-      body.castShadow = true;
-      body.receiveShadow = true;
-      g.add(body);
+      // the front door's wall has a real doorway (a gap with a lintel over it): the character walks through it, the door leaf (lib3d/houseShell.js) swings in it
+      const wallMat = mat(theme.wall, { roughness: 0.92 });
+      wallMat.userData.defaultColor = wallMat.color.clone();
+      const hole = k === entrance.side ? [entrance.x - HOLE_W / 2, entrance.x + HOLE_W / 2] : null,
+        spans = hole ? [[-len / 2, hole[0]], [hole[1], len / 2]].filter(([a, b]) => b - a > 0.02) : [[-len / 2, len / 2]],
+        pieces = spans.map(([a, b]) => [b - a, WALL_H, (a + b) / 2, WALL_H / 2]);
+      if (hole) pieces.push([HOLE_W, WALL_H - 2.32, entrance.x, 2.32 + (WALL_H - 2.32) / 2]);
+      for (const [pw, ph, px, py] of pieces) {
+        const body = new THREE.Mesh(new THREE.BoxGeometry(pw, ph, 0.24), wallMat);
+        body.name = "room-wall-surface";
+        body.position.set(px, py, -0.12);
+        body.castShadow = true;
+        body.receiveShadow = true;
+        g.add(body);
+      }
       const cap = new THREE.Mesh(
         new THREE.BoxGeometry(len + 0.02, 0.07, 0.28),
         mat(theme.trim, { roughness: 0.6 }),
       );
       cap.position.set(0, WALL_H - 0.035, -0.12);
       g.add(cap);
-      const base = new THREE.Mesh(
-        new THREE.BoxGeometry(
-          len - (k === "N" || k === "S" ? 0.48 : 0),
-          0.16,
-          0.04,
-        ),
-        mat(theme.trim, { roughness: 0.6 }),
-      );
-      base.position.set(0, 0.08, 0.02);
-      g.add(base);
+      const baseLen = len - (k === "N" || k === "S" ? 0.48 : 0), baseMat = mat(theme.trim, { roughness: 0.6 });
+      for (const [a, b] of hole ? [[-baseLen / 2, Math.max(-baseLen / 2, hole[0])], [Math.min(baseLen / 2, hole[1]), baseLen / 2]].filter(([x0, x1]) => x1 - x0 > 0.02) : [[-baseLen / 2, baseLen / 2]]) {
+        const base = new THREE.Mesh(new THREE.BoxGeometry(b - a, 0.16, 0.04), baseMat);
+        base.position.set((a + b) / 2, 0.08, 0.02);
+        g.add(base);
+      }
       const decor = new THREE.Group();
       g.add(decor);
       walls[k] = { g, decor, s: 1 };
@@ -558,13 +563,11 @@ export function createRoomScene(container, cb = {}) {
       }
       for (const w of L.windows) place(w.side, windowDecor(theme, w.w, w.h), wallX(w.side, w.at, W, D), w.y ?? 0.95);
       for (const d of L.decor) place(d.side, d.kind === "ac" ? acDecor() : d.kind === "clock" ? clockDecor(theme) : posterDecor(d.n ?? 0, theme), wallX(d.side, d.at, W, D), d.y ?? 1.55);
-      place("S", doorDecor(theme), wallX("S", L.entry.at, W, D), 0);
     } else {
     place("N", windowDecor(theme), W * 0.2, 0.95);
     place("N", acDecor(), -W * 0.2, 2.45);
     place("N", posterDecor(0, theme), -W * 0.02, 1.55);
     place("N", clockDecor(theme), W * 0.02 + 0.9, 2.45);
-    place("W", doorDecor(theme), -(D - 1) / 2, 0);
     place("W", windowDecor(theme, 1.1, 1.1), D * 0.18, 1.0);
     place("W", posterDecor(1, theme), -D * 0.12, 1.6);
     place("E", windowDecor(theme, 1.3, 1.25), -D * 0.1, 0.95);
@@ -992,6 +995,25 @@ export function createRoomScene(container, cb = {}) {
     if (q) { const e = toScene(q); me.x = e.x; me.z = e.z; me.path = []; }
   }
 
+  /** GO OUTSIDE: the camera goes to the yard and the character WALKS out: across the room to the front door, through the doorway (the door opens as they near it), down the step
+   *  and along the footpath into the front garden. Nothing is moved by hand: it is the same walk a tap on the yard makes, so it follows the same collision rules. */
+  function goOutside() {
+    if (!room || !av || me.sleep || fleet.isDriving() || act || mode === "buy") return false;
+    if (isOutdoors()) { showYardNow(); return true; }
+    const P = plotFor(room), r = P.path.at(-1), cx = (r.x0 + r.x1) / 2, cz = Math.min(r.z1 - 2, P.garage.z1 + 6);
+    outing = true; setView("yard"); autoYard = true;
+    if (!walkToPoint(cx - W / 2, cz - D / 2)) { outing = false; autoYard = false; setView("house"); return false; }
+    return true;
+  }
+  const showYardNow = () => { if (view !== "yard") { setView("yard"); autoYard = false; } };
+  /** GO INSIDE: walk back along the footpath, up the step and through the doorway to the entrance of the house. */
+  function goInside() {
+    if (!room || !av || me.sleep || fleet.isDriving() || act || mode === "buy") return false;
+    if (!isOutdoors()) return true;
+    autoYard = view === "yard"; // the camera returns to the house by itself once they are in
+    const [cx, cz] = spawnCell(room); walkTo(cx, cz); return me.path.length > 0;
+  }
+
   /** A tap on a parked vehicle. Returns true when the walk to it (or getting in) is under way. */
   function enterCar(id) {
     id = String(id);
@@ -1269,9 +1291,16 @@ export function createRoomScene(container, cb = {}) {
       len = Math.hypot(ax, az) || 1,
       cx = ax / len,
       cz = az / len;
+    // seen from outside (the yard view, not while arranging things): the house is whole, with its roof, and no wall is cut away; from inside it opens up as before
+    const seeOutside = view === "yard" && mode !== "buy";
+    extMix += ((seeOutside ? 1 : 0) - extMix) * (1 - Math.exp(-dt * 3.2));
+    if (shell) {
+      const ent = shell.entrance, near = Math.min(1, Math.max(0, 1 - (Math.hypot(me.x - ent.cx, me.z - ent.cz) - 0.9) / 1.9)); // the door opens as the character comes close, from either side
+      shell.update(dt, { mix: seeOutside || extMix > 0.02 ? Math.min(1, extMix * 1.02) : 0, near });
+    }
     for (const [k, w] of Object.entries(walls)) {
       const [nx, nz] = DIRS[k],
-        to = nx * cx + nz * cz > 0.28 ? CUT : 1;
+        to = seeOutside || nx * cx + nz * cz <= 0.28 ? 1 : CUT;
       w.s += (to - w.s) * (1 - Math.exp(-dt * 9));
       w.g.scale.y = w.s;
       w.decor.visible = w.s > 0.9;
@@ -1325,7 +1354,9 @@ export function createRoomScene(container, cb = {}) {
       sleepStep(dt);
       if (me.sleep && me.sleep.stage !== "walk") me.path = []; // lying down, asleep or getting up: no walking
       if (act) stepAct(dt);
-      if (autoYard && !act && !fleet.isDriving() && view === "yard" && !isOutdoors()) { autoYard = false; setView("house"); } // back indoors: the camera comes back to the house
+      if (outing && (isOutdoors() || !me.path.length)) outing = false; // out the door (or the walk was refused): the camera stays on the yard
+      const outNow = isOutdoors(); if (outNow !== lastOut) { lastOut = outNow; cb.onPlace?.({ outdoors: outNow }); }
+      if (autoYard && !outing && !act && !fleet.isDriving() && view === "yard" && !outNow) { autoYard = false; setView("house"); } // back indoors: the camera comes back to the house
       if (me.path.length) {
         const [gx, gz] = wp(me.path[0]),
           dx = gx - me.x,
@@ -1434,6 +1465,10 @@ export function createRoomScene(container, cb = {}) {
     isDriving: () => fleet.isDriving(),
     pulse,
     walkTo,
+    goOutside,
+    goInside,
+    isOutdoors: () => (room && av ? isOutdoors() : false),
+    getExteriorMix: () => extMix,
     goToBed,
     lieInBed,
     wakeUp,
@@ -1448,6 +1483,7 @@ export function createRoomScene(container, cb = {}) {
     dispose() {
       disposed = true;
       fleet.dispose();
+      shell?.dispose();
       ro.disconnect();
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);

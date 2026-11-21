@@ -65,6 +65,10 @@
 /* top right */
 .gx-tr { position: absolute; z-index: 4; right: var(--edge); top: calc(var(--safe-t) + 86px); display: flex; gap: 8px; }
 .gx-round { width: 46px; min-height: 46px; padding: 0; border-radius: 50%; background: var(--glass); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid var(--glass-line); box-shadow: var(--lift); }
+.gx-out { position: absolute; z-index: 4; right: var(--edge); top: calc(var(--safe-t) + 142px); display: inline-flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 16px; border-radius: 23px; font-weight: 800; letter-spacing: 0.06em; font-size: 0.8rem; color: #fff; background: linear-gradient(135deg, #2f9e6b, #1f7a53); border: 1px solid rgba(255, 255, 255, 0.28); box-shadow: var(--lift); }
+.gx-out[data-out="1"] { background: linear-gradient(135deg, #4a6fb5, #34518a); }
+.gx-out:active { transform: scale(0.97); }
+.gx[data-drive="1"] .gx-out { display: none; }
 .gx-round:hover:not(:disabled) { background-color: rgba(40, 56, 90, 0.9); }
 /* at the wheel of a vehicle in the compound the screen is for driving: the rest steps aside */
 .gx[data-drive="1"] .gx-tl, .gx[data-drive="1"] .gx-tr, .gx[data-drive="1"] .gx-me, .gx[data-drive="1"] .gx-alert { display: none; }

@@ -64,3 +64,7 @@ while nobody is online. The database holds the market's first moment (`MarketGen
   key differs refuses to compute prices instead of quietly disagreeing.
 * Without this server the Invest app polls `/api/invest/live` over plain HTTP every two seconds. Trading works either way.
 * Every 5 minutes this server re-values stored holdings in a single SQL statement (net worth and the Forbes list read that value).
+
+## Building occupancy and the header population
+
+The same server also keeps the live head count of every building (who is inside, in memory only; `docs/BUILDING-OCCUPANCY.md`) and pushes the header's campus population when the website counts a player's entry (`docs/CAMPUS-POPULATION.md`). Both need only what is already configured above; run a single instance, because the building counts live in this process's memory.
