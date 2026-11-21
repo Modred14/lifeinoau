@@ -222,7 +222,7 @@ def main():
            'buildings': [{k: v for k, v in b.items() if not k.startswith('_')} for b in B] + newb,
            'roads': roads, 'areas': areas, 'outside': [], 'places': places,
            'gameOnly': O['gameOnly'], 'gate': {'x': round(N['gate']['x'] / PX, 1), 'z': round(N['gate']['y'] / PX, 1), 'angle': N['gate']['angle'], 'span': N['gate']['span']}}
-    json.dump(out, open(a.out, 'w'), separators=(',', ':'))
+    json.dump(out, open(a.out, 'w'), separators=(',', ': '))   # a space after the colon, as in the old file: tests/club-features.test.mjs looks for the text "id": "club_0203" in it
     if a.report: json.dump(report, open(a.report, 'w'), indent=1)
     print('wrote', a.out, '| buildings', len(out['buildings']), 'roads', len(roads), 'places', len(places), '| matched', len(matched), 'game', len(game), '| fit', report['transform'])
 
