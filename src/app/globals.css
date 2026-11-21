@@ -381,6 +381,21 @@ input[type="checkbox"] {
 }
 .hud .cash .cash-v { display: inline-block; animation: cash-tick 220ms var(--ease) both; }
 @keyframes cash-tick { from { opacity: 0.45; transform: translateY(2px); } }
+/* The campus population ("6,248 people on campus"), right after the brand. The words show where there is room (they are always there for screen readers); on a phone only the
+   number is drawn, and below 520px the wordmark steps aside (the crown stays) so the chip never runs into the clock in the middle of the bar. */
+.hud .pop {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 9px; flex: none;
+  background: rgba(94, 214, 148, 0.1); border: 1px solid rgba(94, 214, 148, 0.26); color: var(--text);
+  font-size: 0.82rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.hud .pop svg { color: var(--green-text); flex: none; }
+.hud .pop .pop-v { display: inline-block; animation: cash-tick 220ms var(--ease) both; }
+@media (max-width: 719px) {
+  .hud .pop { padding: 0 8px; gap: 5px; }
+  .hud .pop .pop-t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+@media (max-width: 519px) { .hud:has(.pop) .brand span:last-child { display: none; } }
+@media (prefers-reduced-motion: reduce) { .hud .pop .pop-v { animation: none; } }
 .hud .cash svg { color: #f2b84b; }
 @media (max-width: 380px) { .hud-time { display: none; } .hud .brand span:last-child { font-size: 0.92rem; } }
 @media (prefers-reduced-motion: reduce) { .hud { animation: none; transition: none; } .hud .cash .cash-v { animation: none; } }
@@ -788,3 +803,16 @@ input[type="checkbox"] {
 .stage-ctrls--map { z-index: 20; flex-direction: column; right: 10px; bottom: calc(var(--nav-h) + var(--safe-b) + 14px); }
 .stage-ctrls--map button:not(:where(.campus-world *)).on { background: #fff; color: #0d1321; border-color: #fff; }
 .stage-hint { position: absolute; left: 50%; bottom: calc(var(--nav-h) + var(--safe-b) + 14px); transform: translateX(-50%); width: min(92%, 440px); margin: 0; padding: 10px 16px; border-radius: 14px; background: rgba(13, 19, 33, 0.88); color: #eaf0f8; font-size: 0.85rem; line-height: 1.35; text-align: center; z-index: 3; }
+
+/* Building occupancy: "3 people inside", just under a building's name tag on the map. It only exists while somebody is inside (components/OccupancyBadge.js
+   draws nothing at zero). The tag is a transformed box, so this positions against the tag itself; it never takes clicks and never changes the tag's size. */
+.bl .occ {
+  position: absolute; top: calc(100% + 3px); left: 50%; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 5px; height: 18px; padding: 0 8px 0 6px; border-radius: var(--r-pill);
+  background: rgba(13, 19, 33, 0.92); border: 1px solid rgba(94, 214, 148, 0.55); color: var(--text);
+  font-size: 0.66rem; font-weight: 600; font-style: normal; line-height: 1; white-space: nowrap; pointer-events: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45); animation: occ-in 180ms var(--ease) both;
+}
+.bl .occ::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--green-text); flex: none; }
+@keyframes occ-in { from { opacity: 0; transform: translateX(-50%) translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .bl .occ { animation: none; } }

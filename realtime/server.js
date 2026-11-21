@@ -16,13 +16,20 @@ import { gateOf } from "../lib/accountGate.js";
 import { sendChatPush } from "../lib/chatPush.js";
 import { routeRtc, rtcLimiter } from "../lib/voice/rtcRelay.js";
 import { marketFor, snapshot as marketSnapshot, refreshHoldingValues } from "../lib/marketLive.js";
+import { createOccupancy } from "../lib/occupancy.js";
+import { isPlaceId, placeOf } from "../lib/travel.js";
+import { CUSTODY_PLACE } from "../lib/discipline.js";
 
 const GRACE_MS = 4000; // a reload or a network blip reconnects within this time, so nobody flickers to "offline"
 const SEEN_WRITE_MS = 60_000; // "last seen" is written to the database at most once a minute per player
 const MARKET_ROOM = "market"; // sockets that have the Invest app open: they get one small price message a second
 const MARKET_VALUE_EVERY_MS = 300_000; // stored holding values (net worth, Forbes) are re-priced every 5 minutes, in one statement
+const OCC_ROOM = "occ"; // sockets that have the map open: they get the building head counts (lib/occupancy.js, docs/BUILDING-OCCUPANCY.md)
+const OCC_PUSH_MS = 100; // changes that happen within this time are sent as ONE message
+const OCC_SWEEP_MS = 15_000; // how often connections that stopped reporting are forgotten
+const POP_PUSH_MS = 1000; // the header's campus population is pushed at most once a second, however many players enter (docs/CAMPUS-POPULATION.md)
 
-export function createRealtime({ db, secret, origins = [], log = console, graceMs = GRACE_MS, market = null }) {
+export function createRealtime({ db, secret, origins = [], log = console, graceMs = GRACE_MS, market = null, occupancy = null, occSweepMs = OCC_SWEEP_MS }) {
   if (!secret) throw new Error("SESSION_SECRET is required");
   const getMarket = () => (market ??= marketFor(db)); // created on first use: a chat-only deployment never touches the market tables
   const allow = (origin) => !origins.length || !origin || origins.includes(origin);
@@ -49,11 +56,50 @@ export function createRealtime({ db, secret, origins = [], log = console, graceM
   const sweep = setInterval(() => { const old = Date.now() - 600_000; for (const [k, v] of recent) if (v.t < old) recent.delete(k); }, 60_000);
   sweep.unref();
 
+  // ---------- who is inside which building (memory only: lib/occupancy.js has the rules) ----------
+  const occ = occupancy ?? createOccupancy();
+  const occTimers = new Set(), occChains = new Map();
+  let occPending = null, occFlush = null;
+  // Changes (absolute counts, 0 included) go to the sockets that have the map open, merged into one message per OCC_PUSH_MS.
+  const occPush = (changed) => {
+    if (!changed || !Object.keys(changed).length) return;
+    occPending = Object.assign(occPending ?? {}, changed);
+    if (occFlush) return;
+    occFlush = setTimeout(() => { occFlush = null; const d = occPending; occPending = null; if (d) io.to(OCC_ROOM).emit("occ:d", d); }, OCC_PUSH_MS);
+    occFlush.unref?.();
+  };
+  const occSweep = setInterval(() => occPush(occ.sweep()), occSweepMs); // a connection that stopped reporting without saying goodbye is forgotten
+  occSweep.unref();
+  // one player's occupancy requests are handled one after another, so "enter" then "leave" can never be applied the other way round
+  const occSerial = (id, fn) => {
+    const next = (occChains.get(id) ?? Promise.resolve()).then(fn, fn).finally(() => { if (occChains.get(id) === next) occChains.delete(id); });
+    occChains.set(id, next);
+    return next;
+  };
+  // The browser says where it is; the DATABASE decides whether that is true. A player can only be counted inside the place the game itself has them standing at
+  // (they got there by travelling, which is paid for and checked), and never inside Floor O (custody: a prisoner's whereabouts are not shown to anyone).
+  async function standsAt(characterId, place) {
+    const rows = await db.$queryRaw`SELECT "placeId", "hostel", "jailedUntil" FROM "Character" WHERE "id" = ${characterId}`;
+    const c = rows?.[0];
+    if (!c || place === CUSTODY_PLACE) return false;
+    if (c.jailedUntil && +new Date(c.jailedUntil) > Date.now()) return false;
+    return placeOf(c) === place;
+  }
+  const burst = (max, ms) => { let n = 0, t = Date.now(); return () => { const now = Date.now(); if (now - t > ms) { t = now; n = 0; } return ++n <= max; }; };
+
+  // ---------- the campus population in the header: the website tells us the new total, we pass it on (never more than once a second) ----------
+  let pop = null, popTimer = null, popSent = 0;
+  const popPush = () => {
+    if (popTimer) return;
+    popTimer = setTimeout(() => { popTimer = null; popSent = Date.now(); if (pop) io.emit("pop", pop); }, Math.max(0, POP_PUSH_MS - (Date.now() - popSent)));
+    popTimer.unref?.();
+  };
+
   const server = http.createServer(async (req, res) => {
     const path = (req.url ?? "").split("?")[0];
     if (req.method === "GET" && (path === "/health" || path === "/")) {
       res.writeHead(200, { "content-type": "application/json" });
-      return res.end(JSON.stringify({ ok: true, online: live.size }));
+      return res.end(JSON.stringify({ ok: true, online: live.size, inside: occ.inside }));
     }
     if (req.method === "POST" && path === "/internal") return internal(req, res);
     res.writeHead(404); res.end();
@@ -186,6 +232,24 @@ export function createRealtime({ db, secret, origins = [], log = console, graceM
     });
     socket.on("market:unsub", (_msg, ack) => { socket.leave(MARKET_ROOM); ack?.({ ok: true }); });
 
+    // ---- building head counts. The browser asks once to be told (and again after every reconnect); the server then pushes only what changed. ----
+    socket.on("occ:sub", (_msg, ack) => { socket.join(OCC_ROOM); ack?.({ ok: true, counts: occ.snapshot() }); });
+    socket.on("occ:unsub", (_msg, ack) => { socket.leave(OCC_ROOM); ack?.({ ok: true }); });
+    const occOk = burst(40, 60_000);
+    socket.on("occ:in", (msg, ack) => occSerial(me.id, async () => {
+      try {
+        if (!occOk()) return ack?.({ ok: false, error: "slow down" });
+        const place = msg?.place;
+        if (!isPlaceId(place) || place === CUSTODY_PLACE) return ack?.({ ok: false, error: "no such place" });
+        if (!(await standsAt(me.id, place))) return ack?.({ ok: false, error: "not_here" });
+        if (!socket.connected) return ack?.({ ok: false, error: "gone" }); // they left while the database was being asked: never count a connection that is already gone
+        occPush(occ.claim(me.id, socket.id, place));
+        ack?.({ ok: true });
+      } catch (e) { fail(ack, e); }
+    }));
+    socket.on("occ:out", (_msg, ack) => occSerial(me.id, async () => { occPush(occ.release(me.id, socket.id)); ack?.({ ok: true }); }));
+    socket.on("occ:beat", (_msg, ack) => ack?.({ ok: occ.beat(me.id, socket.id) })); // ok:false = the server does not know this connection: the browser then says where it is again
+
     // ---- voice between two players: only the small set-up messages pass through here (the audio goes directly between the two phones) ----
     const rtcOk = rtcLimiter();
     socket.on("rtc", async (msg, ack) => {
@@ -199,6 +263,10 @@ export function createRealtime({ db, secret, origins = [], log = console, graceM
     });
 
     socket.on("disconnect", () => {
+      // A closed tab, a lost network or a dead phone: this connection's claim is forgotten after the grace period (a page reload claims again within it, so
+      // the count does not flicker). Anything the server never hears about is caught by the sweep above.
+      const gone = setTimeout(() => { occTimers.delete(gone); occPush(occ.release(me.id, socket.id)); }, graceMs);
+      gone.unref?.(); occTimers.add(gone);
       const n = (live.get(me.id) ?? 1) - 1;
       if (n > 0) return live.set(me.id, n);
       live.delete(me.id);
@@ -295,6 +363,9 @@ export function createRealtime({ db, secret, origins = [], log = console, graceM
         }
         const nm = await core.namesOf(db, [e.blockedId]);
         io.to(room(e.blockerId)).emit("block", { name: nm.get(e.blockedId), on }); // the blocker's other devices
+      } else if (e?.type === "population") { // a real player entered the game and the website counted it: show the new total to everybody online
+        if (!Number.isSafeInteger(e.people) || e.people < 0 || e.people > 100_000_000 || !Number.isFinite(e.at)) return done(400, { error: "bad event" });
+        if (!pop || e.at >= pop.at) { pop = { people: e.people, at: e.at }; popPush(); } // an older total never replaces a newer one
       } else if (e?.type === "online") { // the admin dashboard asks who has an open socket right now (exact: a player with no socket is not in `live`)
         return done(200, { ok: true, ids: [...live.keys()] });
       } else if (e?.type === "kick") { // an administrator suspended or closed this account: drop every connection it has
@@ -314,7 +385,7 @@ export function createRealtime({ db, secret, origins = [], log = console, graceM
     server, io,
     listen: (port, host = "0.0.0.0") => new Promise((ok) => server.listen(port, host, () => ok(server.address().port))),
     close: async () => {
-      clearInterval(sweep); clearInterval(every); clearTimeout(first); clearTimeout(ticker); clearTimeout(revalueFirst); clearInterval(revalueEvery);
+      clearInterval(sweep); clearInterval(occSweep); clearTimeout(occFlush); clearTimeout(popTimer); for (const t of occTimers) clearTimeout(t); clearInterval(every); clearTimeout(first); clearTimeout(ticker); clearTimeout(revalueFirst); clearInterval(revalueEvery);
       for (const t of offlineTimers.values()) clearTimeout(t);
       await io.close();
     },

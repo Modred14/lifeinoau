@@ -38,3 +38,5 @@ ALTER TABLE "LectureEncounter" ADD CONSTRAINT lectureencounter_outcome_valid CHE
 ALTER TABLE "LectureEncounter" ADD CONSTRAINT lectureencounter_response_state_valid CHECK ("responseState" IS NULL OR "responseState" IN ('ACTIVE', 'DONE'));
 CREATE UNIQUE INDEX one_open_lecture_encounter ON "LectureEncounter" ("characterId") WHERE status = 'OPEN';
 CREATE UNIQUE INDEX one_active_lecture_response ON "LectureEncounter" ("venueId", "roomId") WHERE "responseState" = 'ACTIVE';
+-- Simulated campus population (see migration 20261120120000_campus_population): the counters can never go negative.
+ALTER TABLE "CampusArrivalDay" ADD CONSTRAINT campusarrivalday_nonneg CHECK ("arrivals" >= 0 AND "entries" >= 0);

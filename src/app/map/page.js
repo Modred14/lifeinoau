@@ -24,6 +24,7 @@ import { game, useGame, run, cash } from "@/lib/gameStore";
 import { fareKobo, placeOf, ownsCar, driverActive, homePlace, MODE_INFO } from "@/lib/travel.js";
 import { playSound } from "@/lib/sound";
 import { serverTime } from "@/lib/serverClock";
+import { occupancy } from "@/lib/occupancyClient";
 import { isClub, clubOf, clubStatus, closedMessage, HOURS_LABEL } from "@/lib/clubs.js";
 import { CUSTODY_NAME } from "@/lib/discipline";
 
@@ -162,6 +163,11 @@ export default function MapPage() {
   const tripEnded = (why) => { setTrip(null); setEntering(false); if (why === "error") toast.error("The trip could not start. Try again."); };
   const tripNotice = (m) => toast.error(m); // a ride that cannot reach you, a way that is blocked: said plainly, and you can try again from the sheet
   const tripPlace = trip ? find(trip.to) : null, insidePlace = inside ? find(inside) : null;
+  // Which building this player is inside, for the live "N people inside" on everybody's map (docs/BUILDING-OCCUPANCY.md). Only the id is sent: the realtime server checks it
+  // against where the game has this player standing, and forgets it when they step out, move to another building, lose the connection or leave this page. Floor O (custody) is never counted.
+  const insideId = inside && inside !== "floor0" ? inside : null;
+  useEffect(() => { occupancy.setInside(insideId); }, [insideId]);
+  useEffect(() => () => occupancy.setInside(null), []);
   // the place card is docked on the bottom bar and the two read as one surface (globals.css .dock, bottom-nav.css). The travel sheet and the building panel set and clear the same
   // flag, so this re-asserts it whenever one of them closes while the card is still showing
   const dockOn = !!(L && !trip && !direct);

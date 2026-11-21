@@ -12,6 +12,8 @@ import { Icon } from "./Icon";
 import Phone from "./Phone";
 import PlayerMenu from "./PlayerMenu";
 import BusyAlerts from "./BusyAlerts";
+import CampusPopulation from "./CampusPopulation";
+import CampusEntry from "./CampusEntry";
 import BottomNav from "./BottomNav";
 import { useChat } from "@/lib/chat";
 import SoundToggle from "./SoundToggle";
@@ -243,6 +245,7 @@ export default function Shell({ children }) {
               life<i>in</i>oau
             </span>
           </Link>
+          {st && <CampusPopulation />}
           <span className="grow" />
           {st && clock && <span className="hud-time num">{stamp(clock)}</span>}
           {st && (
@@ -296,6 +299,7 @@ export default function Shell({ children }) {
       />
       {st && <PlayerMenu />}
       {st && !held && <BusyAlerts characterId={String(st.character.id ?? "")} />}
+      {st && <CampusEntry characterId={String(st.character.id ?? "")} />}
     </>
   );
 }
