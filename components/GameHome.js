@@ -73,6 +73,7 @@ export default function GameHome({
     [collapsed, setCollapsed] = useState(false),
     [needsOpen, setNeedsOpen] = useState(false),
     [driving, setDriving] = useState(false),
+    [outdoors, setOutdoors] = useState(false), // the character is outside the house (walked out through the front door)
     [, bumpView] = useState(0); // the yard / house button reads the scene's view, so it re-renders when it is pressed
   const vehicles = useVehicles(), fleetHandlers = useRef({});
   const api = useRef(null),
@@ -409,6 +410,7 @@ export default function GameHome({
           onDrive={(d) => fleetHandlers.current.onDrive?.(d)}
           onLeave={(d) => fleetHandlers.current.onLeave?.(d)}
           onEntry={(e) => fleetHandlers.current.onEntry?.(e)}
+          onPlace={(p) => setOutdoors(!!p.outdoors)}
         />
         <CompoundDrive vehicles={vehicles} api={api} handlers={fleetHandlers} onDriving={setDriving} />
       </div>
@@ -490,6 +492,23 @@ export default function GameHome({
           </>
         )}
       </div>
+
+      {/* the way out: the character walks through the front door into the compound (and back in) */}
+      {!buying && !sleeping && !driving && (
+        <button
+          type="button"
+          className="gx-out"
+          data-out={outdoors ? "1" : "0"}
+          onClick={() => {
+            const r = outdoors ? api.current?.goInside?.() : api.current?.goOutside?.();
+            if (!r) toast.error(outdoors ? "You cannot go in right now." : "You cannot go outside right now.");
+            else if (!outdoors) { try { router.prefetch("/map"); } catch {} import("../lib3d/worldPreload.js").then((w) => w.preloadRoadNow()).catch(() => {}); } // the street (route, road data, collision world) is warmed up with priority while they walk out
+          }}
+        >
+          <Icon name={outdoors ? "home" : "farm"} size={18} />
+          <span>{outdoors ? "GO INSIDE" : "GO OUTSIDE"}</span>
+        </button>
+      )}
 
       {/* top right: look around */}
       <div className="gx-tr">
