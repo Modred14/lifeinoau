@@ -203,7 +203,9 @@ export function createTripFlow(env, o) {
     alightFrom = { x: walker.x, z: walker.z }; walker.cancelRoute(); walker.ignore = new Set([vehicleId()]); go("exit"); return true;
   }
   function startWalk() {
-    walker.ignore = null; const r = nav.plan(walker.x, walker.z, plan.goal.x, plan.goal.z);
+    // The first leg is planned past the vehicle you have just got out of: it stands within a metre of you, and on a street where a wall is only a few metres away the planner finds no way round it
+    // (the keke at a kerb 3 m from a building); it drives off while you walk.
+    walker.ignore = null; const r = nav.plan(walker.x, walker.z, plan.goal.x, plan.goal.z, { ignore: new Set([vehicleId()]) });
     if (!r.ok) { notice("The way to the door is blocked."); end("unreachable"); return; }
     go("walk"); walker.follow(r, { goal: plan.goal, tolerance: 0.45 });
     if (hero && driven) { hero.kinematic = false; hero.role = "npc"; hero.hold = false; hero.stopAt = null; hero.cruise = Math.min(hero.cruise, 9); sim.setRoute(hero, sim.wander(hero.laneId, hero.laneS, 600)); departed = true; }
