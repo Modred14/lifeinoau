@@ -29,10 +29,14 @@ export function buildPlot(room, { mat, tree }) {
     asphalt: mat("#3e4446", { roughness: 0.95 }), line: mat("#ece6cf"), kerb: mat("#c9c6bb"), pavement: mat("#c2bfb3"), verge: mat("#8fb592", { roughness: 1 }),
     wall: mat(st.fence), cap: mat(st.trim), garageWall: mat(st.garage), roof: mat(st.roofColor), door: mat("#6b747a", { metalness: 0.3, roughness: 0.5 }), trim: mat("#f5f1e7"),
     post: mat("#2b2f3a"), lamp: mat("#ffd98a", { emissive: "#ffcc67", emissiveIntensity: 1.1 }), hedge: mat("#4f7f4f", { roughness: 1 }), hedge2: mat("#5f9358", { roughness: 1 }),
-    nWall: mat("#d9cfc0"), nRoof: mat("#7b6a5a"), nGlass: mat("#8fb2c4", { roughness: 0.3 }),
+    laneFloor: mat("#9a9e9c"),
   };
   // a box covering the rectangle r (cells), its bottom at y0 and height h
-  const slab = (r, y0, h, m, cast = false) => { const w = r.x1 - r.x0, d = r.z1 - r.z0, mesh = new THREE.Mesh(boxGeo(w, h, d), m); mesh.position.set(wx((r.x0 + r.x1) / 2), y0 + h / 2, wz((r.z0 + r.z1) / 2)); mesh.receiveShadow = true; mesh.castShadow = cast; g.add(mesh); return mesh; };
+  // Everything beyond the boundary wall (the footpath, kerbs and the road) goes in `roadG`, which the room shows only while you are outside: from indoors the plot ends at its wall.
+  const roadG = new THREE.Group(); roadG.name = "plot-road"; g.add(roadG); let into = g;
+  const slab = (r, y0, h, m, cast = false) => { const w = r.x1 - r.x0, d = r.z1 - r.z0, mesh = new THREE.Mesh(boxGeo(w, h, d), m); mesh.position.set(wx((r.x0 + r.x1) / 2), y0 + h / 2, wz((r.z0 + r.z1) / 2)); mesh.receiveShadow = true; mesh.castShadow = cast; into.add(mesh); return mesh; };
+  // paving that runs on out to the road: the part inside the wall is the plot's, the part beyond it belongs to the road
+  const paved = (r, y0, h, m) => { const cut = pl.z1; if (r.z0 < cut) slab({ ...r, z1: Math.min(r.z1, cut) }, y0, h, m); if (r.z1 > cut) { into = roadG; slab({ ...r, z0: Math.max(r.z0, cut) }, y0, h, m); into = g; } };
   const at = (mesh, x, z) => { mesh.position.x = wx(x); mesh.position.z = wz(z); return mesh; };
   const pl = P.plot, T = 0.025; // paving lies this proud of the lawn
 
@@ -42,19 +46,20 @@ export function buildPlot(room, { mat, tree }) {
   for (let z = pl.z0 + 1; z < pl.z1 - 1; z += 2) slab({ x0: pl.x0 + 1, x1: pl.x1 - 1, z0: z, z1: Math.min(z + 1, pl.z1 - 1) }, GROUND + 0.004, 0.004, M.lawn2);
 
   // ---- paving: the driveway (joints every three cells), its flared mouth, the footpath, the front walk ----
-  slab(P.drive, GROUND, T, M.paving); slab(P.apron, GROUND, T + 0.004, M.paving);
-  for (let z = P.drive.z0 + 3; z < P.drive.z1; z += 3) slab({ x0: P.drive.x0, x1: P.drive.x1, z0: z - 0.03, z1: z + 0.03 }, GROUND + T, 0.004, M.pavingJoint);
-  slab({ x0: (P.drive.x0 + P.drive.x1) / 2 - 0.03, x1: (P.drive.x0 + P.drive.x1) / 2 + 0.03, z0: P.drive.z0, z1: P.drive.z1 }, GROUND + T, 0.004, M.pavingJoint);
-  for (const r of [...P.path, P.link]) slab(r, GROUND, T, M.path);
+  paved(P.drive, GROUND, T, M.paving); paved(P.apron, GROUND, T + 0.004, M.paving);
+  for (let z = P.drive.z0 + 3; z < P.drive.z1; z += 3) paved({ x0: P.drive.x0, x1: P.drive.x1, z0: z - 0.03, z1: z + 0.03 }, GROUND + T, 0.004, M.pavingJoint);
+  paved({ x0: (P.drive.x0 + P.drive.x1) / 2 - 0.03, x1: (P.drive.x0 + P.drive.x1) / 2 + 0.03, z0: P.drive.z0, z1: P.drive.z1 }, GROUND + T, 0.004, M.pavingJoint);
+  for (const r of [...P.path, P.link]) paved(r, GROUND, T, M.path);
   slab({ x0: P.doorOut.x - 1.5, x1: P.doorOut.x + 1.5, z0: room.layout ? D : D - 2, z1: room.layout ? D + 1 : D }, GROUND, T + 0.004, M.concrete); // the step outside the front door
 
   // ---- the road along the south edge, beyond a footpath and a kerb ----
-  const rd = P.road, strip = { x0: rd.x0, x1: rd.x1, z0: pl.z1, z1: rd.z0 };
+  into = roadG; const rd = P.road, strip = { x0: rd.x0, x1: rd.x1, z0: pl.z1, z1: rd.z0 };
   slab({ x0: strip.x0, x1: strip.x1, z0: strip.z0, z1: strip.z1 }, GROUND - 0.27, 0.27 + T, M.pavement);
   slab({ x0: rd.x0, x1: rd.x1, z0: rd.z0, z1: rd.z1 }, GROUND - 0.27, 0.27 - 0.03, M.asphalt);
   slab({ x0: rd.x0, x1: rd.x1, z0: rd.z0 - 0.12, z1: rd.z0 + 0.06 }, GROUND - 0.12, 0.15, M.kerb); slab({ x0: rd.x0, x1: rd.x1, z0: rd.z1 - 0.06, z1: rd.z1 + 0.12 }, GROUND - 0.12, 0.15, M.kerb);
   for (let x = rd.x0 + 1; x < rd.x1 - 2; x += 4) slab({ x0: x, x1: x + 2, z0: (rd.z0 + rd.z1) / 2 - 0.07, z1: (rd.z0 + rd.z1) / 2 + 0.07 }, GROUND - 0.03, 0.01, M.line);
   slab({ x0: rd.x0, x1: rd.x1, z0: rd.z1 + 0.12, z1: rd.z1 + 2.5 }, GROUND - 0.27, 0.27 + T, M.pavement);
+  into = g;
 
   // ---- the boundary wall, with the vehicle gate and the pedestrian gate left open ----
   const wallH = 0.9, wallT = 0.3, bandC = (edge, dir) => edge + dir * 0.2;
@@ -70,17 +75,31 @@ export function buildPlot(room, { mat, tree }) {
   for (let z = pl.z0 + 0.3; z <= pl.z1; z += 4) { pillar(pl.x0 + 0.15, z, 1.1); pillar(pl.x1 - 0.15, z, 1.1); }
   for (const gp of gaps) { const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), M.lamp); lamp.position.set(wx(gp.x0), GROUND + 1.45, wz(sz + 0.5)); g.add(lamp); }
 
-  // ---- the garage: east of the house, its open door facing the driveway ----
-  const ga = P.garage, wallW = 0.3, gh = 2.9;
+  // ---- the garage: a hall east of the house, its front open to the driveway. A lane runs down the middle and the cars stand in painted bays either side of it, nose to the lane ----
+  // (lib/plot.js: P.bays; lib3d/compoundParking.js puts the vehicles in them). Low walls and a frame keep it open to the camera, so every car can be seen.
+  const ga = P.garage, wallW = 0.3, wallH2 = 1.15, postH = 2.9, lane = P.lane;
   slab({ x0: ga.x0, x1: ga.x1, z0: ga.z0, z1: ga.z1 }, GROUND, 0.03, M.garageFloor);
-  slab({ x0: ga.x0, x1: ga.x1, z0: ga.z0, z1: ga.z0 + wallW }, GROUND, gh, M.garageWall, true);
-  slab({ x0: ga.x0, x1: ga.x0 + wallW, z0: ga.z0, z1: ga.z1 }, GROUND, gh, M.garageWall, true); slab({ x0: ga.x1 - wallW, x1: ga.x1, z0: ga.z0, z1: ga.z1 }, GROUND, gh, M.garageWall, true);
-  slab({ x0: ga.x0, x1: P.door.x0, z0: ga.z1 - wallW, z1: ga.z1 }, GROUND, gh, M.garageWall, true); slab({ x0: P.door.x1, x1: ga.x1, z0: ga.z1 - wallW, z1: ga.z1 }, GROUND, gh, M.garageWall, true);
-  slab({ x0: P.door.x0, x1: P.door.x1, z0: ga.z1 - wallW, z1: ga.z1 }, GROUND + 2.35, gh - 2.35, M.garageWall, true); // lintel over the open door
-  slab({ x0: P.door.x0 + 0.05, x1: P.door.x1 - 0.05, z0: ga.z1 - 1.0, z1: ga.z1 - 0.7 }, GROUND + 2.3, 0.07, M.door); // the roll-up door, raised under the roof
-  slab({ x0: ga.x0 - 0.35, x1: ga.x1 + 0.35, z0: ga.z0 - 0.35, z1: ga.z1 + 0.6 }, GROUND + gh, 0.22, M.roof, true);
-  slab({ x0: P.door.x0 - 0.1, x1: P.door.x1 + 0.1, z0: ga.z1 - 0.02, z1: ga.z1 + 0.05 }, GROUND + 2.3, 0.1, M.trim);
-  const gl = new THREE.PointLight(0xffd9a0, 2.2, 7, 1.8); gl.position.set(wx((ga.x0 + ga.x1) / 2), GROUND + 2.2, wz(ga.z1 - 1.5)); g.add(gl);
+  slab({ x0: lane.x0, x1: lane.x1, z0: ga.z0 + wallW, z1: ga.z1 }, GROUND + 0.03, 0.004, M.laneFloor); // the lane is a shade lighter than the bays
+  for (const side of [-1, 1]) for (let row = 0; row <= P.bays.length / 2; row++) { // the white lines between bays, and the line along the lane's edge
+    const z = ga.z1 - PLOT_RULES.bayFront + PLOT_RULES.bayPitch / 2 - row * PLOT_RULES.bayPitch; if (z < ga.z0 + wallW + 0.2) continue;
+    const x0 = side < 0 ? ga.x0 + wallW : lane.x1, x1 = side < 0 ? lane.x0 : ga.x1 - wallW;
+    slab({ x0, x1, z0: z - 0.04, z1: z + 0.04 }, GROUND + 0.034, 0.004, M.line);
+  }
+  slab({ x0: lane.x0 - 0.04, x1: lane.x0 + 0.04, z0: ga.z0 + wallW, z1: ga.z1 }, GROUND + 0.034, 0.004, M.line); slab({ x0: lane.x1 - 0.04, x1: lane.x1 + 0.04, z0: ga.z0 + wallW, z1: ga.z1 }, GROUND + 0.034, 0.004, M.line);
+  slab({ x0: ga.x0, x1: ga.x1, z0: ga.z0, z1: ga.z0 + wallW }, GROUND, wallH2, M.garageWall, true); // back
+  slab({ x0: ga.x0, x1: ga.x0 + wallW, z0: ga.z0, z1: ga.z1 }, GROUND, wallH2, M.garageWall, true); slab({ x0: ga.x1 - wallW, x1: ga.x1, z0: ga.z0, z1: ga.z1 }, GROUND, wallH2, M.garageWall, true); // west and east sides
+  slab({ x0: ga.x0, x1: P.door.x0, z0: ga.z1 - wallW, z1: ga.z1 }, GROUND, wallH2, M.garageWall, true); slab({ x0: P.door.x1, x1: ga.x1, z0: ga.z1 - wallW, z1: ga.z1 }, GROUND, wallH2, M.garageWall, true); // the front, either side of the open lane
+  for (const r of [{ x0: ga.x0, x1: ga.x1, z0: ga.z0, z1: ga.z0 + wallW }, { x0: ga.x0, x1: ga.x0 + wallW, z0: ga.z0, z1: ga.z1 }, { x0: ga.x1 - wallW, x1: ga.x1, z0: ga.z0, z1: ga.z1 }, { x0: ga.x0, x1: P.door.x0, z0: ga.z1 - wallW, z1: ga.z1 }, { x0: P.door.x1, x1: ga.x1, z0: ga.z1 - wallW, z1: ga.z1 }])
+    slab({ x0: r.x0 - 0.03, x1: r.x1 + 0.03, z0: r.z0 - 0.03, z1: r.z1 + 0.03 }, GROUND + wallH2, 0.06, M.cap); // a cap along every wall
+  // the frame: a post at each corner and either side of the opening, and beams over the walls and across the lane (open to the sky, so nothing hides a car)
+  const post = (x, z) => slab({ x0: x - 0.16, x1: x + 0.16, z0: z - 0.16, z1: z + 0.16 }, GROUND, postH, M.cap, true);
+  for (const [x, z] of [[ga.x0 + 0.15, ga.z0 + 0.15], [ga.x1 - 0.15, ga.z0 + 0.15], [ga.x0 + 0.15, ga.z1 - 0.15], [ga.x1 - 0.15, ga.z1 - 0.15], [P.door.x0, ga.z1 - 0.15], [P.door.x1, ga.z1 - 0.15]]) post(x, z);
+  for (let z = ga.z0 + 0.15 + PLOT_RULES.bayPitch * 2; z < ga.z1 - 1; z += PLOT_RULES.bayPitch * 2) { post(ga.x0 + 0.15, z); post(ga.x1 - 0.15, z); }
+  const beam = (r) => slab(r, GROUND + postH, 0.14, M.cap, true), bt = 0.09;
+  beam({ x0: ga.x0, x1: ga.x1, z0: ga.z0 + 0.15 - bt, z1: ga.z0 + 0.15 + bt }); beam({ x0: ga.x0, x1: ga.x1, z0: ga.z1 - 0.15 - bt, z1: ga.z1 - 0.15 + bt });
+  beam({ x0: ga.x0 + 0.15 - bt, x1: ga.x0 + 0.15 + bt, z0: ga.z0, z1: ga.z1 }); beam({ x0: ga.x1 - 0.15 - bt, x1: ga.x1 - 0.15 + bt, z0: ga.z0, z1: ga.z1 });
+  for (let z = ga.z0 + PLOT_RULES.bayPitch * 2; z < ga.z1 - 1; z += PLOT_RULES.bayPitch * 2) beam({ x0: ga.x0, x1: ga.x1, z0: z - bt, z1: z + bt }); // cross beams over the lane
+  for (const z of [ga.z1 - 4, (ga.z0 + ga.z1) / 2, ga.z0 + 4]) { const gl = new THREE.PointLight(0xffd9a0, 1.6, 12, 1.8); gl.position.set(wx((lane.x0 + lane.x1) / 2), GROUND + 2.6, wz(z)); g.add(gl); } // lamps down the lane
 
   // ---- hedges inside the wall (never across a gate or the driveway), and the trees ----
   const gate = (x, z) => [P.gate, P.footGate].some((gp) => x > gp.x0 - 0.9 && x < gp.x1 + 0.9 && z > pl.z1 - 1.6);
@@ -93,16 +112,9 @@ export function buildPlot(room, { mat, tree }) {
   for (let z = pl.z0 + 5; z < pl.z1 - 4; z += 5) { spots.push([pl.x0 + 0.65, z]); spots.push([pl.x1 - 0.65, z]); }
   spots.forEach(([x, z], i) => { if (P.reserved.some((r) => hits(r, x - 0.4, z - 0.4, 0.8, 0.8)) || gate(x, z)) return; const kind = i % 3 === 0 ? "palm" : "bush", t = tree(kind, i); t.position.set(wx(x), GROUND, wz(z)); t.rotation.y = i * 2.1; t.scale.setScalar(kind === "palm" ? 0.9 : 0.8); g.add(t); trees.push({ g: t, a: Math.atan2(wz(z), wx(x)), kind, s: 1, base: t.scale.x }); });
 
-  // ---- the lots either side: just their lawns and walls (no buildings), beyond a gap, so nothing here ever overlaps another plot ----
-  const side = (x0, x1, dir) => {
-    const lot = { x0, x1, z0: pl.z0, z1: pl.z1 };
-    slab(lot, GROUND - 0.27, 0.27, M.grass); slab({ x0: lot.x0 + 0.1, x1: lot.x1 - 0.1, z0: lot.z0 + 0.1, z1: lot.z1 - 0.1 }, GROUND - 0.005, 0.01, M.lawn);
-    slab({ x0: lot.x0, x1: lot.x1, z0: pl.z1 - 0.5, z1: pl.z1 - 0.2 }, GROUND, 0.7, M.wall); // their front wall continues ours along the road
-    slab({ x0: dir < 0 ? lot.x1 - 0.1 : lot.x0, x1: dir < 0 ? lot.x1 : lot.x0 + 0.1, z0: lot.z0, z1: lot.z1 }, GROUND, 0.7, M.wall);
-  };
-  side(pl.x0 - 13, pl.x0 - 0.5, -1); side(pl.x1 + 0.5, pl.x1 + 13, 1);
+  // (no neighbouring lots: the plot ends at its wall, and nothing is drawn beyond it)
   void at; void R;
-  return { group: g, trees, plot: P, release: hold.releaseAll };
+  return { group: g, trees, plot: P, road: roadG, release: hold.releaseAll };
 }
 
 /** Builds a home's plot geometry into the shared cache without keeping anything (for the idle preloader): the next buildPlot() of a home this size finds every box and hedge ready. */

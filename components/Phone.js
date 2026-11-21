@@ -30,6 +30,7 @@ import OffishallApp from "./apps/OffishallApp";
 import GuideApp from "./apps/GuideApp";
 import DeveloperApp from "./apps/DeveloperApp";
 import SugApp from "./apps/SugApp";
+import FacultyApp from "./apps/FacultyApp";
 import BetApp from "./bet/BetApp";
 import GamesApp, { useGamesBadge } from "./apps/GamesApp";
 import "./phone.css";
@@ -54,13 +55,14 @@ const APPS = {
   offishall: { name: "Clothing", icon: "shirt", tone: "fashion", C: OffishallApp }, // clothes shop + wardrobe
   bet: { name: "Bet", icon: "ticket", tone: "bet", own: true, C: BetApp }, // draws its own header and tab bar, like Messages
   games: { name: "Games", icon: "game", tone: "games", own: true, C: GamesApp }, // draws its own header, like Bet and Messages
+  faculty: { name: "Faculty", icon: "faculty", tone: "teal", C: FacultyApp }, // your faculty group: members, private chats, and the faculty elections
   sug: { name: "SUG", icon: "hall", tone: "navy", C: SugApp }, // the Students' Union Government: elections, government, Assembly
   settings: { name: "Settings", icon: "gear", tone: "graphite", own: true, C: SettingsApp }, // draws its own header: it has pages of its own, so Back steps out of a page before it leaves the app
   guide: { name: "OAU Guide", icon: "study", tone: "lime", C: GuideApp }, // generated from lib/features.js
   developer: { name: "Developer", icon: "code", tone: "dev", C: DeveloperApp }, // who made Life in OAU; its Message button opens the real Messages app on the developer's player
 };
 export const PHONE_APPS = Object.keys(APPS);
-const GRID = ["messages", "calls", "bank", "jobs", "portal", "invest", "vouchers", "love", "parties", "spending", "forbes", "awards", "housing", "ride", "offishall", "hire", "bet", "games", "sug", "guide", "developer", "settings"];
+const GRID = ["messages", "calls", "bank", "jobs", "portal", "invest", "vouchers", "love", "parties", "spending", "forbes", "awards", "housing", "ride", "offishall", "hire", "bet", "games", "faculty", "sug", "guide", "developer", "settings"];
 /** In Floor O (N-QRS Custody) the PHONE keeps working: custody stops you leaving, not using your phone. Only the apps that are about getting somewhere (rides, drivers, moving house) are
  *  tucked away. Every app that stays follows its own rules: the server still refuses anything custody forbids (working a shift, going out...) with a clear message. */
 const CUSTODY_HIDDEN = ["ride", "hire", "housing"];

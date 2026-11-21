@@ -15,6 +15,8 @@
 
 .gx-scene { position: absolute; left: var(--edge); right: var(--edge); top: var(--gx-top); bottom: var(--gx-bottom); transition: bottom 420ms var(--ease); }
 .rs { position: absolute; inset: 0; }
+/* at home the 3D scene is the whole screen (the house and its garage fill it); everything else floats above it. In the shop it steps back up above the sheet. */
+.gx[data-mode="home"] .gx-scene { left: 0; right: 0; top: 0; bottom: 0; }
 .rs-canvas { position: absolute; inset: 0; opacity: 0; transition: opacity 700ms var(--ease); }
 .rs[data-ready="1"] .rs-canvas { opacity: 1; }
 .rs-canvas canvas { cursor: default; }
