@@ -1237,7 +1237,8 @@ export async function createInteriorScene(container, c, opts = {}) {
 
   const planRoute = (x, z, floor) =>
     routeFor(c, { x: P.x, z: P.z, fl: P.fl }, x, z, floor); // the route (up and down stairs too) the automatic walk follows
-  let chatSelf = null;
+  let chatSelf = null,
+    duelSelf = null; // { i }: the player is squaring up to the lecturer at npc index i (see startDuel)
   const greets = new Map();
   function chatWith(i) {
     const p = people.find((q) => q.i === i);
@@ -1364,16 +1365,24 @@ export async function createInteriorScene(container, c, opts = {}) {
     }
   };
   // each of the player's lecturers who stands in this building gets a ring to walk up to them (the server decides if the confrontation is allowed)
-  for (const l of lecturers) {
+  // a lecturer who is not one of the player's own is shown too, with the same sign: the button explains why they cannot be fought (the server only allows your own lecturers)
+  const otherLecturers = [];
+  spec.forEach((n, i) => {
+    if (n?.role !== "lecturer" || n.mode === "sit" || lecturers.some((l) => l.npcIndex === i)) return;
+    otherLecturers.push({ npcIndex: i, name: "Lecturer", notYours: true });
+  });
+  for (const l of [...lecturers, ...otherLecturers]) {
     const n = spec[l.npcIndex],
       fx = Math.sin(n.yaw ?? 0),
       fz = Math.cos(n.yaw ?? 0),
       h = {
         x: n.x + fx * 1.4,
         z: n.z + fz * 1.4,
-        label: `Confront ${l.name}`,
-        action: "lecture",
+        label: "Beat Lecturer",
+        name: l.name,
+        action: l.notYours ? "lecture_other" : "lecture",
         code: l.code,
+        npcIndex: l.npcIndex,
         floor: n.floor ?? 0,
         lecturer: l,
       };
@@ -1425,6 +1434,16 @@ export async function createInteriorScene(container, c, opts = {}) {
     await Promise.all([worker(), worker(), worker()]);
   })();
   const stepNpc = (p, t, dt) => {
+    if (p.duel) {
+      // a fight with this lecturer is starting or running: turn to face the player and stand still (the full-screen brawl plays over the room)
+      p.yaw = turnTo(p.yaw, Math.atan2(P.x - p.x, P.z - p.z), dt * 8);
+      if (p.clip !== "idle" && p.av.has?.("idle")) {
+        setClip(p.av, "idle", { fade: 0.2 });
+        p.clip = "idle";
+      }
+      place(p);
+      return;
+    }
     if (p.chat) {
       // being greeted by the player: turn to face them, wave, then talk, then go back to what they were doing
       p.chat.t += dt;
@@ -1857,6 +1876,10 @@ export async function createInteriorScene(container, c, opts = {}) {
     player.rotation.y = P.yaw;
     const acting = stepAct(dt);
     drawAct();
+    if (duelSelf) {
+      const q = people.find((o) => o.i === duelSelf.i);
+      if (q) P.yaw = turnTo(P.yaw, Math.atan2(q.x - P.x, q.z - P.z), dt * 8);
+    }
     if (chatSelf) {
       const q = people.find((o) => o.i === chatSelf.i);
       chatSelf.t += dt;
@@ -2127,6 +2150,31 @@ export async function createInteriorScene(container, c, opts = {}) {
       return view;
     },
     use: activate,
+    /** The player and the lecturer at npc index `i` turn to face each other and stand still, before the brawl opens. Returns false if that lecturer is not drawn (yet). */
+    startDuel(i) {
+      const q = people.find((o) => o.i === i);
+      if (!q) return false;
+      for (const o of people) o.duel = false;
+      q.duel = true;
+      duelSelf = { i };
+      chatSelf = null;
+      return true;
+    },
+    /** The brawl is over (or never started): everyone goes back to normal. Safe to call any time, including twice. */
+    endDuel() {
+      duelSelf = null;
+      for (const o of people) {
+        if (!o.duel) continue;
+        o.duel = false;
+        o.yaw = o.n?.yaw ?? o.yaw;
+        o.clip = null;
+        if (o.base) {
+          setClip(o.av, o.base, { fade: 0.3 });
+          o.clip = o.base;
+        }
+        place(o);
+      }
+    },
     playIncident,
     stopIncident,
     get incident() {
