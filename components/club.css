@@ -119,3 +119,6 @@
 
 .cl-sec { margin: 14px 0 8px; font: 700 0.78rem var(--font-ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .cl-sec:first-child { margin-top: 0; }
+/* club dancing: the note on the Dance tab and the Stop button (kept above the Club button so the two never overlap, on phones too) */
+.cl-note { margin: 0 0 10px; font-size: 0.9rem; opacity: 0.8; line-height: 1.4; }
+.th .cl-stopdance { bottom: calc(var(--safe-b) + 204px); background: #ffd24a; color: #1a1500; }

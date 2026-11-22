@@ -56,7 +56,7 @@ const SETUP = {
   club: { night: true, char: { energy: 100 } },
   event_gig: { char: { energy: 100 } }, back_room_deal: { char: { energy: 100, luck: 100 } },
 };
-for (const a of ["dance", "club_drink", "vip_mingle", "patio_chat"]) SETUP[a] = SETUP.club;
+for (const a of ["dance", "club_drink", "club_mingle", "vip_mingle", "patio_chat"]) SETUP[a] = SETUP.club;
 
 const results = [];
 for (const [act, def] of Object.entries(ACTIVITIES)) {

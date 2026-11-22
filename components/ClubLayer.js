@@ -17,6 +17,7 @@ import { toast } from "@/lib/toast";
 import { playSound } from "@/lib/sound";
 import { closedMessage, clubOf, drinkById } from "@/lib/clubs.js";
 import { gameZoneLabel } from "@/lib/campus-clock.js";
+import { danceAnimFor, danceById, DANCE_RENEW_SEC } from "@/lib/danceStyles.js";
 import "./club.css";
 
 const POLL_MS = 2500, BANNER_MS = 6500;
@@ -28,6 +29,36 @@ export default function ClubLayer({ place, api, ready, selfName = "", people = [
   const [st, setSt] = useState(null), [menu, setMenu] = useState(false), [banners, setBanners] = useState([]);
   const since = useRef(0), played = useRef(new Set()), prev = useRef({ open: null, warned: false, first: true }), busy = useRef(false), leave = useRef(onLeave); leave.current = onLeave;
   useTick(1000, !!(st?.buyout || st?.vip || st?.closing));
+
+  // ---- dancing: the scene plays the clip at once; the server is told (and the lease renewed) so everyone else in the club sees it too
+  const [dance, setDanceId] = useState(null), danceRef = useRef(null);
+  const where = useCallback(() => { const p = api.current?.state; return p ? { x: p.x, z: p.z, floor: p.floor } : {}; }, [api]);
+  const sendDance = useCallback((style) => call("/api/activity", { op: "dance", style, ...(style ? where() : {}) }), [where]);
+  const endDance = useCallback((tell = true) => { // stop here, and (unless the server already knows) tell it
+    api.current?.setDance?.(null); if (danceRef.current == null) return; danceRef.current = null; setDanceId(null); if (tell) sendDance(null);
+  }, [api, sendDance]);
+  const startDance = useCallback(async (id) => {
+    const a = api.current, anim = danceAnimFor(id); if (!a?.setDance || !anim) return;
+    if (!a.setDance(anim)) { toast.info("Stand still on the floor to dance."); return; } // walking or busy with an activity: no dance
+    danceRef.current = id; setDanceId(id); setMenu(false);
+    const r = await sendDance(id);
+    if (r.failed && danceRef.current === id) { endDance(false); toast.error(r.error ?? "You cannot dance right now."); }
+  }, [api, sendDance, endDance]);
+  useEffect(() => { // keep the lease alive while dancing
+    if (!dance) return; const t = setInterval(async () => { const id = danceRef.current; if (!id) return; const r = await sendDance(id); if (r.failed && danceRef.current === id) endDance(false); }, DANCE_RENEW_SEC * 1000);
+    return () => clearInterval(t);
+  }, [dance, sendDance, endDance]);
+  useEffect(() => { // the scene says the dance ended (you walked away, or started an activity)
+    const h = () => endDance(true); window.addEventListener("oau:dance-end", h); return () => window.removeEventListener("oau:dance-end", h);
+  }, [endDance]);
+  useEffect(() => { // the scene started a dance with a partner on the floor: your side goes to the server like any dance, so everyone in the club sees you dancing
+    const h = async (e) => {
+      const id = e.detail?.style ?? "bounce"; danceRef.current = id; setDanceId(id); setMenu(false); toast.info(`Dancing with ${e.detail?.name ?? "her"}. Walk away to stop.`);
+      const r = await sendDance(id); if (r.failed && danceRef.current === id) { endDance(false); toast.error(r.error ?? "You cannot dance right now."); }
+    };
+    window.addEventListener("oau:partner-dance", h); return () => window.removeEventListener("oau:partner-dance", h);
+  }, [sendDance, endDance]);
+  useEffect(() => () => { if (danceRef.current) { danceRef.current = null; call("/api/activity", { op: "dance", style: null }); } }, []); // leaving the club ends it for everyone else too
 
   const apply = useCallback((r) => {
     if (r.club == null) return;
@@ -77,8 +108,9 @@ export default function ClubLayer({ place, api, ready, selfName = "", people = [
       </div>
       <button type="button" className="cl-open" onClick={() => (open ? setMenu(true) : toast.error(closedMessage(club)))} data-sound="none" aria-label="Open the club menu: activities, music and spending"><Icon name="sparkle" size={18} weight="fill" /> Club</button>
       <ClubMusicPlayer club={club} live={isOpen} />
+      {dance && <button type="button" className="cl-open cl-stopdance" onClick={() => endDance(true)} data-sound="none" aria-label="Stop dancing"><Icon name="music" size={18} /> Stop: {danceById(dance)?.label}</button>}
       <div className="cl-banners" aria-live="polite">{banners.map((b) => <div key={b.id} className="cl-banner" data-lv={b.level}>{b.text}</div>)}</div>
-      {menu && st && <ClubPanel club={{ ...club, ...(st.club ?? {}) }} state={st} people={people} selfName={selfName} getPos={() => { const p = api.current?.state; return p ? { x: p.x, z: p.z, floor: p.floor } : null; }} onClose={() => setMenu(false)} onBought={() => load()} />}
+      {menu && st && <ClubPanel club={{ ...club, ...(st.club ?? {}) }} state={st} people={people} selfName={selfName} getPos={() => { const p = api.current?.state; return p ? { x: p.x, z: p.z, floor: p.floor } : null; }} dance={dance} onDance={startDance} onStopDance={() => endDance(true)} onClose={() => setMenu(false)} onBought={() => load()} />}
     </>
   );
 }

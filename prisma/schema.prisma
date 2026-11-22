@@ -147,6 +147,9 @@ model Character {
   inZ                Float?
   inFloor            Int            @default(0)
   inAt               DateTime?
+  // The club dance the player is doing (lib/danceStyles.js). A short lease the screen keeps renewing, so a closed tab never leaves a ghost dancing. Free; no money moves.
+  danceStyle         String?
+  danceUntil         DateTime?
   createdAt          DateTime       @default(now())
   user               User           @relation(fields: [userId], references: [id])
   faculty            Faculty        @relation(fields: [facultyId], references: [id])
