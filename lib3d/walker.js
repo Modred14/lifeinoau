@@ -31,11 +31,12 @@ export function createNav({ world, graph = null }) {
 
   /** The closest free grid cell to (x, z) that can be reached from it in a straight line (so the first and last leg of a route never clip a corner). */
   function nearestFree(x, z, r = 5) {
-    let best = null; const i0 = ix(x), j0 = iz(z);
+    // a point that is itself inside a post's or wall's clearance (a kerb target with a sign beside it) has no clear line to anything: then the nearest free cell is taken without one, instead of none
+    let best = null; const i0 = ix(x), j0 = iz(z), inside = world.blockedAt(x, z, WALK_R + 0.05);
     for (let d = 0; d <= r; d++) for (let j = j0 - d; j <= j0 + d; j++) for (let i = i0 - d; i <= i0 + d; i++) {
       if (Math.max(Math.abs(i - i0), Math.abs(j - j0)) !== d || !inb(i, j) || clearOf(i, j) < 2 + NAV_CLEAR * 10) continue;
       const dd = Math.hypot(cx(i) - x, cz(j) - z); if (best && dd >= best.d) continue;
-      if (dd > 0.4 && !world.segmentClear(x, z, cx(i), cz(j), WALK_R + 0.05, { bodies: false })) continue;
+      if (dd > 0.4 && !inside && !world.segmentClear(x, z, cx(i), cz(j), WALK_R + 0.05, { bodies: false })) continue;
       best = { i, j, d: dd };
     }
     return best;
