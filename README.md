@@ -73,6 +73,36 @@ Pages: Overview (real analytics with their definitions), Online players (live), 
 
 Tests: `node tests/admin-console.test.mjs` (no database) runs with `npm test`. `tests/pg/admin/run.sh` runs the database suites against a throwaway Postgres (see the header of that file).
 
+## The campus map
+
+Two maps are kept in the repository and either can be switched on with one command. The game reads the plain-named copies (`public/data/oau-campus.json`, `public/data/oau-roadgraph.json`) and `lib3d/mapLayout.js`.
+
+| map | what it is | where it is stored |
+| --- | --- | --- |
+| `osm` (default) | OpenStreetMap, 1,800 buildings, 2.4 x 3.2 km, real entrances | `tools/oau/maps/osm/` |
+| `legacy` | the original traced map | `tools/oau/maps/legacy/` |
+
+```sh
+node tools/oau/use-map.mjs osm          # the OpenStreetMap map
+node tools/oau/use-map.mjs legacy       # the way back to the original map
+node tools/oau/use-map.mjs --status     # which one is active
+```
+
+Everything that differs between the two maps (the expressway's waypoints, interchanges and tails, and where the ten billboards stand) is in `lib3d/mapLayout.js`; `use-map.mjs` picks the entry. The copy of the map that is not in use lives outside `public/`, so it is never shipped or cached.
+
+**Rebuild from scratch (one command each, any OS):**
+
+```sh
+sh tools/oau/import-campus.sh           # campus-archive branch -> tools/oau/maps/osm/oau-campus.json (needs: git, node, python with numpy and shapely)
+node tools/oau/use-map.mjs osm          # make it the active map
+npm run build:roads                     # road graph, expressway, tails (needs python with numpy, scipy, scikit-image, shapely)
+node tools/oau/place-billboards.mjs --write   # billboard sites for the OSM map (lib3d/mapLayout.js)
+node scripts/assets-manifest.mjs        # the asset manifest lists the data files
+node tools/oau/verify-map.mjs           # checks the result by script
+```
+
+`tools/oau/import_campus.py` converts OpenStreetMap's `campus.json` into the game's map format: buildings are cut back from roads and clipped to the frame, roads are buffered from their polylines, places keep their ids (46 matched by name, the rest placed where the old position lands, clear of buildings), and heights come from the Google Open Buildings file (a published height, such as the Senate's 24 m, wins). Do not edit the generated files by hand. Map data is © OpenStreetMap contributors (ODbL); building heights are from Google Open Buildings 2.5D Temporal (CC BY 4.0). Both credits are in the map's `meta.attribution`.
+
 ## Checks
 
 ```sh
