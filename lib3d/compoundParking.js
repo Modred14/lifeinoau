@@ -6,11 +6,13 @@
 // the same heading convention as lib3d/garageDrive.js (the nose points along (sin yaw, cos yaw); yaw 0 is south, towards the road). The driving model itself
 // (lib3d/garageDrive.js) works in metres, so `metresWorld` turns the same ground into metres.
 //
-//   parking ... every owned vehicle gets its own place on the lawn, nose towards the open ground in front of it, clear of the house, the garage, the driveway,
+//   garage .... the first vehicles stand in the garage hall (lib/plot.js: bays either side of a lane, nose to the lane, one bay every bayPitch cells, in the order they are given), so
+//               each can pull out onto the lane and drive straight to the gate without moving another; the hall's walls are solid but its floor is open ground
+//   parking ... any vehicle the garage has no bay for (more than PLOT_RULES.bays) gets its own place on the lawn, nose towards the open ground in front of it, clear of the house, the garage, the driveway,
 //               the hedges and anything the player has put on the lawn. The vehicle nearest the gate is the first one placed, so a small collection stands by the gate.
 //   leaving ... the whole lawn (inside the hedges), the driveway, the gate and the road are drivable; the house, the garage, outdoor furniture and the other
 //               parked vehicles are solid. Driving out ends when the whole vehicle is on the carriageway (`onCarriageway`).
-import { plotFor } from "../lib/plot.js";
+import { plotFor, PLOT_RULES } from "../lib/plot.js";
 import { ITEMS, sizeOf } from "../lib/furniture.js";
 import { isOutside } from "../lib/room.js";
 import { garageVehicleSize } from "./garageLayout.js";
@@ -45,9 +47,11 @@ export function poseBox(x, z, yaw, len, wid) {
 export function compoundWorld(room, items = []) {
   const P = plotFor(room), pl = P.plot, W = room.w, D = room.d;
   const lawn = { x0: pl.x0 + HEDGE, x1: pl.x1 - HEDGE, z0: pl.z0 + HEDGE, z1: pl.z1 - HEDGE };
-  const ga = P.garage, solids = [
+  // the garage is a hall you can drive and walk into: only its walls are solid (the back, both sides, and the two pieces of the front either side of the open lane)
+  const ga = P.garage, T = 0.3, solids = [
     { x0: -0.45, x1: W + 0.45, z0: -0.45, z1: D + 0.55, kind: "house" },
-    { x0: ga.x0 - 0.45, x1: ga.x1 + 0.45, z0: ga.z0 - 0.45, z1: ga.z1 + 0.15, kind: "garage" },
+    ...[{ x0: ga.x0, x1: ga.x1, z0: ga.z0, z1: ga.z0 + T }, { x0: ga.x0, x1: ga.x0 + T, z0: ga.z0, z1: ga.z1 }, { x0: ga.x1 - T, x1: ga.x1, z0: ga.z0, z1: ga.z1 },
+      { x0: ga.x0, x1: P.door.x0, z0: ga.z1 - T, z1: ga.z1 }, { x0: P.door.x1, x1: ga.x1, z0: ga.z1 - T, z1: ga.z1 }].map((r) => ({ ...r, kind: "garage" })),
   ];
   for (const it of items) { if (!it || it.placed === false || it.x == null || !ITEMS[it.key] || ITEMS[it.key].flat || !isOutside(room, it)) continue; // whatever stands out on the lawn is solid (a carried-out sofa too), but a rug lies flat and a car drives over it
     const [w, d] = sizeOf(it.key, it.rot ?? 0); solids.push({ x0: it.x - 0.1, x1: it.x + w + 0.1, z0: it.z - 0.1, z1: it.z + d + 0.1, kind: "item" }); }
@@ -104,11 +108,19 @@ function openGround(cw, bodies, wid, step = 0.5) {
  * Every placed vehicle can pull straight out ahead and reach the gate without touching anything (checked against every other vehicle, as each one is added).
  * Returns { slots: [{ ...vehicle, x, z, yaw, len, wid }], unplaced: [vehicle], cw }. A vehicle that cannot be fitted (the lawn is full of the player's own furniture) is listed in `unplaced`.
  */
+/** Where the vehicle in the n-th bay of the garage stands: { x, z (cells, its centre), yaw }. West bays face east and east bays face west, noses a little back from the lane's edge. */
+export function bayPose(P, n, len) {
+  const b = P.bays[n]; if (!b) return null;
+  return { x: b.nose + (b.side < 0 ? -1 : 1) * (PLOT_RULES.bayNose + len / 2), z: b.z, yaw: b.side < 0 ? Math.PI / 2 : -Math.PI / 2, bay: n };
+}
+
 export function planParking(room, vehicles = [], items = []) {
   const cw = compoundWorld(room, items), { lawn, drive, target } = cw;
   // the ground outside the front door is for people: nothing parks across it, so the way out of the house is never shut (a person walks round the vehicles from there)
   const o = doorLink(room).outside, doorstep = { x0: o.x - APRON, x1: o.x + APRON, z0: o.z - APRON, z1: o.z + APRON };
-  const keepOut = [...cw.solids, grow(drive, 0.35), doorstep], bodyOf = (s) => poseBox(s.x, s.z, s.yaw, s.len, s.wid);
+  const keepOut = [...cw.solids, grow(drive, 0.35), grow(cw.P.garage, 0.1), doorstep], bodyOf = (s) => poseBox(s.x, s.z, s.yaw, s.len, s.wid);
+  // the garage first: vehicle n stands in bay n, tidy and square, every one with the lane open in front of its nose
+  const inGarage = vehicles.slice(0, cw.P.bays.length).map((v, n) => { const { len, wid } = vehicleCells(v.modelId); return { ...v, ...bayPose(cw.P, n, len), len, wid, garage: true }; }), rest = vehicles.slice(inGarage.length);
   // candidate centres on a half-cell grid over the lawn, nearest the gate first (ties: west to east, so the result never depends on iteration luck)
   const cand = [];
   for (let x = lawn.x0; x <= lawn.x1; x += 0.5) for (let z = lawn.z0; z <= lawn.z1; z += 0.5) cand.push({ x, z, d: Math.hypot(x - target.x, z - target.z) });
@@ -117,7 +129,7 @@ export function planParking(room, vehicles = [], items = []) {
   const hasDoorRoom = (list, s) => hasStandSpot(walkWorld(cw, list), s);
   /** Parks what it can with these passes, in order. While a pass has `door` set, a vehicle is only parked where a person can stand at one of its doors (the door able to swing), and where it takes that away from no vehicle already parked nearby. */
   function park(passes) {
-    const slots = [], todo = [...vehicles];
+    const slots = [...inGarage], todo = [...rest];
     for (const { gap, strip, door } of passes) {
       if (!todo.length) break;
       for (const v of [...todo]) {

@@ -1,11 +1,11 @@
 # Campus population (the number in the header)
 
-The header shows a lively campus figure, e.g. **6,248 people on campus**. It is a **simulation**: part of it is made up on purpose, and it must stay separate from everything real.
+The header shows the number of people who have visited today as an icon and a figure only (no words), e.g. **6,248**; its tooltip and screen-reader label read **6,248 people visited today**. It is a **simulation**: part of it is made up on purpose, and it must stay separate from everything real.
 
 ## How the number is made
 
 ```
-people on campus  =  5,000  +  registered accounts  +  today's simulated arrivals
+people who visited today  =  5,000  +  registered accounts  +  today's simulated arrivals
 ```
 
 | Part | Where it comes from | Notes |

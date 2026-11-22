@@ -1,7 +1,7 @@
 /* components/bottom-nav.css: the persistent bottom bar and the layer contract that keeps it on screen.
 
-   The bar is a frosted-glass pill (Home, Buy, Map: the tab you are on opens into icon + name) with a round Phone button beside it. It is small on purpose: 52px tall (44px
-   buttons, the minimum comfortable touch target), lifted 8px off the bottom edge, so it covers as little of the world as it can.
+   The bar is a frosted-glass pill (Home, Buy, Map: the tab you are on opens into icon + name) with a round Phone button beside it. It is small on purpose: 44px tall (36px
+   buttons), lifted 6px off the bottom edge, so it covers as little of the world as it can.
 
    Why the bar used to vanish: it sat at z-index 30 while the phone, travel sheets, building interiors and dialogs are full-screen layers at 60-95,
    so every one of them covered it; the trip screen hid it outright; and none of those layers left any room for it.
@@ -14,8 +14,8 @@
       their sheets, footers and joysticks) as "device inset + the bar", so their bottom controls stop above the bar instead of under it. */
 :root {
   --z-nav: 500;
-  --nav-gap: 8px; /* between the bar and the bottom edge (the device's own inset comes on top) */
-  --nav-bar-h: 52px; /* 44px buttons (the minimum comfortable touch target) + 2 x 3px padding + 2px border */
+  --nav-gap: 6px; /* between the bar and the bottom edge (the device's own inset comes on top) */
+  --nav-bar-h: 44px; /* 36px buttons + 2 x 3px padding + 2px border: a slim bar */
   --nav-band: calc(var(--nav-gap) + var(--nav-bar-h));
   --bp-bg: rgba(13, 19, 33, 0.94); /* the one surface the activities panel and the docked bar share (components/building-panel.css) */
   --bp-line: rgba(255, 255, 255, 0.12);
@@ -23,13 +23,13 @@
 }
 /* a phone held sideways has little height to give: the bar gets slimmer */
 @media (max-height: 480px) {
-  :root { --nav-gap: 6px; --nav-bar-h: 48px; }
+  :root { --nav-gap: 4px; --nav-bar-h: 40px; }
 }
 
 /* The bar: a row holding the pill and the phone button. It has no surface of its own; each part is its own piece of glass. */
 .nav {
   position: fixed; z-index: var(--z-nav); bottom: calc(var(--safe-b) + var(--nav-gap)); left: 50%; transform: translateX(-50%);
-  width: min(360px, calc(100% - 2 * var(--edge))); height: var(--nav-bar-h); display: flex; align-items: stretch; gap: 8px;
+  width: min(300px, calc(100% - 2 * var(--edge))); height: var(--nav-bar-h); display: flex; align-items: flex-end; gap: 8px;
   animation: nav-in 240ms var(--ease) both;
 }
 @keyframes nav-in { from { opacity: 0; transform: translate(-50%, 10px); } }
@@ -38,12 +38,20 @@
   border: 1px solid var(--glass-line); box-shadow: var(--glass-rim), var(--glass-lift);
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .nav-pill, .nav-phone { background: var(--glass-bg-strong); } }
-.nav-pill { flex: 1; min-width: 0; display: flex; align-items: stretch; gap: 2px; padding: 3px; border-radius: 999px; }
-.nav-phone:not(:where(.campus-world *)) { flex: none; width: var(--nav-bar-h); padding: 0; border-radius: 50%; display: grid; place-items: center; position: relative; color: rgba(234, 240, 248, 0.82); }
+.nav-pill { flex: 1; min-width: 0; height: var(--nav-bar-h); display: flex; align-items: stretch; gap: 2px; padding: 3px; border-radius: 999px; }
+/* the Phone button is a little handset standing beside the bar, taller than it, so it reads as the phone you pick up */
+.nav .nav-phone:not(:where(.campus-world *)) { flex: none; width: 34px; height: calc(var(--nav-bar-h) + 12px); padding: 0; border-radius: 10px; display: block; position: relative; background: none; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; color: rgba(234, 240, 248, 0.82); }
+.nav-handset { position: absolute; inset: 0; display: block; border-radius: 10px; background: #0b111d; border: 2px solid #c9d0dd; box-shadow: 0 8px 16px -6px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(0, 0, 0, 0.6); transition: transform 160ms var(--ease), border-color 200ms var(--ease); }
+.nav-handset::before { content: ""; position: absolute; left: -4px; top: 14px; width: 2px; height: 8px; border-radius: 1px; background: #c9d0dd; box-shadow: 0 11px 0 #c9d0dd; } /* the side buttons */
+.nav-handset .nh-screen { position: absolute; inset: 2px; border-radius: 7px; background: #1d2b4d; overflow: hidden; display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px; align-content: center; justify-items: center; padding: 9px 4px 7px; transition: background-color 200ms var(--ease); }
+.nav-handset .nh-screen b { display: block; width: 9px; height: 9px; border-radius: 3px; background: #6ee7a8; }
+.nav-handset .nh-screen b:nth-child(2) { background: #6aa7ff; } .nav-handset .nh-screen b:nth-child(3) { background: #f2b84b; } .nav-handset .nh-screen b:nth-child(4) { background: #ff8a8a; }
+.nav-handset .nh-island { position: absolute; z-index: 1; left: 50%; top: 4px; width: 10px; height: 3px; margin-left: -5px; border-radius: 3px; background: #05080f; } /* the speaker slot */
+.nav-handset .nh-home { position: absolute; z-index: 1; left: 50%; bottom: 3px; width: 12px; height: 2px; margin-left: -6px; border-radius: 2px; background: rgba(255, 255, 255, 0.7); } /* the home bar */
 
 .nav-pill > a, .nav-pill > button:not(:where(.campus-world *)) {
-  position: relative; flex: 1 1 0; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0;
-  font-size: 0.8rem; font-weight: 600; letter-spacing: 0.01em; line-height: 1; white-space: nowrap;
+  position: relative; flex: 1 1 0; min-width: 38px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 0;
+  font-size: 0.76rem; font-weight: 600; letter-spacing: 0.01em; line-height: 1; white-space: nowrap;
   border-radius: 999px; border: 0; background: transparent; color: rgba(234, 240, 248, 0.72); padding: 0 10px; box-shadow: inset 0 0 0 1px rgba(110, 231, 168, 0);
   -webkit-tap-highlight-color: transparent; touch-action: manipulation;
   /* Every tab has the same flex-basis (0) and only its flex-GROW changes, so the widths interpolate smoothly: the tab you leave closes while the new one opens, in one motion. */
@@ -53,15 +61,17 @@
 .nav-pill > * > span { max-width: 0; margin-left: 0; opacity: 0; overflow: hidden; transition: max-width 340ms cubic-bezier(0.32, 0.72, 0, 1), margin-left 340ms cubic-bezier(0.32, 0.72, 0, 1), opacity 240ms var(--ease); }
 .nav-pill [data-active="1"] { flex-grow: 2; background: rgba(110, 231, 168, 0.18); color: var(--nav-on); box-shadow: inset 0 0 0 1px rgba(110, 231, 168, 0.22); }
 .nav-pill [data-active="1"] > span { max-width: 4.6rem; margin-left: 7px; opacity: 1; }
-.nav svg { width: 22px; height: 22px; flex: none; transition: transform 200ms var(--ease); }
-.nav-pill > a:hover:not([data-active="1"]), .nav-pill > button:not(:where(.campus-world *)):hover:not(:disabled):not([data-active="1"]), .nav-phone:not(:where(.campus-world *)):hover { color: #fff; background-color: rgba(255, 255, 255, 0.1); }
+.nav svg { width: 20px; height: 20px; flex: none; transition: transform 200ms var(--ease); }
+.nav-pill > a:hover:not([data-active="1"]), .nav-pill > button:not(:where(.campus-world *)):hover:not(:disabled):not([data-active="1"]) { color: #fff; background-color: rgba(255, 255, 255, 0.1); }
+.nav .nav-phone:not(:where(.campus-world *)):hover .nav-handset { border-color: #fff; }
 .nav-pill > button:disabled { opacity: 0.4; }
-.nav-pill > a:active, .nav-pill > button:not(:where(.campus-world *)):active:not(:disabled), .nav-phone:not(:where(.campus-world *)):active { transform: scale(0.94); }
-.nav-phone[data-active="1"] { background: rgba(110, 231, 168, 0.2); border-color: rgba(110, 231, 168, 0.3); color: var(--nav-on); }
+.nav-pill > a:active, .nav-pill > button:not(:where(.campus-world *)):active:not(:disabled) { transform: scale(0.94); }
+.nav .nav-phone:not(:where(.campus-world *)):active { transform: none; } .nav .nav-phone:active .nav-handset { transform: translateY(1px) scale(0.96); }
+.nav .nav-phone[data-active="1"] .nav-handset { border-color: var(--nav-on); } .nav .nav-phone[data-active="1"] .nh-screen { background: #1f5b43; }
 .nav a:focus-visible, .nav button:focus-visible { outline: 2px solid var(--nav-on); outline-offset: -2px; }
 @media (max-height: 480px) {
-  .nav-pill > a, .nav-pill > button:not(:where(.campus-world *)) { min-height: 40px; }
-  .nav svg { width: 20px; height: 20px; }
+  .nav-pill > a, .nav-pill > button:not(:where(.campus-world *)) { min-height: 34px; }
+  .nav svg { width: 18px; height: 18px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .nav { animation: none; }
@@ -104,12 +114,13 @@ body[data-dock="on"] .nav {
   box-sizing: border-box; width: min(520px, calc(100% - 2 * var(--edge))); padding: 3px; gap: 4px; background: var(--bp-bg); border: 0 solid var(--bp-line); border-width: 0 1px 1px;
   border-radius: 0 0 16px 16px; box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.75);
 }
-body[data-dock="on"] .nav :is(.nav-pill, .nav-phone) { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; border-color: transparent; box-shadow: none; }
+body[data-dock="on"] .nav .nav-pill { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; border-color: transparent; box-shadow: none; }
 body[data-dock="on"] .nav-pill { padding: 0; }
 /* the unread badge on the Phone button: pinned to the icon, so it never moves it */
 .nav .nav-ico { position: relative; display: inline-grid; place-items: center; line-height: 0; }
+.nav .nav-phone .nav-ico { position: static; display: block; } /* the handset and the badge are placed against the button itself */
 .nav .nav-badge {
-  position: absolute; top: -6px; right: -9px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; box-sizing: border-box;
+  position: absolute; top: -6px; right: -9px; z-index: 2; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; box-sizing: border-box;
   display: grid; place-items: center; background: #ef4444; color: #fff; font: 700 0.62rem/1 var(--font-ui); font-style: normal;
   border: 1.5px solid rgb(22, 32, 50);
 }

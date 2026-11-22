@@ -58,6 +58,7 @@ model Faculty {
   verified    Boolean      @default(false) // flip to true once checked against oauife.edu.ng
   departments Department[]
   characters  Character[]
+  group       FacultyGroup?
 }
 
 model Department {
@@ -152,6 +153,7 @@ model Character {
   account            Account?
   notifications      Notification[]
   voucherRedemptions VoucherRedemption[]
+  facultyMembership  FacultyGroupMember?
 
   @@index([facultyId])
   @@index([placeId, placeAt])
@@ -1466,4 +1468,29 @@ model CampusArrivalDay {
 model CampusEntry {
   userId      String   @id
   lastEntryAt DateTime
+}
+
+
+// ---- Faculty groups: one community per faculty and its member list. ----
+// A group exists for every Faculty row and a player is in exactly one, the group of Character.facultyId. Both are kept true by database triggers
+// (prisma/migrations/20261121000000_faculty_groups), so no code path (sign-up, admin tools, scripts) can forget them.
+// Private messages reuse Chat/Message above. Faculty Representatives are elected in the existing SUG election (lib/sugService.js, the FACULTY_REP_<id> races),
+// not in a second election system: the group only shows them.
+model FacultyGroup {
+  id        Int      @id @default(autoincrement())
+  facultyId Int      @unique // exactly one group per faculty
+  createdAt DateTime @default(now())
+  faculty   Faculty  @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  members   FacultyGroupMember[]
+}
+
+model FacultyGroupMember {
+  id          Int          @id @default(autoincrement())
+  groupId     Int
+  characterId String       @unique // a player is in one group only
+  joinedAt    DateTime     @default(now())
+  group       FacultyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  character   Character    @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
 }

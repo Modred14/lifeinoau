@@ -32,11 +32,12 @@ import "./travel.css";
 // In the custody building every cell is locked to anyone who is not a prisoner (the server refuses those positions too, lib/custodyCells.js).
 const lockedOf = (c, place) => (place.id === "floor0" ? cellsOf(c) : null);
 
+const NOT_YOURS = "That is not one of your lecturers. You can only beat the lecturers of your own courses (see Courses).";
 export default function BuildingInside({ place, look = null, gender = "M", focus = null, selfName = "", onLeave, onCustody = null, cell = null, banner = null }) {
   const [people, setPeople] = useState(null), [status, setStatus] = useState("loading"), [info, setInfo] = useState(false), [room, setRoom] = useState(""), [near, setNear] = useState(null), [view, setView] = useState(cell ? "overhead" : getPrefs().gameplay.interiorView), [note, setNote] = useState(""), [rings, setRings] = useState([]), [open, setOpen] = useState(null);
   // the lecturers who teach in this building, the confrontation in progress, and the N-QRS response being acted out (all decided by the server: /api/lecture)
   const [fight, setFight] = useState(null), [incident, setIncident] = useState(null), [after, setAfter] = useState(null), [fade, setFade] = useState(0), lec = useRef({ courses: [] }), played = useRef(null);
-  const [sceneReady, setSceneReady] = useState(false), confrontRef = useRef(null), yellowRef = useRef(null), panelCtl = useRef(null);
+  const [sceneReady, setSceneReady] = useState(false), [busy, setBusy] = useState(false), [lecInfo, setLecInfo] = useState(null), busyRef = useRef(false), confrontRef = useRef(null), yellowRef = useRef(null), panelCtl = useRef(null);
   const box = useRef(null), api = useRef(null), [input] = useState(() => ({ jx: 0, jy: 0, run: false, hold(v) { this.run = v; } })), router = useRouter(), leave = useRef(onLeave);
   useEffect(() => { leave.current = onLeave; });
   // While this room is on screen <body data-inside="1">: anything outside it (the phone's Shop tile) can tell that leaving this screen would take you out of the building.
@@ -45,7 +46,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
   // the dimmed phone, and only stops listening (keys, stick, drag, wheel) while it is open, so using the phone cannot walk or turn you. Shell announces it with
   // "oau:phone-state" and keeps <body data-phone="open"> for a room that finishes loading while the phone is already up.
   useEffect(() => {
-    const hold = (on) => { if (on) { input.jx = input.jy = 0; input.run = false; } api.current?.setSuspended?.(on); };
+    const hold = (on) => { if (on) { input.jx = input.jy = 0; input.run = false; } api.current?.setSuspended?.(on || busyRef.current); };
     const h = (e) => hold(!!e.detail);
     window.addEventListener("oau:phone-state", h); return () => window.removeEventListener("oau:phone-state", h);
   }, [input]);
@@ -77,7 +78,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
         const lecturers = (lec.current.courses ?? []).map((x) => ({ code: x.code, name: x.lecturer.name, difficulty: x.lecturer.difficulty, npcIndex: x.venue.npcIndex }));
         // the activity rings: placed by the same code the server uses to check where you stand (lib3d/interiors/activityHubs.js), drawn teal
         const list = activityHubs(c, classify(place.id, place.kind).spec).hubs.map((h) => ({ ...h, activity: h.id, tint: "#5fe3c0" })); c.hubs = [...c.hubs, ...list]; setRings(list); if (dead || !box.current) return;
-        scene = await createInteriorScene(box.current, c, { look, gender, selfName: selfRef.current, club: isClub(place.id), barSpot: (() => { const b = list.find((h) => h.act === "club_drink"); return b ? { x: b.x, z: b.z } : null; })(), input, view: cell ? "overhead" : getPrefs().gameplay.interiorView, lecturers, cell, lockedCells: lockedOf(c, place), onFade: setFade, onIncidentEnd: (e) => setAfter(e), onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onChat: (m) => { toast.info(`${m.name}: ${m.line}`); setTimeout(() => { if (!dead) toast.info(`${m.name}: ${m.reply}`); }, 2600); }, onHub: (h) => { if (h.action === "lecture") { confrontRef.current?.(h.lecturer.code); return; } if (h.activity) { setOpen(h); return; } yellowRef.current?.(h); } });
+        scene = await createInteriorScene(box.current, c, { look, gender, selfName: selfRef.current, club: isClub(place.id), barSpot: (() => { const b = list.find((h) => h.act === "club_drink"); return b ? { x: b.x, z: b.z } : null; })(), input, view: cell ? "overhead" : getPrefs().gameplay.interiorView, lecturers, cell, lockedCells: lockedOf(c, place), onFade: setFade, onIncidentEnd: (e) => setAfter(e), onExit: () => leave.current?.(), onRoom: setRoom, onNear: setNear, onChat: (m) => { toast.info(`${m.name}: ${m.line}`); setTimeout(() => { if (!dead) toast.info(`${m.name}: ${m.reply}`); }, 2600); }, onHub: (h) => { if (h.action === "lecture") { confrontRef.current?.(h.lecturer.code, h.npcIndex); return; } if (h.action === "lecture_other") { toast.info(NOT_YOURS); return; } if (h.activity) { setOpen(h); return; } yellowRef.current?.(h); } });
         if (dead) { scene.dispose(); return; } api.current = scene; if (peopleRef.current) scene.setRemotePlayers(peopleRef.current); setStatus("ready"); setSceneReady(true);
       } catch (e) { console.warn("interior unavailable", e); if (!dead) setStatus("fallback"); }
     })();
@@ -87,19 +88,46 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
   const myLookKey = lookKey(look, gender);
   useEffect(() => { if (sceneReady) api.current?.setSelfLook(look, gender); }, [myLookKey, sceneReady]); // eslint-disable-line react-hooks/exhaustive-deps
   // ---- confronting a lecturer ----
-  async function confront(code) {
-    if (fight || incident) return;
-    const L = await call("/api/lecture?at=" + encodeURIComponent(place.id)); if (L.failed) return toast.error(L.error || "Could not reach the server.");
-    lec.current = L; const c = L.courses.find((x) => x.code === code); if (!c) return toast.error("That lecturer is not in this building.");
-    if (!c.canConfront) return toast.error(c.reason || "You cannot confront them now.");
-    const ok = await confirmAction({ title: `Fight ${c.lecturer.name}?`, message: `Beat them and there is a 70% chance N-QRS comes: they rescue the lecturer and arrest YOU. They seize 30% of your cash, you get a strike, and you serve your whole sentence in Floor O (N-QRS Custody). Lose and you get hurt. Costs ${L.energyCost} energy. Once a week.`, confirmLabel: "Fight", tone: "danger" });
-    if (!ok) return;
-    const r = await call("/api/lecture", { action: "approach", code, requestId: crypto.randomUUID() });
-    if (r.failed) return toast.error(r.error || "You could not walk up to them.");
-    setFight({ course: { code, difficulty: c.lecturer.difficulty, lecturer: { name: c.lecturer.name } }, encounter: r.encounter });
+  // One confrontation at a time. busyRef is set synchronously (state would lag a double tap), and the room stops listening to keys and the stick while it runs,
+  // so the dodge and block keys of the brawl (S, D, L) cannot walk the character behind the overlay. release() always puts the room back, whatever went wrong.
+  const release = () => { busyRef.current = false; setBusy(false); api.current?.endDuel?.(); api.current?.setSuspended?.(document.body.dataset.phone === "open"); };
+  async function confront(code, npcIndex) {
+    if (busyRef.current || fight || incident) return;
+    busyRef.current = true; setBusy(true); api.current?.setSuspended?.(true); input.jx = input.jy = 0; input.run = false;
+    let started = false;
+    try {
+      const L = await call("/api/lecture?at=" + encodeURIComponent(place.id)); if (L.failed) return toast.error(L.error || "Could not reach the server.");
+      lec.current = L; const c = L.courses.find((x) => x.code === code); if (!c) return toast.error("That lecturer is not in this building.");
+      if (!c.canConfront) { setLecInfo({ code, canConfront: false, reason: c.reason }); return toast.error(c.reason || "You cannot confront them now."); }
+      api.current?.startDuel?.(npcIndex ?? c.venue?.npcIndex); // you and the lecturer turn to face each other while you decide
+      const ok = await confirmAction({ title: `Beat ${c.lecturer.name}?`, message: `Beat them and there is a 70% chance N-QRS comes: they rescue the lecturer and arrest YOU. They seize 30% of your cash, you get a strike, and you serve your whole sentence in Floor O (N-QRS Custody). Lose and you get hurt. Costs ${L.energyCost} energy. Once a week.`, confirmLabel: "Fight", tone: "danger" });
+      if (!ok) return;
+      const r = await call("/api/lecture", { action: "approach", code, requestId: crypto.randomUUID() });
+      if (r.failed) return toast.error(r.error || "You could not walk up to them.");
+      started = true;
+      setFight({ course: { code, difficulty: c.lecturer.difficulty, lecturer: { name: c.lecturer.name } }, encounter: r.encounter });
+    } catch (e) {
+      console.error("beat lecturer failed", e); toast.error("Something went wrong. Try again.");
+    } finally {
+      if (!started) release(); // the fight overlay keeps the lock until it closes (see closeFight)
+    }
   }
   confrontRef.current = confront;
-  const settled = (res) => { setFight(null); if (res.incident) { setIncident(res.incident); } };
+  // Walking up to a lecturer: ask the server once (not every frame) whether they can be fought, so the button says why not before you press it.
+  const nearLec = near?.action === "lecture" ? near.lecturer.code : near?.action === "lecture_other" ? "_other" : null;
+  useEffect(() => {
+    if (!nearLec) { setLecInfo(null); return; }
+    if (nearLec === "_other") { setLecInfo({ code: "_other", canConfront: false, reason: NOT_YOURS }); return; }
+    let live = true; setLecInfo(null);
+    call("/api/lecture?at=" + encodeURIComponent(place.id)).then((L) => {
+      if (!live || L.failed) return; lec.current = L;
+      const c = L.courses.find((x) => x.code === nearLec); if (c) setLecInfo({ code: nearLec, canConfront: c.canConfront, reason: c.reason });
+    });
+    return () => { live = false; };
+  }, [nearLec, place.id, fight, incident]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const closeFight = () => { setFight(null); release(); game.refresh(); setLecInfo(null); };
+  const settled = (res) => { setFight(null); release(); if (res.incident) { setIncident(res.incident); } };
   // act out the response as soon as the room is drawn: where it stands comes from the server's clock, so a refresh or a second device lands on the same moment
   useEffect(() => {
     if (!incident || !sceneReady || !api.current) return;
@@ -208,7 +236,11 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
             <button type="button" className="bi3-btn" aria-label="Switch between close view and top view" onClick={() => setView(api.current?.toggleView() ?? "follow")} data-sound="none"><Icon name={view === "follow" ? "eye" : "focus"} size={18} /></button>
             <button type="button" className="bi3-btn" aria-label="About this place" onClick={() => setInfo(true)} data-sound="none"><Icon name="users" size={18} /></button>
           </div>
-          {near && !open && <button type="button" className={`bi3-use${near.activity ? " act" : ""}`} onClick={() => api.current?.use()} data-sound="none"><Icon name={near.activity ? "timer" : "sparkle"} size={18} weight="fill" /> {near.label} <kbd>F</kbd></button>}
+          {near && !open && !fight && !incident && !after && (() => { const isLec = near.action === "lecture" || near.action === "lecture_other", off = isLec && (busy || lecInfo?.canConfront === false); return (
+            <button type="button" className={`bi3-use${near.activity ? " act" : ""}${isLec ? " lec" : ""}`} data-off={off ? "1" : "0"} aria-disabled={off || undefined} disabled={isLec && busy} onClick={() => api.current?.use()} data-sound="none">
+              <Icon name={near.activity ? "timer" : "sparkle"} size={18} weight="fill" /> {near.label}{isLec && near.name && near.name !== "Lecturer" ? `: ${near.name}` : ""} <kbd>F</kbd>
+              {isLec && lecInfo?.canConfront === false && lecInfo.reason && <span className="why">{lecInfo.reason}</span>}
+            </button>); })()}
           <ActivityLayer api={api} rings={rings} open={open} ready onClose={() => setOpen(null)} onLeave={onLeave} onState={setActState} onRun={setRunHub} controlRef={actCtl} />
           <BuildingPanel place={place} rings={rings} state={actState} api={api} ready={sceneReady} runHubId={runHub} ringOpen={open} character={gs?.character} jailed={isJailed(gs?.character ?? {}, serverTime())} balanceKobo={gs?.balanceKobo ?? null} onArrive={onArrive} controlRef={panelCtl} onReload={() => { setActState(null); actCtl.current?.refresh(); }} />
           {isClub(place.id) && <ClubLayer place={place} api={api} ready={sceneReady} selfName={selfName} people={people ?? []} onLeave={onLeave} />}
@@ -218,7 +250,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
           <Hold className="th-btn th-run" label="Run" onDown={() => input.hold(true)} onUp={() => input.hold(false)}>RUN</Hold>
         </div>
       )}
-      {fight && <LectureFight course={fight.course} encounter={fight.encounter} onSettled={settled} onClose={() => { setFight(null); game.refresh(); }} />}
+      {fight && <LectureFight course={fight.course} encounter={fight.encounter} onSettled={settled} onClose={closeFight} />}
       {fade > 0 && <div className="bi3-fade" style={{ opacity: fade }} aria-hidden="true" />}
       {after && incident && <div className="lf-after"><ResultCard res={{ won: true, caught: incident.apprehended, ...incident }} name={incident.lecturer.name} onClose={finish} /></div>}
       {info && card}

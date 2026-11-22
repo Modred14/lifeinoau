@@ -2,7 +2,7 @@
 // Walking about the home compound on foot, and getting into and out of the player's own vehicles. Pure JS (no three.js, no DOM): the 3D room (lib3d/room.js) draws what
 // this says, and the tests walk every vehicle of every home through it.
 //
-//   walkWorld()     what a person cannot walk through: the house, the garage, the player's outdoor furniture, the hedges and the edge of the lawn, and every parked vehicle
+//   walkWorld()     what a person cannot walk through: the house, the garage's walls, the player's outdoor furniture, the hedges and the edge of the lawn, and every parked vehicle
 //   walkField()     a walking route that goes round all of that with room to spare (a clearance-aware grid search, then the route is pulled straight wherever that is clear)
 //   routeFromTo()   a route between any two points, indoors or out: inside the house the existing room planner (lib/room.js findPath), through the front door, then outdoors
 //   standSpots()    where a person may stand beside a vehicle's doors (the existing lib3d/carexit.js exitSpots, plus: the door must have room to swing, and the spot is checked
@@ -51,7 +51,7 @@ export function walkWorld(cw, slots = [], { skipId = null } = {}) {
   // where a person may be: the lawn inside the hedges, the driveway, the footpath and the front walk (never beyond the boundary wall)
   const region = [cw.lawn, clipZ(P.drive), ...P.path.map(clipZ), clipZ(P.link)].map(m);
   // what they may not walk through: the house (its door is handled by routeFromTo), the garage, and every outdoor piece of furniture
-  const ga = P.garage, solids = [{ x0: 0, x1: cw.W, z0: 0, z1: cw.D }, { x0: ga.x0, x1: ga.x1, z0: ga.z0, z1: ga.z1 }, ...cw.solids.filter((s) => s.kind === "item")].map(m);
+  const solids = [{ x0: 0, x1: cw.W, z0: 0, z1: cw.D }, ...cw.solids.filter((s) => s.kind === "garage" || s.kind === "item")].map(m); // (the garage is a hall: its floor is walkable, only its walls are solid)
   const bodies = slots.filter((s) => skipId == null || String(s.id) !== String(skipId)).map((s) => ({ id: String(s.id), ...carBoxOf(s) }));
   const inRegion = (x, z) => { for (const r of region) if (x >= r.x0 - 1e-9 && x <= r.x1 + 1e-9 && z >= r.z0 - 1e-9 && z <= r.z1 + 1e-9) return true; return false; };
   const RING = [[1, 0], [0.7071, 0.7071], [0, 1], [-0.7071, 0.7071], [-1, 0], [-0.7071, -0.7071], [0, -1], [0.7071, -0.7071]];

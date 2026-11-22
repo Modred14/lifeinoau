@@ -39,7 +39,7 @@ export function createCompoundFleet({ scene, camera, stage, cb = {} }) {
     for (const s of plan.slots) {
       const v = makeVehicle(s.modelId || "", s.color); v.root.scale.setScalar(K);
       v.root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } o.userData.fleetId = String(s.id); });
-      const pad = new THREE.Mesh(new THREE.BoxGeometry(s.wid + 0.5, 0.03, s.len + 0.7), padMat); pad.receiveShadow = true;
+      const pad = new THREE.Mesh(new THREE.BoxGeometry(s.wid + 0.5, 0.03, s.len + 0.7), padMat); pad.receiveShadow = true; pad.visible = !s.garage; // (a bay in the garage has its painted lines and needs no pad)
       place(v, s.x * 1, s.z * 1, s.yaw, false); pad.position.set(s.x - half[0], GROUND + 0.015, s.z - half[1]); pad.rotation.y = s.yaw;
       root.add(v.root, pad); meshes.set(String(s.id), { slot: s, vehicle: v, pad });
     }

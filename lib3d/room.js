@@ -418,7 +418,9 @@ export function createRoomScene(container, cb = {}) {
     disposed = false,
     tapT = 9,
     userZoomed = false,
-    fitDist = 14;
+    fitDist = 14,
+    roadG = null, // the road beyond the boundary wall (lib3d/plot3d.js): drawn only while the character is outside or the yard is on show
+    roadShown = true;
   const walls = {},
     trees = [],
     items = new Map(),
@@ -459,6 +461,7 @@ export function createRoomScene(container, cb = {}) {
     // the plot: a square lawn inside a boundary wall with the garage, driveway, road and neighbours (lib3d/plot3d.js)
     const built = buildPlot(room, { mat, tree });
     world.add(built.group);
+    roadG = built.road; roadG.visible = roadShown = wantRoad();
     trees.push(...built.trees);
     // floor
     const tex = floorTexture(W, D, theme, room.theme === "wood", L && ((i, j) => zoneAt(L, i, j)?.kind)),
@@ -582,7 +585,7 @@ export function createRoomScene(container, cb = {}) {
     place("E", windowDecor(theme, 1.3, 1.25), -D * 0.35, 0.95);
     }
     // light and camera framing for this size
-    const pc = plotFor(room), sc = Math.max(W, D) * 0.75 + 2 + Math.min(10, pc.plot.side * 0.3); // the shadows also reach across the yard
+    const pc = plotFor(room), sc = Math.max(Math.max(W, D) * 0.75 + 2 + Math.min(10, pc.plot.side * 0.3), Math.max(Math.abs(pc.garage.x1 - W / 2), Math.abs(pc.garage.z0 - D / 2)) * 0.85 + 4); // the shadows also reach across the yard and over the garage
     Object.assign(sun.shadow.camera, {
       left: -sc,
       right: sc,
@@ -611,20 +614,44 @@ export function createRoomScene(container, cb = {}) {
   // Two framings: "house" (the room, with a strip of yard) and "yard" (the whole plot, for placing garden things). The camera eases between them.
   let view = "house";
   const yardCentre = () => { const p = plotFor(room).plot; return [(p.x0 + p.x1) / 2 - W / 2, (p.z0 + p.z1) / 2 - D / 2]; };
-  function framing() {
+  /** Where the camera stands to show the house and the garage beside it, as big as the screen allows: every corner of their box (walls and frame) is projected and the distance and the
+   *  target are solved together, so the buildings fill the picture (inside the space the top bar and the bottom bar leave) instead of floating in the middle of a big empty one. */
+  function fitBox(box, dir, pad) {
+    const w = container.clientWidth || 1, h = container.clientHeight || 1, vf = THREE.MathUtils.degToRad(camera.fov), tH = Math.tan(vf / 2), tW = tH * (w / h);
+    const v = dir.clone().negate().normalize(), r = new THREE.Vector3().crossVectors(v, new THREE.Vector3(0, 1, 0)).normalize(), u = new THREE.Vector3().crossVectors(r, v).normalize();
+    const corners = []; for (const x of [box.x0, box.x1]) for (const y of [-0.4, box.h]) for (const z of [box.z0, box.z1]) corners.push(new THREE.Vector3(x, y, z));
+    const lim = { x0: -1 + (2 * pad.l) / w, x1: 1 - (2 * pad.r) / w, y0: -1 + (2 * pad.b) / h, y1: 1 - (2 * pad.t) / h };
+    const T = new THREE.Vector3((box.x0 + box.x1) / 2, 0.6, (box.z0 + box.z1) / 2); let d = 160; // (start far: the box is then well in front of the camera and the loop closes in on it)
+    for (let k = 0; k < 14; k++) {
+      let x0 = 9, x1 = -9, y0 = 9, y1 = -9, depth = 0;
+      for (const c of corners) { const o = c.clone().sub(T), z = d + o.dot(v), nx = o.dot(r) / (z * tW), ny = o.dot(u) / (z * tH); x0 = Math.min(x0, nx); x1 = Math.max(x1, nx); y0 = Math.min(y0, ny); y1 = Math.max(y1, ny); depth += z / corners.length; }
+      const sc = Math.max((x1 - x0) / (lim.x1 - lim.x0), (y1 - y0) / (lim.y1 - lim.y0));
+      T.addScaledVector(r, (((x0 + x1) / 2 - (lim.x0 + lim.x1) / 2) * tW * depth)).addScaledVector(u, (((y0 + y1) / 2 - (lim.y0 + lim.y1) / 2) * tH * depth)); // slide the target so the box sits in the middle of the free space
+      d = Math.max(4, sc * depth - (depth - d));
+    }
+    return { dist: d, target: [T.x, T.y, T.z] };
+  }
+  function framing(dir) {
     const w = container.clientWidth || 1,
       h = container.clientHeight || 1,
       aspect = w / h,
       vf = THREE.MathUtils.degToRad(camera.fov),
       hf = 2 * Math.atan(Math.tan(vf / 2) * aspect),
       fitR = (r) => Math.max(r / Math.sin(vf / 2), r / Math.sin(hf / 2));
-    const yardR = plotFor(room).plot.side * 0.5 * Math.SQRT2 + 1.2, houseR = Math.hypot(W, D) / 2 + 1.1;
+    const yardR = plotFor(room).plot.side * 0.5 * Math.SQRT2 + 1.2;
     const [yx, yz] = yardCentre();
-    return view === "yard" ? { dist: fitR(yardR), target: [yx, 0.2, yz], max: fitR(yardR) * 1.15 } : { dist: fitR(houseR), target: [0, 0.6, 0], max: fitR(yardR) * 1.15 };
+    if (view === "yard") return { dist: fitR(yardR), target: [yx, 0.2, yz], max: fitR(yardR) * 1.15 };
+    // the house view: the house and the garage beside it, filling the screen. (On a tall, narrow screen only the front of the garage is kept in, so the house itself stays big.)
+    const g = plotFor(room).garage, tall = aspect < 0.8, full = mode === "home";
+    const box = { x0: -W / 2 - 0.9, x1: g.x1 - W / 2 + 0.9, z0: Math.min(-D / 2, tall ? g.z1 - 8 - D / 2 : g.z0 - D / 2) - 0.9, z1: Math.max(D / 2, g.z1 - D / 2) + 1.4, h: WALL_H };
+    const pad = full ? { t: Math.min(74, h * 0.12), b: Math.min(86, h * 0.14), l: 14, r: 14 } : { t: 8, b: 8, l: 10, r: 10 };
+    const f = fitBox(box, dir ?? camera.position.clone().sub(controls.target), pad);
+    return { ...f, max: fitR(yardR) * 1.15 };
   }
   function fit(reset) {
     if (!room || fleet.isDriving()) return;
-    const f = framing();
+    const sp0 = new THREE.Spherical(1, 0.98, Math.PI / 4);
+    const f = framing(reset ? new THREE.Vector3().setFromSpherical(sp0) : null);
     fitDist = f.dist;
     controls.minDistance = fitDist * 0.5;
     controls.maxDistance = Math.max(fitDist * 1.35, f.max);
@@ -969,6 +996,7 @@ export function createRoomScene(container, cb = {}) {
   const meM = () => ({ x: toMx(me.x), z: toMz(me.z) });
   const wp = (p) => (Array.isArray(p) ? cellWorld(...p) : [p.x, p.z]); // a step of a walk: a floor cell, or a point of the yard
   const isOutdoors = () => Math.max(Math.abs(me.x) - W / 2, Math.abs(me.z) - D / 2) > 0.12;
+  const wantRoad = () => view === "yard" || isOutdoors(); // the street is drawn only once you are outside (or looking at the yard)
   /** The height of the ground under a point: the house floor, or the lawn a step below it (a short ramp at the wall, so nobody floats or sinks at the front door). */
   function groundY(sx, sz) { const d = Math.hypot(Math.max(Math.abs(sx) - W / 2, 0), Math.max(Math.abs(sz) - D / 2, 0)), k = Math.min(1, d / 0.5); return GROUND * k * k * (3 - 2 * k); }
   const walkEnv = () => { const plan = fleet.plan(); return plan && room ? { room, cw: plan.cw, slots: plan.slots, placed: placedList() } : null; };
@@ -1293,6 +1321,7 @@ export function createRoomScene(container, cb = {}) {
       cz = az / len;
     // seen from outside (the yard view, not while arranging things): the house is whole, with its roof, and no wall is cut away; from inside it opens up as before
     const seeOutside = view === "yard" && mode !== "buy";
+    { const wr = wantRoad(); if (roadG && wr !== roadShown) roadG.visible = roadShown = wr; }
     extMix += ((seeOutside ? 1 : 0) - extMix) * (1 - Math.exp(-dt * 3.2));
     if (shell) {
       const ent = shell.entrance, near = Math.min(1, Math.max(0, 1 - (Math.hypot(me.x - ent.cx, me.z - ent.cz) - 0.9) / 1.9)); // the door opens as the character comes close, from either side
@@ -1427,7 +1456,8 @@ export function createRoomScene(container, cb = {}) {
   });
 
   function setMode(m) {
-    mode = m;
+    const was = mode; mode = m;
+    if (was !== m && room) fit(false); // the home screen shows the house full screen, the shop shows it above its sheet: each has its own framing
     if (m !== "home" && act?.phase === "walk") cancelAct(); // furniture is being arranged: no walk to a vehicle on the side
     if (m !== "buy") {
       select(null);

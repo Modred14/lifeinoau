@@ -6,7 +6,7 @@ import { Icon } from "./Icon";
 import "./bottom-nav.css";
 
 /**
- * The persistent bottom bar: a frosted-glass pill with the three places you go (Home, Buy, Map) and, beside it, a round Phone button.
+ * The persistent bottom bar: a frosted-glass pill with the three places you go (Home, Buy, Map) and, beside it, a Phone button drawn as a little handset.
  * The tab you are on is the one that opens up into icon + name (the others are icons, still named for screen readers and on hover).
  *
  * It is a fixed layer of its own (`--z-nav`, see bottom-nav.css) that sits above the game's full-screen layers (travel sheets, building interiors, the trip HUD, dialogs and settings), so it stays on
@@ -77,7 +77,11 @@ export default function BottomNav({ path, onPlay, buying, held, phoneOpen, unrea
         onClick={onPhone}
       >
         <span className="nav-ico">
-          <Icon name="phone" weight={phoneOpen ? "fill" : "regular"} />
+          <span className="nav-handset" aria-hidden="true">
+            <i className="nh-island" />
+            <i className="nh-screen"><b /><b /><b /><b /></i>
+            <i className="nh-home" />
+          </span>
           {unread > 0 && (
             <i className="nav-badge" role="status" aria-hidden="true">
               {unread > 9 ? "9+" : unread}

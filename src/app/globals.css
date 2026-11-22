@@ -381,8 +381,8 @@ input[type="checkbox"] {
 }
 .hud .cash .cash-v { display: inline-block; animation: cash-tick 220ms var(--ease) both; }
 @keyframes cash-tick { from { opacity: 0.45; transform: translateY(2px); } }
-/* The campus population ("6,248 people on campus"), right after the brand. The words show where there is room (they are always there for screen readers); on a phone only the
-   number is drawn, and below 520px the wordmark steps aside (the crown stays) so the chip never runs into the clock in the middle of the bar. */
+/* The number of people who visited today ("6,248"), right after the brand: an icon and the figure, no words (the full phrase is the chip's title and its screen-reader label).
+   Below 520px the wordmark steps aside (the crown stays) so the chip never runs into the clock in the middle of the bar. */
 .hud .pop {
   display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 9px; flex: none;
   background: rgba(94, 214, 148, 0.1); border: 1px solid rgba(94, 214, 148, 0.26); color: var(--text);
@@ -390,10 +390,7 @@ input[type="checkbox"] {
 }
 .hud .pop svg { color: var(--green-text); flex: none; }
 .hud .pop .pop-v { display: inline-block; animation: cash-tick 220ms var(--ease) both; }
-@media (max-width: 719px) {
-  .hud .pop { padding: 0 8px; gap: 5px; }
-  .hud .pop .pop-t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-}
+@media (max-width: 719px) { .hud .pop { padding: 0 8px; gap: 5px; } }
 @media (max-width: 519px) { .hud:has(.pop) .brand span:last-child { display: none; } }
 @media (prefers-reduced-motion: reduce) { .hud .pop .pop-v { animation: none; } }
 .hud .cash svg { color: #f2b84b; }

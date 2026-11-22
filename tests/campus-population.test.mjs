@@ -15,7 +15,7 @@ const ok = (m) => console.log("OK  ", m);
 // the formula: base + registered + today's arrivals, nothing else, never negative
 assert.equal(BASE_POPULATION, 5000); assert.equal(populationOf({ registered: 0, arrivals: 0 }), 5000);
 assert.equal(populationOf({ registered: 1234, arrivals: 14 }), 6248); assert.equal(populationOf({ registered: -5, arrivals: "x" }), 5000); assert.equal(populationOf(), 5000);
-assert.equal(formatPeople(6248), "6,248 people on campus"); assert.equal(formatCount(12345678), "12,345,678"); ok("5,000 + registered + arrivals, formatted as \"6,248 people on campus\"; bad input never makes it negative or NaN");
+assert.equal(formatPeople(6248), "6,248 people visited today"); assert.equal(formatCount(12345678), "12,345,678"); ok("5,000 + registered + arrivals, formatted as \"6,248 people visited today\"; bad input never makes it negative or NaN");
 // the calendar day is West Africa Time (UTC+1): 23:30 UTC is already tomorrow in Lagos
 assert.equal(dayKey(Date.UTC(2026, 10, 20, 22, 59, 59)), "2026-11-20"); assert.equal(dayKey(Date.UTC(2026, 10, 20, 23, 0, 0)), "2026-11-21");
 assert.equal(dayKey(Date.UTC(2026, 11, 31, 23, 30)), "2027-01-01"); assert.equal(dayKey(Date.UTC(2026, 10, 20, 0, 0)), "2026-11-20"); ok("the day rolls over at midnight West Africa Time (23:00 UTC), including across a year end");
