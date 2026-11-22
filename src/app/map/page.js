@@ -17,7 +17,6 @@ import BuildingInside from "@/components/BuildingInside";
 import CustodyCell from "@/components/CustodyCell";
 import { createTargetTracker } from "@/lib/tripTarget.js";
 import { hasInterior } from "@/lib3d/interiors/registry.js";
-import { isOpenSpace } from "@/lib3d/interiors/openSpaces.js";
 import { call, naira } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { game, useGame, run, cash } from "@/lib/gameStore";
@@ -39,7 +38,7 @@ export default function MapPage() {
     [q, setQ] = useState("");
   const [bb, setBb] = useState(null);
   const [data, setData] = useState(null), [sheet, setSheet] = useState(false), [trip, setTrip] = useState(null), [tripSt, setTripSt] = useState(null), [inside, setInside] = useState(null), [fade, setFade] = useState(false), [counts, setCounts] = useState({}), [focus, setFocus] = useState(null), [want, setWant] = useState(null);
-  const g = useGame(), ch = g?.character, here = ch ? placeOf(ch) : null, miniRef = useRef(null), previewRef = useRef(null), input = useRef({}).current, tripRef = useRef(null), targetRef = useRef(null);
+  const g = useGame(), ch = g?.character, here = ch ? placeOf(ch) : null, miniRef = useRef(null), previewRef = useRef(null), input = useRef({}).current, tripRef = useRef(null), targetRef = useRef(null), exitRef = useRef(null), readyRef = useRef(null), [warm, setWarm] = useState(false);
   tripRef.current = trip;
   // Driving out of the home compound: the "Entering Main Road…" screen is up from the first frame, and as soon as the map is ready the same vehicle (model, paint, speed) is put on the road
   // beside the player's home, at the wheel, as a free drive (lib3d/tripflow.js): the usual controls, the usual name tags, and the position goes to other players as for any trip.
@@ -49,7 +48,7 @@ export default function MapPage() {
     const h = takeDriveHandoff(); if (!h) { setEntering(false); return; }
     if (held || !ownsCar(ch)) { setEntering(false); return; }
     const home = homePlace(ch.hostel); input.jx = input.jy = input.steer = input.gas = input.brake = 0; input.run = false; setTripSt(null);
-    setTrip({ id: crypto.randomUUID(), from: home, to: home, mode: "car", driver: false, act: null, free: true, spawn: { v: h.v }, look: ch.look ?? null, gender: ch.gender ?? "M", car: h.modelId, carColor: h.color, people: [], isEnterable: (id) => { const p = find(id); return !!p && (hasInterior(p.id, p.kind) || isOpenSpace(p.id)); }, selfName: ch.name ?? "", name: "the main road" });
+    setTrip({ id: crypto.randomUUID(), from: home, to: home, mode: "car", driver: false, act: null, free: true, spawn: { v: h.v }, look: ch.look ?? null, gender: ch.gender ?? "M", car: h.modelId, carColor: h.color, people: [], isEnterable: (id) => { const p = find(id); return !!p && hasInterior(p.id, p.kind); }, selfName: ch.name ?? "", name: "the main road" });
   }, [entering, mapReady, data, !!ch, !!trip]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!entering) return; const t = tripSt?.phase === "drive" ? setTimeout(() => setEntering(false), 450) : setTimeout(() => setEntering(false), 9000); return () => clearTimeout(t); }, [entering, tripSt?.phase]);
   // Serving a sentence: held at Floor O (N-QRS Custody) and not allowed to travel. The server refuses every trip too; this only stops offering it.
@@ -142,7 +141,7 @@ export default function MapPage() {
     const fetchPeople = () => target.answer(call("/api/travel?at=" + encodeURIComponent(target.id)).then((r) => (r.failed ? [] : r.people ?? [])), null);
     const people = fetchPeople();
     setTripSt(null); input.jx = input.jy = input.steer = input.gas = input.brake = 0; input.run = false;
-    setTrip({ id: crypto.randomUUID(), from: here, to: dest.id, mode, driver: withDriver, act, look: ch?.look ?? null, gender: ch?.gender ?? "M", car: ch?.activeCar || "", carColor: ch?.activeCarColor || "", people, pollPeople: fetchPeople, isEnterable: (id) => { const p = find(id); return !!p && (hasInterior(p.id, p.kind) || isOpenSpace(p.id)); }, selfName: ch?.name ?? "", name: dest.name });
+    setTrip({ id: crypto.randomUUID(), from: here, to: dest.id, mode, driver: withDriver, act, look: ch?.look ?? null, gender: ch?.gender ?? "M", car: ch?.activeCar || "", carColor: ch?.activeCarColor || "", people, pollPeople: fetchPeople, isEnterable: (id) => { const p = find(id); return !!p && hasInterior(p.id, p.kind); }, selfName: ch?.name ?? "", name: dest.name });
     setSel(null);
   }
   /** A tapped name tag has already sent the trip there (locally, at once). This keeps the page in step: the destination, its name, the people at its door. Nothing here waits for the server. */
@@ -158,14 +157,35 @@ export default function MapPage() {
       effects: [{ store: game, patch: (x) => ({ ...cash(-fare)(x), character: { ...x.character, placeId: t.to } }) }] });
     return !res.failed;
   }
-  function entered() { // only enclosed buildings open an interior; open-air places (billboards, grounds, statues, gates...) just end the trip with you standing there
-    const t = tripRef.current, p = t ? find(t.to) : null, indoors = !!p && (hasInterior(p.id, p.kind) || isOpenSpace(p.id)); setFade(true); setTimeout(() => { if (t && indoors) { setFocus(t.act ?? null); setInside(t.to); } else if (t) setSel(t.to); setTrip(null); setFade(false); }, 520); }
+  function entered() { // the player has walked through the door: the room (already built in the background) takes over the screen. The trip and the outdoor world are NOT ended: they stay alive underneath, so coming out is the same walk in reverse (leaveBuilding).
+    const t = tripRef.current, p = t ? find(t.to) : null, indoors = !!p && hasInterior(p.id, p.kind);
+    if (t && indoors) { setFocus(t.act ?? null); setInside(t.to); return; }
+    setFade(true); setTimeout(() => { if (t) setSel(t.to); setTrip(null); setFade(false); }, 520); } // open-air places (billboards, grounds, statues, gates...) just end the trip with you standing there
+  // the room behind the door is ready (or never will be): the trip may open the door. Until then the person waits in the doorway, never behind a loading screen.
+  const roomReady = (id) => { readyRef.current = id; };
+  const holdEnter = () => { const t = tripRef.current, p = t ? find(t.to) : null; return !!p && hasInterior(p.id, p.kind) && readyRef.current !== p.id; };
+  /** Coming out of a building: the player walks out of ITS door onto the spot in front of it, in the same outdoor world, and carries on. Never the map, never a fade, never a reload. */
+  function leaveBuilding() {
+    const id = inside; setFocus(null); if (!id || id === "floor0") { setInside(null); return; }
+    const r = exitRef.current?.();
+    if (r?.ok) { setInside(null); return; }
+    // there is no live world to step into (the player got in from the place card, or the page was reloaded): start one on the doorstep. The room stays on screen until it is drawn.
+    const p = find(id); if (!p) { setInside(null); return; }
+    targetRef.current = createTargetTracker(id);
+    setTrip({ id: crypto.randomUUID(), from: id, to: id, mode: "trek", roam: true, driver: false, act: null, look: ch?.look ?? null, gender: ch?.gender ?? "M", car: "", carColor: "", people: [], pollPeople: () => targetRef.current.answer(call("/api/travel?at=" + encodeURIComponent(id)).then((x) => (x.failed ? [] : x.people ?? [])), null), isEnterable: (i) => { const q = find(i); return !!q && hasInterior(q.id, q.kind); }, selfName: ch?.name ?? "", name: p.name });
+  }
+  const tripReady = () => { if (tripRef.current?.roam) setInside(null); };   // the doorstep world is drawn and the player is already walking out of the door: now the room can go
   const tripEnded = (why) => { setTrip(null); setEntering(false); if (why === "error") toast.error("The trip could not start. Try again."); };
   const tripNotice = (m) => toast.error(m); // a ride that cannot reach you, a way that is blocked: said plainly, and you can try again from the sheet
   const tripPlace = trip ? find(trip.to) : null, insidePlace = inside ? find(inside) : null;
   // Which building this player is inside, for the live "N people inside" on everybody's map (docs/BUILDING-OCCUPANCY.md). Only the id is sent: the realtime server checks it
   // against where the game has this player standing, and forgets it when they step out, move to another building, lose the connection or leave this page. Floor O (custody) is never counted.
   const insideId = inside && inside !== "floor0" ? inside : null;
+  // the room is built in the background once the player is within reach of the door (and again when they walk back to it after coming out): never while the trip is far away
+  const near = !!trip && tripPlace && hasInterior(tripPlace.id, tripPlace.kind) && !!tripSt && (["walk", "door", "enter", "inside", "leave"].includes(tripSt.phase) || (["trek", "afoot", "roam"].includes(tripSt.phase) && tripSt.remain <= 90));
+  useEffect(() => { if (!trip) { setWarm(false); readyRef.current = null; } else if (near) setWarm(true); else if (!tripSt || tripSt.remain > 140 || tripSt.phase === "intro") setWarm(false); }, [near, !!trip, trip?.to, tripSt?.remain > 140]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!warm) readyRef.current = null; }, [warm, trip?.to]);
+  const standbyPlace = !inside && warm && trip && tripPlace && tripPlace.id !== "floor0" ? tripPlace : null;
   useEffect(() => { occupancy.setInside(insideId); }, [insideId]);
   useEffect(() => () => occupancy.setInside(null), []);
   // the place card is docked on the bottom bar and the two read as one surface (globals.css .dock, bottom-nav.css). The travel sheet and the building panel set and clear the same
@@ -196,12 +216,15 @@ export default function MapPage() {
           onTripNotice={tripNotice}
           onTripRetarget={retargeted}
           tripGuard={tripGuard}
+          tripHoldEnter={holdEnter}
+          tripExit={exitRef}
+          onTripReady={tripReady}
         />
       </div>
-      {trip && <TripHud trip={trip} placeName={trip.name} st={tripSt} input={input} miniRef={miniRef} previewRef={previewRef} onCancel={() => setTrip(null)} />}
+      {trip && !inside && <TripHud trip={trip} placeName={trip.name} st={tripSt} input={input} miniRef={miniRef} previewRef={previewRef} onCancel={() => setTrip(null)} />}
       <RoadTransition on={entering} />
       <div className="trip-fade" data-on={fade ? "1" : undefined} aria-hidden="true" />
-      {insidePlace && held && insidePlace.id === "floor0" ? <CustodyCell st={g ?? {}} look={ch?.look ?? null} gender={ch?.gender ?? "M"} selfName={ch?.name ?? ""} onFree={() => { setInside(null); setFocus(null); }} /> : insidePlace && <BuildingInside place={insidePlace} onCustody={() => { setFocus(null); setInside("floor0"); }} look={ch?.look ?? null} gender={ch?.gender ?? "M"} focus={focus} selfName={ch?.name ?? ""} onLeave={() => { setInside(null); setFocus(null); }} />}
+      {insidePlace && held && insidePlace.id === "floor0" ? <CustodyCell st={g ?? {}} look={ch?.look ?? null} gender={ch?.gender ?? "M"} selfName={ch?.name ?? ""} onFree={() => { setInside(null); setFocus(null); }} /> : (insidePlace || standbyPlace) && <BuildingInside key={(insidePlace ?? standbyPlace).id} place={insidePlace ?? standbyPlace} standby={!insidePlace} onReady={roomReady} onCustody={() => { setFocus(null); setInside("floor0"); }} look={ch?.look ?? null} gender={ch?.gender ?? "M"} focus={focus} selfName={ch?.name ?? ""} onLeave={leaveBuilding} />}
       {(sheet || direct) && L && <TravelSheet place={L} here={youPlace?.name} hasCar={ownsCar(ch)} driver={driverActive(ch, g?.week) ? { name: ch.driverName } : null} people={counts[L.id] ?? 0} distanceM={youPlace && L.located && youPlace.located ? Math.round(Math.hypot(L.x - youPlace.x, L.z - youPlace.z)) : null} character={ch} balanceKobo={g?.balanceKobo ?? null} jailed={held} highlight={want} eta={eta} onGo={begin} onClose={() => { closeSheet(); setWant(null); }} />}
       {youPlace && !trip && <div className="map-here" role="status"><Icon name="pin" size={14} weight="fill" /> {held ? <>You are held in <b>{CUSTODY_NAME}</b> until your sentence ends</> : <>You are at <b>{youPlace.name}</b></>}</div>}
       <div
@@ -254,7 +277,7 @@ export default function MapPage() {
             {counts[L.id] > 0 && <p className="mut"><Icon name="users" size={15} /> {counts[L.id]} player{counts[L.id] === 1 ? "" : "s"} here now</p>}
             {isClub(L.id) && (() => { const cs = clubStatus(serverTime()); return <p className="mut" role="status"><Icon name={cs.open ? "moon" : "clock"} size={15} /> <b style={{ color: cs.open ? "var(--green-text)" : "var(--danger-text)" }}>{cs.label}</b> · Opening hours {HOURS_LABEL} · {cs.note}</p>; })()}
             <div className="row">
-              {L.id === here ? (hasInterior(L.id, L.kind) || isOpenSpace(L.id) ? <button type="button" className="go go-there" onClick={() => (isClub(L.id) && !clubStatus(serverTime()).open ? toast.error(closedMessage(clubOf(L.id)), { duration: 7000 }) : setInside(L.id))}><Icon name={isOpenSpace(L.id) ? "users" : "door"} size={18} /> {isOpenSpace(L.id) ? "Hang out here" : "Go inside"}</button> : <p className="mut"><Icon name="pin" size={15} /> You are here. This is an open-air place, so there are no rooms to enter.</p>)
+              {L.id === here ? (hasInterior(L.id, L.kind) ? <button type="button" className="go go-there" onClick={() => (isClub(L.id) && !clubStatus(serverTime()).open ? toast.error(closedMessage(clubOf(L.id)), { duration: 7000 }) : setInside(L.id))}><Icon name="door" size={18} /> Go inside</button> : <p className="mut"><Icon name="pin" size={15} /> You are here. This is an open-air place, so there are no rooms to enter.</p>)
                 : <button type="button" className="go go-there" disabled={!L.located || !ch || held} onClick={() => (isClub(L.id) && !clubStatus(serverTime()).open ? toast.error(closedMessage(clubOf(L.id)), { duration: 7000 }) : setSheet(true))}><Icon name="nav" size={18} weight="fill" /> {held ? "Held in Floor O" : L.located ? "Go there" : "Not on the map yet"}</button>}
             </div>
             {L.kind !== "billboard" && (() => { const fa = featuresAt(L.id, L.kind); return L.id === here ? <PlaceActivities activities={fa.activities} extra={fa.extra} links={[]} character={ch} balanceKobo={g?.balanceKobo ?? null} jailed={held} here highlight={want} actionLabel="Go inside and start" onDo={(a) => { if (isClub(L.id) && !clubStatus(serverTime()).open) return toast.error(closedMessage(clubOf(L.id)), { duration: 7000 }); setFocus(a.act); setInside(L.id); }} /> : null; })()}

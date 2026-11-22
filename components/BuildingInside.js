@@ -33,15 +33,18 @@ import "./travel.css";
 const lockedOf = (c, place) => (place.id === "floor0" ? cellsOf(c) : null);
 
 const NOT_YOURS = "That is not one of your lecturers. You can only beat the lecturers of your own courses (see Courses).";
-export default function BuildingInside({ place, look = null, gender = "M", focus = null, selfName = "", onLeave, onCustody = null, cell = null, banner = null }) {
+export default function BuildingInside({ place, look = null, gender = "M", focus = null, selfName = "", onLeave, onCustody = null, cell = null, banner = null, standby = false, onReady = null }) {
   const [people, setPeople] = useState(null), [status, setStatus] = useState("loading"), [info, setInfo] = useState(false), [room, setRoom] = useState(""), [near, setNear] = useState(null), [view, setView] = useState(cell ? "overhead" : getPrefs().gameplay.interiorView), [note, setNote] = useState(""), [rings, setRings] = useState([]), [open, setOpen] = useState(null);
   // the lecturers who teach in this building, the confrontation in progress, and the N-QRS response being acted out (all decided by the server: /api/lecture)
   const [fight, setFight] = useState(null), [incident, setIncident] = useState(null), [after, setAfter] = useState(null), [fade, setFade] = useState(0), lec = useRef({ courses: [] }), played = useRef(null);
   const [sceneReady, setSceneReady] = useState(false), [busy, setBusy] = useState(false), [lecInfo, setLecInfo] = useState(null), busyRef = useRef(false), confrontRef = useRef(null), yellowRef = useRef(null), panelCtl = useRef(null);
   const box = useRef(null), api = useRef(null), [input] = useState(() => ({ jx: 0, jy: 0, run: false, hold(v) { this.run = v; } })), router = useRouter(), leave = useRef(onLeave);
   useEffect(() => { leave.current = onLeave; });
+  // STANDBY: the room is built in the background, hidden and deaf to input, while the player is still walking up to the door, so going in never shows a loading screen (the trip holds them in the doorway
+  // until onReady). It tells the server nothing and takes nothing over until the page clears `standby`, at the moment they step through.
+  const standbyRef = useRef(standby); standbyRef.current = standby; const readyCb = useRef(onReady); readyCb.current = onReady;
   // While this room is on screen <body data-inside="1">: anything outside it (the phone's Shop tile) can tell that leaving this screen would take you out of the building.
-  useLayoutEffect(() => { document.body.dataset.inside = "1"; return () => { delete document.body.dataset.inside; }; }, []);
+  useLayoutEffect(() => { if (standby) return undefined; document.body.dataset.inside = "1"; return () => { delete document.body.dataset.inside; }; }, [standby]);
   // The phone (components/Phone.js, opened from the bottom bar) is a layer ON TOP of this room: nothing here is unmounted, moved or rebuilt. The room keeps drawing behind
   // the dimmed phone, and only stops listening (keys, stick, drag, wheel) while it is open, so using the phone cannot walk or turn you. Shell announces it with
   // "oau:phone-state" and keeps <body data-phone="open"> for a room that finishes loading while the phone is already up.
@@ -50,11 +53,13 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
     const h = (e) => hold(!!e.detail);
     window.addEventListener("oau:phone-state", h); return () => window.removeEventListener("oau:phone-state", h);
   }, [input]);
-  useEffect(() => { if (sceneReady) api.current?.setSuspended?.(document.body.dataset.phone === "open"); }, [sceneReady]);
+  useEffect(() => { if (sceneReady) { api.current?.setSuspended?.(standby || document.body.dataset.phone === "open"); if (!standby) { input.jx = input.jy = 0; input.run = false; } } }, [sceneReady, standby]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (sceneReady || status === "fallback" || status === "none") readyCb.current?.(place.id, status); }, [sceneReady, status, place.id]);   // ready, or never going to be (the card fallback): either way the door may open
   const peopleRef = useRef(null), selfRef = useRef(selfName); selfRef.current = selfName;
   // who else is in here: the list, and (for those who have reported where they stand) their avatars and name tags in the 3D room. Asked every few seconds,
   // and at once when the tab comes back, so someone who left or disconnected drops out of the room within moments.
   useEffect(() => {
+    if (standby) return undefined;
     let on = true; const load = async () => {
       const r = await call("/api/travel?at=" + encodeURIComponent(place.id)); if (!on || r.failed) return;
       const list = (r.people ?? []).filter((p) => p.name.toLowerCase() !== String(selfRef.current).toLowerCase()); // you are never in your own list
@@ -62,12 +67,13 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
     };
     load(); const t = setInterval(() => !document.hidden && load(), 4000), v = () => !document.hidden && load(); document.addEventListener("visibilitychange", v);
     return () => { on = false; clearInterval(t); document.removeEventListener("visibilitychange", v); };
-  }, [place.id]);
+  }, [place.id, standby]);
   // stepping out (door, button, Escape, closing the tab): tell the server at once, so nobody keeps seeing you inside
   useEffect(() => {
+    if (standby) return undefined;
     const bye = () => fetch("/api/travel", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "leave" }) }).catch(() => {});
     window.addEventListener("pagehide", bye); return () => { window.removeEventListener("pagehide", bye); bye(); };
-  }, [place.id]);
+  }, [place.id, standby]);
   useEffect(() => { // the 3D interior: built when you arrive, freed when you leave
     let dead = false, scene = null;
     (async () => {
@@ -90,7 +96,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
   // ---- confronting a lecturer ----
   // One confrontation at a time. busyRef is set synchronously (state would lag a double tap), and the room stops listening to keys and the stick while it runs,
   // so the dodge and block keys of the brawl (S, D, L) cannot walk the character behind the overlay. release() always puts the room back, whatever went wrong.
-  const release = () => { busyRef.current = false; setBusy(false); api.current?.endDuel?.(); api.current?.setSuspended?.(document.body.dataset.phone === "open"); };
+  const release = () => { busyRef.current = false; setBusy(false); api.current?.endDuel?.(); api.current?.setSuspended?.(standbyRef.current || document.body.dataset.phone === "open"); };
   async function confront(code, npcIndex) {
     if (busyRef.current || fight || incident) return;
     busyRef.current = true; setBusy(true); api.current?.setSuspended?.(true); input.jx = input.jy = 0; input.run = false;
@@ -222,9 +228,9 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
       </div>
     </div>
   );
-  if (status === "fallback" || status === "none") return card;
+  if (status === "fallback" || status === "none") return standby ? null : card;
   return (
-    <div className="bi3" role="dialog" aria-modal="true" aria-label={`Inside ${place.name}`}>
+    <div className="bi3" role="dialog" aria-modal={standby ? undefined : "true"} aria-hidden={standby ? "true" : undefined} aria-label={`Inside ${place.name}`} data-standby={standby ? "1" : undefined} style={standby ? { visibility: "hidden", pointerEvents: "none" } : undefined}>
       {deskPanel}
       <div className="bi3-view" ref={box} />
       {status === "loading" && <div className="bi3-load" role="status"><Icon name="door" size={30} /><b>Going in…</b></div>}

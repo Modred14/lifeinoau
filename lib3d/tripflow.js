@@ -9,6 +9,9 @@
 //   trek:                            intro -> trek (you walk) -> paying -> walk -> door -> enter
 //   the door:                        in "door" you stand in front of a CLOSED door and are offered Open Door. Nothing opens by itself: when you press it you step back just far enough to
 //                                    clear the leaf (and no further than there is room for), the leaf swings out, and you go in (walk into the doorway, or press Go in).
+//   coming out:                      "inside" -> exitBuilding(portal) -> "leave" (the same walk as going in, run backwards: from just inside the wall, through the open doorway, onto the exit spot
+//                                    of the building's portal, lib3d/buildingPortals.js) -> "roam" (you are on foot, free, at the door you came out of; the door swings shut behind you). The
+//                                    SAME trip carries on: nothing is reloaded and nobody is teleported. In "roam" a tapped name tag (retarget) sends you on, and coming back to the door offers it again.
 //   a new destination:               while on foot (trek, or out of your own car) or at the wheel of your own car, retarget() sends the same trip to another place: the plan is made again from
 //                                    where you are, and on foot you are walked there until you take the stick or keys yourself.
 //
@@ -24,11 +27,18 @@ import { createCar, stepCar, gentleStop, carProfile, CAR } from "./carphysics.js
 import { carMaskAt } from "./roadgraph.js";
 import { createRoadFollower, defaultContacts } from "./vehiclepose.js";
 import { exitSpots, pickDoorSide } from "./carexit.js";
-import { SWING, BACK_SPEED, LEAF_ID, canOpenAt, atThreshold, doorLocal, planDoorOpening, inSwing, swingBlocked, leafBody } from "./doorway.js";
+import { SWING, BACK_SPEED, LEAF_ID, canOpenAt, atThreshold, doorLocal, doorFrame, planDoorOpening, inSwing, swingBlocked, leafBody } from "./doorway.js";
+import { portalWalk, portalLength } from "./buildingPortals.js";
 import { RETARGET_WHY } from "./tripretarget.js";
 import { massOf, liftOf } from "./impact.js";
 
 const ARRIVE_RADIUS = 14, DOOR_OPEN = 0.9, ENTER_SECONDS = 1.4, BACK_TIMEOUT = 2.6, OPEN_HOLD_MAX = 1.6, MANUAL_EXIT_SECONDS = 2.6, PARK_ASSIST_BELOW = 7, CLOSE_AUTO_M = 4.5, ENTER_REACH_M = 3.2;
+/** Going through a doorway (in or out) never takes less than ENTER_SECONDS, and is walked at this pace (m/s). */
+const DOORWAY_MPS = 2.4;
+/** How long the person waits in the doorway for the room behind it to be ready (o.holdEnter), at the very most: after that they go in whatever it shows. */
+export const ENTRY_HOLD_MAX = 12;
+/** In "roam": how far from the door you must have walked before standing at it again offers it (so stepping out of it never counts as coming back to it), and how close counts as standing at it. */
+const ROAM_REARM_M = 4, ROAM_AT_DOOR_M = 1.2;
 const clamp01 = (x) => Math.max(0, Math.min(1, x)), smooth = (x) => { x = clamp01(x); return x * x * (3 - 2 * x); }, lerp = (a, b, k) => a + (b - a) * k;
 
 /**
@@ -48,6 +58,7 @@ export function createTripFlow(env, o) {
   let free = !!o.free;   // a free drive: your own car on the road with no destination yet (leaving your compound). Nothing is "arrived at" until a place is chosen (retarget).
   let hero = null, own = null, inProf = null, heroT = 0, spawnAt = 0, spawnTries = 0, waitedForVehicle = 0, boardFrom = null, alightTo = null, lastEta = -1, retargeted = false, approachDoor = null, departed = false, alightFrom = null;
   let dframe = null, dBack = null, dHeld = 0, dStall = 0, dT = 0, arrivals = 0, enterSecs = ENTER_SECONDS, enterPts = null;
+  let leave = null, roamArmed = false, holdT = 0;   // leave: { portal, secs } while coming out of a building
   let doorSide = -1, doorStart = 0, doorTarget = 0, closeAsk = false, exitAsk = false, exitTo = null, exitArrival = false, exitSeat = null, reTo = null;
   const person = { visible: true, seated: false, seat: null, x: plan.start.x, z: plan.start.z, hx: 0, hz: 1 };
 
@@ -287,7 +298,7 @@ export function createTripFlow(env, o) {
   }
   function doorPhase(dt, walkIn) {
     S.canOpen = S.canGoIn = false;
-    if (!hasDoor()) { walker.step(dt, null); if (S.t > 0.6 && S.pay !== "pending") finishEnter(); return; }   // an open-air place, a statue or a gate: you stop there, and that is that
+    if (!hasDoor()) { walker.step(dt, null); if (S.t > 0.6 && entryReady(dt)) finishEnter(); return; }   // an open-air place, a statue or a gate: you stop there, and that is that
     const D = B.door;
     if (S.door === "closed" || S.door === "open") {
       walker.step(dt, walkIn);
@@ -309,9 +320,9 @@ export function createTripFlow(env, o) {
   function retargetTrip(np, en = true) {
     const bad = (reason) => ({ ok: false, reason, text: RETARGET_WHY[reason] }), ph = S.phase;
     if (S.ended || S.entered) return bad("phase");
-    const okPhase = mode === "trek" ? ["trek", "walk", "door"].includes(ph) : ownCar ? ["drive", "afoot"].includes(ph) : false; if (!okPhase) return bad("phase");
+    const okPhase = mode === "trek" ? ["trek", "walk", "door", "roam"].includes(ph) : ownCar ? ["drive", "afoot"].includes(ph) : false; if (!okPhase) return bad("phase");
     if (mode !== "trek" && S.pay !== "none") return bad("paid");       // a fare has been paid for the place you are at: it cannot be taken somewhere else for free
-    if (S.door === "back" || S.door === "opening" || S.door === "closing" || exitAsk) return bad("busy");
+    if (S.door === "back" || S.door === "opening" || (S.door === "closing" && ph !== "roam") || exitAsk) return bad("busy");   // in "roam" the leaf is only swinging shut behind you: retargeting just shuts it
     let route = null;
     if (mode === "trek" || ph === "afoot") { route = mode === "trek" ? np.walk : nav.plan(walker.x, walker.z, np.goal.x, np.goal.z); if (!route?.ok || route.pts.length < 2) return bad("unreachable"); }
     plan = np; B = np.B; enterable = en; shutDoor(); enterPts = null; S.target++; free = false;   // a place was chosen: from now on it is an ordinary trip to it
@@ -350,7 +361,7 @@ export function createTripFlow(env, o) {
     S.seatK = 1; S.vehDoorK = 0; person.seated = true; person.seat = seatLocal(); person.visible = true; S.pay = "none"; go("drive");
   }
 
-  const HIT_PHASES = new Set(["intro", "trek", "approach", "afoot", "walk"]);
+  const HIT_PHASES = new Set(["intro", "trek", "approach", "afoot", "walk", "roam"]);
   /** The traffic hit the person on foot: they are thrown (lib3d/impact.js), whatever they were doing is paused, and the walk resumes when they are up. */
   function struckOnFoot(st, by, now) { walker.hit(st, by, now); S.struck++; S.down = true; }
   function update(dt, inp = {}) {
@@ -412,7 +423,19 @@ export function createTripFlow(env, o) {
       case "enter": { // from where they stand, through the doorway, and in (the leaf stays open behind them)
         const k = Math.min(1, S.t / enterSecs), E = enterPts ?? (beginEnter(), enterPts), tot = E.l1 + E.l2 || 1, s = k * tot, d = -B.door.nx, e = -B.door.nz;
         if (s <= E.l1) { const q = E.l1 ? s / E.l1 : 1; walker.x = E.p0.x + (E.p1.x - E.p0.x) * q; walker.z = E.p0.z + (E.p1.z - E.p0.z) * q; } else { const q = E.l2 ? (s - E.l1) / E.l2 : 1; walker.x = E.p1.x + (E.p2.x - E.p1.x) * q; walker.z = E.p1.z + (E.p2.z - E.p1.z) * q; }
-        walker.vx = walker.vz = 0; turnToward(dt, d, e, 10); walker.speed = 2.4; person.visible = s < E.l1 + E.l2 * 0.55; if (k >= 1 && S.pay !== "pending") finishEnter(); break; }
+        walker.vx = walker.vz = 0; turnToward(dt, d, e, 10); walker.speed = DOORWAY_MPS; person.visible = s < E.l1 + E.l2 * 0.55; if (k >= 1 && entryReady(dt)) finishEnter(); break; }
+      case "leave": { // coming out: the walk in, run backwards. They appear as they pass the wall line, and the control comes back at the exit spot.
+        const k = Math.min(1, S.t / leave.secs), at = portalWalk(leave.portal, k, { leaving: true }), n = leave.portal.door;
+        walker.x = at.x; walker.z = at.z; walker.vx = walker.vz = 0; turnToward(dt, n.nx, n.nz, 10); walker.speed = DOORWAY_MPS; person.visible = at.passedWall;
+        if (k >= 1) { person.visible = true; const e = leave.portal.exit; walker.place(e.x, e.z); walker.speed = 0; walker.hx = e.hx; walker.hz = e.hz; startRoam(); }
+        break; }
+      case "roam": { // on foot, free, at the door you came out of
+        walker.step(dt, walkIn);
+        if (S.door === "closing") { S.doorK = Math.max(0, S.doorK - (dt / DOOR_OPEN) * 1.4); setLeaf(); if (S.doorK <= 0) shutDoor(); }   // the leaf swings shut behind them (the exit spot is out of its way)
+        const dGoal = Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z); if (dGoal > ROAM_REARM_M) roamArmed = true;
+        // back at the door you came out of: the same door sequence as arriving (Open Door, step in). Walking elsewhere never gets here.
+        if (roamArmed && hasDoor() && !walker.tumble && dGoal < ROAM_AT_DOOR_M) { walker.vx = walker.vz = 0; free = false; shutDoor(); go("door"); }
+        break; }
       default: break;
     }
     if (S.phase === "door" || S.phase === "enter") { doorTarget = 0; stepDoor(dt, 0); }
@@ -427,7 +450,35 @@ export function createTripFlow(env, o) {
     if (S.time - lastEta > 0.2) { lastEta = S.time; S.eta = etaNow(); }
     return S;
   }
-  function finishEnter() { if (S.entered) return; S.entered = true; world.removeBody(LEAF_ID); go("inside"); o.onEnter?.(); }
+  function finishEnter() { if (S.entered) return; S.entered = true; holdT = 0; world.removeBody(LEAF_ID); go("inside"); o.onEnter?.(); }
+  /**
+   * May the person go in now? Not while the fare is still being settled, and not while the room behind the door is still being got ready (o.holdEnter(): true = wait): they stand in the
+   * doorway instead, so there is never a loading screen, just a person at a door for a moment on a slow device. The wait is capped (ENTRY_HOLD_MAX), so a room that never reports ready cannot trap anyone outside.
+   */
+  function entryReady(dt) {
+    if (S.pay === "pending") return false;
+    let held = false; try { held = !!o.holdEnter?.(); } catch { held = false; }
+    if (!held) return true;
+    holdT += dt; return holdT >= ENTRY_HOLD_MAX;
+  }
+
+  // ---- coming out of a building (the portal says where) ----
+  /**
+   * The person has been inside (phase "inside"), or this is a trip that begins on the doorstep (o.roam). They are put just inside the wall with the door open and walk out along the portal,
+   * the walk in run backwards, ending on the portal's exit spot; then they are free. The trip itself is never restarted: same plan, same world, same collision, same traffic.
+   * Returns { ok: true } or { ok: false, reason }.
+   */
+  function exitBuilding(portal) {
+    const fresh = S.phase === "intro" && S.t === 0 && !!o.roam;
+    if (S.ended || (S.phase !== "inside" && !fresh)) return { ok: false, reason: "phase" };
+    if (!portal?.ok || !portal.exit) return { ok: false, reason: "noportal" };
+    S.entered = false; S.pay = "none"; arrivals++; holdT = 0; roamArmed = false; enterPts = null; free = true; closeAsk = false;
+    dframe = doorFrame(portal.door, portal.hinge); S.hinge = portal.hinge; S.door = "open"; S.doorK = 1; S.canOpen = S.canGoIn = false; setLeaf();   // the door is open, as it was left
+    leave = { portal, secs: Math.max(ENTER_SECONDS, portalLength(portal) / DOORWAY_MPS) };
+    const a = portal.entrance; walker.cancelRoute(); walker.ignore = null; walker.x = a.x; walker.z = a.z; walker.vx = walker.vz = 0; walker.speed = 0; walker.hx = portal.door.nx; walker.hz = portal.door.nz;
+    person.visible = false; go("leave"); return { ok: true };
+  }
+  function startRoam() { go("roam"); roamArmed = false; S.door = "closing"; S.target++; }
 
   /** Seconds to go, by the planner's own arithmetic from where everything is now. */
   function etaNow() {
@@ -455,5 +506,6 @@ export function createTripFlow(env, o) {
     if (hero) { if (departed) hero.role = "npc"; else sim.remove(hero); }
   }
   if (o.spawn && ownCar) bootDrive(o.spawn);
-  return { update, dispose, state: S, get free() { return free; }, walker, person, get plan() { return plan; }, kind, pressDoor, enterNow, retarget: retargetTrip, stopAuto, get doorFrame() { return dframe; }, get hero() { return hero; }, get approachDoor() { return approachDoor ?? plan.doorIn; }, get own() { return own; }, get vehicle() { return own ?? hero; }, eta: () => S.eta, remainMetres, cancel: () => end("cancelled"), get driving() { return S.phase === "drive"; } };
+  if (o.roam) exitBuilding(o.roam);   // a trip that begins on the doorstep: the person walks out of the door at once (o.roam is the building's portal)
+  return { update, dispose, state: S, get free() { return free; }, get roaming() { return S.phase === "roam"; }, exitBuilding, walker, person, get plan() { return plan; }, kind, pressDoor, enterNow, retarget: retargetTrip, stopAuto, get doorFrame() { return dframe; }, get hero() { return hero; }, get approachDoor() { return approachDoor ?? plan.doorIn; }, get own() { return own; }, get vehicle() { return own ?? hero; }, eta: () => S.eta, remainMetres, cancel: () => end("cancelled"), get driving() { return S.phase === "drive"; } };
 }
