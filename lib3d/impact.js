@@ -23,9 +23,9 @@ export const MAX_LAUNCH = 42;        // m/s: nothing the game's fastest vehicle 
 
 // ---- the vehicles' mass and how high their front is (a low front lifts the legs and throws the person up; a high one pushes) ----
 export const VEHICLE_MASS = { car: 1500, keke: 650, minibus: 3200, bus: 11000 };
-const CAR_MASS = { "corolla-2011": 1290, "accord-2014": 1560, "camry-2014": 1530, "is350-2014": 1680, "cclass-2016": 1650, "gle-2018": 2150, "rrsport-2016": 2290, "urus-2025": 2200, "huracan-2025": 1570, "cybertruck-2024": 3100 };
+const CAR_MASS = { "corolla-2011": 1290, "accord-2014": 1560, "camry-2014": 1530, "is350-2014": 1680, "cclass-2016": 1650, "gle-2018": 2150, "rrsport-2016": 2290, "urus-2025": 2200, "huracan-2025": 1570, "cybertruck-2024": 3100, "tesla-skyhawk-2026": 1750 };
 const LIFT = { car: 0.34, keke: 0.26, minibus: 0.16, bus: 0.1 };      // vertical launch per m/s of closing speed above a crawl
-const CAR_LIFT = { "huracan-2025": 0.42, "is350-2014": 0.36, "gle-2018": 0.26, "rrsport-2016": 0.25, "urus-2025": 0.28, "cybertruck-2024": 0.2 };
+const CAR_LIFT = { "huracan-2025": 0.42, "is350-2014": 0.36, "gle-2018": 0.26, "rrsport-2016": 0.25, "urus-2025": 0.28, "cybertruck-2024": 0.2, "tesla-skyhawk-2026": 0.3 };
 /** Mass (kg) of a vehicle: by car model id when it is known, otherwise by kind ("car", "keke", "minibus", "bus"). */
 export const massOf = (kind = "car", id = null) => CAR_MASS[id] ?? VEHICLE_MASS[kind] ?? VEHICLE_MASS.car;
 export const liftOf = (kind = "car", id = null) => CAR_LIFT[id] ?? LIFT[kind] ?? LIFT.car;

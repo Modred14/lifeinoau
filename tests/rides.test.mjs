@@ -10,12 +10,12 @@ import { ownsCar } from "../lib/travel.js";
 let bad = 0; const chk = (l, c) => { if (!c) bad++; console.log((c ? "OK  " : "FAIL") + " " + l); };
 
 // ---- the showroom ----
-chk("ten cars, with unique ids", CARS.length === 10 && new Set(CARS.map((c) => c.id)).size === 10);
+chk("eleven cars, with unique ids", CARS.length === 11 && new Set(CARS.map((c) => c.id)).size === 11);
 chk("every car has a name, a year, a condition, a body, a shape and specs", CARS.every((c) => c.name && c.year >= 2005 && c.condition && c.body && c.shape && c.specs.length >= 3));
 chk("a priced car says where the price is from; an unpriced one is not for sale", CARS.every((c) => (c.priceNaira == null) === !forSale(c) && (c.priceNaira == null ? c.basis == null : (c.basis === "listings" || c.basis === "estimate") && c.note.length > 20)));
 const priced = CARS.filter(forSale);
 chk("the cheap cars cost far less than the luxury ones", carById("corolla-2011").priceNaira < carById("camry-2014").priceNaira && carById("camry-2014").priceNaira * 10 < carById("huracan-2025").priceNaira && carById("huracan-2025").priceNaira < carById("urus-2025").priceNaira);
-chk("prices are whole naira and reach the screen as kobo text", priced.every((c) => Number.isSafeInteger(c.priceNaira)) && publicCar(carById("corolla-2011")).priceKobo === "700000000" && publicCar(carById("cybertruck-2024")).priceKobo === null);
+chk("prices are whole naira and reach the screen as kobo text", priced.every((c) => Number.isSafeInteger(c.priceNaira)) && publicCar(carById("corolla-2011")).priceKobo === "700000000" && publicCar(carById("cybertruck-2024")).priceKobo === "42750000000");
 chk("paint: a picked paint is used, junk falls back, a fixed paint wins", paintFor(carById("corolla-2011"), "#2c5aa0") === "#2c5aa0" && paintFor(carById("corolla-2011"), "red; drop table") === CAR_PAINTS[0].id && paintFor(carById("cybertruck-2024"), "#2c5aa0") === "#aeb3ba");
 
 // ---- buying ----

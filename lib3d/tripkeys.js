@@ -23,10 +23,12 @@ export function keyId(e) {
 }
 
 const inField = (t) => !!t?.closest?.("input, textarea, select, [contenteditable=''], [contenteditable='true']");
-const CONTROL_KEYS = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "ShiftLeft"]);
+const CONTROL_KEYS = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "ShiftLeft", "KeyQ", "KeyZ"]);
 const BLOCKS_PAGE = (id) => id === "Space" || id.startsWith("Arrow"); // the page must not scroll under the car
 
 /** True for the keys that act once (E or F: get in, get out, open the door), pressed on their own. */
+/** True for T, pressed on its own: a flying car takes off or lands. */
+export const isFlyKey = (e) => !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey && !inField(e.target) && keyId(e) === "KeyT";
 export const isActKey = (e) => !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey && !inField(e.target) && (keyId(e) === "KeyE" || keyId(e) === "KeyF");
 
 /** A set of held keys. press / release take the keyboard events; read() says what is asked for right now. */
@@ -47,7 +49,7 @@ export function createKeys() {
     /** What the keys ask for: walking / driving directions as 0 or 1, steer = right - left (-1, 0 or 1). */
     read() {
       const up = has("KeyW", "ArrowUp"), dn = has("KeyS", "ArrowDown"), left = has("KeyA", "ArrowLeft"), right = has("KeyD", "ArrowRight");
-      return { up: up ? 1 : 0, down: dn ? 1 : 0, left: left ? 1 : 0, right: right ? 1 : 0, space: has("Space") ? 1 : 0, run: has("ShiftLeft") ? 1 : 0, steer: (right ? 1 : 0) - (left ? 1 : 0) };
+      return { up: up ? 1 : 0, down: dn ? 1 : 0, left: left ? 1 : 0, right: right ? 1 : 0, space: has("Space") ? 1 : 0, run: has("ShiftLeft") ? 1 : 0, steer: (right ? 1 : 0) - (left ? 1 : 0), climb: (has("KeyQ") ? 1 : 0) - (has("KeyZ") ? 1 : 0) };
     },
   };
 }
