@@ -20,4 +20,5 @@ assert.ok(/tripExit/.test(map) && /tripHoldEnter/.test(map) && /onTripReady/.tes
 assert.ok(/sync\.stop\(\{ clear: true \}\)/.test(map) && /wasIn/.test(map), "road position reports stop while inside (the player is counted in the building, not on the road)");
 assert.ok(/standby/.test(inside) && /if \(standby\) return undefined;/.test(inside), "a standby room tells the server nothing");
 assert.ok(/leave: "Stepping out/.test(hud) && /roam:/.test(hud), "HUD knows the leave and roam phases");
+assert.ok(!/isOpenSpace/.test(page), "open spaces and billboards have no interior: the page must not open a room for them");
 console.log("seamless-wiring: ok");
