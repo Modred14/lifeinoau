@@ -28,11 +28,11 @@ const labelWidth = (name, tier) => Math.min(190, name.length * (tier === 1 ? 7.4
  * panning. autoRotate is off unless asked for. Every named building carries a label above its roof;
  * labels are real buttons. They thin out with distance and never overlap, and the "Labels" button hides them all.
  */
-export default function CampusMap({ youId = null, trip = null, tripInput = null, getMini = null, getPreview = null, onTripState, onTripArrive, onTripEnter, onTripEnd, onTripNotice, onTripRetarget, tripGuard, onReady, interactive = true, zoomOnly = false, pins = true, autoRotate = false, selectedId = null, onSelect, billboards = null, className = "", style, view = HOME_VIEW }) {
+export default function CampusMap({ youId = null, trip = null, tripInput = null, getMini = null, getPreview = null, onTripState, onTripArrive, onTripEnter, onTripEnd, onTripNotice, onTripRetarget, tripGuard, tripHoldEnter, tripExit, onTripReady, onReady, interactive = true, zoomOnly = false, pins = true, autoRotate = false, selectedId = null, onSelect, billboards = null, className = "", style, view = HOME_VIEW }) {
   const box = useRef(null), api = useRef(null), noFly = useRef(false), sel = useRef(selectedId), cb = useRef(onSelect), [mounts, setMounts] = useState([]), [failed, setFailed] = useState(false), [labels, setLabels] = useState(true), [look, setLook] = useState(false), [hint, setHint] = useState(interactive);
   sel.current = selectedId; cb.current = onSelect;
   const readyCb = useRef(onReady); readyCb.current = onReady;   // told once the map is drawn and can take a trip
-  const tripCb = useRef({}); tripCb.current = { onTripState, onTripArrive, onTripEnter, onTripEnd, onTripNotice, onTripRetarget, tripGuard, getMini, getPreview, tripInput }; const tripRef = useRef(null);
+  const tripCb = useRef({}); tripCb.current = { onTripState, onTripArrive, onTripEnter, onTripEnd, onTripNotice, onTripRetarget, tripGuard, tripHoldEnter, onTripReady, getMini, getPreview, tripInput }; const tripRef = useRef(null);
   const canZoom = interactive || zoomOnly, hold = () => { noFly.current = true; setTimeout(() => { noFly.current = false; }, 400); }; // a tap on the map shouldn't re-centre it
 
   useEffect(() => {
@@ -115,15 +115,15 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
 
   // ---- a trip: the travel engine takes over the camera until it ends ----
   useEffect(() => {
-    const a = api.current; if (!trip || !a) return; let dead = false, handle = null, sync = null, unhook = null, entered = false;
+    const a = api.current; if (!trip || !a) return; let dead = false, handle = null, sync = null, unhook = null, entered = false, wasIn = false;
     const end = (why) => { if (dead) return; tripCb.current.onTripEnd?.(why); };
     (async () => {
       try {
         const { startTrip } = await import("../lib3d/travel.js"); if (dead) return;
         box.current.dataset.trip = "1";
         handle = await startTrip({ stage: a.stage, campus: a.campus, light: a.light, data: a.data }, { ...trip, input: tripCb.current.tripInput ?? {}, miniCanvas: () => tripCb.current.getMini?.() ?? null, previewCanvas: () => tripCb.current.getPreview?.() ?? null,
-          onState: (st) => { const on = st.mode === "trek" ? ["trek", "walk", "door"].includes(st.phase) : !!st.ownCar && ["drive", "afoot"].includes(st.phase); if (box.current) { if (on) box.current.dataset.tags = "1"; else delete box.current.dataset.tags; } tripCb.current.onTripState?.(st); }, onNotice: (m) => tripCb.current.onTripNotice?.(m), onArrive: () => tripCb.current.onTripArrive?.() ?? true, onEnter: () => { entered = true; tripCb.current.onTripEnter?.(); }, onEnd: end });
-        if (dead) { handle?.dispose(); return; } tripRef.current = handle;
+          onState: (st) => { const on = st.mode === "trek" ? ["trek", "walk", "door", "roam"].includes(st.phase) : !!st.ownCar && ["drive", "afoot"].includes(st.phase); if (box.current) { if (on) box.current.dataset.tags = "1"; else delete box.current.dataset.tags; } /* inside a building the player is counted there (docs/BUILDING-OCCUPANCY.md), not also standing on the road: the road reports stop at the door and start again when they come out */ if (sync && (st.phase === "inside") !== wasIn) { wasIn = st.phase === "inside"; try { if (wasIn) sync.stop({ clear: true }); else sync.start(); } catch { /* best effort */ } } tripCb.current.onTripState?.(st); }, onNotice: (m) => tripCb.current.onTripNotice?.(m), onArrive: () => tripCb.current.onTripArrive?.() ?? true, onEnter: () => { entered = true; tripCb.current.onTripEnter?.(); }, holdEnter: () => tripCb.current.tripHoldEnter?.() ?? false, onEnd: end });
+        if (dead) { handle?.dispose(); return; } tripRef.current = handle; if (tripExit) tripExit.current = () => handle.exitBuilding(); tripCb.current.onTripReady?.();   // the page walks the player out of the building through here: the world stays, nothing reloads
         if (!handle) return end("error");
         // real players on the road, in the BACKGROUND: where we are goes to the server and who else is out there comes back without ever touching how the player moves (that is local and
         // immediate). lib/tripSync.js sends the latest pose only, never two requests at once, backs off when the connection is slow or down, and sends at once when it comes back.
@@ -149,7 +149,7 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
       try { if (sync) sync.stop({ clear: true }); else call("/api/travel", { action: "trip" }); } catch { /* the server drops a silent traveller after a few seconds anyway */ }
       try { unhook?.(); } catch { /* ignore */ }
       try { handle?.dispose(); } catch (e) { console.warn("trip cleanup", e); }
-      tripRef.current = null; const el = box.current; if (el) { delete el.dataset.trip; delete el.dataset.tags; } const b = api.current; if (b) { const L = (entered ? b.campus.resolve(trip.to) : b.campus.resolve(trip.from)) ?? b.campus.resolve(trip.to); /* a trip that did not arrive (cancelled, refused, the fare failed) leaves the camera, like the player, where the server still has them */ if (L) b.stage.flyTo(L.x, 0, L.z, 70, 1.0); } };
+      tripRef.current = null; if (tripExit) tripExit.current = null; const el = box.current; if (el) { delete el.dataset.trip; delete el.dataset.tags; } const b = api.current; if (b) { const L = (entered ? b.campus.resolve(trip.to) : b.campus.resolve(trip.from)) ?? b.campus.resolve(trip.to); /* a trip that did not arrive (cancelled, refused, the fare failed) leaves the camera, like the player, where the server still has them */ if (L) b.stage.flyTo(L.x, 0, L.z, 70, 1.0); } };
   }, [trip?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { const a = api.current; if (a && billboards) a.campus.setBillboards(billboards); }, [billboards, mounts]);

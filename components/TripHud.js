@@ -15,7 +15,7 @@ import { fmtDuration } from "@/lib/travel.js";
 import "./travel.css";
 
 const TEXT = {
-  intro: "Getting ready…", approach: "Walking to your ride", board: "Getting in…", ride: "On the way", paying: "Paying the fare…", alight: "Getting out…", exit: "Getting out…", afoot: "Out of the car", reenter: "Getting back in…", walk: "Walking to the door", door: "Going in…", enter: "Going in…", inside: "Going in…",
+  intro: "Getting ready…", approach: "Walking to your ride", board: "Getting in…", ride: "On the way", paying: "Paying the fare…", alight: "Getting out…", exit: "Getting out…", afoot: "Out of the car", reenter: "Getting back in…", walk: "Walking to the door", door: "Going in…", enter: "Going in…", inside: "Going in…", leave: "Stepping out…", roam: "Walk on · tap a place name to go there",
 };
 
 /** Stops the browser scrolling, zooming, selecting or opening a menu under a finger that is steering. */
@@ -41,7 +41,7 @@ export function Hold({ className, label, onDown, onUp, children }) {
 }
 
 export default function TripHud({ trip, placeName, st, input, miniRef, previewRef, onCancel }) {
-  const [preview, setPreview] = useState(false), phase = st?.phase ?? "intro", drive = trip.mode === "car" && !trip.driver, steering = phase === "drive", walking = ["trek", "approach", "walk", "afoot", "door"].includes(phase), doorOn = phase === "door" && st?.hasDoor;
+  const [preview, setPreview] = useState(false), phase = st?.phase ?? "intro", drive = trip.mode === "car" && !trip.driver, steering = phase === "drive", walking = ["trek", "approach", "walk", "afoot", "door", "roam", "leave"].includes(phase), doorOn = phase === "door" && st?.hasDoor;
   // the H key is the horn on a keyboard: it sounds for as long as it is held (never while typing, never with a shortcut such as Ctrl+H, and key repeat does not matter: held is held)
   useEffect(() => {
     if (!steering) return;

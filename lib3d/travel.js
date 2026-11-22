@@ -19,6 +19,7 @@ import { planRetarget, RETARGET_WHY } from "./tripretarget.js";
 import { sightBlocked } from "./destinations.js";
 import { SWING } from "./doorway.js";
 import { createTripFlow } from "./tripflow.js";
+import { portalFor } from "./buildingPortals.js";
 import { ROAD_TOP } from "./roadsurface.js";
 import { wheelContacts } from "./vehiclepose.js";
 import { rigSuspension, leanBody } from "./suspension.js";
@@ -162,7 +163,7 @@ export async function startTrip(env, o) {
   let hornWas = false;
 
   // ---- the journey ----
-  const flow = createTripFlow({ svc, sim: traffic.sim }, { plan, enterable, dims: vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width, id: vehicle.id, seat: vehicle.seat, driver: vehicle.driver, wheels: wheelContacts(vehicle) } : null, rnd: Math.random, free: !!o.free, spawn: o.spawn ?? null, onArrive: () => o.onArrive?.() ?? true, onEnter: () => o.onEnter?.(), onEnd: (why) => { if (alive) o.onEnd?.(why); }, onNotice: (m) => o.onNotice?.(m) });
+  const flow = createTripFlow({ svc, sim: traffic.sim }, { plan, enterable, dims: vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width, id: vehicle.id, seat: vehicle.seat, driver: vehicle.driver, wheels: wheelContacts(vehicle) } : null, rnd: Math.random, free: !!o.free, spawn: o.spawn ?? null, onArrive: () => o.onArrive?.() ?? true, onEnter: () => o.onEnter?.(), holdEnter: () => !!o.holdEnter?.(), roam: o.roam ? portalFor(svc, toP) : null, onEnd: (why) => { if (alive) o.onEnd?.(why); }, onNotice: (m) => o.onNotice?.(m) });
   disposers.push(() => flow.dispose()); setBay();
   const P = flow.person, F = flow.state, WK = flow.walker;
   let camYaw = Math.atan2(-(plan.start.x - (plan.doorIn?.x ?? plan.goal.x)), -(plan.start.z - (plan.doorIn?.z ?? plan.goal.z))), userYaw = 0, userPitch = 0, userAt = -9, time = 0, hornT = 0, lastState = 0, camBack = CAM.walk.back, zoomW = 1, zoomV = 1, leadX = 0, leadZ = 0;
@@ -260,7 +261,7 @@ export async function startTrip(env, o) {
     vehMix = ease(vehMix, inVeh && v ? 1 : 0, 2.6, dt); const m = vehMix, tgt = v ? { x: lerp(P.x, v.x, m), z: lerp(P.z, v.z, m) } : P;
     const headYaw = v ? yawOf2(v.hx, v.hz) + Math.PI : camYaw; // camera yaw: the direction from the target back to the camera
     if (inVeh && v) camYaw = followYaw(camYaw, headYaw, sp, dt, F.phase === "ride");   // behind the car, following its turns a moment late rather than snapping with them (tripcam.js: always the short way round, never wound up)
-    else if (["alight", "exit", "door", "enter", "intro", "board", "approach", "reenter"].includes(F.phase) && WK.mode !== "manual" && !pointer.active) { const want = yawOf2(P.hx, P.hz) + Math.PI, d = angDiff(camYaw, want); camYaw += d * (1 - Math.exp(-dt * 1.6)); }
+    else if (["alight", "exit", "door", "enter", "leave", "intro", "board", "approach", "reenter"].includes(F.phase) && WK.mode !== "manual" && !pointer.active) { const want = yawOf2(P.hx, P.hz) + Math.PI, d = angDiff(camYaw, want); camYaw += d * (1 - Math.exp(-dt * 1.6)); }
     // in a vehicle, looking round springs back to the road ahead; on foot the view stays exactly where the player put it (it never swings by itself while they steer)
     if (inVeh && !pointer.active && time - userAt > 1.2) { userYaw *= Math.exp(-dt * 2.2); userPitch *= Math.exp(-dt * 1.4); }
     if (!inVeh) userYaw *= Math.exp(-dt * 6);
@@ -333,6 +334,9 @@ export async function startTrip(env, o) {
   const api = {
     traffic, get plan() { return plan; }, get to() { return curTo; }, retarget, setLook,
     tagView: () => { camM.x = cam.position.x / S; camM.y = cam.position.y / S; camM.z = cam.position.z / S; return { me: { x: P.x, z: P.z }, cam: camM, occluded: (it) => sightBlocked(svc.world, heights, camM, it, it.bid) }; }, setTravellers: (l) => traffic.setTravellers(l), pos: () => { const inV = !!flow.vehicle && ["ride", "drive", "paying"].includes(F.phase), p = inV ? flow.vehicle : P; return { x: p.x, z: p.z, h: Math.atan2(p.hx, p.hz), mode: inV ? mode : "trek" }; }, route: () => gd, cancel: () => flow.cancel(),
+    /** Walk out of the building the trip went into, through its own door onto its own exit spot (lib3d/buildingPortals.js); the world, traffic and trip carry on. { ok } or { ok: false, reason } */
+    exitBuilding() { if (!alive) return { ok: false, reason: "phase" }; const pl = resolvePlace(data, curTo); return flow.exitBuilding(pl ? portalFor(svc, pl) : null); },
+    get phase() { return F.phase; },
     horn() { if (hornT > 0) return; hornT = 0.4; o.onHorn?.(); },
     dispose() { if (!alive) return; alive = false; off?.(); for (const d of disposers.reverse()) { try { d(); } catch { /* clean up as much as possible */ } } /* the map may already be torn down (the player tapped Home mid-drive): put the shared scene back as far as it still exists, and never throw */
       const safe = (f) => { try { f(); } catch { /* the stage or campus is already disposed */ } };
