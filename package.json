@@ -34,6 +34,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@types/react": "19.3.0",
+    "playwright": "^1.65.1",
     "prisma": "^6.19.3",
     "typescript": "7.0.2"
   },
