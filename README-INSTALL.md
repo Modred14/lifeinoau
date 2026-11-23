@@ -11,7 +11,7 @@ Then:
 
 Radio (Nigerian stations only; there is no radio volume control, the radio plays at a fixed level):
 public/data/radio-stations.json is EMPTY until you run the steps below. A station gets into it ONLY by playing in a real browser (an HTTP 200 proves nothing about audio).
-On a machine with normal internet access:
+tools/radio/candidates.json already holds 94 UNVERIFIED Nigerian candidates (see its _provenance note). On a machine with normal internet access:
   npm i -D playwright && npx playwright install chromium     (AAC stations: set PLAYWRIGHT_CHANNEL=chrome to use installed Google Chrome)
   npm run radio:discover                  find Nigerian candidates (radio-browser.info) -> tools/radio/candidates.json  (add --dry to preview)
   npm run radio:verify:browser            play every candidate in Chromium (desktop + emulated phone) and print a report; changes nothing
