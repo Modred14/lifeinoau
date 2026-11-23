@@ -53,7 +53,7 @@ export function frame(p, room, back = "n") {
     /** n copies from u0 to u1 (inclusive centres). */
     row(type, u0, u1, v, n, o = {}) { for (let i = 0; i < n; i++) F.add(type, n === 1 ? (u0 + u1) / 2 : u0 + ((u1 - u0) * i) / (n - 1), v, { ...o, n: i }); return F; },
     /** Someone standing (or sitting) at (u, v). `face`: "front" looks at the door wall, "back" at the back wall, or an angle. */
-    person(role, u, v, o = {}) { const [x, z] = to(u, v), face = o.face ?? "front", yaw = typeof face === "number" ? face : face === "front" ? ry0 : ry0 + PI; p.npc(role, { room: room.id, floor: room.floor, x, z, yaw, mode: o.mode ?? "stand", ...(o.pool ? { pool: o.pool } : {}) }); return F; },
+    person(role, u, v, o = {}) { const [x, z] = to(u, v), face = o.face ?? "front", yaw = typeof face === "number" ? face : face === "front" ? ry0 : ry0 + PI; p.npc(role, { room: room.id, floor: room.floor, x, z, yaw, mode: o.mode ?? "stand", ...(o.pool ? { pool: o.pool } : {}), ...(o.partner ? { partner: true, gender: "F" } : {}) }); return F; },
     hub(u, v, label, action = 0, act = null) { const [x, z] = to(u, v); p.hub(x, z, label, action, room.floor, act); return F; },
   };
   return F;

@@ -89,7 +89,19 @@ export default function TripHud({ trip, placeName, st, input, miniRef, previewRe
                 onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); input.horn = true; e.preventDefault(); }} onPointerUp={() => (input.horn = false)} onPointerCancel={() => (input.horn = false)} onLostPointerCapture={() => (input.horn = false)}
                 onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { input.horn = true; e.preventDefault(); } }} onKeyUp={(e) => { if (e.key === " " || e.key === "Enter") input.horn = false; }} onBlur={() => (input.horn = false)} onContextMenu={(e) => e.preventDefault()}><Icon name="horn" size={22} weight="fill" /></button>
               <CarRadio active />
-              <button type="button" className="th-btn th-exit" aria-label="Exit car" data-sound="none" disabled={!!st?.exiting} onClick={() => { input.exit = true; playSound("tap"); }}>
+              {st?.canFly && (
+                <button type="button" className="th-btn th-fly" aria-label={st.airborne ? "Land the car" : "Take off"} data-sound="none" onClick={() => { input.fly = true; playSound("tap"); }}>
+                  <Icon name="plane" size={20} weight="bold" /> <span>{st.airborne ? "Land" : "Take off"}</span>
+                </button>
+              )}
+              {st?.canFly && st.airborne && (
+                <>
+                  <Hold className="th-btn th-climb" label="Climb" onDown={() => (input.climb = 1)} onUp={() => (input.climb = 0)}><b>▲ UP</b></Hold>
+                  <Hold className="th-btn th-climb" label="Descend" onDown={() => (input.climb = -1)} onUp={() => (input.climb = 0)}><b>▼ DOWN</b></Hold>
+                  <span className="th-alt" aria-live="off">{st.alt} m</span>
+                </>
+              )}
+              <button type="button" className="th-btn th-exit" aria-label="Exit car" data-sound="none" disabled={!!st?.exiting || !!st?.airborne} onClick={() => { input.exit = true; playSound("tap"); }}>
                 <Icon name="door" size={20} weight="bold" /> <span>{st?.exiting ? "Stopping…" : "Exit car"}</span>
               </button>
             </div>
@@ -102,7 +114,7 @@ export default function TripHud({ trip, placeName, st, input, miniRef, previewRe
               <b>GAS</b>
             </Hold>
           </div>
-          <div className="th-keys" aria-hidden="true"><span><kbd>W</kbd><kbd>↑</kbd> Gas</span><span><kbd>S</kbd><kbd>↓</kbd> Brake · hold to reverse</span><span><kbd>A</kbd><kbd>D</kbd> Steer</span><span><kbd>H</kbd> Horn (hold)</span><span><kbd>R</kbd> Radio</span><span><kbd>E</kbd> Exit car</span></div>
+          <div className="th-keys" aria-hidden="true"><span><kbd>W</kbd><kbd>↑</kbd> Gas</span><span><kbd>S</kbd><kbd>↓</kbd> Brake · hold to reverse</span><span><kbd>A</kbd><kbd>D</kbd> Steer</span><span><kbd>H</kbd> Horn (hold)</span><span><kbd>R</kbd> Radio</span><span><kbd>E</kbd> Exit car</span>{st?.canFly && <><span><kbd>T</kbd> Take off / land</span><span><kbd>Q</kbd><kbd>Z</kbd> Up / down</span></>}</div>
         </>
       )}
       {phase === "ride" && <CarRadio active float />}

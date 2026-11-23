@@ -13,6 +13,7 @@ export const VEHICLE_DIMS = {
   "urus-2025":       { length: 5.112, width: 2.016, height: 1.638, wheelbase: 3.003 },
   "huracan-2025":    { length: 4.549, width: 1.945, height: 1.22,  wheelbase: 2.62 },
   "cybertruck-2024": { length: 5.683, width: 2.027, height: 1.791, wheelbase: 3.80 },
+  "tesla-skyhawk-2026": { length: 4.86, width: 1.96, height: 1.31, wheelbase: 2.90 },
   keke:              { length: 2.78,  width: 1.3,   height: 1.72,  wheelbase: 1.95 },
   bus:               { length: 6.075, width: 1.882, height: 2.254, wheelbase: 4.12 },
 };

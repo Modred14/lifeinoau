@@ -17,7 +17,7 @@ const hits = (r, x, z, w, d) => x < r.x1 && x + w > r.x0 && z < r.z1 && z + d > 
  * lib3d/modelCache.js: building the plot again (re-entering the home, resizing it) makes new meshes and materials over geometry that is already built. Each mesh keeps its own
  * position, material and shadow flags. Call release() (or dispose the group with room.js's dispose(), which does) when the plot goes.
  */
-export function buildPlot(room, { mat, tree }) {
+export function buildPlot(room, { mat, tree, embedded = false }) {
   const P = plotFor(room), st = homeStyle(room), W = room.w, D = room.d, g = new THREE.Group(), trees = [], R = PLOT_RULES, hold = createHolder();
   const boxGeo = (w, h, d) => hold.get(`plot:box:${w}|${h}|${d}`, () => new THREE.BoxGeometry(w, h, d), { priority: 1 });
   const icoGeo = (r, detail) => hold.get(`plot:ico:${r}|${detail}`, () => new THREE.IcosahedronGeometry(r, detail), { priority: 1 });
@@ -99,7 +99,7 @@ export function buildPlot(room, { mat, tree }) {
   beam({ x0: ga.x0, x1: ga.x1, z0: ga.z0 + 0.15 - bt, z1: ga.z0 + 0.15 + bt }); beam({ x0: ga.x0, x1: ga.x1, z0: ga.z1 - 0.15 - bt, z1: ga.z1 - 0.15 + bt });
   beam({ x0: ga.x0 + 0.15 - bt, x1: ga.x0 + 0.15 + bt, z0: ga.z0, z1: ga.z1 }); beam({ x0: ga.x1 - 0.15 - bt, x1: ga.x1 - 0.15 + bt, z0: ga.z0, z1: ga.z1 });
   for (let z = ga.z0 + PLOT_RULES.bayPitch * 2; z < ga.z1 - 1; z += PLOT_RULES.bayPitch * 2) beam({ x0: ga.x0, x1: ga.x1, z0: z - bt, z1: z + bt }); // cross beams over the lane
-  for (const z of [ga.z1 - 4, (ga.z0 + ga.z1) / 2, ga.z0 + 4]) { const gl = new THREE.PointLight(0xffd9a0, 1.6, 12, 1.8); gl.position.set(wx((lane.x0 + lane.x1) / 2), GROUND + 2.6, wz(z)); g.add(gl); } // lamps down the lane
+  if (!embedded) for (const z of [ga.z1 - 4, (ga.z0 + ga.z1) / 2, ga.z0 + 4]) { const gl = new THREE.PointLight(0xffd9a0, 1.6, 12, 1.8); gl.position.set(wx((lane.x0 + lane.x1) / 2), GROUND + 2.6, wz(z)); g.add(gl); } // lamps down the lane
 
   // ---- hedges inside the wall (never across a gate or the driveway), and the trees ----
   const gate = (x, z) => [P.gate, P.footGate].some((gp) => x > gp.x0 - 0.9 && x < gp.x1 + 0.9 && z > pl.z1 - 1.6);
@@ -114,6 +114,7 @@ export function buildPlot(room, { mat, tree }) {
 
   // (no neighbouring lots: the plot ends at its wall, and nothing is drawn beyond it)
   void at; void R;
+  if (embedded) g.remove(roadG); // on the map the road, kerb and pavement beyond the wall are the map's own
   return { group: g, trees, plot: P, road: roadG, release: hold.releaseAll };
 }
 

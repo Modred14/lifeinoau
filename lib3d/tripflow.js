@@ -31,6 +31,7 @@ import { SWING, BACK_SPEED, LEAF_ID, canOpenAt, atThreshold, doorLocal, doorFram
 import { portalWalk, portalLength } from "./buildingPortals.js";
 import { RETARGET_WHY } from "./tripretarget.js";
 import { massOf, liftOf } from "./impact.js";
+import { createAir, canTakeOff, takeOff, land, stepAir, isAirborne, fanOut } from "./flightphysics.js";
 
 const ARRIVE_RADIUS = 14, DOOR_OPEN = 0.9, ENTER_SECONDS = 1.4, BACK_TIMEOUT = 2.6, OPEN_HOLD_MAX = 1.6, MANUAL_EXIT_SECONDS = 2.6, PARK_ASSIST_BELOW = 7, CLOSE_AUTO_M = 4.5, ENTER_REACH_M = 3.2;
 /** Going through a doorway (in or out) never takes less than ENTER_SECONDS, and is walked at this pace (m/s). */
@@ -90,11 +91,16 @@ export function createTripFlow(env, o) {
     if (own.h > ELEVATED) { world.removeBody("own"); sim.removeExternal("own"); return; }
     world.setBody("own", { x: own.x, z: own.z, hx: own.hx, hz: own.hz, hl: own.len / 2, hw: own.wid / 2 }); sim.setExternal("own", { x: own.x, z: own.z, hx: own.hx, hz: own.hz, len: own.len, wid: own.wid, v: own.v });
   }
-  function makeOwn() { const h = hero; own = Object.assign(createCar({ x: h.x, z: h.z, ang: Math.atan2(h.hx, h.hz) }), { len: h.len, wid: h.wid, kind, P: carProfile(dims?.id), lv: 0, h: 0, slope: 0 }); sim.remove(h); hero = null; own.pen = ownProbe(own.x, own.z, own.hx, own.hz)?.pen ?? 0; follower.reset(own); publishOwn(); }
+  function makeOwn() { const h = hero; own = Object.assign(createCar({ x: h.x, z: h.z, ang: Math.atan2(h.hx, h.hz) }), { len: h.len, wid: h.wid, kind, P: carProfile(dims?.id), lv: 0, h: 0, slope: 0, air: createAir() }); sim.remove(h); hero = null; own.pen = ownProbe(own.x, own.z, own.hx, own.hz)?.pen ?? 0; follower.reset(own); publishOwn(); }
+  /** The player's own car standing where it is parked (the compound): no road lane, no traffic hero. `p` = { x, z, hx, hz, len, wid }. */
+  function makeOwnAt(p) {
+    own = Object.assign(createCar({ x: p.x, z: p.z, ang: Math.atan2(p.hx, p.hz) }), { len: p.len, wid: p.wid, kind, P: carProfile(dims?.id), lv: 0, h: 0, slope: 0, air: createAir() });
+    own.pen = ownProbe(own.x, own.z, own.hx, own.hz)?.pen ?? 0; follower.reset(own); publishOwn();
+  }
   const onRoad = (x, z) => graph.surfaceAt(x, z, onRoad.s ??= {}).cls === 1;      // the ground: people, door checks, kerbside exits
   const carSurf = {};
   /** Is (x, z) road for your own car, on the level it is on (the ground, or the expressway deck) and, where roads cross, at the height it is at? */
-  const onRoadOwn = (x, z, mask) => graph.surfaceAt(x, z, carSurf, mask, own.h).cls === 1;
+  const onRoadOwn = (x, z, mask) => graph.surfaceAt(x, z, carSurf, mask, own.h).cls === 1 || (!!o.drivable && own.h < 1 && o.drivable(x, z));   // o.drivable: the player's own compound (lib3d/homeSite.js), which a car may drive over as well as the road
   /**
    * Why a pose is not allowed for your own car: null when it is fine, otherwise { pen, why } with why = "road" (a part of it would be off the carriageway), "building" or "vehicle".
    * `pen` says how bad the place is, so the physics can let a car that is already touching something move AWAY from it (it is never pinned) but never further in.
@@ -123,6 +129,7 @@ export function createTripFlow(env, o) {
   /** Asking to get out: the car brakes itself to a stop (not at once, and not at all if it is going far too fast), then the door opens. */
   function requestExit() {
     if (exitAsk || S.phase !== "drive") return;
+    if (own.air && isAirborne(own.air)) { notice("You cannot get out while flying. Land first (T)."); return; }
     if (own.h > 0.8) { notice("You cannot get out on the expressway or its ramps. Drive down to a normal road first."); return; }
     if (own.v > EXIT_REFUSE_SPEED) { notice("Slow down before you get out."); return; }
     if (!pickExit()) { notice("There is no room to get out here. Move the car and try again."); return; }
@@ -138,7 +145,29 @@ export function createTripFlow(env, o) {
     const r = sim.strike(q0, { x: own.x, z: own.z, hx: own.hx, hz: own.hz, v: own.v }, { len: own.len, wid: own.wid, mass: massOf(kind, dims?.id), lift: liftOf(kind, dims?.id) }, "own");
     if (!r.hits) return; const was = own.v; own.v += r.dv; if ((was > 0 && own.v < 0) || (was < 0 && own.v > 0)) own.v = 0; S.hits += r.hits;
   }
+  /** Is the road under the car free to land on (road, no building, no vehicle), as it would be with the wheels down? Looked at with the car temporarily on the ground. */
+  function landingClear() { const h = own.h, lv = own.lv; own.h = 0; own.lv = 0; try { return !ownProbe(own.x, own.z, own.hx, own.hz) && graph.levelAt(own.x, own.z, 0, 0).lv === 0; } finally { own.h = h; own.lv = lv; } }
+  /** The Fly / Land button or T: a flying car takes off from a stop on a normal road, or starts to land. */
+  function toggleFlight() {
+    const a = own.air; if (!a || !own.P.flies) { notice("This car cannot fly."); return; }
+    if (isAirborne(a)) { land(a); return; }
+    if (exitAsk) return;
+    const g = canTakeOff(own, a, own.h < 0.8 && graph.levelAt(own.x, own.z, own.lv, own.h).lv === 0);
+    if (!g.ok) { notice(g.why); return; }
+    takeOff(own, a); exitAsk = false; S.exiting = false;
+  }
+  /** One step of a flying car: lib3d/flightphysics.js moves it; the ground game does not see it (no road, building or traffic checks) until it is back on the road. */
+  function flyOwn(dt, inp) {
+    const a = own.air, r = stepAir(own, a, { gas: inp.gas ?? 0, brake: inp.brake ?? 0, steer: inp.steer ?? 0, climb: inp.climb ?? 0 }, dt, { landingClear });
+    if (r.notice) notice(r.notice);
+    own.road = { y: own.h, pitch: 0, roll: 0 }; own.slope = 0;
+    if (r.landed) { updateLevel(dt); own.pen = ownProbe(own.x, own.z, own.hx, own.hz)?.pen ?? 0; }
+    publishOwn();
+    return { near: false, drv: { gas: inp.gas ?? 0, brake: inp.brake ?? 0, steer: inp.steer ?? 0 } };
+  }
   function driveOwn(dt, inp) {
+    if (inp.fly) toggleFlight();
+    if (own.air && isAirborne(own.air)) { if (inp.exit) requestExit(); return flyOwn(dt, inp); }
     if (inp.exit) requestExit();
     let drv = { gas: inp.gas ?? 0, brake: inp.brake ?? 0, steer: inp.steer ?? 0 };
     const dist = Math.hypot(own.x - plan.drop.x, own.z - plan.drop.z), near = !free && dist < ARRIVE_RADIUS && own.h < 1.0;   // driving over the place on the expressway is not arriving at it
@@ -361,6 +390,12 @@ export function createTripFlow(env, o) {
     S.seatK = 1; S.vehDoorK = 0; person.seated = true; person.seat = seatLocal(); person.visible = true; S.pay = "none"; go("drive");
   }
 
+  /** The player at the wheel of their own car, out of the garage and already moving (the compound's gate); the compound ground is drivable so no road lane is needed. `p` = { x, z, hx, hz, len, wid }, `v` m/s. */
+  function bootAt(p, v) {
+    makeOwnAt(p); own.v = Math.max(0, Math.min(v ?? 0, own.P?.vmax ?? CAR.vmax)); own.distance = 0;
+    S.seatK = 1; S.vehDoorK = 0; person.seated = true; person.seat = seatLocal(); person.visible = true; S.pay = "none"; go("drive");
+  }
+
   const HIT_PHASES = new Set(["intro", "trek", "approach", "afoot", "walk", "roam"]);
   /** The traffic hit the person on foot: they are thrown (lib3d/impact.js), whatever they were doing is paused, and the walk resumes when they are up. */
   function struckOnFoot(st, by, now) { walker.hit(st, by, now); S.struck++; S.down = true; }
@@ -431,6 +466,7 @@ export function createTripFlow(env, o) {
         break; }
       case "roam": { // on foot, free, at the door you came out of
         walker.step(dt, walkIn);
+        if (own && inp.enter && distToCar(walker.x, walker.z) < ENTER_REACH_M && !walker.tumble) { startReenter(); break; }   // your own car is parked here (the compound): get in it
         if (S.door === "closing") { S.doorK = Math.max(0, S.doorK - (dt / DOOR_OPEN) * 1.4); setLeaf(); if (S.doorK <= 0) shutDoor(); }   // the leaf swings shut behind them (the exit spot is out of its way)
         const dGoal = Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z); if (dGoal > ROAM_REARM_M) roamArmed = true;
         // back at the door you came out of: the same door sequence as arriving (Open Door, step in). Walking elsewhere never gets here.
@@ -440,7 +476,8 @@ export function createTripFlow(env, o) {
     }
     if (S.phase === "door" || S.phase === "enter") { doorTarget = 0; stepDoor(dt, 0); }
     S.auto = !!walker.path && walker.mode === "auto" && ["trek", "afoot", "walk"].includes(S.phase);
-    S.canExit = S.phase === "drive" && !exitAsk; S.canEnter = S.phase === "afoot" && distToCar(walker.x, walker.z) < ENTER_REACH_M; S.canClose = S.phase === "afoot" && S.vehDoorK > 0.02 && doorTarget === 1;
+    S.canFly = S.phase === "drive" && !!own?.P?.flies; S.airborne = !!(own?.air && isAirborne(own.air)); S.alt = own ? Math.round(own.h) : 0; S.fan = own?.air ? fanOut(own.air) : 0; S.fanSpin = own?.air?.spin ?? 0;
+    S.canExit = S.phase === "drive" && !exitAsk && !S.airborne; S.canEnter = (S.phase === "afoot" || (S.phase === "roam" && !!own)) && distToCar(walker.x, walker.z) < ENTER_REACH_M; S.canClose = S.phase === "afoot" && S.vehDoorK > 0.02 && doorTarget === 1;
     // the person
     person.x = walker.x; person.z = walker.z; person.hx = walker.hx; person.hz = walker.hz; S.speed = S.phase === "drive" ? own.v : S.phase === "ride" && hero ? hero.v : walker.speed;
     if (!person.seated && S.phase !== "board") sim.setExternal("player", { x: walker.x, z: walker.z, hx: walker.hx, hz: walker.hz, len: 0.6, wid: 0.6, v: walker.speed }); else sim.removeExternal("player");
@@ -505,7 +542,9 @@ export function createTripFlow(env, o) {
     S.ended = true; sim.removeExternal("player"); sim.removePerson("player"); sim.removeExternal("own"); world.removeBody("own"); world.removeBody(LEAF_ID);
     if (hero) { if (departed) hero.role = "npc"; else sim.remove(hero); }
   }
-  if (o.spawn && ownCar) bootDrive(o.spawn);
+  if (o.spawn && o.parked && ownCar) bootAt(o.parked, o.spawn.v);   // driving out of the compound gate: at the wheel, already rolling, on the compound ground
+  else if (o.spawn && ownCar) bootDrive(o.spawn);
+  else if (o.parked && ownCar) makeOwnAt(o.parked);   // the own car waits where it is parked (the compound)
   if (o.roam) exitBuilding(o.roam);   // a trip that begins on the doorstep: the person walks out of the door at once (o.roam is the building's portal)
   return { update, dispose, state: S, get free() { return free; }, get roaming() { return S.phase === "roam"; }, exitBuilding, walker, person, get plan() { return plan; }, kind, pressDoor, enterNow, retarget: retargetTrip, stopAuto, get doorFrame() { return dframe; }, get hero() { return hero; }, get approachDoor() { return approachDoor ?? plan.doorIn; }, get own() { return own; }, get vehicle() { return own ?? hero; }, eta: () => S.eta, remainMetres, cancel: () => end("cancelled"), get driving() { return S.phase === "drive"; } };
 }

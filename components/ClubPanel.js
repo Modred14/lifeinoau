@@ -9,6 +9,7 @@ import { Icon } from "./Icon";
 import { call, naira } from "@/lib/client";
 import { game, useGame, run, cash } from "@/lib/gameStore";
 import { toast } from "@/lib/toast";
+import { DANCE_STYLES } from "@/lib/danceStyles.js";
 import { DRINKS, PACKAGES, EXPERIENCES, BUYOUT_TIERS, BUYOUT_TERMS, SPRAY_AMOUNTS, VIP_PERKS, MIN_SPEND, MAX_SPEND, SPEND_STEP, validSpend, tierOf, fxLevel, buyoutPrice, drinkById } from "@/lib/clubs.js";
 import { activitiesFor, ACTIVITIES, labelOf, summaryOf } from "@/lib/activities.js";
 import "./club.css";
@@ -16,7 +17,7 @@ import { compactMoney } from "@/lib/money.js";
 
 const N = (n) => compactMoney(n);
 const CONFIRM_FROM = 100_000; // anything from here up (and every gift and buyout) asks "are you sure?" first
-const TABS = [["do", "Activities", "users"], ["bottles", "Bottles", "gift"], ["spray", "Spray", "coins"], ["packages", "Packages", "forbes"], ["more", "Experiences", "sparkle"], ["buyout", "Buyout", "club"]];
+const TABS = [["do", "Activities", "users"], ["dance", "Dance", "music"], ["bottles", "Bottles", "gift"], ["spray", "Spray", "coins"], ["packages", "Packages", "forbes"], ["more", "Experiences", "sparkle"], ["buyout", "Buyout", "club"]];
 
 /** One bottle drawn for each drink: its own shape and colours (original artwork, not a maker's label). */
 export function BottleArt({ drink, size = 84 }) {
@@ -41,7 +42,7 @@ export function BottleArt({ drink, size = 84 }) {
   );
 }
 
-export default function ClubPanel({ club, state, people = [], selfName = "", getPos, onClose, onBought }) {
+export default function ClubPanel({ club, state, people = [], selfName = "", getPos, dance = null, onDance, onStopDance, onClose, onBought }) {
   const [tab, setTab] = useState("do"), [pick, setPick] = useState(null), [busy, setBusy] = useState(false), [custom, setCustom] = useState(""), [amount, setAmount] = useState(SPRAY_AMOUNTS[2]), [to, setTo] = useState(null);
   const g = useGame(), router = useRouter(), rid = useRef(null);
   const open = !!state?.status?.open, balance = g?.balanceKobo != null ? BigInt(g.balanceKobo) : null, can = (n) => balance == null || balance >= BigInt(n) * 100n;
@@ -85,6 +86,14 @@ export default function ClubPanel({ club, state, people = [], selfName = "", get
         <nav className="cl-tabs" aria-label="Sections">{TABS.map(([id, name, icon]) => <button key={id} type="button" className="cl-tab" aria-pressed={tab === id} onClick={() => setTab(id)}><Icon name={icon} size={16} /> {name}</button>)}</nav>
 
         <div className="cl-body">
+          {tab === "dance" && (<section>
+            <p className="cl-note">Free. Stand still on the floor, pick a style and dance; everyone in the club sees you. Switch styles any time. Walk away or press Stop to finish.</p>
+            <div className="cl-rows">{DANCE_STYLES.map((d) => (
+              <article key={d.id} className="cl-row"><span className="cl-ico"><Icon name={d.icon} size={20} /></span><div><h3>{d.label}</h3><p>{d.blurb}</p></div>
+                <div className="cl-end"><b className="cl-price">Free</b>{dance === d.id
+                  ? <button type="button" className="cl-buy" onClick={onStopDance}>Stop</button>
+                  : <button type="button" className="cl-buy" onClick={() => onDance?.(d.id)}>{dance ? "Switch" : "Dance"}</button>}</div></article>))}</div>
+          </section>)}
           {tab === "do" && <Activities club={club} open={open} setTab={setTab} onClose={onClose} />}
 
           {tab === "bottles" && (<>
@@ -171,6 +180,7 @@ function Activities({ club, open, setTab, onClose }) {
   return (<>
     <h4 className="cl-sec">Entertainment</h4>
     <div className="cl-rows">
+      <Row icon="music" name="Dance" text="Pick a style, including Ọ̀blee. Everyone in the club sees you." price="Free" label="Choose" go={() => setTab("dance")} />
       <Row icon="sound" name="Club music" text="The DJ is playing. Play, pause, skip and set the volume." price="Free" label="Open" go={() => { onClose(); window.dispatchEvent(new CustomEvent("oau:club-ui", { detail: { panel: "dj" } })); }} />
       {others.map((e) => <Row key={e.act} icon={ACTIVITIES[e.act].icon} name={labelOf(e)} text={summaryOf(ACTIVITIES[e.act])} price={cost(e.act)} label="Go" go={() => doRing(e)} />)}
       <Row icon="courses" name="Fight a lecturer" text="Your lecturers stand in their lecture rooms, not in the club. Open Courses to see where yours is, then go and confront them there." price="Costs energy" label="Find them" go={() => { onClose(); window.dispatchEvent(new CustomEvent("oau:phone-app", { detail: { app: "courses" } })); }} />

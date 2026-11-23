@@ -11,6 +11,7 @@ import TravelSheet from "@/components/TravelSheet";
 import TripHud from "@/components/TripHud";
 import RoadTransition from "@/components/RoadTransition";
 import { peekDriveHandoff, takeDriveHandoff } from "@/lib/driveHandoff.js";
+import { loadHomeOption } from "@/lib/homeOption.js";
 import PlaceActivities from "@/components/PlaceActivities";
 import { featuresAt } from "@/lib/features.js";
 import BuildingInside from "@/components/BuildingInside";
@@ -46,9 +47,10 @@ export default function MapPage() {
   useEffect(() => {
     if (!entering || !mapReady || !data || !ch || trip) return;
     const h = takeDriveHandoff(); if (!h) { setEntering(false); return; }
-    if (held || !ownsCar(ch)) { setEntering(false); return; }
+    if (held || (!h.walk && !ownsCar(ch))) { setEntering(false); return; }
     const home = homePlace(ch.hostel); input.jx = input.jy = input.steer = input.gas = input.brake = 0; input.run = false; setTripSt(null);
-    setTrip({ id: crypto.randomUUID(), from: home, to: home, mode: "car", driver: false, act: null, free: true, spawn: { v: h.v }, look: ch.look ?? null, gender: ch.gender ?? "M", car: h.modelId, carColor: h.color, people: [], isEnterable: (id) => { const p = find(id); return !!p && hasInterior(p.id, p.kind); }, selfName: ch.name ?? "", name: "the main road" });
+    // the player's own compound (house, yard, garage, parked vehicles) is drawn on its lot beside the road; a drive-out starts at the wheel in the gate, a walk-out on the doorstep
+    loadHomeOption(ch, h.modelId).then((hm) => setTrip({ id: crypto.randomUUID(), from: home, to: home, mode: ownsCar(ch) ? "car" : "trek", driver: false, act: null, free: true, home: hm, roam: !!(hm && h.walk), spawn: h.walk ? null : { v: h.v }, look: ch.look ?? null, gender: ch.gender ?? "M", car: h.modelId, carColor: h.color, people: [], isEnterable: (id) => { const p = find(id); return !!p && hasInterior(p.id, p.kind); }, selfName: ch.name ?? "", name: "the main road" }));
   }, [entering, mapReady, data, !!ch, !!trip]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!entering) return; const t = tripSt?.phase === "drive" ? setTimeout(() => setEntering(false), 450) : setTimeout(() => setEntering(false), 9000); return () => clearTimeout(t); }, [entering, tripSt?.phase]);
   // Serving a sentence: held at Floor O (N-QRS Custody) and not allowed to travel. The server refuses every trip too; this only stops offering it.

@@ -19,7 +19,7 @@ const BY_ID = {
   buy_data: P("phone"), phone_fix: P("phone", { cycle: ["phone", "interact"] }),
   // talking with a person
   fin_advice: P("talk", { face: ["desk", "officedesk", "counter"] }), academic_adviser: P("talk", { face: ["desk", "officedesk"] }), health_checkup: P("talk", { face: ["desk"] }),
-  pastoral_chat: P("talk"), hall_chat: P("talk"), patio_chat: P("talk"), student_dialogue: P("listen", { seat: "chair", cycle: ["listen", "talk"] }),
+  pastoral_chat: P("talk"), hall_chat: P("talk"), patio_chat: P("talk"), club_mingle: P("talk", { cycle: ["talk", "cheer", "talk", "drink"] }), student_dialogue: P("listen", { seat: "chair", cycle: ["listen", "talk"] }),
   // learning
   attend_class: P("listen", { seat: "chair", face: BOARD }), study_course: P("read", { seat: "chair", cycle: ["read", "write"], face: TABLES }),
   class_test: P("write", { seat: "chair", face: TABLES }), sit_exam: P("write", { seat: "chair", face: TABLES }),

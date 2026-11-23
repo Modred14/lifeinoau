@@ -12,7 +12,7 @@ import { VEHICLE_DIMS } from "./vehicleDims.js";
 
 const SHAPES = {
   compact: [4.5, 1.78], sedan: [4.85, 1.85], sport: [4.65, 1.84], suv: [4.9, 1.95],
-  "suv-large": [4.95, 2], "super-suv": [5.1, 2.02], supercar: [4.52, 1.93], cybertruck: [5.68, 2.03],
+  "suv-large": [4.95, 2], "super-suv": [5.1, 2.02], supercar: [4.52, 1.93], cybertruck: [5.68, 2.03], flyer: [4.86, 1.96],
 };
 /** The real size of a car in the garage (lib3d/vehicleDims.js); a car with no measurements falls back to the size of its body shape. */
 export const garageVehicleSize = (id) => { const d = VEHICLE_DIMS[id]; if (d) return { id, length: d.length, width: d.width, height: d.height, wheelbase: d.wheelbase }; const c = carById(id), [length, width] = SHAPES[c?.shape] ?? [4.5, 1.85]; return { id, length, width, height: 1.5, wheelbase: length * 0.6 }; };

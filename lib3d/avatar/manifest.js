@@ -70,5 +70,6 @@ export const ANIMATIONS = {
   lookAround: ["look_around", "lookaround", "idle_look"],
   no: ["no", "headshake", "head_shake", "disagree"],
   listen: ["listen"], write: ["write"], eatSit: ["eat_sit"], shop: ["shop", "browse"], work: ["work"], pray: ["pray"], present: ["present", "teach"], sleepLie: ["sleep_lie"],
+  danceBounce: ["dance_bounce", "dancebounce"], danceSway: ["dance_sway", "dancesway"], danceLegwork: ["dance_legwork", "zanku", "dancelegwork"], danceOblee: ["dance_oblee", "oblee", "danceoblee"], // club dances (built in code; an authored clip with one of these names replaces ours)
   idleEmote: ["idle_emote", "emote_idle", "idle_dance", "belle"], // the automatic emote when the player has done nothing for a while (built in code if no clip is installed)
 };

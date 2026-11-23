@@ -51,6 +51,7 @@ const HANDLING = {
   "urus-2025":       { wheelbase: 3.003, steerMax: 0.52, latG: 8.0, yawLag: 0.09 },
   "huracan-2025":    { wheelbase: 2.62, steerMax: 0.52, latG: 9.4, yawLag: 0.07, reverseMax: 4 },
   "cybertruck-2024": { wheelbase: 3.80, steerMax: 0.50, latG: 6.0, yawLag: 0.13 },
+  "tesla-skyhawk-2026": { wheelbase: 2.90, steerMax: 0.52, latG: 8.2, yawLag: 0.08, flies: true },
   keke:              { wheelbase: 1.95, steerMax: 0.70, latG: 4.2, yawLag: 0.10, reverseMax: 2.5, reverseAccel: 1.2, steerSpeedRef: 7 },
   bus:               { wheelbase: 4.12, steerMax: 0.43, latG: 4.4, yawLag: 0.14, reverseMax: 3, reverseAccel: 1.2, steerSpeedRef: 9 },
 };

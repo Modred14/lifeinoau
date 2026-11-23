@@ -262,6 +262,7 @@ export async function createInteriorScene(container, c, opts = {}) {
   let alive = true,
     view = opts.view ?? "follow",
     pose = null,
+    dance = null, // the club dance clip names the player is dancing with (setDance); ends when they walk or start an activity
     route = null; // route: an automatic walk to a ring { pts, i, done(ok) }; pose: avatar clips to try while standing still (an activity is running)
   const own = (o) => {
     toDispose.push(o);
@@ -1240,6 +1241,27 @@ export async function createInteriorScene(container, c, opts = {}) {
   let chatSelf = null,
     duelSelf = null; // { i }: the player is squaring up to the lecturer at npc index i (see startDuel)
   const greets = new Map();
+  let partnerSelf = null; // { i, t }: dancing with the partner NPC at npc index i (club dance floors)
+  const PARTNER_SEC = 14; // how long a dance with a partner lasts, unless you walk away
+  function startPartner(i) {
+    const q = people.find((o) => o.i === i);
+    if (!q || !q.n.partner || q.partnered || q.chat || suspended || (act && !act.off) || cuffedNow || P.moving > 0.05) return;
+    if (partnerSelf) endPartner();
+    q.partnered = true;
+    partnerSelf = { i, t: 0 };
+    dance = ["danceBounce", "idleEmote"]; // the player's side of the dance; the same clip as hers, started on the same frame, so the two stay in time
+    opts.onPartnerDance?.({ name: q.n.studentName ?? "her", style: "bounce" });
+  }
+  function endPartner() {
+    const q = partnerSelf && people.find((o) => o.i === partnerSelf.i);
+    partnerSelf = null;
+    if (!q) return;
+    q.partnered = false;
+    if (q.base) {
+      setClip(q.av, q.base, { fade: 0.3 }); // back to dancing on her own
+      q.clip = q.base;
+    }
+  }
   function chatWith(i) {
     const p = people.find((q) => q.i === i);
     if (!p || p.chat) return;
@@ -1257,6 +1279,10 @@ export async function createInteriorScene(container, c, opts = {}) {
     if (suspended || !near || locked) return;
     if (near.h.action === "chat") {
       chatWith(near.h.npcIndex);
+      return;
+    }
+    if (near.h.action === "dancepartner") {
+      startPartner(near.h.npcIndex);
       return;
     }
     opts.onHub?.(near.h);
@@ -1279,7 +1305,7 @@ export async function createInteriorScene(container, c, opts = {}) {
       const av = await createNpc(
         lec
           ? lecturerSpec(lec.name, lec.difficulty)
-          : npcSpec(seed, { role, gender: hashSeed(seed) & 1 ? "F" : "M" }),
+          : npcSpec(seed, { role, gender: n.gender ?? (hashSeed(seed) & 1 ? "F" : "M") }),
       );
       if (!alive) {
         av.dispose();
@@ -1304,7 +1330,7 @@ export async function createInteriorScene(container, c, opts = {}) {
         tag.position.set(0, (av.height ?? 1.75) + 0.45, 0);
         av.root.add(tag);
       }
-      if (n.social && !lec) {
+      if ((n.social || n.partner) && !lec) {
         const nm = studentName(seed),
           tg = new THREE.Sprite(
             own(
@@ -1462,6 +1488,24 @@ export async function createInteriorScene(container, c, opts = {}) {
           p.clip = p.base;
         }
       }
+      return;
+    }
+    if (p.partnered) {
+      // dancing with the player: she steps in close (she walks, she never jumps), faces them and dances in time with them
+      const dx = P.x - p.x,
+        dz = P.z - p.z,
+        d = Math.hypot(dx, dz);
+      if (d > 1.05) {
+        const k = Math.min(d - 1.0, 1.3 * dt);
+        p.x += (dx / d) * k;
+        p.z += (dz / d) * k;
+      }
+      p.yaw = turnTo(p.yaw, Math.atan2(dx, dz), dt * 8);
+      if (p.clip !== "danceBounce" && p.av.has?.("danceBounce")) {
+        setClip(p.av, "danceBounce", { fade: 0.25 });
+        p.clip = "danceBounce";
+      }
+      place(p);
       return;
     }
     if (p.mode === "talk") {
@@ -1886,6 +1930,17 @@ export async function createInteriorScene(container, c, opts = {}) {
       if (P.moving > 0.05 || !q || chatSelf.t > 4.5) chatSelf = null;
       else P.yaw = turnTo(P.yaw, Math.atan2(q.x - P.x, q.z - P.z), dt * 6);
     }
+    if (partnerSelf) {
+      partnerSelf.t += dt;
+      const q = people.find((o) => o.i === partnerSelf.i);
+      if (q && dance) P.yaw = turnTo(P.yaw, Math.atan2(q.x - P.x, q.z - P.z), dt * 8); // face her
+      if (partnerSelf.t > PARTNER_SEC && dance) {
+        dance = null;
+        opts.onDanceEnd?.();
+      }
+    }
+    if (dance && (P.moving > 0.05 || (act && !act.off) || cuffedNow)) { dance = null; opts.onDanceEnd?.(); }
+    if (partnerSelf && !dance) endPartner(); // however the dance ended, she goes back to dancing on her own // walking away, an activity or a custody step ends the dance
     if (avatar) {
       const want = cuffedNow
         ? P.moving > 0.05
@@ -1905,7 +1960,9 @@ export async function createInteriorScene(container, c, opts = {}) {
                 ? chatSelf.t < 1.8
                   ? "greet"
                   : "talk"
-                : act && !act.off
+                : dance
+                  ? (dance.find((n) => avatar.has?.(n)) ?? "idle")
+                  : act && !act.off
                   ? clipAt(act.plan, act.t, (n) => avatar.has?.(n))
                   : pose && !acting
                     ? (pose.find((n) => avatar.has?.(n)) ?? "idle")
@@ -1916,7 +1973,7 @@ export async function createInteriorScene(container, c, opts = {}) {
         avatar.play(want, { fade: act ? 0.4 : 0.25 })
       )
         cur = want;
-      if (pose && P.moving <= 0.05) avatar.setSpeed?.(1);
+      if ((pose || dance) && P.moving <= 0.05) avatar.setSpeed?.(1);
       else if (want !== "idle")
         avatar.setSpeed?.(
           Math.max(0.6, Math.min(1.6, P.moving * (P.run ? 1 : 1.05))),
@@ -1943,7 +2000,7 @@ export async function createInteriorScene(container, c, opts = {}) {
       let sp = null,
         sd = 2.0;
       for (const q of people) {
-        if (!q.n.social || q.f !== P.fl || q.chat) continue;
+        if (!(q.n.social || q.n.partner) || q.f !== P.fl || q.chat || q.partnered) continue;
         const d = Math.hypot(q.x - P.x, q.z - P.z);
         if (d < sd) {
           sd = d;
@@ -1953,9 +2010,9 @@ export async function createInteriorScene(container, c, opts = {}) {
       if (sp) {
         sp.hubObj ??= {
           h: {
-            action: "chat",
+            action: sp.n.partner ? "dancepartner" : "chat",
             npcIndex: sp.i,
-            label: `Greet ${sp.n.studentName ?? "student"}`,
+            label: sp.n.partner ? `Dance with ${sp.n.studentName ?? "her"}` : `Greet ${sp.n.studentName ?? "student"}`,
             x: 0,
             z: 0,
           },
@@ -2180,6 +2237,13 @@ export async function createInteriorScene(container, c, opts = {}) {
     get incident() {
       return inc ? { id: inc.id, outcome: inc.outcome } : null;
     },
+    /** Start (a list of clip names, tried in order) or stop (null) the player's club dance. Returns whether it started: only while standing still and not in an activity. */
+    setDance(list) {
+      if (!list?.length) { dance = null; return true; }
+      if (P.moving > 0.05 || (act && !act.off)) return false;
+      dance = list; return true;
+    },
+    get dancing() { return !!dance; },
     setPose(list, id) {
       pose = list?.length ? list : null;
       endAct();

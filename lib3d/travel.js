@@ -20,6 +20,8 @@ import { sightBlocked } from "./destinations.js";
 import { SWING } from "./doorway.js";
 import { createTripFlow } from "./tripflow.js";
 import { portalFor } from "./buildingPortals.js";
+import { createHomeCompound } from "./homeCompound.js";
+import { gateStand } from "./homeSite.js";
 import { ROAD_TOP } from "./roadsurface.js";
 import { wheelContacts } from "./vehiclepose.js";
 import { rigSuspension, leanBody } from "./suspension.js";
@@ -31,7 +33,7 @@ import { lookKey } from "../lib/look.js";
 import { paintBase, drawMini, drawPreview } from "./minimap.js";
 import { createGuide } from "./tripguide.js";
 import { CAM, PITCH, clamp, ease, frame, clearBack, followBack, zoomByPinch, zoomByWheel, angDiff, followYaw } from "./tripcam.js";
-import { createKeys, isActKey } from "./tripkeys.js";
+import { createKeys, isActKey, isFlyKey } from "./tripkeys.js";
 import { stepKeySteer } from "./keysteer.js";
 import { attachTripPointer } from "./tripinput.js";
 
@@ -111,6 +113,13 @@ export async function startTrip(env, o) {
   Object.assign(light.sun.shadow.camera, { left: -14, right: 14, top: 14, bottom: -14 }); light.sun.shadow.camera.updateProjectionMatrix();
   const disposers = []; let alive = true;
 
+  // ---- the player's own home compound, standing on its lot beside a real road: one world, so the door, the yard, the garage and the street need no loading between them ----
+  let home = null;
+  if (o.home) {
+    try { home = createHomeCompound({ parent: world, svc, room: o.home.room, items: o.home.items ?? [], vehicles: o.home.vehicles ?? [], anchor: fromP, seed: o.home.seed ?? "", activeId: o.home.activeId ?? null }); } catch (e) { console.warn("home compound", e); home = null; }
+    if (home) { disposers.push(() => home.dispose()); const e = home.portal.exit; plan = { ...plan, B: home.B, goal: { x: e.x, z: e.z }, start: { x: e.x, z: e.z } }; B = plan.B; }
+  }
+
   // ---- the guide: a ribbon of chevrons on the way to go, and the beam over the destination ----
   // The route is NEVER the one planned when the trip began: lib3d/tripguide.js works it out from where the traveller is now to where they are going, again whenever the leg changes
   // (on foot -> in the vehicle -> on foot) or they leave the route, and shows only the part still ahead. This block only draws it.
@@ -120,7 +129,7 @@ export async function startTrip(env, o) {
   const ring = new THREE.Mesh(new THREE.RingGeometry(2.2, 2.8, 40), new THREE.MeshBasicMaterial({ color: "#3fd08a", transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.set(B.front.x, 0.25, B.front.z); world.add(ring);
   disposers.push(() => { beam.geometry.dispose(); beam.material.dispose(); ring.geometry.dispose(); ring.material.dispose(); });
   // the door is drawn only for a place with a door to open (an enterable building): never for an open-air place, a statue or a gate
-  let door = null; const setDoor = () => { door?.dispose(); door = B.building && enterable ? buildDoor(B.door) : null; if (door) world.add(door.group); }; setDoor(); disposers.push(() => door?.dispose());
+  let door = null; const setDoor = () => { door?.dispose(); door = B.building && enterable && !home ? buildDoor(B.door) : null; if (door) world.add(door.group); }; setDoor(); disposers.push(() => door?.dispose());
   // where to stop your own car: a green bay on the kerb at the drop-off (drawn only while you drive)
   const bay = new THREE.Group(), bayMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 5.2).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#3fd08a", transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 }));
   bay.add(bayMesh); bay.position.y = 0.2; bay.visible = false; world.add(bay); disposers.push(() => { bayMesh.geometry.dispose(); bayMesh.material.dispose(); });
@@ -163,7 +172,8 @@ export async function startTrip(env, o) {
   let hornWas = false;
 
   // ---- the journey ----
-  const flow = createTripFlow({ svc, sim: traffic.sim }, { plan, enterable, dims: vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width, id: vehicle.id, seat: vehicle.seat, driver: vehicle.driver, wheels: wheelContacts(vehicle) } : null, rnd: Math.random, free: !!o.free, spawn: o.spawn ?? null, onArrive: () => o.onArrive?.() ?? true, onEnter: () => o.onEnter?.(), holdEnter: () => !!o.holdEnter?.(), roam: o.roam ? portalFor(svc, toP) : null, onEnd: (why) => { if (alive) o.onEnd?.(why); }, onNotice: (m) => o.onNotice?.(m) });
+  const homeParked = () => { const d = vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width } : { len: 4.5, wid: 1.85 }; if (o.spawn) return { ...gateStand(home.site), ...d }; const a = home.activeSlot; return a ? { x: a.x, z: a.z, hx: a.hx, hz: a.hz, len: a.len, wid: a.wid } : null; };
+  const flow = createTripFlow({ svc, sim: traffic.sim }, { plan, enterable, dims: vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width, id: vehicle.id, seat: vehicle.seat, driver: vehicle.driver, wheels: wheelContacts(vehicle) } : null, rnd: Math.random, free: !!o.free, spawn: o.spawn ?? null, onArrive: () => o.onArrive?.() ?? true, onEnter: () => o.onEnter?.(), holdEnter: () => !!o.holdEnter?.(), roam: o.roam ? (home ? home.portal : portalFor(svc, toP)) : null, drivable: home?.drivable ?? null, parked: home ? homeParked() : null, onEnd: (why) => { if (alive) o.onEnd?.(why); }, onNotice: (m) => o.onNotice?.(m) });
   disposers.push(() => flow.dispose()); setBay();
   const P = flow.person, F = flow.state, WK = flow.walker;
   let camYaw = Math.atan2(-(plan.start.x - (plan.doorIn?.x ?? plan.goal.x)), -(plan.start.z - (plan.doorIn?.z ?? plan.goal.z))), userYaw = 0, userPitch = 0, userAt = -9, time = 0, hornT = 0, lastState = 0, camBack = CAM.walk.back, zoomW = 1, zoomV = 1, leadX = 0, leadZ = 0;
@@ -191,16 +201,16 @@ export async function startTrip(env, o) {
   const driving = () => F.phase === "drive";
   // One-shot buttons (the HUD buttons and the E / F keys) are read once and cleared every frame, so a press is never seen twice and never lingers into a later phase.
   const taken = (n) => { const v = !!input[n]; input[n] = false; return v; };
-  const keyHit = new Set(), kh = (e) => { if (isActKey(e)) keyHit.add("act"); };
+  const keyHit = new Set(), kh = (e) => { if (isActKey(e)) keyHit.add("act"); if (isFlyKey(e)) keyHit.add("fly"); };
   window.addEventListener("keydown", kh); disposers.push(() => window.removeEventListener("keydown", kh));
   // The keys steer through lib3d/keysteer.js: a key moves the steering towards full lock at a limited rate and lets it back to straight, like a wheel, instead of throwing it to full lock.
   let keySteer = 0;
   const read = (dt = 0) => {
-    const kk = kb.read(), drive = driving(), afoot = F.phase === "afoot", act = keyHit.delete("act"), exitBtn = taken("exit"), enterBtn = taken("enter"), closeBtn = taken("close"), doorBtn = taken("door"), goInBtn = taken("goin"), stopBtn = taken("stop"), atDoor = F.phase === "door";
+    const kk = kb.read(), drive = driving(), afoot = F.phase === "afoot", act = keyHit.delete("act"), exitBtn = taken("exit"), enterBtn = taken("enter"), closeBtn = taken("close"), flyBtn = taken("fly"), flyKey = keyHit.delete("fly"), doorBtn = taken("door"), goInBtn = taken("goin"), stopBtn = taken("stop"), atDoor = F.phase === "door";
     keySteer = drive ? stepKeySteer(keySteer, kk.steer, dt) : 0;
     const wheel = Math.max(-1, Math.min(1, (input.steer ?? 0) + keySteer));   // the on-screen wheel and the keys add up; +1 is a right turn
     return { fwd: Math.max(kk.up, input.jy > 0 ? input.jy : 0), back: Math.max(kk.down, input.jy < 0 ? -input.jy : 0), right: Math.max(kk.right, input.jx > 0 ? input.jx : 0) - Math.max(kk.left, input.jx < 0 ? -input.jx : 0), run: !!kk.run || !!input.run,
-      gas: drive ? Math.max(kk.up, input.gas ?? 0) : 0, brake: drive ? Math.max(kk.down, kk.space, input.brake ?? 0) : 0, steer: drive ? wheel : 0,
+      gas: drive ? Math.max(kk.up, input.gas ?? 0) : 0, brake: drive ? Math.max(kk.down, kk.space, input.brake ?? 0) : 0, steer: drive ? wheel : 0, fly: drive && (flyBtn || flyKey), climb: drive ? Math.max(-1, Math.min(1, kk.climb + (input.climb ?? 0))) : 0,
       exit: drive && (exitBtn || act), enter: afoot && (enterBtn || (act && F.canEnter)), close: afoot && (closeBtn || (act && !F.canEnter && F.canClose)),
       door: atDoor && (doorBtn || (act && F.door === "closed")), goIn: atDoor && (goInBtn || (act && F.door === "open")), stop: stopBtn };   // Open Door / Go in / stop the automatic walk: the buttons, and E or F for the door
   };
@@ -235,7 +245,7 @@ export async function startTrip(env, o) {
       if (avatar.walker) avatar.walker.pose((avatar.walker._p = (avatar.walker._p ?? 0) + sp * dt * 2.4), Math.min(1, sp / 1.2));
     }
   }
-  let lastVx = null, lastVz = null, lastYaw = null, lastSpeed = null, steerShown = 0;
+  let fanK = 0, lastVx = null, lastVz = null, lastYaw = null, lastSpeed = null, steerShown = 0;
   vehicle?.root && (vehicle.root.rotation.order = "YXZ");
   function drawVehicle(dt) {
     if (!vehicle) return; const v = flow.vehicle; vehicle.root.visible = !!v && !(flow.hero?.done);
@@ -244,6 +254,7 @@ export async function startTrip(env, o) {
     const road = own ? v.road : null;
     // the root carries the RIDE (it puts the tyres on the road: height, pitch and roll from the wheels' contacts, lib3d/vehiclepose.js); the body leans on its own, about the tyres' ground level (lib3d/suspension.js)
     vehicle.root.position.set(v.x, ROAD_TOP + (road ? road.y : 0), v.z); vehicle.root.rotation.set(road ? -road.pitch : 0, yaw, road ? road.roll : 0);
+    if (own && vehicle.flight) { const want = flow.state?.airborne ? 1 : 0; fanK += Math.max(-dt / 1.2, Math.min(dt / 1.4, want - fanK)); vehicle.flight.deploy(fanK); vehicle.flight.spin(dt, flow.state?.fanSpin ?? 0); }   // the lift fans fold out for flight and away again after landing
     if (own) leanBody(vehicle, v.pitch ?? 0, v.roll ?? 0); // the front wheels: your own car shows its steering; every other vehicle steers by how fast it is turning (the bicycle model, from its heading change)
     let steer = 0, braking = false;
     if (own) { steer = v.steer; braking = (v.brk ?? 0) > 0.08 || (v.reversing && Math.abs(v.v) < 0.5); }
@@ -310,7 +321,8 @@ export async function startTrip(env, o) {
     // a vehicle hit somebody (an NPC, you, another player): the sound by how hard, and the page told (o.onHit), for a message or a log
     for (const ev of traffic.sim.takeEvents()) { if (Math.hypot(ev.x - camPt.x, ev.z - camPt.z) < 70) playSound(ev.kind === "launch" ? "crash" : ev.kind === "knockdown" ? "thump" : "bump"); try { o.onHit?.(ev); } catch { /* the page's handler must never stop the trip */ } }
     if (inp.stop) flow.stopAuto(); if (inp.door) flow.pressDoor(); if (inp.goIn) flow.enterNow();
-    flow.update(dt, { dx: ax, dz: az, mag: m, run: inp.run, gas: inp.gas, brake: inp.brake, steer: inp.steer, exit: inp.exit, enter: inp.enter, close: inp.close });
+    home?.update(dt, flow.walker.x, flow.walker.z);
+    flow.update(dt, { dx: ax, dz: az, mag: m, run: inp.run, gas: inp.gas, brake: inp.brake, steer: inp.steer, exit: inp.exit, enter: inp.enter, close: inp.close, fly: inp.fly, climb: inp.climb });
     lastPhase = F.phase;
     // sound: where the listener is and which way the view faces, what you are riding or driving, who is near. The horn is the held HUD button / H key (input.horn).
     { const vv = inVehNow() ? flow.vehicle : null, who = vv ?? P, sp = vv ? (vv.v ?? 0) : WK.speed, hx = who.hx ?? 0, hz = who.hz ?? 1, horn = !!input.horn && driving();
@@ -327,7 +339,7 @@ export async function startTrip(env, o) {
     if (gd.show && !flow.free) { rb.mesh.visible = true; if (gd.rev !== rbRev || time - rbAt > (gd.kind === "drive" ? 0.12 : 0.2)) { rbRev = gd.rev; rbAt = time; rb.set(gd.pts, gd.s, gd.kind === "walk" ? 1.3 : 2.4, gd.kind === "walk" ? "#4aa8ff" : "#2fe38a"); } rb.tex.offset.y -= dt * 1.6; } else rb.mesh.visible = false;
     const live = { x: pos.x, z: pos.z, hx: pos.hx, hz: pos.hz, route: { pts: gd.pts, len: gd.len }, mode: gd.kind === "walk" ? "trek" : "drive", dest: { x: B.front.x, z: B.front.z } }, mini = o.miniCanvas?.(), prev = o.previewCanvas?.();
     if (mini) drawMini(mini, base, live); if (prev) drawPreview(prev, base, live);
-    if (time - lastState > 0.1) { lastState = time; o.onState?.({ phase: F.phase, mode, auto, free: flow.free, eta: flow.free ? null : F.eta, left: flow.free ? null : F.eta, remain: Math.round(flow.remainMetres()), speed: Math.round(Math.abs(F.speed ?? 0) * 3.6), canHorn: mode === "car" && F.phase === "drive", ownCar: mode === "car" && !plan.driven, canExit: !!F.canExit, exiting: !!F.exiting, canEnter: !!F.canEnter, canClose: !!F.canClose, steerAngle: flow.own ? flow.own.steer : 0, gear: flow.own ? (flow.own.reversing || flow.own.v < -0.05 ? "R" : "D") : "", estimate: plan.secs, notice: F.notice, routeKind: gd.kind, routeLen: Math.round(gd.len), settling: F.pay === "pending" && ["door", "enter"].includes(F.phase), walking: F.phase === "approach" && WK.mode, autoWalk: WK.mode === "auto", parts: plan.parts,
+    if (time - lastState > 0.1) { lastState = time; o.onState?.({ phase: F.phase, mode, auto, free: flow.free, eta: flow.free ? null : F.eta, left: flow.free ? null : F.eta, remain: Math.round(flow.remainMetres()), speed: Math.round(Math.abs(F.speed ?? 0) * 3.6), canHorn: mode === "car" && F.phase === "drive", ownCar: mode === "car" && !plan.driven, canExit: !!F.canExit, exiting: !!F.exiting, canFly: !!F.canFly, airborne: !!F.airborne, alt: F.alt ?? 0, canEnter: !!F.canEnter, canClose: !!F.canClose, steerAngle: flow.own ? flow.own.steer : 0, gear: flow.own ? (flow.own.reversing || flow.own.v < -0.05 ? "R" : "D") : "", estimate: plan.secs, notice: F.notice, routeKind: gd.kind, routeLen: Math.round(gd.len), settling: F.pay === "pending" && ["door", "enter"].includes(F.phase), walking: F.phase === "approach" && WK.mode, autoWalk: WK.mode === "auto", parts: plan.parts,
         door: F.door, hasDoor: !!(B.building && enterable), canOpen: !!F.canOpen, canGoIn: !!F.canGoIn, auto: !!F.auto, to: curTo, turn: F.phase === "drive" && !flow.free ? turnTo() : null }); }
   });
 

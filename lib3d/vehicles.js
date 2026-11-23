@@ -184,7 +184,31 @@ export function makeCar(paint = "#1c1d21") { const v = buildCar(specById(FAMILY)
 export function makeVehicle(modelId, paint) {
   const car = carById(modelId);
   if (!car || !CAR_SPECS[car.id]) return makeCar(paint || undefined);
-  return buildCar(specById(car.id), car.fixedPaint ?? (paint || undefined), car.id);
+  const v = buildCar(specById(car.id), car.fixedPaint ?? (paint || undefined), car.id);
+  return car.flies ? attachFlyer(v) : v;
+}
+
+// ------------------------------------------------------------------ the flying car's lift fans
+/** Four ducted lift fans (a ring, two blades, a hub and a light-blue glow ring) on short arms, two a side, ahead of and behind the cabin. Stowed they slide in and shrink out of sight inside the
+ *  body, so a parked or road-going Skyhawk is the same size as the spec says; deployed they sit out from the flanks. Added to a finished car, never to the cached body geometry.
+ *  v.flight = { deploy(k) (0 stowed .. 1 out), deployed, spin(dt, rate) (rate 0..1 = fan speed), pods }. */
+export const FLY_POD = { x: 0.98, y: 0.97, z: 1.12, arm: 0.58, radius: 0.46 };
+function attachFlyer(v) {
+  const P = FLY_POD, ring = new THREE.TorusGeometry(P.radius, 0.04, 8, 28).rotateX(Math.PI / 2), glow = new THREE.TorusGeometry(P.radius - 0.07, 0.012, 6, 28).rotateX(Math.PI / 2);
+  const arm = new THREE.BoxGeometry(P.arm, 0.06, 0.14).translate(P.arm / 2, 0, 0), blade = new THREE.BoxGeometry(P.radius * 1.78, 0.012, 0.09), hub = new THREE.CylinderGeometry(0.06, 0.06, 0.05, 12);
+  const trim = K.MATS.trim(), dark = K.MATS.dark(), chrome = K.MATS.chrome(), lit = K.flat("#5ad1ff", { emissive: "#5ad1ff", emissiveIntensity: 1.4, roughness: 0.4 });
+  const pods = [], flight = { pods, k: 0, deployed: false, phase: 0, deploy, spin };
+  for (const side of [1, -1]) for (const dz of [1, -1]) {
+    const pivot = new THREE.Group(), body = new THREE.Group(), rotor = new THREE.Group();
+    pivot.position.set(side * P.x, P.y, dz * P.z); body.scale.x = side;   // side -1 is the mirror image: +x is the vehicle's left
+    const a = new THREE.Mesh(arm, trim), r = new THREE.Mesh(ring, trim), g = new THREE.Mesh(glow, lit); r.position.x = g.position.x = P.arm;
+    rotor.position.x = P.arm; for (const rot of [0, Math.PI / 2]) { const b = new THREE.Mesh(blade, dark); b.rotation.y = rot; rotor.add(b); } rotor.add(new THREE.Mesh(hub, chrome));
+    body.add(a, r, g, rotor); pivot.add(body); v.root.add(pivot); pods.push({ pivot, rotor, dir: (side * dz > 0 ? 1 : -1) });
+  }
+  function deploy(k) { const t = Math.max(0, Math.min(1, k)); flight.k = t; flight.deployed = t >= 0.999; for (const p of pods) { p.pivot.visible = t > 0.02; const s = 0.15 + 0.85 * t; p.pivot.scale.set(s, 0.15 + 0.85 * t, s); p.pivot.position.x = Math.sign(p.pivot.position.x || 1) * (FLY_POD.x - (1 - t) * 0.7); } }
+  function spin(dt, rate = 1) { if (!flight.k) return; flight.phase += dt * (6 + 70 * Math.max(0, Math.min(1, rate))) * flight.k; for (const p of pods) p.rotor.rotation.y = flight.phase * p.dir; }
+  deploy(0); v.flight = flight; v.flies = true; v.height = Math.max(v.height, FLY_POD.y + 0.1);
+  return v;
 }
 /** A keke napep: a green Bajaj three-wheeler with a black canopy, open at the sides. */
 export function makeKeke() { return buildKeke(); }

@@ -9,6 +9,7 @@ import { toast } from "@/lib/toast";
 import { playSound } from "@/lib/sound";
 import { confirmAction } from "@/lib/confirm";
 import { usePlayMode, setPlayMode } from "@/lib/ui";
+import { setDriveHandoff } from "@/lib/driveHandoff.js";
 import { game, roomStore, useStore, begin, finish, cash, canAfford } from "@/lib/gameStore";
 import { ITEMS, MAX_ITEMS, ownedCount, roomScore, sellKobo, priceKobo, canGoOutside, isFixture, isOutdoor } from "@/lib/furniture.js";
 import { roomFor, autoPlace, isOutside } from "@/lib/room.js";
@@ -507,6 +508,14 @@ export default function GameHome({
         >
           <Icon name={outdoors ? "home" : "farm"} size={18} />
           <span>{outdoors ? "GO INSIDE" : "GO OUTSIDE"}</span>
+        </button>
+      )}
+
+      {/* from the compound on to the street: the map draws the same house, yard and parked vehicles on the same lot, so they go on walking from where they stand */}
+      {!buying && !sleeping && !driving && outdoors && (
+        <button type="button" className="gx-out gx-street" onClick={() => { const ch = game.get()?.character; setDriveHandoff({ modelId: ch?.activeCar ?? "", color: ch?.activeCarColor ?? "", v: 0, walk: true }); router.push("/map"); }}>
+          <Icon name="map" size={18} />
+          <span>TO THE STREET</span>
         </button>
       )}
 

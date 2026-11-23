@@ -176,6 +176,26 @@ export const CAR_SPECS = {
     ],
     seat: { x: -0.5, y: 0.78, z: -0.9 }, driver: { x: 0.5, y: 0.78, z: 0.55 },
   },
+  // ---------------------------------------------------------------- Tesla Skyhawk Flying Car (2026): a low two-seat electric coupe with a glass canopy; the four lift-fan pods fold out of its sides (lib3d/vehicles.js, attachFlyer)
+  "tesla-skyhawk-2026": {
+    name: "Tesla Skyhawk", ref: "#e9ebef", accent: "#5ad1ff", L: 4.86, W: 1.96, H: 1.31, zf: 1.45, zr: -1.45, wr: 0.34, tw: 0.255, wheel: { style: "aero", color: "#15171a" }, yb: 0.13, gap: 0.04, bevel: 0.07,
+    upper: [[-2.2, 0.13], [-2.4, 0.3], [-2.43, 0.55], [-2.38, 0.78], [-2.2, 0.9], [-1.7, 0.95], [-1.45, 0.96], [0.7, 0.95], [0.82, 0.98], [1.4, 0.88], [2.0, 0.74], [2.35, 0.58], [2.43, 0.42], [2.4, 0.25], [2.3, 0.13]],
+    warp: { y1: 0.4, y2: 0.96, tum: 0.12, sillY: 0.25, sill: 0.06, nz0: 1.4, nCut: 0.36, nTaper: 0.16, nRnd: 2.0, tz0: 1.3, tCut: 0.3, tTaper: 0.12 }, doorLow: 0.2, sillTrim: 0.2,
+    pickLower: (cx, cy, cz, nx, ny, nz) => (ny < -0.55 || (cy < 0.2 && Math.abs(nx) > 0.4) ? "trim" : cy < 0.3 && Math.abs(cz) > 2.0 && Math.abs(nz) > 0.4 ? "accent" : "paint"),
+    cabin: { pts: [[-1.75, 0.92], [-1.75, 0.98], [-1.1, 1.27], [-0.7, 1.31], [0.0, 1.305], [0.35, 1.22], [1.0, 0.93], [1.0, 0.9]], hw: 0.8, y0: 0.94, y1: 1.31, tum: 0.3, crown: 0.03, fz0: 0.2, fCut: 0.08, rz0: -1.2, rCut: 0.08 },
+    win: [[-0.2, 0.78], [-1.3, -0.3]], screens: { f: [[1.0, 0.93], [0.35, 1.22]], r: [[-1.75, 0.98], [-1.1, 1.27]] },
+    doors: { left: [-0.25, 0.85], right: [-0.25, 0.85], extra: [] }, mirror: { z: 0.78, drop: 0.0, y: 0.99, k: "trim" },
+    decals: [
+      { k: "lampF", m: 1, s: 1, poly: lamp(0.34, 0.86, 0.6, 0.67, 0.03) }, { k: "trim", m: 0, s: 1, depth: 0.05, poly: trap(0.2, 0.34, 0.5, 0.62) }, { k: "chrome", m: 0, s: 1, depth: 0.07, poly: disc(0, 0.5, 0.035) },
+      { k: "accent", m: 1, s: 1, depth: 0.05, poly: [[0.45, 0.16], [0.9, 0.2], [0.9, 0.23], [0.45, 0.19]] }, { k: "lampR", m: 0, s: -1, depth: 0.06, poly: bar(0.82, 0.72, 0.05) },
+      { k: "trim", m: 0, s: -1, poly: bar(0.66, 0.2, 0.26) }, plate(0.4, 0.26, 0.13),
+    ],
+    extras: ({ parts, K, F, lowX }) => {
+      parts.add("trim", K.surfBox(1.5, 0.03, 0.3, 0, 0.99, -2.1, F, [6, 1, 1]));                       // the flush ducktail spoiler
+      for (const side of [1, -1]) parts.add("accent", K.sidePatch([[-0.9, 0.36], [0.9, 0.36], [0.9, 0.385], [-0.9, 0.385]], { xOf: lowX, side, lift: 0.007 }));   // the light-blue rocker line
+    },
+    seat: { x: -0.4, y: 0.42, z: -0.25 }, driver: { x: 0.4, y: 0.42, z: -0.25 },
+  },
 };
 
 /** The OAU shuttle bus: a white Dongfeng C-series minibus (4.50 x 1.68 x 1.96 m, 3.05 m wheelbase, as in the reference photograph) with a sliding door on the kerb (right) side. */

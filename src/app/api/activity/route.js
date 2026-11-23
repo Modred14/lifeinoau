@@ -1,11 +1,11 @@
 // src/app/api/activity/route.js
 // app/api/activity/route.js: building activities (lib/activityService.js). GET = the rings of the building you are in and what you can do now.
-// POST { op: "report" | "start" | "finish" | "cancel", ... }. The server checks where you are, the clock, the limits and the fee; nothing sent here decides a reward.
+// POST { op: "report" | "dance" | "start" | "finish" | "cancel", ... }. The server checks where you are, the clock, the limits and the fee; nothing sent here decides a reward.
 import { PrismaClient } from "@prisma/client";
 import { getUserId } from "@/lib/auth";
 import { allowed, tooMany } from "@/lib/ratelimit";
 import { GameError } from "@/lib/gameService";
-import { status, report, startActivity, finishActivity, cancelActivity } from "@/lib/activityService";
+import { status, report, setDance, startActivity, finishActivity, cancelActivity } from "@/lib/activityService";
 export const dynamic = "force-dynamic"; // never cache API responses
 const db = (globalThis.db ??= new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } }));
 const fail = (e) => {
@@ -27,6 +27,10 @@ export async function POST(req) {
     if (b.op === "report") { // the scene reports a position every few seconds: a generous limit of its own
       if (!(await allowed(db, "actpos:" + uid, 40, 60_000))) return tooMany();
       return Response.json(await report(db, uid, b));
+    }
+    if (b.op === "dance") { // free and renewed every few seconds while dancing: a limit of its own, so it never eats the activity budget
+      if (!(await allowed(db, "actdance:" + uid, 30, 60_000))) return tooMany();
+      return Response.json(await setDance(db, uid, { style: b.style ?? null, x: b.x, z: b.z, floor: b.floor }));
     }
     if (!(await allowed(db, "act:" + uid, 40, 60_000))) return tooMany();
     if (b.op === "start") return Response.json(await startActivity(db, uid, { hubId: String(b.hubId ?? ""), requestId: b.requestId, x: b.x, z: b.z, floor: b.floor, param: typeof b.param === "string" ? b.param.slice(0, 20) : undefined }));

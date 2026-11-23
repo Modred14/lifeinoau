@@ -16,6 +16,8 @@ import * as THREE from "three";
 import { boneKey } from "./manifest.js";
 import { bake, legs, arms, spine, NEED, TAU } from "./npcClips.js";
 import { POLICE_CLIPS, POLICE_SEATED } from "./policeClips.js";
+import { DANCE_CLIPS } from "./danceClips.js";
+import { resolveClip } from "./animation.js";
 
 const wave = (ps, k = 1) => Math.sin(ps * k);
 
@@ -163,7 +165,7 @@ const clips = {
     spine(S, -0.01 + 0.012 * br, 0.04, 0);
   }),
 };
-Object.assign(clips, POLICE_CLIPS); // officer and custody clips (policeClips.js) are baked and shared the same way
+Object.assign(clips, POLICE_CLIPS, DANCE_CLIPS); // club dances (danceClips.js) too; // officer and custody clips (policeClips.js) are baked and shared the same way
 const SEATED = new Set(["listen", "write", "type", "read", "eatSit", ...POLICE_SEATED]);
 
 const cache = new Map();
@@ -183,6 +185,6 @@ export function activityClips(root, gender = "F", existing = []) {
       } finally { root.position.copy(keep.p); root.quaternion.copy(keep.q); root.scale.copy(keep.s); root.updateMatrixWorld(true); }
     }
   }
-  return cache.get(gender).filter((c) => !have.has(c.name.toLowerCase())).map((c) => c.clone());
+  return cache.get(gender).filter((c) => !have.has(c.name.toLowerCase()) && !(c.name in DANCE_CLIPS && resolveClip(existing, c.name))).map((c) => c.clone()); // a dance the model already has under any alias (manifest.js) stays the artist's
 }
 export const ACTIVITY_CLIP_NAMES = Object.keys(clips);
