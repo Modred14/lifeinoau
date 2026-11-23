@@ -430,7 +430,7 @@ export default function SettingsScreen({ onClose, onLogout, loggingOut }) {
         <Slider id="sx-sfx" title="Effects volume" value={draft.audio.sfxVolume} disabled={!draft.audio.sfx} onChange={setPref("audio", "sfxVolume")} />
         <p className="sx-foot">{!draft.audio.music && !draft.audio.sfx ? "The game is silent." : "Changes play at once so you can hear them."} Browsers start sound after your first tap.</p>
       </Card>
-      <Card title="Vehicles and town" note="Engines, horns, traffic, the sound of the town and the car radio. Each has its own volume and mute." icon="ride">
+      <Card title="Vehicles and town" note="Engines, horns, traffic and the sound of the town. Each has its own volume and mute. The car radio plays at a fixed level and follows the master volume." icon="ride">
         <Slider id="sx-master" title="Master volume" value={draft.audio.masterVolume} disabled={draft.audio.masterMute} onChange={setPref("audio", "masterVolume")} />
         <Toggle title="Mute everything" note="Music, effects, vehicles, town and radio" checked={draft.audio.masterMute} onChange={setPref("audio", "masterMute")} />
         <Slider id="sx-engine" title="Engine sounds (your vehicle)" value={draft.audio.engineVolume} disabled={draft.audio.engineMute} onChange={setPref("audio", "engineVolume")} />
@@ -447,7 +447,6 @@ export default function SettingsScreen({ onClose, onLogout, loggingOut }) {
         <Toggle title="Mute traffic" checked={draft.audio.trafficMute} onChange={setPref("audio", "trafficMute")} />
         <Slider id="sx-town" title="Town ambience (people, birds, surroundings)" value={draft.audio.townVolume} disabled={draft.audio.townMute} onChange={setPref("audio", "townVolume")} />
         <Toggle title="Mute town ambience" checked={draft.audio.townMute} onChange={setPref("audio", "townMute")} />
-        <Slider id="sx-radio" title="Car radio volume" value={draft.audio.radioVolume} disabled={draft.audio.masterMute} onChange={setPref("audio", "radioVolume")} />
         <p className="sx-foot">The radio is switched on and off in the car. On iPhone and iPad the radio follows the device volume.</p>
       </Card>
     </>),

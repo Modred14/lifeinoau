@@ -14,4 +14,14 @@ ok("the radio button keeps its size in the horn / radio / exit row (never squeez
 ok("a phone upright clears the pedal stack; a phone on its side stops before the pedals", /max-width: 599px\) and \(min-height: 521px\) \{ \.th\[data-phase="drive"\] \{ --cr-clear: calc\(var\(--th-bottom\) \+ var\(--th-gas-h\)/.test(css) && /--cr-pedals-w/.test(css) && /orientation: landscape/.test(css));
 ok("the transport buttons can shrink to their column (the global button padding must not set their minimum width)", /\.th \.cr-ctl button \{[^}]*min-width: 0; padding: 0/.test(css) && /\.cr-ctl \{ display: grid; grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1\.4fr\) minmax\(0, 1fr\)/.test(css));
 ok("flat colours only: the radio stylesheet has no gradients", !/gradient/i.test(css));
+// ---- no radio volume control anywhere ----
+const settings = readFileSync(new URL("../components/SettingsScreen.js", import.meta.url), "utf8"), mixer = readFileSync(new URL("../lib/audio/mixer.js", import.meta.url), "utf8");
+ok("the radio panel has no volume slider, volume output, mute-icon row or setMix call", !/type="range"/.test(js) && !/radioVolume/.test(js) && !/<output/.test(js) && !/setMix/.test(js) && !/cr-vol/.test(js) && !/aria-label="Radio volume"/.test(js));
+ok("the radio stylesheet has no volume rules and no grid cell reserved for one", !/cr-vol/.test(css) && !/range-(thumb|track)/.test(css) && !/"scr vol"/.test(css) && !/ vol"/.test(css));
+ok("Settings has no car radio volume slider (and nothing in it reads or writes radioVolume)", !/sx-radio/.test(settings) && !/Car radio volume/.test(settings) && !/radioVolume/.test(settings));
+ok("the radio level is a constant in the mixer, not a setting", /export const RADIO_LEVEL = 0\.8/.test(mixer) && !/radioVolume/.test(mixer));
+ok("the play / pause control is still there (it is not the volume's business)", /aria-label=\{r\.on && !r\.paused \? "Pause" : "Play"\}/.test(js) && /setPlaying\(/.test(js));
+// ---- Nigerian stations, grouped, with logos ----
+ok("the station list is grouped by region and each station shows a logo (initials when it has none or it fails to load)", /groupStations\(r\.stations\)/.test(js) && /className="cr-region"/.test(js) && /function StationLogo/.test(js) && /onError=\{\(\) => setBad\(true\)\}/.test(js) && /cr-logo/.test(css));
+ok("no station is named in the panel code: it only shows what the (Nigerian-only) station file holds", !/somafm|radio paradise|\bkexp\b|\bnts\b/i.test(js));
 console.log(`car-radio-layout: ${n} checks passed`);

@@ -52,21 +52,21 @@
 .th .cr-ctl button:hover:not(:disabled) { background: #26345a; }
 .th .cr-ctl .cr-play { background: #fff; color: #161b26; border-color: #fff; }
 .th .cr-ctl button:disabled { opacity: 0.4; }
-.cr-vol { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; }
-.cr-vol input { width: 100%; min-width: 0; height: 32px; margin: 0; background: transparent; accent-color: var(--th-ok); touch-action: pan-y; cursor: pointer; -webkit-appearance: none; appearance: none; }
-.cr-vol input::-webkit-slider-runnable-track { height: 6px; border-radius: 99px; background: #2a3556; }
-.cr-vol input::-moz-range-track { height: 6px; border-radius: 99px; background: #2a3556; }
-.cr-vol input::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; margin-top: -8px; border-radius: 50%; border: 0; background: #fff; box-shadow: 0 0 0 3px rgba(63, 208, 138, 0.45); }
-.cr-vol input::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; border: 0; background: #fff; box-shadow: 0 0 0 3px rgba(63, 208, 138, 0.45); }
-.cr-vol input:focus-visible { outline: 2px solid var(--th-ok); outline-offset: 4px; border-radius: 6px; }
-.cr-vol output { min-width: 3ch; text-align: right; font-size: 0.8rem; color: #c8d0e0; }
 .cr-note { margin: 0; font-size: 0.76rem; color: var(--th-amber); }
 .th .cr-more { height: 36px; border-radius: 10px; background: transparent; color: #cfd7e8; border: 1px dashed rgba(255, 255, 255, 0.25); }
-.cr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: min(190px, 30dvh); min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
-.th .cr-list button { width: 100%; min-height: 44px; display: grid; gap: 1px; text-align: left; padding: 7px 12px; border-radius: 12px; background: #131c33; color: #fff; border: 1px solid transparent; }
+.cr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; max-height: min(190px, 30dvh); min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.cr-list ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cr-region { display: block; margin: 0 0 6px 2px; font: 700 0.7rem/1 var(--font-ui); letter-spacing: 0.06em; text-transform: uppercase; color: #8b96ad; }
+.th .cr-list button { width: 100%; min-height: 44px; display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: 10px; align-items: center; text-align: left; padding: 6px 12px 6px 8px; border-radius: 12px; background: #131c33; color: #fff; border: 1px solid transparent; }
 .th .cr-list button[aria-current="true"] { border-color: var(--th-ok); background: #14301f; }
+.cr-list button .cr-logo { grid-row: 1 / span 2; }
 .cr-list b, .cr-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cr-list b { font: 650 0.88rem/1.2 var(--font-ui); } .cr-list small { font-size: 0.74rem; color: #98a4bd; }
+/* a station's logo: a small white tile (logos are drawn for light backgrounds), or its initials when there is no logo or it does not load */
+.cr-logo { flex: none; width: 32px; height: 32px; border-radius: 8px; overflow: hidden; display: grid; place-items: center; background: #fff; color: #161b26; font: 800 0.72rem/1 var(--font-ui); letter-spacing: 0.02em; }
+.cr-logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.cr-logo[data-fallback="1"] { background: #26345a; color: #dbe3f5; }
+.cr-screen .cr-logo { width: 40px; height: 40px; border-radius: 10px; }
 .cr-key { margin: 0; font-size: 0.72rem; color: #7d89a3; display: none; }
 .cr-key kbd { background: #1b2540; border: 1px solid var(--th-line); border-radius: 5px; padding: 0 5px; margin: 0 2px; font: inherit; }
 @media (hover: hover) and (pointer: fine) { .cr-key { display: block; } }
@@ -81,7 +81,6 @@
   .th .cr-pw, .th .cr-x { width: 44px; height: 44px; }
   .th .cr-ctl button { height: 52px; }
   .th .cr-more { height: 44px; }
-  .cr-vol input { height: 44px; }
   .th .cr-chip { min-height: 44px; }
   .th .cr-list button { min-height: 48px; }
 }
@@ -89,7 +88,6 @@
 @media (max-width: 359px) {
   .th .cr { padding: 10px; gap: 8px; }
   .cr-screen { padding: 8px 10px; gap: 8px; } .cr-txt b { font-size: 0.9rem; } .cr-txt span { font-size: 0.74rem; }
-  .cr-vol { gap: 6px; } .cr-vol output { min-width: 0; font-size: 0.74rem; }
   .th .cr-ctl { gap: 6px; }
 }
 /* a tablet, or any window that is both wide and tall: more room, so bigger type and a taller station list */
@@ -111,7 +109,7 @@
   .th:has(.cr) .th-info { visibility: hidden; }
 }
 /* a phone on its side has hardly any height. The panel opens beside the trip card (top, to the right of it), as wide as the room before the pedals, and is a two-column grid when there is room
-   (the station on the left; play / volume on the right). It never reaches the pedals (bottom right), the map and speed (top right) or the bottom bar (--th-bottom already clears it). */
+   (the station on the left; the play / pause row on the right). It never reaches the pedals (bottom right), the map and speed (top right) or the bottom bar (--th-bottom already clears it). */
 @media (max-height: 520px) and (orientation: landscape) {
   .th {
     --cr-info-w: min(var(--th-info-w), 44vw - 66px);
@@ -128,8 +126,8 @@
 }
 /* roomy landscape phone: two columns (the right one is never narrower than three 44px buttons) */
 @media (max-height: 520px) and (orientation: landscape) and (min-width: 760px) {
-  .th .cr { grid-template-columns: minmax(0, 1fr) minmax(164px, 1.15fr); grid-template-areas: "hd hd" "scr ctl" "scr vol" "note note" "more more" "list list"; column-gap: 10px; align-items: stretch; }
-  .cr header { grid-area: hd; } .cr-screen { grid-area: scr; align-self: stretch; gap: 8px; } .cr-ctl { grid-area: ctl; gap: 6px; } .cr-vol { grid-area: vol; } .cr-note { grid-area: note; }
+  .th .cr { grid-template-columns: minmax(0, 1fr) minmax(164px, 1.15fr); grid-template-areas: "hd hd" "scr ctl" "note note" "more more" "list list"; column-gap: 10px; align-items: stretch; }
+  .cr header { grid-area: hd; } .cr-screen { grid-area: scr; align-self: stretch; gap: 8px; } .cr-ctl { grid-area: ctl; gap: 6px; } .cr-note { grid-area: note; }
   .th .cr-more { grid-area: more; } .cr-list { grid-area: list; }
 }
 /* a very short landscape phone: there is no room beside the card, so while the radio is open it takes the card's place (the card is back as soon as it closes); it stops before the pedals and above the steering buttons */
@@ -140,9 +138,9 @@
   .th .cr-chip { top: calc(var(--th-top) + 48px); }
 }
 @media (max-height: 380px) and (orientation: landscape) and (min-width: 540px) {
-  .th .cr { grid-template-columns: minmax(0, 1fr) minmax(164px, 1.15fr); grid-template-areas: "hd ctl" "scr vol" "note note" "more more" "list list"; column-gap: 10px; align-items: stretch; }
+  .th .cr { grid-template-columns: minmax(0, 1fr) minmax(164px, 1.15fr); grid-template-areas: "hd ctl" "scr scr" "note note" "more more" "list list"; column-gap: 10px; align-items: stretch; }
   .cr header { grid-area: hd; justify-content: space-between; } .cr header b { display: none; } /* power and close, the title would only be a few letters wide */
-  .cr-screen { grid-area: scr; gap: 8px; } .cr-ctl { grid-area: ctl; gap: 6px; } .cr-vol { grid-area: vol; } .cr-note { grid-area: note; }
+  .cr-screen { grid-area: scr; gap: 8px; } .cr-ctl { grid-area: ctl; gap: 6px; } .cr-note { grid-area: note; }
   .th .cr-more { grid-area: more; } .cr-list { grid-area: list; }
 }
 @media (prefers-reduced-motion: reduce) { .cr-eq[data-live="1"] b, .cr-spin { animation: none; } .cr-eq[data-live="1"] b { height: 70%; } }
