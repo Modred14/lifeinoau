@@ -76,7 +76,7 @@ const places = [{ x: 0, z: 0, kind: "shop" }, { x: 400, z: 0, kind: "hostel" }, 
 
 // ---- 5. the mixer ----
 ok("by default everything is on", channel("engine", MIX_DEFAULTS) === 1 && channel("horn", MIX_DEFAULTS) === 1 && channel("master", MIX_DEFAULTS) === 1);
-ok("the master scales every channel", Math.abs(channel("engine", { ...MIX_DEFAULTS, masterVolume: 50 }) - 0.5) < 1e-9 && Math.abs(channel("radio", { ...MIX_DEFAULTS, masterVolume: 50, radioVolume: 50 }) - 0.25) < 1e-9);
+ok("the master scales every channel", Math.abs(channel("engine", { ...MIX_DEFAULTS, masterVolume: 50 }) - 0.5) < 1e-9 && Math.abs(channel("radio", { ...MIX_DEFAULTS, masterVolume: 50 }) - 0.4) < 1e-9);   // the radio has a fixed 80 % level, scaled by the master
 ok("each channel is independent", channel("engine", { ...MIX_DEFAULTS, hornVolume: 0 }) === 1 && channel("horn", { ...MIX_DEFAULTS, hornVolume: 0 }) === 0);
 ok("a channel mute silences only that channel", channel("town", { ...MIX_DEFAULTS, townMute: true }) === 0 && channel("traffic", { ...MIX_DEFAULTS, townMute: true }) === 1);
 ok("muting the master silences all, the radio too", ["engine", "horn", "traffic", "town", "radio", "master"].every((c) => channel(c, { ...MIX_DEFAULTS, masterMute: true }) === 0));
@@ -84,10 +84,11 @@ console.log(`${n} vehicle-audio checks passed`);
 
 // ---- 6. the audio settings are saved and validated like every other setting ----
 { const { SETTING_DEFAULTS, cleanSettings } = await import("../lib/settings.js"), d = SETTING_DEFAULTS.audio;
-  ok("every volume and mute has a default", ["masterVolume", "engineVolume", "hornVolume", "trafficVolume", "townVolume", "radioVolume", "masterMute", "engineMute", "hornMute", "trafficMute", "townMute", "hornStyle"].every((k) => k in d));
+  ok("every volume and mute has a default", ["masterVolume", "engineVolume", "hornVolume", "trafficVolume", "townVolume", "masterMute", "engineMute", "hornMute", "trafficMute", "townMute", "hornStyle"].every((k) => k in d));
   ok("the old settings are untouched", d.music === true && d.sfx === true && d.musicVolume === 100 && d.sfxVolume === 100);
-  const c = cleanSettings({ audio: { masterVolume: 150, hornVolume: -5, radioVolume: "loud", hornStyle: "nope", engineMute: true, trafficMute: "yes" } }).audio;
-  ok("volumes are clamped to 0..100 and junk falls back to the default", c.masterVolume === 100 && c.hornVolume === 0 && c.radioVolume === d.radioVolume);
+  const c = cleanSettings({ audio: { masterVolume: 150, hornVolume: -5, radioVolume: 0, hornStyle: "nope", engineMute: true, trafficMute: "yes" } }).audio;
+  ok("volumes are clamped to 0..100 and junk falls back to the default", c.masterVolume === 100 && c.hornVolume === 0);
+  ok("the radio has no volume setting any more: it is not a default, and a radioVolume saved by an older version is dropped", !("radioVolume" in d) && !("radioVolume" in c));
   ok("an unknown horn style falls back to automatic; a real boolean is kept; a non-boolean is ignored", c.hornStyle === "auto" && c.engineMute === true && c.trafficMute === false);
   ok("every horn style the Settings list offers is accepted", ["auto", "standard", "deep", "bright", "air"].every((h) => cleanSettings({ audio: { hornStyle: h } }).audio.hornStyle === h)); }
 console.log(`${n} vehicle-audio checks passed (with settings)`);

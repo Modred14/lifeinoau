@@ -1,5 +1,8 @@
 // tools/radio/verify-stations.mjs
-// Decides which radio stations may be in the game. A station is added ONLY if its stream really works, checked here, from a machine with normal internet access:
+// A quick, no-browser check of radio streams: do they answer with real audio bytes? It is the first half of tools/radio/verify-browser.mjs, which is what admits a station to the game (by playing
+// it in a real browser: an HTTP 200 and audio-looking bytes still do not prove that it plays). LifeinOAU's radio is NIGERIAN ONLY: lib/radio/stations.js rejects any other country.
+// The build runs this with --check --write --soft: it re-checks the stations already in the game, removes the ones that are definitely gone, and NEVER adds a candidate.
+// Usage, from a machine with normal internet access:
 //
 //   node tools/radio/verify-stations.mjs                 check every candidate in tools/radio/candidates.json and print a report (changes nothing)
 //   node tools/radio/verify-stations.mjs --write         ...and put the ones that pass into public/data/radio-stations.json (existing entries are re-checked too)
@@ -58,7 +61,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const dead = (why) => /^HTTP (404|410)\b/.test(why) || /not MP3, AAC or Ogg/.test(why);   // definitely gone, as opposed to a network hiccup, a timeout or a region block
   const results = await Promise.all(all.map((s) => check(s, { allowHttp: args.has("--allow-http") })));   // all streams at once: the whole check takes about one timeout, not one per station
   all.forEach((s, i) => { const r = results[i]; console.log(`${r.ok ? "PASS" : "FAIL"}  ${s.id.padEnd(22)} ${r.ok ? `${r.format} · ${r.meta === "icy" ? "track info" + (r.title ? ` ("${r.title.slice(0, 40)}")` : "") : "no track info"}` : r.why}`);
-    if (r.ok) { const clean = cleanStation({ ...s, format: r.format, meta: r.meta, verifiedAt: new Date().toISOString().slice(0, 10) }); if (clean) { pass.push(clean); out.push(clean); } else fail.push([s.id, "incomplete entry (needs id, name, url)"]); } else { fail.push([s.id, r.why]); if (soft && had.has(s.id) && !dead(r.why)) { const kept = cleanStation(s); if (kept) { out.push(kept); console.log(`      kept ${s.id}: the failure may be temporary (${r.why})`); } } } });
+    if (r.ok) { const clean = cleanStation({ ...s, format: r.format, meta: r.meta, verifiedAt: new Date().toISOString().slice(0, 10) }); if (clean) { pass.push(clean); out.push(clean); } else fail.push([s.id, "not a valid NIGERIAN station entry (needs id, name, url, country Nigeria)"]); } else { fail.push([s.id, r.why]); if (soft && had.has(s.id) && !dead(r.why)) { const kept = cleanStation(s); if (kept) { out.push(kept); console.log(`      kept ${s.id}: the failure may be temporary (${r.why})`); } } } });
   console.log(`\n${pass.length} stream(s) work, ${fail.length} do not.`);
   if (args.has("--soft") && !pass.length) { console.log("WARNING: no stream passed (is this machine offline?). Keeping public/data/radio-stations.json as it is; the radio will use whatever is in it."); process.exit(0); }
   if (args.has("--write")) { fs.writeFileSync(OUT, JSON.stringify({ _readme: read(OUT)._readme, stations: out }, null, 2) + "\n"); console.log(`Wrote ${out.length} station(s) to public/data/radio-stations.json (${pass.length} verified now; stations that are definitely gone are left out).`); }

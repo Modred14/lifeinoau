@@ -6,7 +6,7 @@
 // Chromium with real clicks (so the browser's autoplay rules apply, exactly as for a player) and checks what actually happens:
 //   - the <audio> element really plays (currentTime moves) and the decoded sound really is the station's (measured with WebAudio: the 440 Hz peak, then the 1000 Hz peak),
 //   - the SERVER sees at most one open connection at any time (no duplicate or leaked streams), also when switching stations quickly,
-//   - pause / resume, next / previous, volume, mute, closing the panel (the engine does not depend on it), leaving the vehicle and coming back,
+//   - pause / resume, next / previous, the fixed volume (there is no volume control; a stale saved volume is ignored), master mute, closing the panel (the engine does not depend on it), leaving the vehicle and coming back,
 //   - a dropped stream reconnects by itself; after the reconnect attempts run out, the radio recovers when the network comes back.
 // It runs twice: as desktop Chrome and as an emulated Android phone (Pixel 5: touch, mobile user agent). That is emulation, not a real device.
 // Playwright is not a dependency of the game: install it where you run this (npm i -D playwright && npx playwright install chromium), or point PLAYWRIGHT_MODULE at it.
@@ -31,7 +31,7 @@ const mp3 = { a: fs.readFileSync(path.join(tmp, "a.mp3")), b: fs.readFileSync(pa
 
 // ---- the local "radio server" ----
 const open = { a: new Set(), b: new Set() }; let opened = 0, refuse = false;
-const stationsFile = (port) => ({ stations: ["a", "b"].map((id, i) => ({ id: "test-" + id, name: "Test FM " + id.toUpperCase(), country: "Nowhere", genre: i ? "Tone 1000" : "Tone 440", url: `http://127.0.0.1:${port}/stream/${id}`, format: "mp3", meta: i ? "none" : "icy", verifiedAt: "2026-11-15" })) });
+const stationsFile = (port) => ({ stations: ["a", "b"].map((id, i) => ({ id: "test-" + id, name: "Test FM " + id.toUpperCase(), country: "Nigeria", state: i ? "Oyo" : "Lagos", genre: i ? "Tone 1000" : "Tone 440", url: `http://127.0.0.1:${port}/stream/${id}`, format: "mp3", meta: i ? "none" : "icy", verifiedAt: "2026-11-15" })) });
 const MIME = { ".js": "text/javascript", ".html": "text/html", ".json": "application/json" };
 const server = http.createServer((req, res) => {
   const u = new URL(req.url, "http://x");
@@ -121,14 +121,16 @@ async function suite(label, contextOptions, mobile) {
   await press("play"); await until("playing again", async () => (await rs()).status === "playing"); ok("resume plays again and it really advances", await advances());
   const c = await hear(); ok("and it is the right station's sound again", Math.abs(c.hz - 440) < 30 && c.db > -70, JSON.stringify(c));
 
-  // 5-6: volume and mute are real (the element's volume follows the mixer)
-  await page.evaluate(() => M.setMix({ radioVolume: 30, masterVolume: 100, masterMute: false }));
-  ok("volume 30% is applied to the audio element", Math.abs((await au()).vol - 0.3) < 0.01);
-  const quiet = await hear(); await page.evaluate(() => M.setMix({ radioVolume: 100 })); const loud = await hear();
-  ok("a higher volume gives a proportionally louder signal (30% -> 100% is about 3.3x)", loud.rms / quiet.rms > 2.5 && loud.rms / quiet.rms < 4.5, `rms ${quiet.rms.toFixed(4)} -> ${loud.rms.toFixed(4)}`);
+  // 5-6: there is no volume control: the radio plays at a fixed level; only the master volume and the master mute reach it
+  ok("the audio element plays at the fixed 80 % level", Math.abs((await au()).vol - 0.8) < 0.01, String((await au()).vol));
+  await page.evaluate(() => M.setMix({ radioVolume: 0, masterVolume: 100, masterMute: false }));   // a volume saved by the old slider, at its lowest
+  ok("a stale saved radio volume of 0 changes nothing: still 80 %, and really audible (the radio is never accidentally muted)", Math.abs((await au()).vol - 0.8) < 0.01 && (await hear()).rms > 0.005);
+  const full = await hear(); await page.evaluate(() => M.setMix({ masterVolume: 50 })); const half = await hear();
+  ok("the master volume still scales it (50 % -> element volume 0.4, about half the measured signal)", Math.abs((await au()).vol - 0.4) < 0.01 && half.rms / full.rms > 0.35 && half.rms / full.rms < 0.65, `rms ${full.rms.toFixed(4)} -> ${half.rms.toFixed(4)}`);
+  await page.evaluate(() => M.setMix({ masterVolume: 100 }));
   await page.evaluate(() => M.setMix({ masterMute: true })); ok("muting (master) sets the element volume to 0", (await au()).vol === 0);
   const muted = await hear(); ok("and the measured sound is silent", muted.rms < 0.0005, JSON.stringify(muted));
-  await page.evaluate(() => M.setMix({ masterMute: false })); const un = await hear(); ok("unmuting brings the sound back", un.rms > 0.005 && (await au()).vol > 0.9, JSON.stringify(un));
+  await page.evaluate(() => M.setMix({ masterMute: false })); const un = await hear(); ok("unmuting brings the sound back", un.rms > 0.005 && Math.abs((await au()).vol - 0.8) < 0.01, JSON.stringify(un));
 
   // 7-8: leaving the vehicle is the game's own rule (the panel itself is React and is not part of this test)
   await press("getOut"); await until("stopped", async () => { const s = await stats(); return s.a + s.b === 0; });
