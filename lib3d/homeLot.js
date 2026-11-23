@@ -43,6 +43,10 @@ export function lotIsFree(svc, room, lot) {
     if (svc.graph.surfaceAt(x, z).cls !== 0) return false;                        // a road or its pavement
     if (svc.world.sdf(x, z, 4) < (cx < p.x0 || cx > p.x1 || cz < p.z0 ? MARGIN_M * 0.9 : 0.4)) return false; // a building, water, a tree
   }
+  // The driveway corridor: the gate's width, from the front yard through the gate to the kerb's apron. A car swings out across it, so no lamp, sign or tree may stand in it. It is sampled every 0.6 m: the 2.4 m grid
+  // above can step over a lamp post (0.4 m across) that stands between two samples.
+  const fine = 0.6 / CELL_M;
+  for (let cz = p.z1 - PLOT_RULES.frontYard; cz <= P.kerb + 1.4 + 1e-6; cz += fine) for (let cx = P.gate.x0; cx <= P.gate.x1 + 1e-6; cx += fine) { const [x, z] = F.toWorld(cx, cz); if (svc.world.sdf(x, z, 3) < 0.9) return false; }
   for (const [cx, cz] of [[p.x0, p.z1], [p.x1, p.z1]]) { // the front corners: nothing solid on the pavement either side of the gate
     const [x, z] = F.toWorld(cx, cz); if (svc.world.sdf(x, z, 3) < 0.6) return false;
   }
