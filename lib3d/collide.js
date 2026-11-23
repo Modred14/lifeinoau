@@ -28,6 +28,13 @@ export class CollisionWorld {
   /** A thin barrier with no inside (a wall, a fence). */
   addWall(ax, az, bx, bz, tag = null) { this._edge([ax, az], [bx, bz], -1, tag); }
   addRect(x0, z0, x1, z1, tag = null) { return this.addPolygon([[x0, z0], [x1, z0], [x1, z1], [x0, z1]], tag); }
+  /** Takes away everything that was added with `{ owner }` in its tag (a home compound that is no longer there). The slots stay, marked dead, so nothing else's index moves. Returns how many solids went. */
+  removeOwned(owner) {
+    let n = 0;
+    for (const p of this.polys) if (!p.dead && p.tag?.owner === owner) { p.dead = true; n++; }
+    for (const e of this.E) if (!e.dead && (e.poly >= 0 ? this.polys[e.poly].tag : e.tag)?.owner === owner) { e.dead = true; if (e.poly < 0) n++; }
+    return n;
+  }
   /** A post or pole: a small octagon. */
   addPost(x, z, r, tag = null) { const p = []; for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + Math.PI / 8; p.push([x + Math.cos(a) * r, z + Math.sin(a) * r]); } return this.addPolygon(p, tag); }
   _edge(a, b, poly, tag = null) {
@@ -45,10 +52,10 @@ export class CollisionWorld {
   /** Calls fn(edgeIndex) once for every static edge in the cells around (x, z) within r. */
   _near(x, z, r, fn) {
     const c = this.cell, st = ++this.stamp;
-    for (let i = Math.floor((x - r) / c); i <= Math.floor((x + r) / c); i++) for (let j = Math.floor((z - r) / c); j <= Math.floor((z + r) / c); j++) { const l = this.hash.get(KEY(i, j)); if (!l) continue; for (const id of l) { if (this._seen?.[id] === st) continue; (this._seen ??= new Int32Array(1 << 20))[id] = st; fn(id); } }
+    for (let i = Math.floor((x - r) / c); i <= Math.floor((x + r) / c); i++) for (let j = Math.floor((z - r) / c); j <= Math.floor((z + r) / c); j++) { const l = this.hash.get(KEY(i, j)); if (!l) continue; for (const id of l) { if (this._seen?.[id] === st) continue; (this._seen ??= new Int32Array(1 << 20))[id] = st; if (this.E[id].dead) continue; fn(id); } }
   }
   /** Index of the solid polygon containing (x, z), or -1. */
-  inside(x, z) { const l = this.phash.get(KEY(Math.floor(x / this.cell), Math.floor(z / this.cell))); if (!l) return -1; for (const pi of l) { const p = this.polys[pi], b = p.bb; if (x >= b[0] && x <= b[2] && z >= b[1] && z <= b[3] && inPoly(x, z, p.pts)) return pi; } return -1; }
+  inside(x, z) { const l = this.phash.get(KEY(Math.floor(x / this.cell), Math.floor(z / this.cell))); if (!l) return -1; for (const pi of l) { const p = this.polys[pi], b = p.bb; if (p.dead) continue; if (x >= b[0] && x <= b[2] && z >= b[1] && z <= b[3] && inPoly(x, z, p.pts)) return pi; } return -1; }
   _seg(e, x, z) { const dx = e.bx - e.ax, dz = e.bz - e.az, l2 = dx * dx + dz * dz || 1; let t = ((x - e.ax) * dx + (z - e.az) * dz) / l2; t = t < 0 ? 0 : t > 1 ? 1 : t; const px = e.ax + dx * t, pz = e.az + dz * t; return [Math.hypot(x - px, z - pz), px, pz, t]; }
   /** Signed distance to the nearest static solid within `max` metres: negative inside, `max` if none is near. */
   sdf(x, z, max = 40) {
@@ -105,7 +112,7 @@ export class CollisionWorld {
   raycast(ax, az, bx, bz) {
     const l = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(l / (this.cell * 0.5))); let best = null; const seen = new Set();
     for (let i = 0; i <= n; i++) { const x = ax + ((bx - ax) * i) / n, z = az + ((bz - az) * i) / n, c = this.cell;
-      for (let a = Math.floor(x / c) - 0; a <= Math.floor(x / c); a++) for (let b = Math.floor(z / c); b <= Math.floor(z / c); b++) for (const id of this.hash.get(KEY(a, b)) ?? []) { if (seen.has(id)) continue; seen.add(id); const e = this.E[id], t = segHit(ax, az, bx, bz, e.ax, e.az, e.bx, e.bz); if (t != null && (best == null || t < best)) best = t; } }
+      for (let a = Math.floor(x / c) - 0; a <= Math.floor(x / c); a++) for (let b = Math.floor(z / c); b <= Math.floor(z / c); b++) for (const id of this.hash.get(KEY(a, b)) ?? []) { if (seen.has(id)) continue; seen.add(id); const e = this.E[id]; if (e.dead) continue; const t = segHit(ax, az, bx, bz, e.ax, e.az, e.bx, e.bz); if (t != null && (best == null || t < best)) best = t; } }
     return best;
   }
 }

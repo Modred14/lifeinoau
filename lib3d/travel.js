@@ -20,6 +20,8 @@ import { sightBlocked } from "./destinations.js";
 import { SWING } from "./doorway.js";
 import { createTripFlow } from "./tripflow.js";
 import { portalFor } from "./buildingPortals.js";
+import { createHomeCompound } from "./homeCompound.js";
+import { gateStand } from "./homeSite.js";
 import { ROAD_TOP } from "./roadsurface.js";
 import { wheelContacts } from "./vehiclepose.js";
 import { rigSuspension, leanBody } from "./suspension.js";
@@ -111,6 +113,13 @@ export async function startTrip(env, o) {
   Object.assign(light.sun.shadow.camera, { left: -14, right: 14, top: 14, bottom: -14 }); light.sun.shadow.camera.updateProjectionMatrix();
   const disposers = []; let alive = true;
 
+  // ---- the player's own home compound, standing on its lot beside a real road: one world, so the door, the yard, the garage and the street need no loading between them ----
+  let home = null;
+  if (o.home) {
+    try { home = createHomeCompound({ parent: world, svc, room: o.home.room, items: o.home.items ?? [], vehicles: o.home.vehicles ?? [], anchor: fromP, seed: o.home.seed ?? "", activeId: o.home.activeId ?? null }); } catch (e) { console.warn("home compound", e); home = null; }
+    if (home) { disposers.push(() => home.dispose()); const e = home.portal.exit; plan = { ...plan, B: home.B, goal: { x: e.x, z: e.z }, start: { x: e.x, z: e.z } }; B = plan.B; }
+  }
+
   // ---- the guide: a ribbon of chevrons on the way to go, and the beam over the destination ----
   // The route is NEVER the one planned when the trip began: lib3d/tripguide.js works it out from where the traveller is now to where they are going, again whenever the leg changes
   // (on foot -> in the vehicle -> on foot) or they leave the route, and shows only the part still ahead. This block only draws it.
@@ -120,7 +129,7 @@ export async function startTrip(env, o) {
   const ring = new THREE.Mesh(new THREE.RingGeometry(2.2, 2.8, 40), new THREE.MeshBasicMaterial({ color: "#3fd08a", transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.set(B.front.x, 0.25, B.front.z); world.add(ring);
   disposers.push(() => { beam.geometry.dispose(); beam.material.dispose(); ring.geometry.dispose(); ring.material.dispose(); });
   // the door is drawn only for a place with a door to open (an enterable building): never for an open-air place, a statue or a gate
-  let door = null; const setDoor = () => { door?.dispose(); door = B.building && enterable ? buildDoor(B.door) : null; if (door) world.add(door.group); }; setDoor(); disposers.push(() => door?.dispose());
+  let door = null; const setDoor = () => { door?.dispose(); door = B.building && enterable && !home ? buildDoor(B.door) : null; if (door) world.add(door.group); }; setDoor(); disposers.push(() => door?.dispose());
   // where to stop your own car: a green bay on the kerb at the drop-off (drawn only while you drive)
   const bay = new THREE.Group(), bayMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 5.2).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#3fd08a", transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 }));
   bay.add(bayMesh); bay.position.y = 0.2; bay.visible = false; world.add(bay); disposers.push(() => { bayMesh.geometry.dispose(); bayMesh.material.dispose(); });
@@ -163,7 +172,8 @@ export async function startTrip(env, o) {
   let hornWas = false;
 
   // ---- the journey ----
-  const flow = createTripFlow({ svc, sim: traffic.sim }, { plan, enterable, dims: vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width, id: vehicle.id, seat: vehicle.seat, driver: vehicle.driver, wheels: wheelContacts(vehicle) } : null, rnd: Math.random, free: !!o.free, spawn: o.spawn ?? null, onArrive: () => o.onArrive?.() ?? true, onEnter: () => o.onEnter?.(), holdEnter: () => !!o.holdEnter?.(), roam: o.roam ? portalFor(svc, toP) : null, onEnd: (why) => { if (alive) o.onEnd?.(why); }, onNotice: (m) => o.onNotice?.(m) });
+  const homeParked = () => { const d = vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width } : { len: 4.5, wid: 1.85 }; if (o.spawn) return { ...gateStand(home.site), ...d }; const a = home.activeSlot; return a ? { x: a.x, z: a.z, hx: a.hx, hz: a.hz, len: a.len, wid: a.wid } : null; };
+  const flow = createTripFlow({ svc, sim: traffic.sim }, { plan, enterable, dims: vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width, id: vehicle.id, seat: vehicle.seat, driver: vehicle.driver, wheels: wheelContacts(vehicle) } : null, rnd: Math.random, free: !!o.free, spawn: o.spawn ?? null, onArrive: () => o.onArrive?.() ?? true, onEnter: () => o.onEnter?.(), holdEnter: () => !!o.holdEnter?.(), roam: o.roam ? (home ? home.portal : portalFor(svc, toP)) : null, drivable: home?.drivable ?? null, parked: home ? homeParked() : null, onEnd: (why) => { if (alive) o.onEnd?.(why); }, onNotice: (m) => o.onNotice?.(m) });
   disposers.push(() => flow.dispose()); setBay();
   const P = flow.person, F = flow.state, WK = flow.walker;
   let camYaw = Math.atan2(-(plan.start.x - (plan.doorIn?.x ?? plan.goal.x)), -(plan.start.z - (plan.doorIn?.z ?? plan.goal.z))), userYaw = 0, userPitch = 0, userAt = -9, time = 0, hornT = 0, lastState = 0, camBack = CAM.walk.back, zoomW = 1, zoomV = 1, leadX = 0, leadZ = 0;
@@ -311,6 +321,7 @@ export async function startTrip(env, o) {
     // a vehicle hit somebody (an NPC, you, another player): the sound by how hard, and the page told (o.onHit), for a message or a log
     for (const ev of traffic.sim.takeEvents()) { if (Math.hypot(ev.x - camPt.x, ev.z - camPt.z) < 70) playSound(ev.kind === "launch" ? "crash" : ev.kind === "knockdown" ? "thump" : "bump"); try { o.onHit?.(ev); } catch { /* the page's handler must never stop the trip */ } }
     if (inp.stop) flow.stopAuto(); if (inp.door) flow.pressDoor(); if (inp.goIn) flow.enterNow();
+    home?.update(dt, flow.walker.x, flow.walker.z);
     flow.update(dt, { dx: ax, dz: az, mag: m, run: inp.run, gas: inp.gas, brake: inp.brake, steer: inp.steer, exit: inp.exit, enter: inp.enter, close: inp.close, fly: inp.fly, climb: inp.climb });
     lastPhase = F.phase;
     // sound: where the listener is and which way the view faces, what you are riding or driving, who is near. The horn is the held HUD button / H key (input.horn).

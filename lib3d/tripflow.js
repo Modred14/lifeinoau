@@ -92,10 +92,15 @@ export function createTripFlow(env, o) {
     world.setBody("own", { x: own.x, z: own.z, hx: own.hx, hz: own.hz, hl: own.len / 2, hw: own.wid / 2 }); sim.setExternal("own", { x: own.x, z: own.z, hx: own.hx, hz: own.hz, len: own.len, wid: own.wid, v: own.v });
   }
   function makeOwn() { const h = hero; own = Object.assign(createCar({ x: h.x, z: h.z, ang: Math.atan2(h.hx, h.hz) }), { len: h.len, wid: h.wid, kind, P: carProfile(dims?.id), lv: 0, h: 0, slope: 0, air: createAir() }); sim.remove(h); hero = null; own.pen = ownProbe(own.x, own.z, own.hx, own.hz)?.pen ?? 0; follower.reset(own); publishOwn(); }
+  /** The player's own car standing where it is parked (the compound): no road lane, no traffic hero. `p` = { x, z, hx, hz, len, wid }. */
+  function makeOwnAt(p) {
+    own = Object.assign(createCar({ x: p.x, z: p.z, ang: Math.atan2(p.hx, p.hz) }), { len: p.len, wid: p.wid, kind, P: carProfile(dims?.id), lv: 0, h: 0, slope: 0, air: createAir() });
+    own.pen = ownProbe(own.x, own.z, own.hx, own.hz)?.pen ?? 0; follower.reset(own); publishOwn();
+  }
   const onRoad = (x, z) => graph.surfaceAt(x, z, onRoad.s ??= {}).cls === 1;      // the ground: people, door checks, kerbside exits
   const carSurf = {};
   /** Is (x, z) road for your own car, on the level it is on (the ground, or the expressway deck) and, where roads cross, at the height it is at? */
-  const onRoadOwn = (x, z, mask) => graph.surfaceAt(x, z, carSurf, mask, own.h).cls === 1;
+  const onRoadOwn = (x, z, mask) => graph.surfaceAt(x, z, carSurf, mask, own.h).cls === 1 || (!!o.drivable && own.h < 1 && o.drivable(x, z));   // o.drivable: the player's own compound (lib3d/homeSite.js), which a car may drive over as well as the road
   /**
    * Why a pose is not allowed for your own car: null when it is fine, otherwise { pen, why } with why = "road" (a part of it would be off the carriageway), "building" or "vehicle".
    * `pen` says how bad the place is, so the physics can let a car that is already touching something move AWAY from it (it is never pinned) but never further in.
@@ -383,6 +388,12 @@ export function createTripFlow(env, o) {
     S.seatK = 1; S.vehDoorK = 0; person.seated = true; person.seat = seatLocal(); person.visible = true; S.pay = "none"; go("drive");
   }
 
+  /** The player at the wheel of their own car, out of the garage and already moving (the compound's gate); the compound ground is drivable so no road lane is needed. `p` = { x, z, hx, hz, len, wid }, `v` m/s. */
+  function bootAt(p, v) {
+    makeOwnAt(p); own.v = Math.max(0, Math.min(v ?? 0, own.P?.vmax ?? CAR.vmax)); own.distance = 0;
+    S.seatK = 1; S.vehDoorK = 0; person.seated = true; person.seat = seatLocal(); person.visible = true; S.pay = "none"; go("drive");
+  }
+
   const HIT_PHASES = new Set(["intro", "trek", "approach", "afoot", "walk", "roam"]);
   /** The traffic hit the person on foot: they are thrown (lib3d/impact.js), whatever they were doing is paused, and the walk resumes when they are up. */
   function struckOnFoot(st, by, now) { walker.hit(st, by, now); S.struck++; S.down = true; }
@@ -453,6 +464,7 @@ export function createTripFlow(env, o) {
         break; }
       case "roam": { // on foot, free, at the door you came out of
         walker.step(dt, walkIn);
+        if (own && inp.enter && distToCar(walker.x, walker.z) < ENTER_REACH_M && !walker.tumble) { startReenter(); break; }   // your own car is parked here (the compound): get in it
         if (S.door === "closing") { S.doorK = Math.max(0, S.doorK - (dt / DOOR_OPEN) * 1.4); setLeaf(); if (S.doorK <= 0) shutDoor(); }   // the leaf swings shut behind them (the exit spot is out of its way)
         const dGoal = Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z); if (dGoal > ROAM_REARM_M) roamArmed = true;
         // back at the door you came out of: the same door sequence as arriving (Open Door, step in). Walking elsewhere never gets here.
@@ -463,7 +475,7 @@ export function createTripFlow(env, o) {
     if (S.phase === "door" || S.phase === "enter") { doorTarget = 0; stepDoor(dt, 0); }
     S.auto = !!walker.path && walker.mode === "auto" && ["trek", "afoot", "walk"].includes(S.phase);
     S.canFly = S.phase === "drive" && !!own?.P?.flies; S.airborne = !!(own?.air && isAirborne(own.air)); S.alt = own ? Math.round(own.h) : 0; S.fan = own?.air ? fanOut(own.air) : 0; S.fanSpin = own?.air?.spin ?? 0;
-    S.canExit = S.phase === "drive" && !exitAsk && !S.airborne; S.canEnter = S.phase === "afoot" && distToCar(walker.x, walker.z) < ENTER_REACH_M; S.canClose = S.phase === "afoot" && S.vehDoorK > 0.02 && doorTarget === 1;
+    S.canExit = S.phase === "drive" && !exitAsk && !S.airborne; S.canEnter = (S.phase === "afoot" || (S.phase === "roam" && !!own)) && distToCar(walker.x, walker.z) < ENTER_REACH_M; S.canClose = S.phase === "afoot" && S.vehDoorK > 0.02 && doorTarget === 1;
     // the person
     person.x = walker.x; person.z = walker.z; person.hx = walker.hx; person.hz = walker.hz; S.speed = S.phase === "drive" ? own.v : S.phase === "ride" && hero ? hero.v : walker.speed;
     if (!person.seated && S.phase !== "board") sim.setExternal("player", { x: walker.x, z: walker.z, hx: walker.hx, hz: walker.hz, len: 0.6, wid: 0.6, v: walker.speed }); else sim.removeExternal("player");
@@ -528,7 +540,9 @@ export function createTripFlow(env, o) {
     S.ended = true; sim.removeExternal("player"); sim.removePerson("player"); sim.removeExternal("own"); world.removeBody("own"); world.removeBody(LEAF_ID);
     if (hero) { if (departed) hero.role = "npc"; else sim.remove(hero); }
   }
-  if (o.spawn && ownCar) bootDrive(o.spawn);
+  if (o.spawn && o.parked && ownCar) bootAt(o.parked, o.spawn.v);   // driving out of the compound gate: at the wheel, already rolling, on the compound ground
+  else if (o.spawn && ownCar) bootDrive(o.spawn);
+  else if (o.parked && ownCar) makeOwnAt(o.parked);   // the own car waits where it is parked (the compound)
   if (o.roam) exitBuilding(o.roam);   // a trip that begins on the doorstep: the person walks out of the door at once (o.roam is the building's portal)
   return { update, dispose, state: S, get free() { return free; }, get roaming() { return S.phase === "roam"; }, exitBuilding, walker, person, get plan() { return plan; }, kind, pressDoor, enterNow, retarget: retargetTrip, stopAuto, get doorFrame() { return dframe; }, get hero() { return hero; }, get approachDoor() { return approachDoor ?? plan.doorIn; }, get own() { return own; }, get vehicle() { return own ?? hero; }, eta: () => S.eta, remainMetres, cancel: () => end("cancelled"), get driving() { return S.phase === "drive"; } };
 }
