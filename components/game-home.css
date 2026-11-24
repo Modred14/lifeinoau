@@ -111,7 +111,7 @@
 .bs-tabs { display: flex; gap: 6px; overflow-x: auto; flex: 1; min-width: 0; padding: 2px; scrollbar-width: none; }
 .bs-tabs::-webkit-scrollbar { display: none; }
 .bs-tabs button { flex: none; min-height: 40px; padding: 6px 14px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); border: 1px solid transparent; font-size: 0.9rem; gap: 7px; }
-.bs-tabs button.on { background: #fff; color: #0d1321; font-weight: 600; }
+.bs-tabs button.on { background: var(--btn-bg-on); border-color: var(--btn-line-on); color: var(--text); font-weight: 600; } /* selected tab = the green accent (was a solid white pill) */
 .bs-tabs button i { font-style: normal; background: var(--green); color: #fff; border-radius: 999px; min-width: 20px; padding: 0 6px; font-size: 0.75rem; }
 .bs-hide { min-height: 40px; padding: 6px 14px; border-radius: 999px; background: transparent; flex: none; gap: 6px; font-size: 0.88rem; }
 .bs-row { display: flex; gap: 12px; overflow-x: auto; padding: 4px 2px 8px; scroll-snap-type: x proximity; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.25) transparent; overscroll-behavior-x: contain; }

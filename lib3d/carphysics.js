@@ -15,6 +15,7 @@
 // Input: { gas 0..1, brake 0..1, steer -1..1 } where steer +1 is a RIGHT turn (D / the wheel turned clockwise).
 import { OWN_CAR_MAX } from "../lib/travel.js";
 import { VEHICLE_PERFORMANCE, STANDARD_VEHICLE, deriveLongitudinal, PEDAL_UP } from "../lib/vehiclePerformance.js";
+import { STEER_TO_YAW, headingOf } from "./heading.js";   // the direction convention shared with the flying car (lib3d/flightphysics.js)
 
 /** The lock available at speed falls to a half at this speed (m/s): a faster vehicle keeps its lock to a higher speed, so a supercar is as steerable at its own speeds as a family car is at its. */
 const lockRef = (vmax) => 12 * Math.sqrt(Math.max(1, vmax / 22));
@@ -67,7 +68,7 @@ const approach = (cur, want, maxD) => (want > cur ? Math.min(want, cur + maxD) :
 
 /** A new car at rest. pose: { x, z, ang }. */
 export function createCar({ x = 0, z = 0, ang = 0 } = {}) {
-  return { x, z, ang, hx: Math.sin(ang), hz: Math.cos(ang), v: 0, steer: 0, yawRate: 0, thr: 0, brk: 0, reversing: false, holdT: 0, accel: 0, lat: 0, pitch: 0, roll: 0, pen: 0, impact: 0, grip: 1, distance: 0 };
+  return { x, z, ang, ...headingOf(ang), v: 0, steer: 0, yawRate: 0, thr: 0, brk: 0, reversing: false, holdT: 0, accel: 0, lat: 0, pitch: 0, roll: 0, pen: 0, impact: 0, grip: 1, distance: 0 };
 }
 
 /** The most the front wheels may turn at this speed. */
@@ -108,7 +109,7 @@ function sub(c, inp, h, probe, P) {
   v1 = clamp(v1, -P.reverseMax, P.vmax);
 
   // ---- steering: the wheels turn at a limited rate, towards an angle that shrinks with speed ----
-  const lim = steerLimit(Math.abs((v0 + v1) / 2), P), want = -clamp(inp.steer ?? 0, -1, 1) * lim;
+  const lim = steerLimit(Math.abs((v0 + v1) / 2), P), want = STEER_TO_YAW * clamp(inp.steer ?? 0, -1, 1) * lim;
   const toward = Math.abs(want) >= Math.abs(c.steer) && Math.sign(want || 1) === Math.sign(c.steer || want || 1) ? P.steerRate : P.steerReturn;
   c.steer = approach(c.steer, want, toward * h); c.steer = clamp(c.steer, -lim, lim);
 

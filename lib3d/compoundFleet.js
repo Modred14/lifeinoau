@@ -15,13 +15,13 @@ import { planParking, compoundWorld, metresWorld, onCarriageway, CELL_M } from "
 import { createDriver } from "./garageDrive.js";
 import { garageVehicleSize } from "./garageLayout.js";
 import { GROUND } from "./plot3d.js";
-import { createKeys } from "./tripkeys.js";
+import { attachVehicleKeys, driveAxes } from "./vehicleInput.js";
 
 const K = 1 / CELL_M;
 
 export function createCompoundFleet({ scene, camera, stage, cb = {} }) {
   const root = new THREE.Group(); scene.add(root);
-  const meshes = new Map(), kb = createKeys(), pad = { throttle: 0, steer: 0 }, padMat = new THREE.MeshStandardMaterial({ color: "#a3a6a1", roughness: 0.95 });
+  const meshes = new Map(), pad = { throttle: 0, steer: 0 }, padMat = new THREE.MeshStandardMaterial({ color: "#a3a6a1", roughness: 0.95 });
   let room = null, items = [], vehicles = [], plan = null, half = [0, 0], timer = 0, dirty = false, drive = null, alive = true, steerShown = 0, lastReport = "", saved = null, builtKey = "";
 
   function clear() {
@@ -48,13 +48,12 @@ export function createCompoundFleet({ scene, camera, stage, cb = {} }) {
   const later = () => { if (drive) { dirty = true; return; } clearTimeout(timer); timer = setTimeout(rebuild, 0); }; // planning takes a moment: never inside the call that asked for it
   const place = (v, cx, cz, yaw, onRoad) => { v.root.position.set(cx - half[0], GROUND + (onRoad ? -0.03 : 0.03), cz - half[1]); v.root.rotation.y = yaw; };
 
-  // Keys go through lib3d/tripkeys.js, the same as on the map: told apart by their place on the keyboard (any layout), never read while typing in a box (the phone's messages),
-  // a shortcut such as Cmd+D is never a control, and losing focus drops everything held, so a key can never stay pressed.
-  const kd = (e) => { if (drive && kb.press(e)) e.preventDefault(); };
-  const ku = (e) => kb.release(e);
-  const clearInput = () => { kb.clear(); pad.throttle = 0; pad.steer = 0; };
-  window.addEventListener("keydown", kd); window.addEventListener("keyup", ku); window.addEventListener("blur", clearInput); document.addEventListener("visibilitychange", clearInput);
-  const input = () => { const k = kb.read(); return { throttle: Math.max(-1, Math.min(1, k.up - Math.max(k.down, k.space) + pad.throttle)), steer: Math.max(-1, Math.min(1, k.steer + pad.steer)) }; };
+  // Keys go through lib3d/vehicleInput.js, the one keyboard binding of every vehicle (the map trip and the garage use it too): told apart by their place on the keyboard (any layout), never read
+  // while typing in a box (the phone's messages) or under an open dialog, a shortcut such as Cmd+D is never a control, and losing focus or hiding the tab drops everything held, so a key can never
+  // stay pressed. Keys are taken only while a vehicle is being driven.
+  const vin = attachVehicleKeys({ active: () => !!drive }), kb = vin.keys;
+  const clearInput = () => { vin.clear(); pad.throttle = 0; pad.steer = 0; };
+  const input = () => (vin.blocked() ? { throttle: 0, steer: 0 } : driveAxes(kb.read(), pad));
 
   const cam = { pos: new THREE.Vector3(), look: new THREE.Vector3(), ready: false }, want = new THREE.Vector3();
 
@@ -102,6 +101,6 @@ export function createCompoundFleet({ scene, camera, stage, cb = {} }) {
     /** Opens (k up to 1) the door on `side` (+1 the driver's, left) of a parked vehicle; the other door is shut. */
     setDoor(id, side, k) { const m = meshes.get(String(id)); if (!m?.vehicle.setDoor) return; m.vehicle.setDoor(side, k); m.vehicle.setDoor(-side, 0); },
     setInput({ throttle, steer } = {}) { if (throttle != null) pad.throttle = Math.max(-1, Math.min(1, throttle)); if (steer != null) pad.steer = Math.max(-1, Math.min(1, steer)); },
-    dispose() { alive = false; clearTimeout(timer); window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); window.removeEventListener("blur", clearInput); document.removeEventListener("visibilitychange", clearInput); clear(); scene.remove(root); padMat.dispose(); },
+    dispose() { alive = false; clearTimeout(timer); vin.detach(); clear(); scene.remove(root); padMat.dispose(); },
   };
 }
