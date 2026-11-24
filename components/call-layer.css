@@ -43,7 +43,7 @@
 .cx-btn.cx-wide { width: 100%; max-width: 100%; min-height: 52px; margin-top: 16px; border-radius: 16px; flex-direction: row; font-size: 1rem; }
 .cx-hang { display: grid; place-items: center; width: 62px; height: 62px; margin-top: 22px; border: 0; border-radius: 50%; color: #fff; background: #dc2626; box-shadow: 0 10px 24px -8px rgba(220, 38, 38, 0.8); cursor: pointer; }
 .cx-hang:disabled { opacity: 0.5; }
-.cx-btn:focus-visible, .cx-hang:focus-visible, .cx-chip:focus-visible, .cx-money input:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.cx-btn:focus-visible, .cx-hang:focus-visible, .cx-chip:focus-visible, .cx-money input:focus-visible { outline: 3px solid var(--ring); outline-offset: 3px; }
 
 /* asking and approving */
 .cx-ask { display: grid; justify-items: center; gap: 8px; width: 100%; margin-top: 12px; }

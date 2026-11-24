@@ -169,17 +169,42 @@ a {
   border-color: rgba(63, 208, 138, 0.45);
 }
 
-/* controls: 44px+ targets, 8px+ gaps, visible focus, pressed state never moves layout */
-button:not(:where(.campus-world *)),
-.btn {
+/* controls: 44px+ targets, 8px+ gaps, visible focus, pressed state never moves layout.
+   (Buttons inside .campus-world, the 3D map's own labels, are excluded from the shared skin, as before.)
+
+   THE SHARED STATE LAYER. Read this before you add a hover / pressed / selected rule to a component.
+   - Everything in this block sits at ZERO specificity (:where). A component that paints its own control (any class with a background) always wins, over the shared skin and over the
+     shared states, so the shared colours can never repaint an accent, glass or HUD control. (They used to: a global `button:hover` at specificity 0,2,1 out-ranked component skins, so gold
+     buttons went navy, the steering pads went white, and ~180 component rules were written as copies of its selector just to beat it.)
+   - A default button takes its colours from the --btn-* tokens below. Variants (.go, .danger, .ghost) only change tokens, so they get every state for free.
+   - States: hover = a step lighter, pressed = one more step, selected = green tint with a green edge, disabled = faded. None of them is ever white. Keyboard focus is :focus-visible, below.
+   - Hover only applies where the device can hover, so a tap never leaves a hover colour stuck on a phone. Pressed (:active) feedback works everywhere.
+   - Selected is .on, [aria-pressed="true"], [aria-selected="true"] or [aria-checked="true"].
+   - Need a different look for one component? Give it a class that sets its own background and its own :hover / :active / selected rules. Keep :hover BELOW the selected and pressed
+     rules (wrap it in :where() or put it first) so hovering a selected control never loses its selected look. */
+:root {
+  --btn-bg: var(--raised);
+  --btn-line: var(--line);
+  --btn-fg: var(--text);
+  --btn-bg-hover: #223052;
+  --btn-bg-press: #2c3d66;
+  --btn-hover-line: rgba(255, 255, 255, 0.28);
+  --btn-bg-on: rgba(21, 128, 61, 0.22);
+  --btn-bg-on-hover: rgba(21, 128, 61, 0.32);
+  --btn-bg-on-press: rgba(21, 128, 61, 0.42);
+  --btn-line-on: var(--green-text);
+  --ring-gap: var(--bg); /* the dark halo a focus ring sits on where a control floats over a bright map (see components/travel.css) */
+}
+:where(button:not(:where(.campus-world *)), .btn) {
   font: 500 1rem/1.2 var(--font-ui);
   min-height: 44px;
   padding: 10px 16px;
   border-radius: var(--r-md);
-  border: 1px solid var(--line);
-  background: var(--raised);
-  color: var(--text);
+  border: 1px solid var(--btn-line);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
   transition:
     background var(--t-fast) var(--ease),
     border-color var(--t-fast) var(--ease),
@@ -191,45 +216,56 @@ button:not(:where(.campus-world *)),
   gap: var(--s2);
   text-align: center;
 }
-button:not(:where(.campus-world *)):hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.28);
-  background: #22305066;
-  background-color: #223052;
+/* variants: tokens only */
+:where(button:not(:where(.campus-world *)), .btn):where(.go) {
+  --btn-bg: var(--green);
+  --btn-bg-hover: #1a9449;
+  --btn-bg-press: #147a3b;
+  --btn-line: transparent;
+  --btn-fg: #fff;
+  font-weight: 600;
 }
-button:not(:where(.campus-world *)):active:not(:disabled) {
+:where(button:not(:where(.campus-world *)), .btn):where(.danger) {
+  --btn-bg: var(--danger);
+  --btn-bg-hover: #e23a3a;
+  --btn-bg-press: #b91c1c;
+  --btn-line: transparent;
+  --btn-fg: #fff;
+}
+:where(button:not(:where(.campus-world *)), .btn):where(.ghost) {
+  --btn-bg: transparent;
+}
+/* hover: only where a pointer can hover; a hairline plus a step lighter. The hairline is an outline, so it sits on any skin (and never replaces a component's border) */
+@media (hover: hover) {
+  :where(button:not(:where(.campus-world *)):not(:disabled), .btn:not([aria-disabled="true"])):where(:hover) {
+    background: var(--btn-bg-hover);
+    outline: 1px solid var(--btn-hover-line);
+    outline-offset: -1px;
+  }
+}
+/* selected (never .go / .danger: those are already solid) */
+:where(button:not(:where(.campus-world *)), .btn):where(.on, [aria-pressed="true"], [aria-selected="true"], [aria-checked="true"]):where(:not(.go, .danger)) {
+  background: var(--btn-bg-on);
+  border-color: var(--btn-line-on);
+}
+@media (hover: hover) {
+  :where(button:not(:where(.campus-world *)):not(:disabled), .btn:not([aria-disabled="true"])):where(.on, [aria-pressed="true"], [aria-selected="true"], [aria-checked="true"]):where(:not(.go, .danger)):where(:hover) {
+    background: var(--btn-bg-on-hover);
+  }
+}
+/* pressed: one more step, and the press itself (a zero-specificity transform, so a component's own transform is never replaced) */
+:where(button:not(:where(.campus-world *)):not(:disabled), .btn:not([aria-disabled="true"])):where(:active) {
+  background: var(--btn-bg-press);
   transform: scale(0.98);
 }
-button:not(:where(.campus-world *)):disabled {
+:where(button:not(:where(.campus-world *)):not(:disabled), .btn:not([aria-disabled="true"])):where(.on, [aria-pressed="true"], [aria-selected="true"], [aria-checked="true"]):where(:not(.go, .danger)):where(:active) {
+  background: var(--btn-bg-on-press);
+}
+:where(button:not(:where(.campus-world *)):disabled, .btn[aria-disabled="true"]) {
   opacity: 0.45;
   cursor: not-allowed;
 }
-button:not(:where(.campus-world *)).go,
-.btn.go {
-  background: var(--green);
-  border-color: transparent;
-  color: #fff;
-  font-weight: 600;
-}
-button:not(:where(.campus-world *)).go:hover:not(:disabled) {
-  background-color: #1a9449;
-}
-button:not(:where(.campus-world *)).on {
-  border-color: var(--green-text);
-  background: rgba(21, 128, 61, 0.22);
-}
-button:not(:where(.campus-world *)).on:hover:not(:disabled),
-button:not(:where(.campus-world *))[aria-pressed="true"]:hover:not(:disabled) {
-  border-color: var(--green-text);
-  background-color: rgba(21, 128, 61, 0.32);
-}
-button:not(:where(.campus-world *)).ghost {
-  background: transparent;
-}
-button:not(:where(.campus-world *)).danger {
-  background: var(--danger);
-  border-color: transparent;
-  color: #fff;
-}
+/* keyboard focus: a clear green ring, offset so it never touches the control. Components may recolour it with --ring where the surface needs it. */
 :focus-visible {
   outline: 3px solid var(--ring);
   outline-offset: 2px;
@@ -798,7 +834,7 @@ input[type="checkbox"] {
 @media (max-width: 480px) { .hud-mid { display: none; } }
 /* the 3D map's controls: a column down the right edge so eight buttons never overflow a phone */
 .stage-ctrls--map { z-index: 20; flex-direction: column; right: 10px; bottom: calc(var(--nav-h) + var(--safe-b) + 14px); }
-.stage-ctrls--map button:not(:where(.campus-world *)).on { background: #fff; color: #0d1321; border-color: #fff; }
+.stage-ctrls--map button:not(:where(.campus-world *)).on { background: var(--green); color: #fff; border-color: var(--green-text); } /* selected = the green accent (it was a solid white tile) */
 .stage-hint { position: absolute; left: 50%; bottom: calc(var(--nav-h) + var(--safe-b) + 14px); transform: translateX(-50%); width: min(92%, 440px); margin: 0; padding: 10px 16px; border-radius: 14px; background: rgba(13, 19, 33, 0.88); color: #eaf0f8; font-size: 0.85rem; line-height: 1.35; text-align: center; z-index: 3; }
 
 /* Building occupancy: "3 people inside", just under a building's name tag on the map. It only exists while somebody is inside (components/OccupancyBadge.js

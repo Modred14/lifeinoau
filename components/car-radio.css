@@ -18,7 +18,8 @@
 @media (max-width: 599px) and (min-height: 521px) { .th[data-phase="drive"] { --cr-clear: calc(var(--th-bottom) + var(--th-gas-h) + var(--th-aux) + 24px); } }
 .th[data-phase="ride"] { --cr-clear: calc(var(--th-bottom) + var(--th-aux) + 18px); }
 .th .th-radio { flex: none; width: var(--th-aux); min-width: var(--th-aux); height: var(--th-aux); min-height: 0; padding: 0; border-radius: 50%; background: var(--th-surface); color: #fff; border: 1px solid var(--th-line); box-shadow: none; display: grid; place-items: center; }
-.th .th-radio:hover:not(:disabled) { background: #1d2a47; border-color: rgba(255, 255, 255, 0.3); }
+@media (hover: hover) { .th .th-radio:where(:hover:not(:disabled)) { background: #1d2a47; border-color: rgba(255, 255, 255, 0.3); } }
+.th .th-radio:where(:active:not(:disabled)) { background: #2c3d66; }
 .th .th-radio[data-on="1"] { color: #06210f; background: var(--th-ok); border-color: var(--th-ok); }
 .th .th-radio-float { position: absolute; right: var(--th-r); bottom: calc(var(--th-bottom) + 6px); } /* riding (not steering): there is no pedal row, so it sits in the corner */
 .th-aux > .th-btn { flex: none; white-space: nowrap; } /* the horn, radio and exit buttons keep their size: never squeezed under 44px */
@@ -32,6 +33,8 @@
 .th .cr-pw, .th .cr-x { flex: none; width: 36px; height: 36px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: #1b2540; color: #fff; border: 1px solid var(--th-line); }
 .th .cr-pw[data-on="1"] { background: var(--th-ok); color: #06210f; border-color: var(--th-ok); }
 .th .cr-x { background: transparent; border-color: transparent; }
+@media (hover: hover) { .th .cr-pw:where(:hover:not(:disabled)) { background: #26345a; } .th .cr-x:where(:hover:not(:disabled)) { background: rgba(255, 255, 255, 0.08); } }
+.th .cr-pw:where(:active:not(:disabled)), .th .cr-x:where(:active:not(:disabled)) { background: #2c3d66; }
 .cr-screen { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: #070c18; border: 1px solid rgba(255, 255, 255, 0.1); min-height: 52px; }
 .cr-screen[data-on="1"] { border-color: rgba(63, 208, 138, 0.45); }
 .cr-txt { min-width: 0; flex: 1; display: grid; gap: 3px; }
@@ -49,8 +52,11 @@
 @keyframes cr-rot { to { transform: rotate(360deg); } }
 .cr-ctl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr); gap: 8px; }
 .th .cr-ctl button { height: 46px; min-width: 0; padding: 0; border-radius: 14px; display: grid; place-items: center; background: #1b2540; color: #fff; border: 1px solid var(--th-line); }
-.th .cr-ctl button:hover:not(:disabled) { background: #26345a; }
+@media (hover: hover) { .th .cr-ctl button:not(.cr-play):where(:hover:not(:disabled)) { background: #26345a; } }
+.th .cr-ctl button:not(.cr-play):where(:active:not(:disabled)) { background: #2c3d66; }
 .th .cr-ctl .cr-play { background: #fff; color: #161b26; border-color: #fff; }
+@media (hover: hover) { .th .cr-ctl .cr-play:where(:hover:not(:disabled)) { background: #e4ebf5; border-color: #e4ebf5; } }
+.th .cr-ctl .cr-play:active:not(:disabled) { background: var(--th-ok); border-color: var(--th-ok); color: #06210f; } /* pressed = the green accent, and the text stays readable */
 .th .cr-ctl button:disabled { opacity: 0.4; }
 .cr-note { margin: 0; font-size: 0.76rem; color: var(--th-amber); }
 .th .cr-more { height: 36px; border-radius: 10px; background: transparent; color: #cfd7e8; border: 1px dashed rgba(255, 255, 255, 0.25); }
@@ -59,6 +65,8 @@
 .cr-region { display: block; margin: 0 0 6px 2px; font: 700 0.7rem/1 var(--font-ui); letter-spacing: 0.06em; text-transform: uppercase; color: #8b96ad; }
 .th .cr-list button { width: 100%; min-height: 44px; display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: 10px; align-items: center; text-align: left; padding: 6px 12px 6px 8px; border-radius: 12px; background: #131c33; color: #fff; border: 1px solid transparent; }
 .th .cr-list button[aria-current="true"] { border-color: var(--th-ok); background: #14301f; }
+@media (hover: hover) { .th .cr-list button:not([aria-current="true"]):where(:hover:not(:disabled)) { background: #1a2646; } .th .cr-more:where(:hover:not(:disabled)) { background: rgba(255, 255, 255, 0.06); } }
+.th .cr-list button:not([aria-current="true"]):where(:active:not(:disabled)) { background: #222f52; }
 .cr-list button .cr-logo { grid-row: 1 / span 2; }
 .cr-list b, .cr-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cr-list b { font: 650 0.88rem/1.2 var(--font-ui); } .cr-list small { font-size: 0.74rem; color: #98a4bd; }
@@ -74,6 +82,9 @@
 /* the one-line "now playing" chip under the trip card, while the panel is closed */
 .th .cr-chip { top: var(--cr-top); display: inline-flex; align-items: center; gap: 8px; max-width: var(--cr-w); min-height: 32px; padding: 0 12px 0 10px; border-radius: 99px; background: var(--th-surface); color: #fff; border: 1px solid rgba(63, 208, 138, 0.45); font: 600 0.76rem/1 var(--font-ui); }
 .cr-chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (hover: hover) { .th .cr-chip:where(:hover) { background: #131c33; } }
+/* the panel is dark: its controls keep the green ring (the HUD's dark halo is for controls that float over the map) */
+.th .cr :focus-visible, .th .cr-chip:focus-visible { box-shadow: none; }
 
 /* a finger is the pointer (any phone or tablet): every control is at least 44px, and the panel is a little roomier */
 @media (pointer: coarse) {
