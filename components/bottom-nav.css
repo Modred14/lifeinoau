@@ -1,7 +1,13 @@
 /* components/bottom-nav.css: the persistent bottom bar and the layer contract that keeps it on screen.
 
-   The bar is a frosted-glass pill (Home, Buy, Map: the tab you are on opens into icon + name) with a round Phone button beside it. It is small on purpose: 44px tall (36px
-   buttons), lifted 6px off the bottom edge, so it covers as little of the world as it can.
+   The bar is a frosted-glass pill (Home, Buy, Map: the tab you are on opens into icon + name) with a small Phone button beside it. It is COMPACT on purpose: 32px tall (28px tabs,
+   1px / 2px padding), lifted 3px off the bottom edge, so it covers as little of the world as it can.
+
+   ONE size, everywhere except inside a building. Every dimension of the bar comes from the --nav-* tokens below. The tokens on :root are the compact bar and are the same at every
+   screen size and in every game state (walking the world, the phone and its apps, the map, the travel sheet and the map's place card docked on the bar). There is deliberately NO
+   breakpoint that makes them bigger. The ONE exception is a room you are standing in: BuildingInside.js marks <body data-inside="1"> for as long as an interior is on screen, and
+   the block "inside a building" restores the bar's original size there, token for token (the interior's panel and controls were laid out around it).
+   Anything new that wants the bar's footprint reads --nav-band / --nav-h, never a number.
 
    Why the bar used to vanish: it sat at z-index 30 while the phone, travel sheets, building interiors and dialogs are full-screen layers at 60-95,
    so every one of them covered it; the trip screen hid it outright; and none of those layers left any room for it.
@@ -14,22 +20,80 @@
       their sheets, footers and joysticks) as "device inset + the bar", so their bottom controls stop above the bar instead of under it. */
 :root {
   --z-nav: 500;
-  --nav-gap: 6px; /* between the bar and the bottom edge (the device's own inset comes on top) */
-  --nav-bar-h: 44px; /* 36px buttons + 2 x 3px padding + 2px border: a slim bar */
+  /* ---- the compact bar (outside buildings) ---- */
+  --nav-gap: 3px; /* between the bar and the bottom edge (the device's own inset comes on top) */
+  --nav-btn-h: 28px; /* a tab: still a usable target, WCAG 2.2's minimum is 24px */
+  --nav-bar-h: 32px; /* 28px tabs + 2 x 1px padding + 2px border */
   --nav-band: calc(var(--nav-gap) + var(--nav-bar-h));
+  --nav-w: 184px; /* the floating bar: three tabs (the open one with its name) and the phone, with no slack to speak of */
+  --nav-pad: 1px 2px; /* the bar's own padding: top/bottom 1px, left/right 2px */
+  --nav-row-gap: 2px; /* between the pill and the phone button */
+  --nav-tab-gap: 1px; /* between the tabs */
+  --nav-tab-px: 8px;
+  --nav-tab-minw: 30px;
+  --nav-ico: 18px;
+  --nav-font: 0.7rem;
+  --nav-label-gap: 4px; /* icon to name, on the open tab */
+  --nav-label-max: 3.4rem;
+  --nh-u: 0.65px; /* the handset is drawn in units of this: 1px is the original size, every part of it follows */
+  --nav-badge: 13px; /* the unread count on the phone button */
+  --nav-badge-px: 3px;
+  --nav-badge-top: -5px;
+  --nav-badge-right: -7px;
+  --nav-badge-font: 0.58rem;
+  /* docked on a panel (the travel sheet, the map's place card): the bar takes the panel's width and the pill stays a small centred group in it, not stretched across it */
+  --nav-dock-pad: 1px 2px;
+  --nav-dock-gap: 2px;
+  --nav-dock-radius: 12px;
+  --nav-dock-justify: center;
+  --nav-dock-pill-flex: 0 1 160px; /* the same width the pill has in the floating bar (184px less the phone button) */
+  --nav-dock-pill-h: 100%;
+  --nav-dock-pill-bw: 0px;
   --bp-bg: rgba(13, 19, 33, 0.94); /* the one surface the activities panel and the docked bar share (components/building-panel.css) */
   --bp-line: rgba(255, 255, 255, 0.12);
   --nav-on: #6ee7a8; /* the active tab: the game's green, a little brighter so it holds up on glass */
 }
-/* a phone held sideways has little height to give: the bar gets slimmer */
+
+/* ---- inside a building: the bar exactly as it was (the room's panel, stick and buttons are laid out around these numbers) ---- */
+body[data-inside] {
+  --nav-gap: 6px;
+  --nav-btn-h: 36px;
+  --nav-bar-h: 44px; /* 36px buttons + 2 x 3px padding + 2px border */
+  --nav-band: calc(var(--nav-gap) + var(--nav-bar-h));
+  --nav-h: var(--nav-band); /* globals.css defines it on :root, where it would still see the compact band */
+  --nav-w: 300px;
+  --nav-pad: 3px;
+  --nav-row-gap: 8px;
+  --nav-tab-gap: 2px;
+  --nav-tab-px: 10px;
+  --nav-tab-minw: 38px;
+  --nav-ico: 20px;
+  --nav-font: 0.76rem;
+  --nav-label-gap: 7px;
+  --nav-label-max: 4.6rem;
+  --nh-u: 1px;
+  --nav-badge: 15px;
+  --nav-badge-px: 4px;
+  --nav-badge-top: -6px;
+  --nav-badge-right: -9px;
+  --nav-badge-font: 0.62rem;
+  --nav-dock-pad: 3px;
+  --nav-dock-gap: 4px;
+  --nav-dock-radius: 16px;
+  --nav-dock-justify: flex-start;
+  --nav-dock-pill-flex: 1;
+  --nav-dock-pill-h: var(--nav-bar-h);
+  --nav-dock-pill-bw: 1px;
+}
+/* a phone held sideways has little height to give: the room's bar gets slimmer, as it always did. (The compact bar is already as slim as it goes and does not change.) */
 @media (max-height: 480px) {
-  :root { --nav-gap: 4px; --nav-bar-h: 40px; }
+  body[data-inside] { --nav-gap: 4px; --nav-btn-h: 34px; --nav-bar-h: 40px; --nav-ico: 18px; }
 }
 
 /* The bar: a row holding the pill and the phone button. It has no surface of its own; each part is its own piece of glass. */
 .nav {
   position: fixed; z-index: var(--z-nav); bottom: calc(var(--safe-b) + var(--nav-gap)); left: 50%; transform: translateX(-50%);
-  width: min(300px, calc(100% - 2 * var(--edge))); height: var(--nav-bar-h); display: flex; align-items: flex-end; gap: 8px;
+  width: min(var(--nav-w), calc(100% - 2 * var(--edge))); height: var(--nav-bar-h); display: flex; align-items: flex-end; gap: var(--nav-row-gap);
   animation: nav-in 240ms var(--ease) both;
 }
 @keyframes nav-in { from { opacity: 0; transform: translate(-50%, 10px); } }
@@ -38,21 +102,21 @@
   border: 1px solid var(--glass-line); box-shadow: var(--glass-rim), var(--glass-lift);
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .nav-pill, .nav-phone { background: var(--glass-bg-strong); } }
-.nav-pill { flex: 1; min-width: 0; height: var(--nav-bar-h); display: flex; align-items: stretch; gap: 2px; padding: 3px; border-radius: 999px; }
-/* the Phone button is a little handset standing beside the bar, taller than it, so it reads as the phone you pick up */
-.nav .nav-phone:not(:where(.campus-world *)) { flex: none; width: 34px; height: calc(var(--nav-bar-h) + 12px); padding: 0; border-radius: 10px; display: block; position: relative; background: none; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; color: rgba(234, 240, 248, 0.82); }
-.nav-handset { position: absolute; inset: 0; display: block; border-radius: 10px; background: #0b111d; border: 2px solid #c9d0dd; box-shadow: 0 8px 16px -6px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(0, 0, 0, 0.6); transition: transform 160ms var(--ease), border-color 200ms var(--ease); }
-.nav-handset::before { content: ""; position: absolute; left: -4px; top: 14px; width: 2px; height: 8px; border-radius: 1px; background: #c9d0dd; box-shadow: 0 11px 0 #c9d0dd; } /* the side buttons */
-.nav-handset .nh-screen { position: absolute; inset: 2px; border-radius: 7px; background: #1d2b4d; overflow: hidden; display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px; align-content: center; justify-items: center; padding: 9px 4px 7px; transition: background-color 200ms var(--ease); }
-.nav-handset .nh-screen b { display: block; width: 9px; height: 9px; border-radius: 3px; background: #6ee7a8; }
+.nav-pill { flex: 1; min-width: 0; height: var(--nav-bar-h); display: flex; align-items: stretch; gap: var(--nav-tab-gap); padding: var(--nav-pad); border-radius: 999px; }
+/* the Phone button is a little handset standing beside the bar, a touch taller than it, so it reads as the phone you pick up */
+.nav .nav-phone:not(:where(.campus-world *)) { flex: none; width: calc(34 * var(--nh-u)); height: calc(var(--nav-bar-h) + 12 * var(--nh-u)); min-height: 0; /* the shared button skin asks for 44px, which the compact handset must not inherit */ padding: 0; border-radius: calc(10 * var(--nh-u)); display: block; position: relative; background: none; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; color: rgba(234, 240, 248, 0.82); }
+.nav-handset { position: absolute; inset: 0; display: block; border-radius: calc(10 * var(--nh-u)); background: #0b111d; border: calc(2 * var(--nh-u)) solid #c9d0dd; box-shadow: 0 calc(8 * var(--nh-u)) calc(16 * var(--nh-u)) calc(-6 * var(--nh-u)) rgba(0, 0, 0, 0.7), inset 0 0 0 calc(1 * var(--nh-u)) rgba(0, 0, 0, 0.6); transition: transform 160ms var(--ease), border-color 200ms var(--ease); }
+.nav-handset::before { content: ""; position: absolute; left: calc(-4 * var(--nh-u)); top: calc(14 * var(--nh-u)); width: calc(2 * var(--nh-u)); height: calc(8 * var(--nh-u)); border-radius: calc(1 * var(--nh-u)); background: #c9d0dd; box-shadow: 0 calc(11 * var(--nh-u)) 0 #c9d0dd; } /* the side buttons */
+.nav-handset .nh-screen { position: absolute; inset: calc(2 * var(--nh-u)); border-radius: calc(7 * var(--nh-u)); background: #1d2b4d; overflow: hidden; display: grid; grid-template-columns: repeat(2, 1fr); gap: calc(3 * var(--nh-u)); align-content: center; justify-items: center; padding: calc(9 * var(--nh-u)) calc(4 * var(--nh-u)) calc(7 * var(--nh-u)); transition: background-color 200ms var(--ease); }
+.nav-handset .nh-screen b { display: block; width: calc(9 * var(--nh-u)); height: calc(9 * var(--nh-u)); border-radius: calc(3 * var(--nh-u)); background: #6ee7a8; }
 .nav-handset .nh-screen b:nth-child(2) { background: #6aa7ff; } .nav-handset .nh-screen b:nth-child(3) { background: #f2b84b; } .nav-handset .nh-screen b:nth-child(4) { background: #ff8a8a; }
-.nav-handset .nh-island { position: absolute; z-index: 1; left: 50%; top: 4px; width: 10px; height: 3px; margin-left: -5px; border-radius: 3px; background: #05080f; } /* the speaker slot */
-.nav-handset .nh-home { position: absolute; z-index: 1; left: 50%; bottom: 3px; width: 12px; height: 2px; margin-left: -6px; border-radius: 2px; background: rgba(255, 255, 255, 0.7); } /* the home bar */
+.nav-handset .nh-island { position: absolute; z-index: 1; left: 50%; top: calc(4 * var(--nh-u)); width: calc(10 * var(--nh-u)); height: calc(3 * var(--nh-u)); margin-left: calc(-5 * var(--nh-u)); border-radius: calc(3 * var(--nh-u)); background: #05080f; } /* the speaker slot */
+.nav-handset .nh-home { position: absolute; z-index: 1; left: 50%; bottom: calc(3 * var(--nh-u)); width: calc(12 * var(--nh-u)); height: calc(2 * var(--nh-u)); margin-left: calc(-6 * var(--nh-u)); border-radius: calc(2 * var(--nh-u)); background: rgba(255, 255, 255, 0.7); } /* the home bar */
 
 .nav-pill > a, .nav-pill > button:not(:where(.campus-world *)) {
-  position: relative; flex: 1 1 0; min-width: 38px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 0;
-  font-size: 0.76rem; font-weight: 600; letter-spacing: 0.01em; line-height: 1; white-space: nowrap;
-  border-radius: 999px; border: 0; background: transparent; color: rgba(234, 240, 248, 0.72); padding: 0 10px; box-shadow: inset 0 0 0 1px rgba(110, 231, 168, 0);
+  position: relative; flex: 1 1 0; min-width: var(--nav-tab-minw); min-height: var(--nav-btn-h); display: inline-flex; align-items: center; justify-content: center; gap: 0;
+  font-size: var(--nav-font); font-weight: 600; letter-spacing: 0.01em; line-height: 1; white-space: nowrap;
+  border-radius: 999px; border: 0; background: transparent; color: rgba(234, 240, 248, 0.72); padding: 0 var(--nav-tab-px); box-shadow: inset 0 0 0 1px rgba(110, 231, 168, 0);
   -webkit-tap-highlight-color: transparent; touch-action: manipulation;
   /* Every tab has the same flex-basis (0) and only its flex-GROW changes, so the widths interpolate smoothly: the tab you leave closes while the new one opens, in one motion. */
   transition: background-color 280ms var(--ease), color 220ms var(--ease), box-shadow 280ms var(--ease), transform 120ms var(--ease), flex-grow 340ms cubic-bezier(0.32, 0.72, 0, 1);
@@ -60,8 +124,8 @@
 /* the name is there for everyone (screen readers read it, a hover shows it as a tooltip) but only the tab you are on shows it: it opens out beside the icon */
 .nav-pill > * > span { max-width: 0; margin-left: 0; opacity: 0; overflow: hidden; transition: max-width 340ms cubic-bezier(0.32, 0.72, 0, 1), margin-left 340ms cubic-bezier(0.32, 0.72, 0, 1), opacity 240ms var(--ease); }
 .nav-pill [data-active="1"] { flex-grow: 2; background: rgba(110, 231, 168, 0.18); color: var(--nav-on); box-shadow: inset 0 0 0 1px rgba(110, 231, 168, 0.22); }
-.nav-pill [data-active="1"] > span { max-width: 4.6rem; margin-left: 7px; opacity: 1; }
-.nav svg { width: 20px; height: 20px; flex: none; transition: transform 200ms var(--ease); }
+.nav-pill [data-active="1"] > span { max-width: var(--nav-label-max); margin-left: var(--nav-label-gap); opacity: 1; }
+.nav svg { width: var(--nav-ico); height: var(--nav-ico); flex: none; transition: transform 200ms var(--ease); }
 .nav-pill > a:hover:not([data-active="1"]), .nav-pill > button:not(:where(.campus-world *)):hover:not(:disabled):not([data-active="1"]) { color: #fff; background-color: rgba(255, 255, 255, 0.1); }
 .nav .nav-phone:not(:where(.campus-world *)):hover .nav-handset { border-color: #fff; }
 .nav-pill > button:disabled { opacity: 0.4; }
@@ -69,10 +133,6 @@
 .nav .nav-phone:not(:where(.campus-world *)):active { transform: none; } .nav .nav-phone:active .nav-handset { transform: translateY(1px) scale(0.96); }
 .nav .nav-phone[data-active="1"] .nav-handset { border-color: var(--nav-on); } .nav .nav-phone[data-active="1"] .nh-screen { background: #1f5b43; }
 .nav a:focus-visible, .nav button:focus-visible { outline: 2px solid var(--nav-on); outline-offset: -2px; }
-@media (max-height: 480px) {
-  .nav-pill > a, .nav-pill > button:not(:where(.campus-world *)) { min-height: 34px; }
-  .nav svg { width: 18px; height: 18px; }
-}
 @media (prefers-reduced-motion: reduce) {
   .nav { animation: none; }
   .nav a, .nav button, .nav svg, .nav-pill > * > span { transition: none !important; }
@@ -111,16 +171,16 @@ body[data-nav="on"] .sx-toast { bottom: calc(20px + var(--safe-b)); }
    same background, side and bottom borders only, square top corners and no top edge (the panel / card draws the single top border). The pill and the phone button lose their own
    glass, so what is left is the one surface with the icons on it. */
 body[data-dock="on"] .nav {
-  box-sizing: border-box; width: min(520px, calc(100% - 2 * var(--edge))); padding: 3px; gap: 4px; background: var(--bp-bg); border: 0 solid var(--bp-line); border-width: 0 1px 1px;
-  border-radius: 0 0 16px 16px; box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.75);
+  box-sizing: border-box; width: min(520px, calc(100% - 2 * var(--edge))); padding: var(--nav-dock-pad); gap: var(--nav-dock-gap); justify-content: var(--nav-dock-justify); background: var(--bp-bg); border: 0 solid var(--bp-line); border-width: 0 1px 1px;
+  border-radius: 0 0 var(--nav-dock-radius) var(--nav-dock-radius); box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.75);
 }
 body[data-dock="on"] .nav .nav-pill { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; border-color: transparent; box-shadow: none; }
-body[data-dock="on"] .nav-pill { padding: 0; }
+body[data-dock="on"] .nav-pill { padding: 0; flex: var(--nav-dock-pill-flex); height: var(--nav-dock-pill-h); border-width: var(--nav-dock-pill-bw); }
 /* the unread badge on the Phone button: pinned to the icon, so it never moves it */
 .nav .nav-ico { position: relative; display: inline-grid; place-items: center; line-height: 0; }
 .nav .nav-phone .nav-ico { position: static; display: block; } /* the handset and the badge are placed against the button itself */
 .nav .nav-badge {
-  position: absolute; top: -6px; right: -9px; z-index: 2; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; box-sizing: border-box;
-  display: grid; place-items: center; background: #ef4444; color: #fff; font: 700 0.62rem/1 var(--font-ui); font-style: normal;
+  position: absolute; top: var(--nav-badge-top); right: var(--nav-badge-right); z-index: 2; min-width: var(--nav-badge); height: var(--nav-badge); padding: 0 var(--nav-badge-px); border-radius: 8px; box-sizing: border-box;
+  display: grid; place-items: center; background: #ef4444; color: #fff; font: 700 var(--nav-badge-font)/1 var(--font-ui); font-style: normal;
   border: 1.5px solid rgb(22, 32, 50);
 }
