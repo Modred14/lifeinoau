@@ -32,7 +32,8 @@ function plan(mode, skip = 0) { let n = 0; for (let i = 0; i < 400; i++) { const
 function rig(modelId, mode = "car", skip = 0) {
   const pl = plan(mode, skip); if (!pl) return null;
   let seed = 5; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
-  const sim = createTrafficSim({ graph: svc.graph, world: svc.world, focus: () => pl.start ?? places[0], rnd }), D = VEHICLE_DIMS[modelId] ?? VEHICLE_DIMS["corolla-2011"], notices = [];
+  // the traffic is seeded far from the test road: these tests are about the controls, and whether a traffic car happens to stand in the way (it did, 3 m ahead of the Accord) is not what they measure
+  const sim = createTrafficSim({ graph: svc.graph, world: svc.world, focus: () => ({ x: -4000, z: -4000 }), rnd }), D = VEHICLE_DIMS[modelId] ?? VEHICLE_DIMS["corolla-2011"], notices = [];
   const seat = { x: -0.4, y: 0.42, z: -0.25 };
   const flow = createTripFlow({ svc, sim }, { plan: pl, onArrive: () => true, onEnter() {}, onEnd() {}, onNotice: (m) => notices.push(m), dims: { len: D.length, wid: D.width, id: modelId, seat, driver: { ...seat, x: 0.4 } } });
   const win = new EventTarget(), doc = new EventTarget(); doc.hidden = false; doc.dialogs = []; doc.querySelectorAll = () => doc.dialogs; let clock = 0;
@@ -52,13 +53,15 @@ function rig(modelId, mode = "car", skip = 0) {
 const sgn = (x) => (Math.abs(x) < 1e-3 ? 0 : Math.sign(x));
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
+// The road is searched with the widest and longest ground car, so that it is open for every car the test then drives down it (a Corolla fits where an Accord or a C-Class clips a lamp post).
+const GROUND = CARS.filter((c) => !c.flies).map((c) => c.id), WIDEST = [...GROUND].sort((a, b) => ((VEHICLE_DIMS[b]?.width ?? 0) - (VEHICLE_DIMS[a]?.width ?? 0)) || ((VEHICLE_DIMS[b]?.length ?? 0) - (VEHICLE_DIMS[a]?.length ?? 0)))[0];
 // ---- find a start with open road ahead AND behind it (the first plan's kerb faces a wall: a collision, not a control problem, would end every test)
 const OPEN = (() => {
   for (let skip = 0; skip < 40; skip++) {
-    const R = rig("corolla-2011", "car", skip); if (!R || !R.drive()) continue; const o = R.flow.own, pose = { x: o.x, z: o.z, ang: o.ang };
-    const go = (g) => { R.reset(pose); let mv = 0, vmax = 0, min = 99; for (let i = 0; i < 150; i++) { R.flow.update(DT, g); R.sim.update(DT); vmax = Math.max(vmax, Math.abs(o.v)); if (i > 20) min = Math.min(min, o.v); } return { min, vmax, pen: o.pen, d: Math.hypot(o.x - pose.x, o.z - pose.z) }; };
+    const R = rig(WIDEST, "car", skip); if (!R || !R.drive()) continue; const o = R.flow.own, pose = { x: o.x, z: o.z, ang: o.ang };
+    const go = (g) => { R.reset(pose); let mv = 0, vmax = 0, min = 99, hit = 0; for (let i = 0; i < 150; i++) { R.flow.update(DT, g); R.sim.update(DT); vmax = Math.max(vmax, Math.abs(o.v)); hit = Math.max(hit, o.impact); if (i > 20) min = Math.min(min, o.v); } return { min, vmax, hit, pen: o.pen, d: Math.hypot(o.x - pose.x, o.z - pose.z) }; };
     const f = go({ gas: 1 }), b = go({ brake: 1 });
-    R.vin.detach(); if (f.vmax > 14 && f.d > 45 && b.vmax > 1.5 && b.d > 3) return { skip, pose };
+    R.vin.detach(); if (f.vmax > 14 && f.d > 45 && b.vmax > 1.5 && b.d > 3 && f.hit === 0 && b.hit === 0) return { skip, pose };
   }
   return null;
 })();
