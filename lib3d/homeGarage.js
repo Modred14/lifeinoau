@@ -9,6 +9,7 @@ import { createAvatar } from "./avatar/loadAvatar.js";
 import { garageLayout, garageWalkPath, garageVehicleSize, G } from "./garageLayout.js";
 import { driveWorld, createDriver, onRoad } from "./garageDrive.js";
 import { createSkyRig } from "./daylightRig.js";
+import { attachVehicleKeys, driveAxes } from "./vehicleInput.js";
 
 export function createHomeGarage(container, vehicles, options = {}) {
   const layout = garageLayout(vehicles), L = layout;
@@ -92,13 +93,11 @@ export function createHomeGarage(container, vehicles, options = {}) {
   canvas.addEventListener("pointerdown", pointerDown); canvas.addEventListener("pointerup", pointerUp);
 
   // ---- driving: keyboard, and a virtual stick/pedals fed through setInput (touch and mouse) ----
-  const keys = new Set(), pad = { throttle: 0, steer: 0 };
-  const KEYMAP = { ArrowUp: "up", w: "up", W: "up", ArrowDown: "down", s: "down", S: "down", ArrowLeft: "left", a: "left", A: "left", ArrowRight: "right", d: "right", D: "right", " ": "down" };
-  const keydown = (e) => { if (!drive || e.metaKey || e.ctrlKey || e.altKey) return; const k = KEYMAP[e.key]; if (!k) return; keys.add(k); e.preventDefault(); };
-  const keyup = (e) => { const k = KEYMAP[e.key]; if (k) keys.delete(k); };
-  const clearInput = () => { keys.clear(); pad.throttle = 0; pad.steer = 0; };
-  window.addEventListener("keydown", keydown); window.addEventListener("keyup", keyup); window.addEventListener("blur", clearInput); document.addEventListener("visibilitychange", clearInput);
-  const input = () => ({ throttle: Math.max(-1, Math.min(1, (keys.has("up") ? 1 : 0) - (keys.has("down") ? 1 : 0) + pad.throttle)), steer: Math.max(-1, Math.min(1, (keys.has("right") ? 1 : 0) - (keys.has("left") ? 1 : 0) + pad.steer)) });
+  // The keys are lib3d/vehicleInput.js, the same binding the map and the compound use (this used to be a private key map by typed letter: it broke on other keyboard layouts and left keys
+  // stuck when Cmd was held). Taken only while driving. W S A D / arrows / Space (brake); the pad adds to them.
+  const pad = { throttle: 0, steer: 0 }, vin = attachVehicleKeys({ active: () => !!drive }), kb = vin.keys;
+  const clearInput = () => { vin.clear(); pad.throttle = 0; pad.steer = 0; };
+  const input = () => (vin.blocked() ? { throttle: 0, steer: 0 } : driveAxes(kb.read(), pad));
 
   const cam = { pos: new T.Vector3(), look: new T.Vector3(), ready: false }, tmp = new T.Vector3();
   let lastReport = "", wasOnRoad = false, steerShown = 0;
@@ -137,6 +136,6 @@ export function createHomeGarage(container, vehicles, options = {}) {
     layout, select(id) { selected = id; }, startDrive, stopDrive, isDriving: () => !!drive,
     setInput({ throttle, steer } = {}) { if (throttle != null) pad.throttle = Math.max(-1, Math.min(1, throttle)); if (steer != null) pad.steer = Math.max(-1, Math.min(1, steer)); },
     carState: () => (drive ? { ...drive.driver.state } : null),
-    dispose() { alive = false; canvas.removeEventListener("pointerdown", pointerDown); canvas.removeEventListener("pointerup", pointerUp); window.removeEventListener("keydown", keydown); window.removeEventListener("keyup", keyup); window.removeEventListener("blur", clearInput); document.removeEventListener("visibilitychange", clearInput); avatar?.dispose(); stage.dispose(); for (const m of disposed) m.dispose(); for (const m of carMeshes.values()) m.vehicle.dispose(); group.traverse((o) => { if (o.isMesh && !o.geometry?.userData?.shared) o.geometry?.dispose(); }); },
+    dispose() { alive = false; canvas.removeEventListener("pointerdown", pointerDown); canvas.removeEventListener("pointerup", pointerUp); vin.detach(); avatar?.dispose(); stage.dispose(); for (const m of disposed) m.dispose(); for (const m of carMeshes.values()) m.vehicle.dispose(); group.traverse((o) => { if (o.isMesh && !o.geometry?.userData?.shared) o.geometry?.dispose(); }); },
   };
 }

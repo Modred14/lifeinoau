@@ -9,7 +9,7 @@ const ev = (code, target = {}) => ({ code, key: code.slice(-1).toLowerCase(), ta
 const k = createKeys(); k.press(ev("KeyW")); chk("W is read from its place on the keyboard", k.read().up === 1);
 const box = { closest: (s) => (s.includes("input") ? {} : null) }; const k2 = createKeys(); k2.press(ev("KeyW", box)); chk("typing in a box never drives", k2.read().up === 0);
 const src = (f) => readFileSync(new URL(f, import.meta.url), "utf8");
-chk("the compound's keys go through tripkeys (no raw e.key map)", /createKeys/.test(src("../lib3d/compoundFleet.js")) && !/KEYMAP/.test(src("../lib3d/compoundFleet.js")));
+chk("the compound's keys go through tripkeys (no raw e.key map)", /attachVehicleKeys/.test(src("../lib3d/compoundFleet.js")) && /createKeys/.test(src("../lib3d/vehicleInput.js")) && !/KEYMAP/.test(src("../lib3d/compoundFleet.js")));
 chk("a pointer-up in the room never re-enables the orbit controls while driving", /if \(!fleet\.isDriving\(\)\) controls\.enabled = true/.test(src("../lib3d/room.js")));
 chk("the stage keeps its controls off while a caller drives the camera", /if \(manual\) \{ if \(controls\.enabled\) controls\.enabled = false/.test(src("../lib3d/stage.js")));
 process.exit(bad ? 1 : 0);

@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import SteerButtons from "./SteerButtons";
+import Hold, { NO_GESTURE } from "./HoldButton";
 import CarRadio from "./CarRadio";
 import { playSound } from "@/lib/sound";
 import { fmtDuration } from "@/lib/travel.js";
@@ -18,38 +19,21 @@ const TEXT = {
   intro: "Getting ready…", approach: "Walking to your ride", board: "Getting in…", ride: "On the way", paying: "Paying the fare…", alight: "Getting out…", exit: "Getting out…", afoot: "Out of the car", reenter: "Getting back in…", walk: "Walking to the door", door: "Going in…", enter: "Going in…", inside: "Going in…", leave: "Stepping out…", roam: "Walk on · tap a place name to go there",
 };
 
-/** Stops the browser scrolling, zooming, selecting or opening a menu under a finger that is steering. */
-const NO_GESTURE = { touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none", WebkitTapHighlightColor: "transparent" };
+export { Hold };   // the held button is components/HoldButton.js (one finger, released on cancel / blur / hide: lib/pointerHold.js); BuildingInside and the pads import it from here
 
 /** A thumb stick: drag inside the circle. Writes -1..1 into input.jx / input.jy. It follows ONE finger (the one that touched it first); other fingers, on it or elsewhere, are ignored. */
 export function Stick({ input }) {
   const ref = useRef(null), id = useRef(null), [dot, setDot] = useState([0, 0]);
   const move = (e) => { const r = ref.current.getBoundingClientRect(), R = r.width / 2, dx = e.clientX - (r.left + R), dy = e.clientY - (r.top + R), d = Math.min(R * 0.8, Math.hypot(dx, dy)), a = Math.atan2(dy, dx), x = Math.cos(a) * d, y = Math.sin(a) * d; setDot([x, y]); input.jx = x / (R * 0.8); input.jy = -y / (R * 0.8); };
   const end = (e) => { if (e && e.pointerId !== id.current) return; id.current = null; setDot([0, 0]); input.jx = 0; input.jy = 0; };
-  useEffect(() => () => { input.jx = 0; input.jy = 0; }, [input]); // leaving the screen never leaves the stick pushed
+  useEffect(() => { const off = () => end(); window.addEventListener("blur", off); document.addEventListener("visibilitychange", off); return () => { window.removeEventListener("blur", off); document.removeEventListener("visibilitychange", off); input.jx = 0; input.jy = 0; }; }, [input]); // eslint-disable-line react-hooks/exhaustive-deps -- leaving the screen, losing focus or hiding the tab never leaves the stick pushed
   return <div ref={ref} className="th-stick" style={NO_GESTURE} role="application" aria-label="Walk: drag to move" onContextMenu={(e) => e.preventDefault()}
     onPointerDown={(e) => { if (id.current != null) return; id.current = e.pointerId; e.currentTarget.setPointerCapture(e.pointerId); move(e); e.preventDefault(); }}
     onPointerMove={(e) => { if (e.pointerId === id.current) move(e); }} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}><i style={{ transform: `translate(${dot[0]}px, ${dot[1]}px)` }} /></div>;
 }
-/** A button that is "down" while held, by the one finger that pressed it: a second finger on it does not press it again, and lifting that one does not release the first. While it is down it
- *  carries data-down, so the button can show it (written straight to the element: pressing a pedal never re-renders the screen). */
-export function Hold({ className, label, onDown, onUp, children }) {
-  const id = useRef(null), el = useRef(null), mark = (on) => { const b = el.current; if (!b) return; if (on) b.dataset.down = "1"; else delete b.dataset.down; };
-  const up = (e) => { if (e.pointerId !== id.current) return; id.current = null; mark(false); onUp(); };
-  useEffect(() => () => { if (id.current != null) onUp(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  return <button ref={el} type="button" className={className} style={NO_GESTURE} aria-label={label} data-sound="none" onPointerDown={(e) => { if (id.current != null) return; id.current = e.pointerId; e.currentTarget.setPointerCapture(e.pointerId); mark(true); onDown(); e.preventDefault(); }} onPointerUp={up} onPointerCancel={up} onLostPointerCapture={up} onContextMenu={(e) => e.preventDefault()}>{children}</button>;
-}
-
 export default function TripHud({ trip, placeName, st, input, miniRef, previewRef, onCancel }) {
   const [preview, setPreview] = useState(false), phase = st?.phase ?? "intro", drive = trip.mode === "car" && !trip.driver, steering = phase === "drive", walking = ["trek", "approach", "walk", "afoot", "door", "roam", "leave"].includes(phase), doorOn = phase === "door" && st?.hasDoor;
-  // the H key is the horn on a keyboard: it sounds for as long as it is held (never while typing, never with a shortcut such as Ctrl+H, and key repeat does not matter: held is held)
-  useEffect(() => {
-    if (!steering) return;
-    const typing = (e) => e.metaKey || e.ctrlKey || e.altKey || e.target?.closest?.("input,textarea,select"), isH = (e) => e.code === "KeyH" || (!e.code && e.key?.toLowerCase() === "h");
-    const down = (e) => { if (!typing(e) && isH(e)) input.horn = true; }, up = (e) => { if (isH(e)) input.horn = false; }, off = () => { input.horn = false; };
-    window.addEventListener("keydown", down); window.addEventListener("keyup", up); window.addEventListener("blur", off);
-    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); window.removeEventListener("blur", off); input.horn = false; };
-  }, [steering, input]);
+  // the H key is the horn on a keyboard too: it is read with the other keys (lib3d/tripkeys.js, lib3d/vehicleInput.js), so it drops with them when focus is lost
   useEffect(() => { if (!preview) return; const k = (e) => e.key === "Escape" && setPreview(false); document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [preview]);
   const m = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + " km" : n + " m");
   const vname = trip.mode === "bus" ? "bus" : trip.mode === "keke" ? "keke" : "car";
@@ -85,22 +69,8 @@ export default function TripHud({ trip, placeName, st, input, miniRef, previewRe
           <SteerButtons input={input} />
           <div className="th-pedals">
             <div className="th-aux">
-              <button type="button" className="th-btn th-horn" aria-label="Horn: hold to sound it" data-sound="none" style={NO_GESTURE}
-                onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); input.horn = true; e.preventDefault(); }} onPointerUp={() => (input.horn = false)} onPointerCancel={() => (input.horn = false)} onLostPointerCapture={() => (input.horn = false)}
-                onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { input.horn = true; e.preventDefault(); } }} onKeyUp={(e) => { if (e.key === " " || e.key === "Enter") input.horn = false; }} onBlur={() => (input.horn = false)} onContextMenu={(e) => e.preventDefault()}><Icon name="horn" size={22} weight="fill" /></button>
+              <Hold className="th-btn th-horn" label="Horn: hold to sound it" keys onDown={() => (input.horn = true)} onUp={() => (input.horn = false)}><Icon name="horn" size={22} weight="fill" /></Hold>
               <CarRadio active />
-              {st?.canFly && (
-                <button type="button" className="th-btn th-fly" aria-label={st.airborne ? "Land the car" : "Take off"} data-sound="none" onClick={() => { input.fly = true; playSound("tap"); }}>
-                  <Icon name="plane" size={20} weight="bold" /> <span>{st.airborne ? "Land" : "Take off"}</span>
-                </button>
-              )}
-              {st?.canFly && st.airborne && (
-                <>
-                  <Hold className="th-btn th-climb" label="Climb" onDown={() => (input.climb = 1)} onUp={() => (input.climb = 0)}><b>▲ UP</b></Hold>
-                  <Hold className="th-btn th-climb" label="Descend" onDown={() => (input.climb = -1)} onUp={() => (input.climb = 0)}><b>▼ DOWN</b></Hold>
-                  <span className="th-alt" aria-live="off">{st.alt} m</span>
-                </>
-              )}
               <button type="button" className="th-btn th-exit" aria-label="Exit car" data-sound="none" disabled={!!st?.exiting || !!st?.airborne} onClick={() => { input.exit = true; playSound("tap"); }}>
                 <Icon name="door" size={20} weight="bold" /> <span>{st?.exiting ? "Stopping…" : "Exit car"}</span>
               </button>
@@ -114,6 +84,16 @@ export default function TripHud({ trip, placeName, st, input, miniRef, previewRe
               <b>GAS</b>
             </Hold>
           </div>
+          {st?.canFly && (
+            <div className="th-flight" role="group" aria-label="Flight controls">
+              {st.airborne && <span className="th-alt" aria-live="off">{st.alt} m</span>}
+              {st.airborne && <Hold className="th-btn th-climb" label="Climb" keys onDown={() => (input.climbUp = true)} onUp={() => (input.climbUp = false)}><b>▲ UP</b></Hold>}
+              {st.airborne && <Hold className="th-btn th-climb" label="Descend" keys onDown={() => (input.climbDown = true)} onUp={() => (input.climbDown = false)}><b>▼ DOWN</b></Hold>}
+              <button type="button" className="th-btn th-fly" aria-label={st.airborne ? "Land the car" : "Take off"} data-sound="none" onClick={() => { input.fly = true; playSound("tap"); }}>
+                <Icon name="plane" size={20} weight="bold" /> <span>{st.airborne ? "Land" : "Take off"}</span>
+              </button>
+            </div>
+          )}
           <div className="th-keys" aria-hidden="true"><span><kbd>W</kbd><kbd>↑</kbd> Gas</span><span><kbd>S</kbd><kbd>↓</kbd> Brake · hold to reverse</span><span><kbd>A</kbd><kbd>D</kbd> Steer</span><span><kbd>H</kbd> Horn (hold)</span><span><kbd>R</kbd> Radio</span><span><kbd>E</kbd> Exit car</span>{st?.canFly && <><span><kbd>T</kbd> Take off / land</span><span><kbd>Q</kbd><kbd>Z</kbd> Up / down</span></>}</div>
         </>
       )}

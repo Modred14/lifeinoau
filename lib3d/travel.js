@@ -33,8 +33,7 @@ import { lookKey } from "../lib/look.js";
 import { paintBase, drawMini, drawPreview } from "./minimap.js";
 import { createGuide } from "./tripguide.js";
 import { CAM, PITCH, clamp, ease, frame, clearBack, followBack, zoomByPinch, zoomByWheel, angDiff, followYaw } from "./tripcam.js";
-import { createKeys, isActKey, isFlyKey } from "./tripkeys.js";
-import { stepKeySteer } from "./keysteer.js";
+import { attachVehicleKeys, createVehicleReader } from "./vehicleInput.js";
 import { attachTripPointer } from "./tripinput.js";
 
 let netCache = null;
@@ -183,9 +182,9 @@ export async function startTrip(env, o) {
   // ---- controls: keys (cleared when the window loses focus, so a key never sticks), and dragging the picture to look around ----
   // lib3d/tripkeys.js: keys are told apart by where they are on the keyboard (so W A S D work on any layout), a shortcut such as Cmd+D is never a control, letting go of Cmd drops everything
   // held (a Mac sends no key-up for the others while it is down), and losing focus or hiding the tab clears the lot, so a key can never stay "pressed" and steer the car by itself.
-  const kb = createKeys(), kd = (e) => { if (kb.press(e)) e.preventDefault(); }, ku = (e) => kb.release(e), blur = () => kb.clear(), hide = () => { if (document.hidden) kb.clear(); };
-  window.addEventListener("keydown", kd); window.addEventListener("keyup", ku); window.addEventListener("blur", blur); document.addEventListener("visibilitychange", hide);
-  disposers.push(() => { window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); window.removeEventListener("blur", blur); document.removeEventListener("visibilitychange", hide); });
+  // lib3d/vehicleInput.js is the one keyboard binding for every vehicle (this map trip, the home compound, the garage): it also drops every key when focus moves into a text box, a context menu opens,
+  // or a modal dialog (the Phone, the travel sheet) opens over the game, so a held W never keeps the car accelerating under a screen.
+  const vin = attachVehicleKeys(), kb = vin.keys; disposers.push(() => vin.detach());
   // Looking round, zooming and (on a touch screen, while driving) swiping to steer all come through lib3d/tripinput.js: every finger is tracked by its own id on the canvas only, so a finger on
   // the on-screen stick or a button is never also read as a camera drag, a second finger pinches instead of rotating, and the orbit controls are switched off for the whole trip (stage.setManual).
   const inVehNow = () => !!vehicle && ["ride", "drive", "paying"].includes(F.phase);
@@ -201,16 +200,14 @@ export async function startTrip(env, o) {
   const driving = () => F.phase === "drive";
   // One-shot buttons (the HUD buttons and the E / F keys) are read once and cleared every frame, so a press is never seen twice and never lingers into a later phase.
   const taken = (n) => { const v = !!input[n]; input[n] = false; return v; };
-  const keyHit = new Set(), kh = (e) => { if (isActKey(e)) keyHit.add("act"); if (isFlyKey(e)) keyHit.add("fly"); };
-  window.addEventListener("keydown", kh); disposers.push(() => window.removeEventListener("keydown", kh));
   // The keys steer through lib3d/keysteer.js: a key moves the steering towards full lock at a limited rate and lets it back to straight, like a wheel, instead of throwing it to full lock.
-  let keySteer = 0;
+  const vreader = createVehicleReader({ vin, input });   // keys + on-screen controls -> what the vehicle is asked (lib3d/vehicleInput.js): eased key steering, zero under a dialog, cleared when you leave the vehicle
+  let hornNow = false;
   const read = (dt = 0) => {
-    const kk = kb.read(), drive = driving(), afoot = F.phase === "afoot", act = keyHit.delete("act"), exitBtn = taken("exit"), enterBtn = taken("enter"), closeBtn = taken("close"), flyBtn = taken("fly"), flyKey = keyHit.delete("fly"), doorBtn = taken("door"), goInBtn = taken("goin"), stopBtn = taken("stop"), atDoor = F.phase === "door";
-    keySteer = drive ? stepKeySteer(keySteer, kk.steer, dt) : 0;
-    const wheel = Math.max(-1, Math.min(1, (input.steer ?? 0) + keySteer));   // the on-screen wheel and the keys add up; +1 is a right turn
+    const vr = vreader.read(driving(), dt), kk = vr.kk, drive = vr.drive, afoot = F.phase === "afoot", act = vin.take("act"), exitBtn = taken("exit"), enterBtn = taken("enter"), closeBtn = taken("close"), flyBtn = taken("fly"), flyKey = vin.take("fly"), doorBtn = taken("door"), goInBtn = taken("goin"), stopBtn = taken("stop"), atDoor = F.phase === "door";
+    hornNow = vr.horn;
     return { fwd: Math.max(kk.up, input.jy > 0 ? input.jy : 0), back: Math.max(kk.down, input.jy < 0 ? -input.jy : 0), right: Math.max(kk.right, input.jx > 0 ? input.jx : 0) - Math.max(kk.left, input.jx < 0 ? -input.jx : 0), run: !!kk.run || !!input.run,
-      gas: drive ? Math.max(kk.up, input.gas ?? 0) : 0, brake: drive ? Math.max(kk.down, kk.space, input.brake ?? 0) : 0, steer: drive ? wheel : 0, fly: drive && (flyBtn || flyKey), climb: drive ? Math.max(-1, Math.min(1, kk.climb + (input.climb ?? 0))) : 0,
+      gas: vr.gas, brake: vr.brake, steer: vr.steer, fly: drive && (flyBtn || flyKey), climb: vr.climb,
       exit: drive && (exitBtn || act), enter: afoot && (enterBtn || (act && F.canEnter)), close: afoot && (closeBtn || (act && !F.canEnter && F.canClose)),
       door: atDoor && (doorBtn || (act && F.door === "closed")), goIn: atDoor && (goInBtn || (act && F.door === "open")), stop: stopBtn };   // Open Door / Go in / stop the automatic walk: the buttons, and E or F for the door
   };
@@ -325,7 +322,7 @@ export async function startTrip(env, o) {
     flow.update(dt, { dx: ax, dz: az, mag: m, run: inp.run, gas: inp.gas, brake: inp.brake, steer: inp.steer, exit: inp.exit, enter: inp.enter, close: inp.close, fly: inp.fly, climb: inp.climb });
     lastPhase = F.phase;
     // sound: where the listener is and which way the view faces, what you are riding or driving, who is near. The horn is the held HUD button / H key (input.horn).
-    { const vv = inVehNow() ? flow.vehicle : null, who = vv ?? P, sp = vv ? (vv.v ?? 0) : WK.speed, hx = who.hx ?? 0, hz = who.hz ?? 1, horn = !!input.horn && driving();
+    { const vv = inVehNow() ? flow.vehicle : null, who = vv ?? P, sp = vv ? (vv.v ?? 0) : WK.speed, hx = who.hx ?? 0, hz = who.hz ?? 1, horn = hornNow;
       if (audio) audio.update(dt, { phase: F.phase, mode, carId: vehicle?.id ?? o.car ?? null, ego: flow.vehicle ?? null, own: flow.own ?? null, pos: { x: who.x, z: who.z, vx: hx * sp, vz: hz * sp }, fwd: f, horn, onDeck: ((flow.own ? flow.own.h : flow.vehicle?.y) ?? 0) > 2, sim: traffic.sim.vehicles, peds: traffic.sim.peds, remote: traffic.remoteVehicles });
       else if (horn && !hornWas) playSound("horn");   // no trip sound (it failed to load): the old single beep
       hornWas = horn; }

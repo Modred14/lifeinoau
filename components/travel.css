@@ -382,3 +382,20 @@ body[data-nav="on"] .ts-scroll { padding-bottom: 14px; }
 /* keyboard focus: the green ring (globals.css) sits on a dark halo, the gap between the control and the ring, so it reads over a bright daytime map and a dark night one alike.
    It only adds the halo: the control keeps its own colours and size. (The radio panel below the HUD is dark itself and goes without: see car-radio.css.) */
 .th :focus-visible { box-shadow: 0 0 0 2px var(--ring-gap); }
+
+/* The flight controls of a flying car (Take off / Land, climb, descend, the altitude) have their OWN cluster, above the steering pads on the left. They used to ride in the pedal column with the
+   horn, the radio and Exit: seven buttons in a 166 px column, which ran off the left edge of every phone while flying (Land was out of reach) and off the top of a phone held sideways.
+   Now the pedal column holds three small buttons at most, and this cluster has the whole free width above the steering: a column on a tall screen, a wrapping row on a short one. */
+.th { --th-sb: max(64px, calc(var(--th-wheel) * 0.56)); }   /* the size of a steering pad (the same number .th-sb uses) */
+.th-flight { position: absolute; left: var(--th-l); bottom: calc(var(--th-bottom) + var(--th-sb) + 12px); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; pointer-events: none; }
+.th-flight > * { pointer-events: auto; }
+.th .th-flight .th-alt { align-self: flex-start; padding: 3px 10px; border-radius: 999px; background: var(--th-surface); border: 1px solid var(--th-line); }
+.th .th-flight .th-climb { min-width: 88px; }
+@media (max-height: 520px) and (orientation: landscape) {
+  .th-flight { flex-direction: row; flex-wrap: wrap-reverse; align-items: center; gap: 6px 8px; max-width: calc(100vw - var(--th-l) - var(--th-r) - 2 * var(--th-pw) - var(--th-aux) - 56px); }
+  .th .th-flight .th-climb { min-width: 0; padding: 0 12px; }
+}
+@media (max-height: 380px) and (orientation: landscape) {   /* the smallest phones on their side: every pixel of height counts, so the cluster sits closer to the pads and is a little slimmer */
+  .th-flight { bottom: calc(var(--th-bottom) + var(--th-sb) + 6px); gap: 4px 6px; }
+  .th .th-flight .th-fly { padding: 0 12px; } .th .th-flight .th-alt { padding: 2px 8px; font-size: 0.8rem; }
+}

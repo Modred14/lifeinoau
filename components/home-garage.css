@@ -212,8 +212,9 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  padding: 0 max(16px, env(safe-area-inset-left, 0px)) 0
-    max(16px, env(safe-area-inset-right, 0px));
+  /* top right bottom left: the notch inset of each side goes on that side (these two were swapped, which put the pad under the notch of a phone held sideways) */
+  padding: 0 max(16px, env(safe-area-inset-right, 0px)) 0
+    max(16px, env(safe-area-inset-left, 0px));
   pointer-events: none;
 }
 .hg-steer,
@@ -242,7 +243,8 @@
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
-.hg-pad button:active {
+.hg-pad button:active,
+.hg-pad button[data-down] {
   background: rgba(38, 117, 78, 0.88);
 }
 .hg-pad button small {

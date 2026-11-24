@@ -12,6 +12,7 @@
     "realtime": "node --env-file=.env realtime/server.js",
     "test:chat": "node tests/e2e/chat.e2e.mjs",
     "test:radio": "node tests/e2e/radio.e2e.mjs",
+    "test:vehicles": "node tests/e2e/vehicle-controls.e2e.mjs",
     "radio:verify": "node tools/radio/verify-stations.mjs --check",
     "radio:discover": "node tools/radio/discover-nigeria.mjs",
     "radio:verify:browser": "node tools/radio/verify-browser.mjs",
