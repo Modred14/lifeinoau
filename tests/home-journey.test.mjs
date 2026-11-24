@@ -90,6 +90,8 @@ for (const hostel of ["Awo", "Ojaja", "Off-campus", "2-Bedroom Flat", "3-Bedroom
   chk(`${tag} the car drives out of the gate onto the real carriageway (${onRoadAt?.toFixed(1)}s), never inside a wall or another car`, onRoadAt != null && maxPen === 0, `t=${td.toFixed(0)}s pos=${o.x.toFixed(1)},${o.z.toFixed(1)} v=${o.v.toFixed(1)} stuck=${stuck}`);
   const x0 = o.x, z0 = o.z; let tt = 0; while (tt < 6) { flow.update(1 / 30, { gas: 0.7, brake: 0, steer: 0 }); sim.update(1 / 30); tt += 1 / 30; }
   chk(`${tag} and it carries on along the street (the same trip, the free drive continues)`, !end && flow.state.phase === "drive" && flow.free);
-  flow.dispose(); for (const s of site.slots) svc.world.removeBody("park:" + s.id); removeSiteCollision(svc.world); void x0; void z0;
+  flow.dispose(); for (const s of site.slots) svc.world.removeBody("park:" + s.id); removeSiteCollision(svc.world);
+  // this home's traffic simulation is finished, and its vehicles must not stay in the shared world as frozen obstacles for the next home (they did, wherever they happened to stop)
+  for (const id of [...svc.world.bodies.keys()]) svc.world.removeBody(id); void x0; void z0;
 }
 console.log(bad ? `\n${bad} check(s) failed` : "\nAll checks passed"); process.exit(bad ? 1 : 0);

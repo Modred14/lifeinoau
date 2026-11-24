@@ -23,7 +23,8 @@ export function createNav({ world, graph = null }) {
   const nx = Math.ceil((x1 - x0) / CELL), nz = Math.ceil((z1 - z0) / CELL), clear = new Uint8Array(nx * nz), cls = new Uint8Array(nx * nz), surf = {};
   const cx = (i) => x0 + (i + 0.5) * CELL, cz = (j) => z0 + (j + 0.5) * CELL, ix = (x) => Math.floor((x - x0) / CELL), iz = (z) => Math.floor((z - z0) / CELL), inb = (i, j) => i >= 0 && j >= 0 && i < nx && j < nz;
   /** 1 = blocked, 2.. = clearance in tenths of a metre (+2), for the cell centre. */
-  function clearOf(i, j) { const k = j * nx + i; let c = clear[k]; if (!c) { const sd = world.sdf(cx(i), cz(j), 6); c = sd < 0 ? 1 : 2 + Math.min(250, Math.round(sd * 10)); clear[k] = c; } return c; }
+  let rev0 = world.rev ?? 0;   // the clearance cache below is built from the world's solids: it is dropped when they change (a home's compound going up or down)
+  function clearOf(i, j) { if (world.rev !== rev0) { clear.fill(0); rev0 = world.rev; } const k = j * nx + i; let c = clear[k]; if (!c) { const sd = world.sdf(cx(i), cz(j), 6); c = sd < 0 ? 1 : 2 + Math.min(250, Math.round(sd * 10)); clear[k] = c; } return c; }
   function kindOf(i, j) { const k = j * nx + i; let c = cls[k]; if (!c) { if (!graph) c = 1; else { const sf = graph.surfaceAt(cx(i), cz(j), surf); c = sf.cls === 1 ? (graph.onCrossing(cx(i), cz(j)) ? 4 : 3) : sf.cls === 2 ? 2 : 1; } cls[k] = c; } return c; }
   const costOf = (c) => (c === 2 ? COST.pavement : c === 3 ? COST.road : c === 4 ? COST.crossing : COST.ground);
   /** Walking cost per metre at a point (pavement 1, open ground 1.25, a crossing 1.1, the road 3.6). */
