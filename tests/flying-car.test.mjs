@@ -67,8 +67,8 @@ const run = (own, air, inp, secs, ctx = {}, dt = 1 / 60) => { let last = null; f
   run(own, air, { gas: 0 }, 6); chk("above the clearance height it is in free flight", own.h >= CLEARANCE_M && air.state === "cruise" && isAirborne(air));
   const hx0 = own.x, hz0 = own.z; run(own, air, { gas: 1 }, 6);
   chk("with the throttle it flies forward along its nose, faster than any road car at that moment, never above its air top speed", Math.hypot(own.x - hx0, own.z - hz0) > 40 && own.v > 25 && own.v <= AIR_TOP + 1e-9);
-  const ang0 = own.ang; run(own, air, { gas: 1, steer: 1 }, 2); chk("steering turns it (right is positive)", own.ang > ang0 + 0.3 && Math.abs(own.hx ** 2 + own.hz ** 2 - 1) < 1e-9);
-  const alt0 = own.h; run(own, air, { climb: 1 }, 3); const alt1 = own.h; run(own, air, { climb: -1, gas: 0 }, 8); chk("climb and descend change the altitude", alt1 > alt0 + 5 && own.h < alt1 - 8 && air.state === "cruise");
+  const ang0 = own.ang; run(own, air, { gas: 1, steer: 1 }, 2); chk("steering turns it: +1 is a RIGHT turn, which makes the yaw fall exactly as it does on the ground (lib3d/heading.js)", own.ang < ang0 - 0.3 && Math.abs(own.hx ** 2 + own.hz ** 2 - 1) < 1e-9);
+  const alt0 = own.h; run(own, air, { climb: 1 }, 3); const alt1 = own.h; run(own, air, { climb: -1, gas: 0 }, 4); chk("climb and descend change the altitude", alt1 > alt0 + 5 && own.h < alt1 - 8 && air.state === "cruise");
   own.h = air.alt = 100; air.vy = 0; air.state = "cruise"; run(own, air, { climb: 1, gas: 0 }, 70); chk("the ceiling holds", own.h <= 260 + 1e-9 && own.h > 250);
   // landing, from a known height over a known spot
   own.h = air.alt = 70; air.vy = 0; air.state = "cruise"; own.v = 0; land(air); const lx = own.x, lz = own.z;

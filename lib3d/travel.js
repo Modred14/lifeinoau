@@ -34,6 +34,7 @@ import { paintBase, drawMini, drawPreview } from "./minimap.js";
 import { createGuide } from "./tripguide.js";
 import { CAM, PITCH, clamp, ease, frame, clearBack, followBack, zoomByPinch, zoomByWheel, angDiff, followYaw } from "./tripcam.js";
 import { attachVehicleKeys, createVehicleReader } from "./vehicleInput.js";
+import { poseRotation } from "./heading.js";
 import { attachTripPointer } from "./tripinput.js";
 
 let netCache = null;
@@ -250,7 +251,7 @@ export async function startTrip(env, o) {
     const own = !!flow.own, yaw = own ? v.ang : v.yaw ?? yawOf2(v.hx, v.hz), moved = lastVx == null ? 0 : Math.hypot(v.x - lastVx, v.z - lastVz); lastVx = v.x; lastVz = v.z;
     const road = own ? v.road : null;
     // the root carries the RIDE (it puts the tyres on the road: height, pitch and roll from the wheels' contacts, lib3d/vehiclepose.js); the body leans on its own, about the tyres' ground level (lib3d/suspension.js)
-    vehicle.root.position.set(v.x, ROAD_TOP + (road ? road.y : 0), v.z); vehicle.root.rotation.set(road ? -road.pitch : 0, yaw, road ? road.roll : 0);
+    vehicle.root.position.set(v.x, ROAD_TOP + (road ? road.y : 0), v.z); vehicle.root.rotation.set(...poseRotation(yaw, road ? road.pitch : 0, road ? road.roll : 0));   // one pose for every vehicle, on the road or in the air (lib3d/heading.js)
     if (own && vehicle.flight) { const want = flow.state?.airborne ? 1 : 0; fanK += Math.max(-dt / 1.2, Math.min(dt / 1.4, want - fanK)); vehicle.flight.deploy(fanK); vehicle.flight.spin(dt, flow.state?.fanSpin ?? 0); }   // the lift fans fold out for flight and away again after landing
     if (own) leanBody(vehicle, v.pitch ?? 0, v.roll ?? 0); // the front wheels: your own car shows its steering; every other vehicle steers by how fast it is turning (the bicycle model, from its heading change)
     let steer = 0, braking = false;

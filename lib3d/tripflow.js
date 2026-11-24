@@ -160,7 +160,7 @@ export function createTripFlow(env, o) {
   function flyOwn(dt, inp) {
     const a = own.air, r = stepAir(own, a, { gas: inp.gas ?? 0, brake: inp.brake ?? 0, steer: inp.steer ?? 0, climb: inp.climb ?? 0 }, dt, { landingClear });
     if (r.notice) notice(r.notice);
-    own.road = { y: own.h, pitch: 0, roll: 0 }; own.slope = 0;
+    own.road = { y: own.h, pitch: a.pitch, roll: a.roll }; own.slope = 0;      // the flight attitude takes the same road in the drawing as a car's ride: + pitch is nose up, + roll is the left side up (lib3d/heading.js)
     if (r.landed) { updateLevel(dt); own.pen = ownProbe(own.x, own.z, own.hx, own.hz)?.pen ?? 0; }
     publishOwn();
     return { near: false, drv: { gas: inp.gas ?? 0, brake: inp.brake ?? 0, steer: inp.steer ?? 0 } };
