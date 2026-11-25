@@ -168,7 +168,7 @@ export function refineRoadNetwork(raw, data, { sdf = null, log = () => {} } = {}
   // ---- 1. class of every road (before anything changes, from the polygon width the generator measured) ----
   for (const e of edges) { e.cls = e.w >= REFINE.arterialWidth ? "arterial" : e.w >= 9.8 ? "collector" : "local"; }
   // the north-east ring road is made of express-width pieces joined by one ordinary-width one; it is one road
-  const EXTRA_ARTERIAL = data?.meta?.oldToNew ? [] : [10];   // an edge id of the OLD map's graph: never applied to the OpenStreetMap map (where id 10 is something else)
+  const EXTRA_ARTERIAL = data?.meta?.oldToNew ? [] : [10];   // an edge id of the OLD map's graph: never applied to the new map (where id 10 is something else)
   for (const e of edges) if (EXTRA_ARTERIAL.includes(e.id)) e.cls = "arterial";
 
   // ---- 2. straighten ----
@@ -227,7 +227,7 @@ export function refineRoadNetwork(raw, data, { sdf = null, log = () => {} } = {}
   // a road that snakes (more than 110 degrees of turning on a short run) is straightened as far as the walls allow, and the change is undone if it takes a place away from its road
   for (const e of edges) { if (e.__off) continue; const L = plen(e.pts); if (L < 50 || totalTurn(e.pts) * 57.3 < 110) continue;
     for (const [eps, dev] of [[[8, 6, 4], 12], [[12, 9, 7, 5], 18], [[16, 12, 9], 26]]) { const keep = e.pts, sm = straighten(keep, e.cls, { sdf, eps, maxDev: dev }); if (!sm || totalTurn(sm) >= totalTurn(keep) * 0.7) continue; e.pts = sm; if (worse(access(mainOnly()), base0)) { e.pts = keep; continue; } report.uncurled = (report.uncurled ?? 0) + 1; break; } }
-  // ---- 3a2. tight bends (OpenStreetMap map only). A road cannot be drawn wider than its bend is round: where the bend radius is under the road's half width the inner edge folds over and the asphalt has a hole.
+  // ---- 3a2. tight bends (new map only). A road cannot be drawn wider than its bend is round: where the bend radius is under the road's half width the inner edge folds over and the asphalt has a hole.
   // A bend under 7 m is re-fitted with long straight runs (the same fitter as above, the change undone if a place loses its road). A cul-de-sac loop (a road that returns to its own junction) becomes a short
   // dead-end stub to the far side of the loop, which the dead-end pass below then tries to join to a neighbouring road.
   if (data?.meta?.oldToNew) {
@@ -257,7 +257,7 @@ export function refineRoadNetwork(raw, data, { sdf = null, log = () => {} } = {}
       if (e.cls === "local" && L >= 150) { e.cls = "collector"; report.upgraded++; } else if (e.cls === "collector" && L >= 260 && (e.clr ?? 0) >= 11) { e.cls = "arterial"; report.upgraded++; }
     } }
 
-  // ---- 3c2. rim forks (OpenStreetMap map only). Where a road meets the frame the skeleton forks into little Y branches 1 to 10 m long, each ending at its own rim node. A lane is trimmed 3 m at each end, so an
+  // ---- 3c2. rim forks (new map only). Where a road meets the frame the skeleton forks into little Y branches 1 to 10 m long, each ending at its own rim node. A lane is trimmed 3 m at each end, so an
   // edge that short has no lane at all (tests/vehicle-ground.test.mjs). Every such branch is cut off; the junction it hung from becomes the road's end at the rim.
   if (data?.meta?.oldToNew) {
     report.rimForks = 0;
@@ -270,8 +270,8 @@ export function refineRoadNetwork(raw, data, { sdf = null, log = () => {} } = {}
     }
   }
   // ---- 3d. close dead ends: a street that stops in the middle of nowhere is joined to the nearest other road when a straight link of at most CLOSE_MAX m keeps CLOSE_CLR m clear of every wall (the
-  // OpenStreetMap map has real cul-de-sacs; the game wants none). A dead end with no clear link stays. The link is a new junction on the other road. Rim ends are roads leaving the map and are left alone.
-  if (sdf && data?.meta?.oldToNew) {   // OpenStreetMap map only: the legacy graph stays exactly as baked
+  // new map has real cul-de-sacs; the game wants none). A dead end with no clear link stays. The link is a new junction on the other road. Rim ends are roads leaving the map and are left alone.
+  if (sdf && data?.meta?.oldToNew) {   // new map only: the legacy graph stays exactly as baked
     const CLOSE_MAX = 140, CLOSE_CLR = 4.0;   // the game drops a road whose centreline is under 2.7 m from a wall (XS.minDrivableClearance); 4 m leaves margin
     report.closed = [];
     for (let pass = 0; pass < 8; pass++) {

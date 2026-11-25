@@ -289,7 +289,7 @@ export function drivePlan(net, from, to) {
 /** Where the front door of a building is: the point on its outline closest to a road, with the wall's outward direction. Cached per building. */
 export function doorOf(net, bd, hint = null) {
   const hit = net.doors.get(bd.id); if (hit) return hit;
-  // `hint` is an entrance the map itself gives ([x, z], the OpenStreetMap map has one for its named buildings): the sample of the outline nearest to it wins, as long as it is within 10 m of it and its front is walkable.
+  // `hint` is an entrance the map itself gives ([x, z], the new map has one for its named buildings): the sample of the outline nearest to it wins, as long as it is within 10 m of it and its front is walkable.
   // Without a hint, or when nothing near the hint is usable, the point closest to a road is chosen, as before.
   const pts = bd.pts, c = centroid(pts); let best = null, bestHint = null;
   for (let e = 0; e < pts.length; e++) {

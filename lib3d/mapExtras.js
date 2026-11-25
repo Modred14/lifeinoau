@@ -43,7 +43,7 @@ export const GROUNDS = {
 };
 
 /**
- * The grounds and churches for one map. The rectangles above are in the OLD traced map's metres. The OpenStreetMap map carries `meta.groundOffsets` ({ motion: [dx, dz], religious: [dx, dz] }, written by
+ * The grounds and churches for one map. The rectangles above are in the OLD traced map's metres. The new map carries `meta.groundOffsets` ({ motion: [dx, dz], religious: [dx, dz] }, written by
  * tools/oau/import_campus.py: where each ground fits clear of the new map's buildings, roads and lake), and every rectangle and church is shifted by its ground's offset, so the layout inside a ground never changes.
  */
 export function groundsFor(data) {
@@ -116,7 +116,7 @@ export const BUILDING_TRIMS = {
 const polyArea = (P) => { let a = 0; for (let i = 0, j = P.length - 1; i < P.length; j = i++) a += (P[j][0] + P[i][0]) * (P[j][1] - P[i][1]); return Math.abs(a / 2); };
 export function withExtras(data) {
   if (data.extrasAdded) return data;
-  const legacy = !data.meta?.oldToNew;   // BUILDING_TRIMS is keyed by the OLD traced map's building ids: it must never touch the OpenStreetMap map (tools/oau/import_campus.py sets meta.oldToNew)
+  const legacy = !data.meta?.oldToNew;   // BUILDING_TRIMS is keyed by the OLD traced map's building ids: it must never touch the new map (tools/oau/import_campus.py sets meta.oldToNew)
   const buildings = data.buildings.map((b) => (legacy && BUILDING_TRIMS[b.id] ? { ...b, pts: BUILDING_TRIMS[b.id].map((p) => p.slice()), area: Math.round(polyArea(BUILDING_TRIMS[b.id])), trimmed: true } : b)), places = [...data.places];
   let next = buildings.reduce((m, q) => Math.max(m, q.id), -1) + 1;
   const GR = groundsFor(data), GROUNDS_HERE = { motion: GR.motion, religious: GR.religious };

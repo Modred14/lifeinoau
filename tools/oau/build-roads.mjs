@@ -3,7 +3,7 @@
 //   2. roadgraph.py        raster + skeleton                    ->  tools/oau/roadgraph.raw.json      (needs python with numpy, scipy, scikit-image, shapely)
 //   3. refine-roads.mjs    straighten, classify, add the expressway and its ramps -> public/data/oau-roadgraph.json
 //   4. attach-tails.mjs    join the expressway's two ends to campus roads and move piers off roads
-// Which map is active is public/data/oau-campus.json (switch with: node tools/oau/use-map.mjs osm|legacy).
+// Which map is active is public/data/oau-campus.json (switch with: node tools/oau/use-map.mjs new|legacy).
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";

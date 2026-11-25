@@ -1,11 +1,11 @@
 // lib3d/mapLayout.js
-// EVERYTHING THAT DIFFERS BETWEEN THE TWO CAMPUS MAPS, in one place, so switching map is one command (node tools/oau/use-map.mjs osm | legacy) and nothing is hand-edited:
+// EVERYTHING THAT DIFFERS BETWEEN THE TWO CAMPUS MAPS, in one place, so switching map is one command (node tools/oau/use-map.mjs new | legacy) and nothing is hand-edited:
 //   the expressway's waypoints, how far it runs past the map edge, its two interchanges and its two tails (lib3d/highway.js, lib3d/highwaytails.js), and where the ten billboards stand (lib3d/mapExtras.js).
 //   legacy  the original traced map (public/data/oau-campus.legacy.json), positions as the game shipped them
-//   osm     the OpenStreetMap map (public/data/oau-campus.osm.json, converted by tools/oau/import_campus.py): its expressway was laid out again on that map (the old one cannot be transformed: it would cut through
+//   new     the new map (tools/oau/maps/new/, converted by tools/oau/import_campus.py): its expressway was laid out again on that map (the old one cannot be transformed: it would cut through
 //           the denser new buildings), and its billboard sites are written by tools/oau/place-billboards.mjs --write
 // LAYOUT is rewritten by tools/oau/use-map.mjs. Do not change it by hand.
-export const LAYOUT = "osm";   // MAP-LAYOUT-SWITCH
+export const LAYOUT = "new";   // MAP-LAYOUT-SWITCH
 
 export const LAYOUTS = {
   legacy: {
@@ -32,7 +32,7 @@ export const LAYOUTS = {
       ["Pharmacy Road", 390.3, 602.1, 0.671],
     ],
   },
-  osm: {
+  new: {
     // One straight leg from the west edge (0, 1260) to the south edge (2340, 3239.8), found by tools/oau/search_expressway_routes.py: 55 m from the nearest building (rule: 24 m), 3.07 km inside the map,
     // 4.27 km with 600 m of causeway at each end. (Straight + 24 m + 4.2 km with the old 480 m ends cannot all hold on this map; see docs/NEW-MAP-STATUS.md.) It does not cross the lake.
     extend: 600,
@@ -60,7 +60,7 @@ export const LAYOUTS = {
       ["Fajuyi Crossing", 651.4, 1136.3, -0.06],
       ["Ede Road Banks", 1860.4, 2333.2, 0.262],
       ["Nightlife Strip", 729.9, 2671, -1.536],
-    ],   // BILLBOARD-SITES-OSM
+    ],   // BILLBOARD-SITES-NEW
   },
 };
 export const ACTIVE = LAYOUTS[LAYOUT];

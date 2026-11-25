@@ -28,7 +28,7 @@ const kinds = {}; for (const p of posts) kinds[p.kind] = (kinds[p.kind] ?? 0) + 
   chk("no solid post stands on a ground carriageway: street lights, trees, signs, piers, billboard footings, woodland trees (" + posts.length + " posts: " + Object.entries(kinds).map(([k, n]) => n + " " + k).join(", ") + ")", onRoad.length === 0, onRoad.length ? onRoad.slice(0, 4).map((p) => p.kind + "@" + p.x.toFixed(0) + "," + p.z.toFixed(0)).join(" ") : ""); }
 { const plan = G.furniturePlan, n = (k) => posts.filter((p) => p.kind === k).length;
   chk("every street light, tree and sign of the furniture plan is a solid post in the world (" + plan.solids.length + "), and the meshes are built from that same plan", plan && plan.solids.length === n("lamp") + n("tree") + n("sign") && plan.solids.length > 1500); }
-// (the old map has woodland, so over 100 trees; the OpenStreetMap map has no woodland areas, and then there are rightly no woodland trees)
+// (the old map has woodland, so over 100 trees; the new map has no woodland areas, and then there are rightly no woodland trees)
 { const shown = woodlandTrees(data).filter(([x, z]) => !treeOnRoad(G, x, z)).length;
   chk("every woodland tree that is drawn is a solid trunk, and a tree hidden because a road runs there is not (" + shown + ")", shown === posts.filter((p) => p.kind === "wood-tree").length && (shown > 100 || data.areas.wood.length === 0)); }
 { // people can still walk along a pavement that has street lights and trees on it: the planner does not have to send them into the road to get round one

@@ -1,5 +1,5 @@
 // tools/oau/use-map.mjs: switch the campus map the game uses. One command, either way:
-//   node tools/oau/use-map.mjs osm        the OpenStreetMap map (default for new work)
+//   node tools/oau/use-map.mjs new        the new map (the default)
 //   node tools/oau/use-map.mjs legacy     the original traced map: the way back
 //   node tools/oau/use-map.mjs --status   which map is active
 //   node tools/oau/use-map.mjs --save     store the active files as the active map's own copy (npm run build:roads does this when it finishes)
@@ -17,7 +17,7 @@ const current = () => fs.readFileSync(layoutFile, "utf8").match(re)[1];
 const want = process.argv[2];
 if (want === "--status" || !want) { console.log("active map: " + current()); process.exit(0); }
 if (want === "--save") { const m = current(); for (const f of FILES) if (fs.existsSync(p(f))) fs.copyFileSync(p(f), p(stored(m, f))); console.log("saved the active files as the " + m + " map's copy"); process.exit(0); }
-if (!["osm", "legacy"].includes(want)) { console.error("usage: node tools/oau/use-map.mjs osm|legacy|--status|--save"); process.exit(1); }
+if (!["new", "legacy"].includes(want)) { console.error("usage: node tools/oau/use-map.mjs new|legacy|--status|--save"); process.exit(1); }
 const cur = current();
 if (cur !== want) for (const f of FILES) {             // 1. switching: save the active files into the current map's own copy first (keeps a rebuilt graph). Choosing the map that is already active reloads its stored copy instead.
   if (fs.existsSync(p(f))) fs.copyFileSync(p(f), p(stored(cur, f)));

@@ -27,7 +27,7 @@ export const HW = {
   parapet: DECK.parapet,      // concrete parapet: thickness (m); the drivable half-width is this much less (lib3d/roadsurface.js)
   girder: 2.2,                // depth of the box girder under the deck
   apron: 80,                  // an end apron with no median (m)
-  extend: LAYOUT_NOW.extend,  // how far the road runs on past the edge of the map at each end (m): 480 on the old map, 600 on the OpenStreetMap map
+  extend: LAYOUT_NOW.extend,  // how far the road runs on past the edge of the map at each end (m): 480 on the old map, 600 on the new map
   radius: 2500,               // arc radius at the two bends
   ramp: { half: 4.2, minLen: 365, maxGrade: 0.038 },   // a ramp: one lane, two shoulders; under 4 % on average (tests/road-network.test.mjs demands it; the old minLen 235 gave 5.2 to 6.4 % on the original map, it is steeper mid-way, ease5). The ramp starts minLen + 40 m before its junction and is about 41 m shorter than that, over a deck 14.2 m up
   pier: { land: 38, water: 50, col: [3.0, 2.2], head: [21.0, 1.7], clear: 3.5 },     // spacing (m), column (w x d), cross-head (w x d), clearance to a ground road

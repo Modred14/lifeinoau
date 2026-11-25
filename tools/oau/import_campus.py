@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # tools/oau/import_campus.py
-"""Converts the OpenStreetMap campus (campus.json + building-heights.json from the campus-archive branch) into the schema the game already loads
+"""Converts the new campus map (campus.json + building-heights.json from the campus-archive branch) into the schema the game already loads
 (public/data/oau-campus.json), so roadgraph.py, refine-roads.mjs, the 3D map and every test stay as they are.
 
-    python3 tools/oau/import_campus.py --campus /path/campus.json --heights /path/building-heights.json --old /tmp/legacy-merged.json --out tools/oau/maps/osm/oau-campus.json
+    python3 tools/oau/import_campus.py --campus /path/campus.json --heights /path/building-heights.json --old /tmp/legacy-merged.json --out tools/oau/maps/new/oau-campus.json
     needs: numpy, shapely   (offline tool only)
 
 What it does
   1. units: campus.json is 20 px = 1 m, x east, y south, origin top-left. The output is metres, x east, z south, same origin (z = y).
-  2. buildings: every OSM footprint, heights from building-heights.json (Google Open Buildings, CC BY 4.0) else the OSM value.
+  2. buildings: every footprint of the map, heights from building-heights.json else the map's own value.
   3. roads: every `road` polyline is buffered by half its width and unioned into road polygons with holes (the schema roadgraph.py reads). Footpaths (`path`) are left out.
   4. areas: water, parking, field (-> pitch) and grass (-> park).
   5. places: an old place keeps its id and takes the new map's building when the two maps name it alike (EQUIV lists the hand-made matches). The rest are GAME PLACEMENTS: they keep their id, and
@@ -71,7 +71,7 @@ def main():
     for i, b in enumerate(N['buildings']):
         pts = [[round(x, 1), round(z, 1)] for x, z in pts_m(b['pts'])]
         poly = Polygon(pts).buffer(0)
-        h = heights.get(str(i)); src = 'google-open-buildings-2023' if h is not None else ('osm-height' if b.get('h') else 'default')
+        h = heights.get(str(i)); src = 'height-data' if h is not None else ('map-height' if b.get('h') else 'default')
         h = float(h if h is not None else (b.get('h') or 5.0))
         B.append({'id': i, 'pts': pts, 'area': int(round(poly.area)), 'h': h, 'hSrc': src, '_name': b.get('name')})
     bpoly = [Polygon(b['pts']).buffer(0) for b in B]; btree = STRtree(bpoly)
@@ -87,7 +87,7 @@ def main():
         if g.area < 20: continue
         roads.append({'pts': [[round(x, 1), round(z, 1)] for x, z in g.exterior.coords[:-1]],
                       'holes': [[[round(x, 1), round(z, 1)] for x, z in h.coords[:-1]] for h in g.interiors if Polygon(h).area >= 4]})
-    # ---- set buildings back from roads. OpenStreetMap houses stand right on the kerb; the game's road builder needs the centreline to keep 2.7 m clear of every wall (lib3d/roadgraph.js XS.minDrivableClearance) and
+    # ---- set buildings back from roads. The map's houses stand right on the kerb; the game's road builder needs the centreline to keep 2.7 m clear of every wall (lib3d/roadgraph.js XS.minDrivableClearance) and
     # drops a road that does not, which splits the network. Every footprint is cut back to max(half the road width + 3 m, 6 m) from each road centreline (the old map got this from hand-made BUILDING_TRIMS).
     # A footprint left under 12 m2 is dropped; one that is cut in two keeps its larger piece. Building ids are renumbered; `remap` carries the OSM index to the new id.
     carve = unary_union([LineString(pts_m(r['pts'])).buffer(max(r['w'] / 2.0 + 3.0, 6.0), cap_style=2, join_style=1, resolution=4) for r in N['roads'] if r['kind'] == 'road'])
@@ -178,13 +178,13 @@ def main():
                 if hit: bi = int(hit[0]); break
             if bi is None: report.setdefault('noBuilding', []).append(p['id'])
         rec = {k: v for k, v in p.items() if k not in ('osmLabel', 'offmap', 'unnamed')}
-        rec.update({'src': 'osm', 'conf': 'named-in-osm', 'x': round(x, 1), 'z': round(z, 1), 'bid': bi, 'snapPx': 0.0})
+        rec.update({'src': 'map', 'conf': 'named-on-map', 'x': round(x, 1), 'z': round(z, 1), 'bid': bi, 'snapPx': 0.0})
         if q.get('door'): rec['door'] = [round(q['door'][0] / PX, 1), round(q['door'][1] / PX, 1)]   # the entrance the map gives (lib3d/roadnet.js doorOf follows it)
         places.append(rec)
         if bi is not None:
             claimed.add(bi); B[bi]['place'] = p['id']
             ob0 = old_b.get(p.get('bid'))
-            if ob0 and str(ob0.get('hSrc', '')).startswith('published'): B[bi]['h'] = ob0['h']; B[bi]['hSrc'] = ob0['hSrc']   # a height from a published source (the Senate: 24 m, 8 floors, MAGG 2025) beats an OpenStreetMap tag
+            if ob0 and str(ob0.get('hSrc', '')).startswith('published'): B[bi]['h'] = ob0['h']; B[bi]['hSrc'] = ob0['hSrc']   # a height from a published source (the Senate: 24 m, 8 floors, MAGG 2025) beats the map's own tag
         report['matched'][p['id']] = q['name']
     nid = len(B)
     for p in game:
@@ -213,10 +213,10 @@ def main():
         offsets[name] = [round(cx - ocx, 1), round(cz - ocz, 1)]
         g = box(cx - (x1 - x0) / 2 - 4, cz - (z1 - z0) / 2 - 4, cx + (x1 - x0) / 2 + 4, cz + (z1 - z0) / 2 + 4); obst_geoms.append(g); omargin[id(g)] = 6.0; otree = STRtree(obst_geoms)
         report.setdefault('grounds', {})[name] = {'centre': [round(cx, 1), round(cz, 1)], 'movedFromTransformM': round(moved, 0), 'offset': offsets[name]}
-    out = {'_file': 'public/data/oau-campus.json (generated by tools/oau/import_campus.py from the OpenStreetMap campus; do not edit by hand)',
-           'meta': {'title': 'OAU campus from OpenStreetMap', 'source': 'OpenStreetMap (campus.json) + Google Open Buildings 2.5D Temporal 2023 (heights)',
-                    'attribution': N['attribution'] + '. Building heights: Google Open Buildings 2.5D Temporal, 2023 (CC BY 4.0)',
-                    'axes': 'x east, z south, metres; origin top-left of the OSM frame', 'absoluteGeoreference': 'none claimed', 'terrain': 'flat',
+    out = {'_file': 'public/data/oau-campus.json (generated by tools/oau/import_campus.py from the new campus map; do not edit by hand)',
+           'meta': {'title': 'OAU campus (new map)', 'source': 'campus.json and building-heights.json of the campus-archive branch, converted by tools/oau/import_campus.py',
+                    'attribution': 'Map data prepared for OAU Life',
+                    'axes': 'x east, z south, metres; origin top-left of the map frame', 'absoluteGeoreference': 'none claimed', 'terrain': 'flat',
                     'generated': N.get('generated'), 'oldToNew': report['transform'], 'groundOffsets': offsets},
            'bounds': bounds,
            'buildings': [{k: v for k, v in b.items() if not k.startswith('_')} for b in B] + newb,
