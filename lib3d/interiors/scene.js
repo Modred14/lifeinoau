@@ -1391,14 +1391,9 @@ export async function createInteriorScene(container, c, opts = {}) {
       /* this person just does not appear */
     }
   };
-  // each of the player's lecturers who stands in this building gets a ring to walk up to them (the server decides if the confrontation is allowed)
-  // a lecturer who is not one of the player's own is shown too, with the same sign: the button explains why they cannot be fought (the server only allows your own lecturers)
-  const otherLecturers = [];
-  spec.forEach((n, i) => {
-    if (n?.role !== "lecturer" || n.mode === "sit" || lecturers.some((l) => l.npcIndex === i)) return;
-    otherLecturers.push({ npcIndex: i, name: "Lecturer", notYours: true });
-  });
-  for (const l of [...lecturers, ...otherLecturers]) {
+  // every eligible lecturer who stands in this building gets a ring to walk up to them. Who is eligible is the server's decision (lib/lectureService.js reads the
+  // same interior plans), so a lecturer added to a plan has a ring with no change here; the server still checks the rest (where you are, energy, the weekly limit).
+  for (const l of lecturers) {
     const n = spec[l.npcIndex],
       fx = Math.sin(n.yaw ?? 0),
       fz = Math.cos(n.yaw ?? 0),
@@ -1407,7 +1402,7 @@ export async function createInteriorScene(container, c, opts = {}) {
         z: n.z + fz * 1.4,
         label: "Beat Lecturer",
         name: l.name,
-        action: l.notYours ? "lecture_other" : "lecture",
+        action: "lecture",
         code: l.code,
         npcIndex: l.npcIndex,
         floor: n.floor ?? 0,
@@ -2232,6 +2227,10 @@ export async function createInteriorScene(container, c, opts = {}) {
       return view;
     },
     use: activate,
+    /** The rings of the lecturers standing in this room, as the scene drew them: [{ code, name, npcIndex, x, z, floor }]. The Activity Panel walks to these. */
+    get lecturerRings() {
+      return hubObjs.filter((o) => o.h.action === "lecture").map((o) => ({ code: o.h.code, name: o.h.name, npcIndex: o.h.npcIndex, x: o.h.x, z: o.h.z, floor: o.h.floor ?? 0 }));
+    },
     /** The player and the lecturer at npc index `i` turn to face each other and stand still, before the brawl opens. Returns false if that lecturer is not drawn (yet). */
     startDuel(i) {
       const q = people.find((o) => o.i === i);
