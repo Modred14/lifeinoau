@@ -13,6 +13,7 @@ import { studentName, greetLine, chatLine } from "../../lib/socialTalk.js";
 import { incidentFrame } from "./lectureEncounter.js";
 import { ITEMS, dimsOf } from "./items.js";
 import { movePlayer, rayClip, EXIT_DEPTH, DOOR_H } from "./compile.js";
+import { CAMERA_CONFIG, sweepClear, stepClearance, blockedPitch, hysteresis, fovFor, damp } from "../camera/cameraRig.js";
 import { planRoute as routeFor } from "./routing.js";
 import { createPlayerTags } from "../playerTags.js";
 import { createRemotePlayers } from "./remotePlayers.js";
@@ -1390,14 +1391,9 @@ export async function createInteriorScene(container, c, opts = {}) {
       /* this person just does not appear */
     }
   };
-  // each of the player's lecturers who stands in this building gets a ring to walk up to them (the server decides if the confrontation is allowed)
-  // a lecturer who is not one of the player's own is shown too, with the same sign: the button explains why they cannot be fought (the server only allows your own lecturers)
-  const otherLecturers = [];
-  spec.forEach((n, i) => {
-    if (n?.role !== "lecturer" || n.mode === "sit" || lecturers.some((l) => l.npcIndex === i)) return;
-    otherLecturers.push({ npcIndex: i, name: "Lecturer", notYours: true });
-  });
-  for (const l of [...lecturers, ...otherLecturers]) {
+  // every eligible lecturer who stands in this building gets a ring to walk up to them. Who is eligible is the server's decision (lib/lectureService.js reads the
+  // same interior plans), so a lecturer added to a plan has a ring with no change here; the server still checks the rest (where you are, energy, the weekly limit).
+  for (const l of lecturers) {
     const n = spec[l.npcIndex],
       fx = Math.sin(n.yaw ?? 0),
       fz = Math.cos(n.yaw ?? 0),
@@ -1406,7 +1402,7 @@ export async function createInteriorScene(container, c, opts = {}) {
         z: n.z + fz * 1.4,
         label: "Beat Lecturer",
         name: l.name,
-        action: l.notYours ? "lecture_other" : "lecture",
+        action: "lecture",
         code: l.code,
         npcIndex: l.npcIndex,
         floor: n.floor ?? 0,
@@ -1819,7 +1815,10 @@ export async function createInteriorScene(container, c, opts = {}) {
   const v3 = new THREE.Vector3(),
     look = new THREE.Vector3(),
     camPos = new THREE.Vector3();
-  let camInit = false;
+  let camInit = false,
+    plVis = true;
+  const camClear = { v: 1, hold: 0 },
+    lookSm = new THREE.Vector3();
   const setVis = () => {
     for (let f = 0; f < c.floors; f++) {
       groups[f].visible = f <= P.fl;
@@ -2105,10 +2104,13 @@ export async function createInteriorScene(container, c, opts = {}) {
       });
       tileMesh.instanceColor.needsUpdate = true;
     }
-    // camera
+    // camera (maths and tuning in lib3d/camera/cameraRig.js)
     const ty = P.y + 1.35,
       fx = Math.sin(camYaw),
-      fz = Math.cos(camYaw);
+      fz = Math.cos(camYaw),
+      aspect = camera.aspect || 1,
+      cfg = CAMERA_CONFIG.interior;
+    let hClear = 0; // horizontal distance the camera may stand from the player this frame
     if (view === "overhead") {
       const dist = Math.max(camDist * 3.8, 12),
         pit = Math.min(1.4, 1.15 + (camPitch - 0.4) * 0.5),
@@ -2116,45 +2118,63 @@ export async function createInteriorScene(container, c, opts = {}) {
         r = dist * Math.cos(pit);
       camPos.set(P.x - fx * r, P.y + h, P.z - fz * r);
       look.set(P.x, P.y + 0.6, P.z);
+      camClear.v = 1; camClear.hold = 0;
       if (avatar) player.visible = true;
+      plVis = true;
     } else {
-      const h = camDist * Math.cos(camPitch),
-        v = camDist * Math.sin(camPitch);
-      let k =
-        Math.min(
-          1,
-          rayClip(
-            c.wallsByFloor[P.fl],
-            P.x,
-            P.z,
-            P.x - fx * h,
-            P.z - fz * h,
-            0.22,
-          ),
+      const h0 = camDist * Math.cos(camPitch),
+        walls = c.wallsByFloor[P.fl] ?? [];
+      // three rays (centre + either side) so a corner is cleared as well as a flat wall
+      let want =
+        sweepClear(
+          (ax, az, bx, bz, pad) => rayClip(walls, ax, az, bx, bz, pad),
+          P.x, P.z, -fx * h0, -fz * h0, cfg.pad, cfg.side,
         ) * 0.94;
       if (c.porch && P.fl === 0) {
         const o0 = c.outsideDepth(P.x, P.z),
-          o1 = c.outsideDepth(P.x - fx * h, P.z - fz * h);
+          o1 = c.outsideDepth(P.x - fx * h0, P.z - fz * h0);
         if (o0 < -0.25 && o1 > -0.25)
-          k = Math.min(k, Math.max(0.05, (-0.25 - o0) / (o1 - o0)));
+          want = Math.min(want, Math.max(0.05, (-0.25 - o0) / (o1 - o0)));
       } // the camera stays inside while you are inside
-      const room2 = room ?? null,
+      const k = stepClearance(camClear, want, dt, cfg).v, // in fast, out slowly after a short hold: no zoom pumping against one wall
+        pit = blockedPitch(camPitch, k, cfg), // walled in: rise over the player and look down instead of collapsing into their head
+        room2 = room ?? null,
         ceil = room2 ? fl(P.fl) + room2.h - 0.2 : fl(P.fl) + 3.2;
+      hClear = h0 * k;
       camPos.set(
-        P.x - fx * h * k,
-        Math.min(ty + v * Math.max(k, 0.35), ceil),
-        P.z - fz * h * k,
+        P.x - fx * hClear,
+        Math.min(ty + camDist * Math.sin(pit) * Math.max(k, 0.5), ceil),
+        P.z - fz * hClear,
       );
       look.set(P.x + fx * 0.5, ty - 0.1 - (1 - k) * 0.2, P.z + fz * 0.5);
-      player.visible = camDist * k > 0.85;
     }
     if (!camInit) {
       camera.position.copy(camPos);
+      lookSm.copy(look);
       camInit = true;
-    } else camera.position.lerp(camPos, Math.min(1, dt * 14));
-    camera.lookAt(look);
-    camera.fov = view === "overhead" ? 45 : 62;
-    camera.updateProjectionMatrix();
+    } else {
+      camera.position.lerp(camPos, 1 - Math.exp(-cfg.posRate * dt)); // time-based, not frame-based
+      lookSm.lerp(look, 1 - Math.exp(-cfg.lookRate * dt)); // the aim eases too, so a change of wall or floor never snaps the view
+    }
+    if (view !== "overhead") {
+      // smoothing lags behind a fast pull-in: never let the eased camera stand further out than the clear distance
+      const ox = camera.position.x - P.x,
+        oz = camera.position.z - P.z,
+        od = Math.hypot(ox, oz);
+      if (od > hClear + 0.02 && od > 1e-6) {
+        const sc = (hClear + 0.02) / od;
+        camera.position.x = P.x + ox * sc;
+        camera.position.z = P.z + oz * sc;
+      }
+      plVis = hysteresis(plVis, Math.hypot(camera.position.x - P.x, camera.position.y - ty, camera.position.z - P.z), cfg.hideBelow, cfg.showAbove);
+      player.visible = plVis;
+    }
+    camera.lookAt(lookSm);
+    const fovWant = fovFor(aspect, view === "overhead" ? "overhead" : "landscape", cfg);
+    if (Math.abs(camera.fov - fovWant) > 0.05) {
+      camera.fov = Math.abs(camera.fov - fovWant) < 0.2 ? fovWant : damp(camera.fov, fovWant, 6, dt);
+      camera.updateProjectionMatrix(); // only when the field of view actually changes
+    }
     void vp;
     remote.update(t, dt, P);
     clubFx?.update(t, dt);
@@ -2207,6 +2227,10 @@ export async function createInteriorScene(container, c, opts = {}) {
       return view;
     },
     use: activate,
+    /** The rings of the lecturers standing in this room, as the scene drew them: [{ code, name, npcIndex, x, z, floor }]. The Activity Panel walks to these. */
+    get lecturerRings() {
+      return hubObjs.filter((o) => o.h.action === "lecture").map((o) => ({ code: o.h.code, name: o.h.name, npcIndex: o.h.npcIndex, x: o.h.x, z: o.h.z, floor: o.h.floor ?? 0 }));
+    },
     /** The player and the lecturer at npc index `i` turn to face each other and stand still, before the brawl opens. Returns false if that lecturer is not drawn (yet). */
     startDuel(i) {
       const q = people.find((o) => o.i === i);

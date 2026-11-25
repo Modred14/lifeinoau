@@ -13,7 +13,6 @@ import Phone from "./Phone";
 import PlayerMenu from "./PlayerMenu";
 import BusyAlerts from "./BusyAlerts";
 import CampusPopulation from "./CampusPopulation";
-import CampusEntry from "./CampusEntry";
 import BottomNav from "./BottomNav";
 import { useChat } from "@/lib/chat";
 import SoundToggle from "./SoundToggle";

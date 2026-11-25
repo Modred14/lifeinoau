@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import { toast } from "@/lib/toast";
-import { buildCards, chipsFor, nearestRing, waitLabel, walkSeconds } from "@/lib/buildingPanel.js";
+import { buildCards, chipsFor, lecturerCards, nearestRing, waitLabel, walkLabel, walkSeconds } from "@/lib/buildingPanel.js";
 import { pickCard } from "@/lib/hubActions.js";
 import "./building-panel.css";
 
@@ -32,6 +32,20 @@ function Tile({ c, state, onGo }) {
   );
 }
 
+/** Beat Lecturer, one card per lecturer close by: the name says WHICH lecturer, the chip how far they are. A lecturer who cannot be fought now says why when tapped. */
+function LecturerTile({ l, state, onGo }) {
+  return (
+    <button type="button" className="bp-tile" data-state={state} data-risk="risky" data-lecturer={l.code} aria-disabled={state === "unavailable" ? "true" : undefined} onClick={onGo} data-sound="none">
+      <span className="bp-top">
+        <span className="bp-ico"><Icon name="alert" size={20} weight="fill" /></span>
+        <span className="bp-chipm"><Icon name="timer" size={13} /> {walkLabel(walkSeconds(l.metres))}</span>
+      </span>
+      <b className="bp-tile-t">{l.label}</b>
+      <small className="bp-tile-s">{l.name}{l.room ? ` · ${l.room}` : ""}</small>
+    </button>
+  );
+}
+
 /**
  * place            the building / open space
  * rings            the activity rings of this interior
@@ -44,8 +58,10 @@ function Tile({ c, state, onGo }) {
  * onArrive(ring, { auto })   the character stands at the ring: open its panel (and, if `auto`, start it)
  * onReload         ask the server again (used by the error state's button)
  * controlRef        ref the panel fills with { goAct(acts, label) }: the yellow desks in the room use it to walk to the matching activity (components/BuildingInside.js)
+ * lecturers         the lecturers standing in this building, as BuildingInside knows them from the server ({ code, name, roomName, x, z, floor, canConfront, reason, own })
+ * onBeat(lecturer)  the character stands in front of the lecturer: start the confrontation (BuildingInside asks the server, then opens the fight)
  */
-export default function BuildingPanel({ place, rings, state, api, ready, runHubId = null, ringOpen = null, character, jailed, balanceKobo, onArrive, onReload, controlRef = null }) {
+export default function BuildingPanel({ place, rings, state, api, ready, runHubId = null, ringOpen = null, character, jailed, balanceKobo, onArrive, onReload, controlRef = null, lecturers = [], onBeat = null }) {
   const root = useRef(null), seq = useRef(0), going = useRef(false), sheetId = useId();
   const [userOpen, setUserOpen] = useState(null); // null: automatic (open when there is something to choose), true/false: the person's choice
   const [chip, setChip] = useState("all"), [walk, setWalk] = useState(null), [, tick] = useState(0);
@@ -55,6 +71,16 @@ export default function BuildingPanel({ place, rings, state, api, ready, runHubI
   useEffect(() => { if (chip !== "all" && !chips.some((c) => c.id === chip)) setChip("all"); }, [chips, chip]);
   const shown = cards ? (chip === "all" ? cards : cards.filter((c) => c.category === chip)) : [];
   const running = runHubId ? rings.find((r) => r.id === runHubId) : null;
+  // Beat Lecturer: the lecturers close to the character right now. Read from the scene a couple of times a second, so the card appears as you walk into the room
+  // and goes as you walk out, and the panel only re-renders when who is offered (or how far, roughly) really changes.
+  const [lecNear, setLecNear] = useState([]);
+  useEffect(() => {
+    if (!ready) { setLecNear([]); return undefined; }
+    const sig = (a) => a.map((x) => `${x.code}:${x.blocked ?? ""}:${Math.round(x.metres / 2)}`).join("|");
+    const read = () => { const s = api.current?.state, next = s ? lecturerCards(lecturers, s) : []; setLecNear((p) => (sig(p) === sig(next) ? p : next)); };
+    read(); const t = setInterval(read, 500);
+    return () => clearInterval(t);
+  }, [ready, lecturers, api]);
   const stateOf = (c) => (running && running.act === c.act && running.label === c.label ? "running" : walk?.card.key === c.key ? "selected" : c.blocked ? "unavailable" : "available");
 
   // ---- the panel and the bottom bar are ONE surface: tell the page the bar is docked, and keep our height/offset in step with the real sizes
@@ -78,7 +104,7 @@ export default function BuildingPanel({ place, rings, state, api, ready, runHubI
   const busy = !!walk || !!ringOpen || !!running;
   const solo = !walk && (!!ringOpen || !!running); // the activity card in the room (ActivityLayer) shows this on its own, so the panel steps aside: one card, not two
   // the bar stays joined to whatever is docked on it: this panel, or the activity card that replaces it while an activity runs
-  const loading = !cards && !failed, open = !busy && (userOpen ?? (loading || failed || (cards?.length ?? 0) > 0));
+  const loading = !cards && !failed, open = !busy && (userOpen ?? (loading || failed || (cards?.length ?? 0) + lecNear.length > 0));
 
   // ---- the walk itself
   const stop = useCallback((silent = true) => { seq.current++; api.current?.cancelWalk?.(); setWalk(null); if (!silent) toast.info("You stopped walking."); }, [api]);
@@ -102,6 +128,25 @@ export default function BuildingPanel({ place, rings, state, api, ready, runHubI
       setWalk(null);
       if (!ok) { toast.info("The way was blocked, or you took the controls. Tap it again to resume."); return; }
       onArrive(ring, { auto, confirmed: !!c.risky });
+    } finally { going.current = false; }
+  }
+  /** Walk up to the lecturer (the scene's own walk, the same ring the "Beat Lecturer" prompt stands on), then hand over to the confrontation. */
+  async function goLecturer(l) {
+    if (going.current || walk) { toast.info(walk ? "You are already walking. Cancel that first if you want to go somewhere else." : "One moment, that is already being set up."); return; }
+    if (!ready || !api.current || !onBeat) { toast.info("The room is still loading. Try again in a moment."); return; }
+    if (l.blocked) { toast.info(l.blocked); return; } // the reason the server gave: tired, already fought this week, N-QRS at the scene, in custody...
+    going.current = true;
+    try {
+      const s = api.current.state, info = api.current.routeInfo(l.ring.x, l.ring.z, l.ring.floor), token = ++seq.current;
+      const ring = { id: l.key, room: l.room || l.name, x: l.ring.x, z: l.ring.z, floor: l.ring.floor };
+      if (!info) { toast.error(`No way to walk to ${l.name} from here. Move to another part of the room and try again.`); return; }
+      if (info.length <= ON_RING && (s.floor ?? 0) === ring.floor) { onBeat(l); return; }
+      setWalk({ card: l, ring, seconds: walkSeconds(info.length, info.speed) });
+      const ok = await api.current.walkTo(ring.x, ring.z, ring.floor);
+      if (token !== seq.current) return; // cancelled, or another card was chosen meanwhile
+      setWalk(null);
+      if (!ok) { toast.info("The way was blocked, or you took the controls. Tap it again to resume."); return; }
+      onBeat(l);
     } finally { going.current = false; }
   }
   // The yellow desks in the room (reception, stewards' desk, back stairwell...) lead to an activity here: walk to it exactly as if its card had been chosen.
@@ -136,7 +181,8 @@ export default function BuildingPanel({ place, rings, state, api, ready, runHubI
   const onUp = (e) => { const d = drag.current; drag.current = null; if (!d) return; const dy = e.clientY - d.y; if (dy < -24) setUserOpen(true); else if (dy > 24) setUserOpen(false); else toggle(); };
   const onKey = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } };
 
-  const nOpen = cards?.filter((c) => !c.blocked).length ?? 0;
+  const lecShown = chip === "all" ? lecNear : []; // Beat Lecturer sits under "All" only: it is not a timed activity, so no category claims it
+  const nTotal = (cards?.length ?? 0) + lecNear.length, nOpen = (cards?.filter((c) => !c.blocked).length ?? 0) + lecNear.filter((l) => !l.blocked).length;
   const where = place.name;
 
   return (
@@ -153,7 +199,7 @@ export default function BuildingPanel({ place, rings, state, api, ready, runHubI
         ) : (
           <>
             <span className="bp-bar-ico"><Icon name="pin" size={18} weight="fill" /></span>
-            <span className="bp-bar-t"><b>{where}</b><small>{loading ? "Looking for activities…" : failed ? "Could not load activities" : cards.length === 0 ? "No activities here" : `${nOpen} of ${cards.length} activit${cards.length === 1 ? "y" : "ies"} available`}</small></span>
+            <span className="bp-bar-t"><b>{where}</b><small>{loading && !lecNear.length ? "Looking for activities…" : failed && !lecNear.length ? "Could not load activities" : nTotal === 0 ? "No activities here" : `${nOpen} of ${nTotal} activit${nTotal === 1 ? "y" : "ies"} available`}</small></span>
             <button type="button" className="bp-bar-x" onClick={toggle} aria-expanded={open} aria-controls={sheetId} data-sound="none"><Icon name="down" size={16} /> {open ? "Fold" : "Activities"}</button>
           </>
         )}
@@ -171,10 +217,11 @@ export default function BuildingPanel({ place, rings, state, api, ready, runHubI
             {failed && (
               <div className="bp-empty" role="alert"><Icon name="alert" size={26} /><b>Could not load what you can do here</b><p>{state.error || "The connection dropped."}</p><button type="button" className="bp-go" onClick={onReload} data-sound="none" tabIndex={open ? 0 : -1}><Icon name="spin" size={16} /> Try again</button></div>
             )}
-            {cards && cards.length === 0 && <div className="bp-empty"><Icon name="door" size={26} /><b>Nothing to do here right now</b><p>{place.name} has no activities you can use at the moment. You are free to look around, or open the Map to go somewhere else.</p></div>}
-            {cards && cards.length > 0 && shown.length > 0 && (
+            {cards && cards.length === 0 && lecNear.length === 0 && <div className="bp-empty"><Icon name="door" size={26} /><b>Nothing to do here right now</b><p>{place.name} has no activities you can use at the moment. You are free to look around, or open the Map to go somewhere else.</p></div>}
+            {(shown.length > 0 || lecShown.length > 0) && (
               <ul className="bp-rail" ref={rail} onWheel={onWheel} aria-label="Activities">
                 {shown.map((c) => <li key={c.key} className="bp-wrap"><Tile c={c} state={stateOf(c)} onGo={() => go(c)} /></li>)}
+                {lecShown.map((l) => <li key={l.key} className="bp-wrap"><LecturerTile l={l} state={walk?.card.key === l.key ? "selected" : l.blocked ? "unavailable" : "available"} onGo={() => goLecturer(l)} /></li>)}
               </ul>
             )}
           </div>

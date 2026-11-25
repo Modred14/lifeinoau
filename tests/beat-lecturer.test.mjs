@@ -26,7 +26,7 @@ for (const m of Object.keys(MOVES)) assert.ok(new RegExp(`\\n  ${m}: \\{ pose:`)
 
 // ---- the room: label, lock, frozen input, facing, cleanup ----
 assert.ok(scene.includes('label: "Beat Lecturer"'), "the ring is labelled Beat Lecturer");
-assert.ok(scene.includes('"lecture_other"') && room.includes("NOT_YOURS"), "a lecturer who is not yours explains why");
+assert.ok(!scene.includes("lecture_other") && !room.includes("NOT_YOURS"), "no lecturer is refused for being 'not yours': the server decides who can be fought (any lecturer in a lecture room)");
 assert.ok(/startDuel\(i\)/.test(scene) && /endDuel\(\)/.test(scene), "the scene can square the two up and let them go");
 assert.ok(/p\.duel\)/.test(scene) && /duelSelf/.test(scene), "both characters face each other while it runs");
 assert.ok(/if \(busyRef\.current \|\| fight \|\| incident\) return/.test(room), "a second tap while one is running is ignored");
