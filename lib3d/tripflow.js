@@ -31,6 +31,7 @@ import { SWING, BACK_SPEED, LEAF_ID, canOpenAt, atThreshold, doorLocal, doorFram
 import { portalWalk, portalLength } from "./buildingPortals.js";
 import { RETARGET_WHY } from "./tripretarget.js";
 import { massOf, liftOf } from "./impact.js";
+import { JACK, jackTarget, jackStand, jackDoor, createVictim } from "./carjack.js";
 import { createAir, canTakeOff, takeOff, land, stepAir, isAirborne, fanOut } from "./flightphysics.js";
 
 const ARRIVE_RADIUS = 14, DOOR_OPEN = 0.9, ENTER_SECONDS = 1.4, BACK_TIMEOUT = 2.6, OPEN_HOLD_MAX = 1.6, MANUAL_EXIT_SECONDS = 2.6, PARK_ASSIST_BELOW = 7, CLOSE_AUTO_M = 4.5, ENTER_REACH_M = 3.2;
@@ -48,13 +49,13 @@ const clamp01 = (x) => Math.max(0, Math.min(1, x)), smooth = (x) => { x = clamp0
  * plus the one-shot buttons { exit } (Exit Car), { enter } (get back in) and { close } (close the door).
  */
 export function createTripFlow(env, o) {
-  const { svc, sim } = env, { world, nav, graph } = svc, mode = o.plan.mode, dims = o.dims ?? null;
+  const { svc, sim } = env, { world, nav, graph } = svc; let mode = o.plan.mode, dims = o.dims ?? null;   // (mode, dims and kind change once, when a car is taken from its driver: see startJack)
   // how your own vehicle sits on the road: its height, pitch and roll from where its tyres touch (the model's real wheel positions when the page gives them, otherwise two axles from its size)
-  const follower = createRoadFollower(graph, dims?.wheels?.length ? dims.wheels : defaultContacts(dims?.len, dims?.wid));
+  let follower = createRoadFollower(graph, dims?.wheels?.length ? dims.wheels : defaultContacts(dims?.len, dims?.wid));
   let plan = o.plan, B = plan.B, enterable = o.enterable !== false;   // enterable: the place has a door to open (an open-air place, a statue or a gate has none: you simply stop there)   // dims: { len, wid, id (the car model, for its handling), seat, driver } of the model, when it is not the standard size (a purchased car)
-  const driven = !!plan.driven, ownCar = mode === "car" && !plan.driven, vehicleTrip = mode !== "trek", kind = plan.kind;
+  const driven = !!plan.driven; let ownCar = mode === "car" && !plan.driven, vehicleTrip = mode !== "trek", kind = plan.kind;
   const walker = new Walker(world, nav, { x: plan.start.x, z: plan.start.z, hx: 0, hz: 1 });
-  const S = { phase: "intro", t: 0, time: 0, eta: plan.secs, notice: null, ended: false, entered: false, pay: "none", doorK: 0, boardK: 0, alightK: 0, speed: 0, vehDoorK: 0, vehDoorSide: -1, seatK: 0, exiting: false, canExit: false, canEnterOther: false, canEnter: false, canClose: false,
+  const S = { phase: "intro", t: 0, time: 0, eta: plan.secs, notice: null, ended: false, entered: false, pay: "none", doorK: 0, boardK: 0, alightK: 0, speed: 0, vehDoorK: 0, vehDoorSide: -1, seatK: 0, exiting: false, canExit: false, canEnterOther: false, canEnter: false, canClose: false, canJack: false, jackSide: 0, jackStage: "", stolen: false,
     door: "closed", hinge: "left", canOpen: false, canGoIn: false, auto: false, target: 0, hits: 0, down: false, struck: 0 };   // door: "closed" | "back" | "opening" | "open" | "closing"
   let free = !!o.free;   // a free drive: your own car on the road with no destination yet (leaving your compound). Nothing is "arrived at" until a place is chosen (retarget).
   let hero = null, own = null, inProf = null, heroT = 0, spawnAt = 0, spawnTries = 0, waitedForVehicle = 0, boardFrom = null, alightTo = null, lastEta = -1, retargeted = false, approachDoor = null, departed = false, alightFrom = null;
@@ -170,7 +171,7 @@ export function createTripFlow(env, o) {
     if (own.air && isAirborne(own.air)) { if (inp.exit) requestExit(); return flyOwn(dt, inp); }
     if (inp.exit) requestExit();
     let drv = { gas: inp.gas ?? 0, brake: inp.brake ?? 0, steer: inp.steer ?? 0 };
-    const dist = Math.hypot(own.x - plan.drop.x, own.z - plan.drop.z), near = !free && dist < ARRIVE_RADIUS && own.h < 1.0;   // driving over the place on the expressway is not arriving at it
+    const dist = plan.drop ? Math.hypot(own.x - plan.drop.x, own.z - plan.drop.z) : Infinity, near = !free && dist < ARRIVE_RADIUS && own.h < 1.0;   // driving over the place on the expressway is not arriving at it
     if (exitAsk && drv.gas > 0.3) { exitAsk = false; S.exiting = false; }     // you changed your mind: you pressed the gas
     if (exitAsk) drv = gentleStop(own, Math.min(4.5, own.P.brake * 0.6), own.P);
     else if (near && own.v > 0.3 && own.v < PARK_ASSIST_BELOW && !drv.gas) drv.brake = Math.max(drv.brake, 0.4);   // by the drop-off the car helps you park: it eases to a stop if you let go of the gas
@@ -194,7 +195,13 @@ export function createTripFlow(env, o) {
 
   // ---- phases ----
   function startApproach() {
-    go("approach"); approachDoor = plan.doorIn; walker.follow(plan.walkIn, { goal: plan.doorIn, tolerance: 0.4, onDone: (why) => { if (why === "blocked") { notice("You cannot get to the " + kindName() + " from here."); end("unreachable"); } } });
+    go("approach"); approachDoor = plan.doorIn;
+    if (ownCar && own) {   // your car was left standing here earlier (lib/roadParking.js): nothing is spawned, you walk to its real door
+      doorSide = chooseDoorSide(); S.vehDoorSide = doorSide; approachDoor = doorStand(); const r = nav.plan(walker.x, walker.z, approachDoor.x, approachDoor.z, { ignore: new Set(["own"]) });
+      if (r.ok) walker.follow(r, { goal: approachDoor, tolerance: 0.4, ignore: new Set(["own"]) }); else { notice("You cannot get to your car from here."); end("unreachable"); }
+      spawnAt = 0; return;
+    }
+    walker.follow(plan.walkIn, { goal: plan.doorIn, tolerance: 0.4, onDone: (why) => { if (why === "blocked") { notice("You cannot get to the " + kindName() + " from here."); end("unreachable"); } } });
     if (ownCar && spawnVehicle()) { doorSide = chooseDoorSide(); S.vehDoorSide = doorSide; }
     spawnAt = 0;   // the vehicle sets off as you do, and both get there together
   }
@@ -237,6 +244,7 @@ export function createTripFlow(env, o) {
    */
   function beginExit(arrival) {
     const hp = heroPose(), box = carBox(), sp = pickExit(); exitArrival = arrival; exitAsk = false; S.exiting = false; closeAsk = false;
+    if (own && (sp || arrival)) { own.v = 0; own.thr = own.brk = 0; own.yawRate = 0; own.steer = 0; publishOwn(); }   // a car you get out of stands still (an arrival stops it within a creep of the bay): traffic must not see a moving obstacle where it is parked
     if (!sp && !arrival) { notice("There is no room to get out here. Move the car and try again."); return false; }
     const side = sp?.side ?? (ownCar ? 1 : -1), d = sp ?? (() => { const st = doorPoint({ ...hp, kind }, kind, side), q = nav.stand(st.x, st.z); return { x: q.x, z: q.z, side, door: threshold(box, side) }; })();
     exitTo = d; doorSide = d.side; S.vehDoorSide = doorSide; exitSeat = toWorld(hp, seatLocal()); doorStart = S.vehDoorK;
@@ -339,6 +347,56 @@ export function createTripFlow(env, o) {
     else swingDoor(dt, S.door === "opening" ? 1 : -1);
   }
 
+  // ---- taking a car from the person driving it (lib3d/carjack.js has the rules; this runs the sequence) ----
+  // trek/roam (on foot, no car in play) --"Steal Vehicle"--> jackwalk (go round to the driver's door: a player on the far side is walked round) --> jack (the door opens, the driver is startled,
+  // resists, is pulled out through it onto a clear spot and runs off) --> board (the ordinary getting-in: the player steps in through the open door, sits, the door closes) --> drive.
+  // Only at the moment the player reaches the door does the computer-driven car become theirs: it is removed from the traffic (so nothing drives it any more) and becomes the own car,
+  // with the same physics and handling as any car of the player's (lib3d/carphysics.js); o.makeStolen() gives the drawing its full model with doors.
+  let jk = null;   // { veh, stand, from, back, t, victim, ... } while a take is under way
+  const jackEligible = () => !own && !hero && !jk && !S.entered && !S.ended && !walker.tumble && !!o.makeStolen && (S.phase === "trek" || S.phase === "roam");
+  const vBox = (b) => ({ x: b.x, z: b.z, hx: b.hx, hz: b.hz, len: b.len, wid: b.wid });
+  function abortJack(text) {
+    if (jk?.veh) jk.veh.hold = false;
+    walker.cancelRoute(); walker.ignore = null; const back = jk?.back ?? "trek"; jk = null; S.jackStage = ""; if (text) notice(text); go(back);
+  }
+  function startJack(tg) {
+    if (!jackEligible()) return false;
+    const v = tg.veh, ignore = new Set(["veh" + v.id]), r = nav.plan(walker.x, walker.z, tg.stand.x, tg.stand.z, { ignore });
+    if (!r.ok) { notice("You cannot get to the driver's door from here."); return false; }
+    v.hold = true;   // it stands still while you go round (it was already stopped by you standing in its way)
+    walker.cancelRoute(); walker.ignore = ignore; walker.follow(r, { goal: tg.stand, tolerance: JACK.standTol - 0.15, ignore });
+    jk = { veh: v, stand: tg.stand, from: { x: v.x, z: v.z }, back: S.phase, victim: null }; S.jackSide = tg.side; go("jackwalk"); return true;
+  }
+  function jackWalk(dt) {
+    const v = jk.veh; walker.step(dt, null);
+    if (v.done || !sim.vehicles.includes(v) || Math.hypot(v.x - jk.from.x, v.z - jk.from.z) > 1.0) { abortJack("The car drove off."); return; }
+    jk.stand = jackStand(v); const d = Math.hypot(walker.x - jk.stand.x, walker.z - jk.stand.z);
+    if (d < JACK.standTol) { beginJack(); return; }
+    if (S.t > JACK.walkTimeout || (!walker.following && d >= JACK.standTol * 1.5)) abortJack("You cannot get to the driver's door from here.");
+  }
+  function beginJack() {
+    const v = jk.veh, car = vBox(v), stand = jk.stand;
+    // the driver needs a clear place to be put down outside the driver's own door, well clear of the player: with none, the car cannot be taken from here
+    const sp = exitSpots(car, KINDS.car, { ...exitCtx(), vehicles: sim.vehicles.filter((b) => b !== v).map(vBox), accept: (q) => q.side === 1 && Math.hypot(q.x - stand.x, q.z - stand.z) > 1.3 }, { preferSide: 1 })[0];   // the driver comes out of ITS door, onto the best clear spot on that side (the kerb side ranks higher, but is the other door)
+    if (!sp || sp.side !== 1) { abortJack("There is no room to pull the driver out here."); return; }
+    let d2 = null; try { d2 = o.makeStolen({ id: v.id, tint: v.tint, color: v.color }); } catch { d2 = null; }
+    if (!d2) { abortJack("You cannot take this car."); return; }
+    // from here on it is the player's: the same car, in the same place, now under the own-car physics, standing still until they are in it
+    mode = "car"; kind = "car"; ownCar = true; vehicleTrip = true; dims = d2;
+    follower = createRoadFollower(graph, d2.wheels?.length ? d2.wheels : defaultContacts(d2.len, d2.wid));
+    own = Object.assign(createCar({ x: v.x, z: v.z, ang: Math.atan2(v.hx, v.hz) }), { len: d2.len ?? v.len, wid: d2.wid ?? v.wid, kind, P: carProfile(d2.id), lv: 0, h: 0, slope: 0, air: createAir() });
+    sim.remove(v); jk.veh = null; own.v = 0; own.pen = ownProbe(own.x, own.z, own.hx, own.hz)?.pen ?? 0; follower.reset(own); publishOwn();
+    free = true; S.stolen = true; S.canJack = false; walker.ignore = new Set(["own"]);
+    jk.victim = createVictim({ car: vBox(own), exit: sp, world, ignore: new Set(["own"]) }); doorSide = 1; S.vehDoorSide = 1; S.vehDoorK = 0; go("jack");
+  }
+  function jackAct(dt) {
+    const V = jk.victim, t = S.t; V.update(dt); jk.stepped = true;   // (stepped: the driver moves once a frame, also on the frame the phase changes)
+    S.jackStage = V.V.stage; walker.step(dt, null);
+    S.vehDoorK = Math.max(S.vehDoorK, Math.min(1, t / 0.7));   // the door swings open as it begins
+    const dr = jackDoor(own); turnToward(dt, dr.x - walker.x, dr.z - walker.z, 8);
+    if (t >= JACK.pulled) { doorStart = S.vehDoorK; S.jackStage = ""; startBoard(); }   // the driver is out and running: the ordinary getting in takes over (step in, sit, door shuts)
+  }
+
   // ---- a new destination, in the middle of the trip ----
   const stopAuto = () => { if (walker.path && ["trek", "afoot", "walk"].includes(S.phase)) { walker.cancelRoute(); return true; } return false; };
   function startAuto(route) {
@@ -352,6 +410,7 @@ export function createTripFlow(env, o) {
     const bad = (reason) => ({ ok: false, reason, text: RETARGET_WHY[reason] }), ph = S.phase;
     if (S.ended || S.entered) return bad("phase");
     const okPhase = mode === "trek" ? ["trek", "walk", "door", "roam"].includes(ph) : ownCar ? ["drive", "afoot"].includes(ph) : false; if (!okPhase) return bad("phase");
+    if (S.stolen && ph === "drive") return bad("phase");   // a car taken off the road has no planned route: get out and walk, or keep driving
     if (mode !== "trek" && S.pay !== "none") return bad("paid");       // a fare has been paid for the place you are at: it cannot be taken somewhere else for free
     if (S.door === "back" || S.door === "opening" || (S.door === "closing" && ph !== "roam") || exitAsk) return bad("busy");   // in "roam" the leaf is only swinging shut behind you: retargeting just shuts it
     let route = null;
@@ -404,6 +463,7 @@ export function createTripFlow(env, o) {
   function update(dt, inp = {}) {
     if (S.ended) return S; dt = Math.min(dt, 0.25); S.time += dt; S.t += dt;
     const walkIn = { dx: inp.dx ?? 0, dz: inp.dz ?? 0, mag: inp.mag ?? 0, run: !!inp.run };
+    if (inp.jack && jackEligible()) { const tg = jackTarget(sim.vehicles, walker); if (tg) startJack(tg); }
     switch (S.phase) {
       case "intro": walker.step(dt, null); if (S.t >= INTRO_SECONDS) { if (mode === "trek") go("trek"); else startApproach(); } break;
       case "trek": walker.step(dt, walkIn); if (!walker.tumble && Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z) < 3.2) { walker.step(0.0001, null); arrive(); } break;
@@ -417,6 +477,7 @@ export function createTripFlow(env, o) {
           if (stoppedAtPickup() && (!hero.kinematic || heroT >= plan.tVeh - 0.05)) { if (!retargeted) { retargeted = true; retarget(); } const d = doorStand(); if (!walker.tumble && Math.hypot(walker.x - d.x, walker.z - d.z) < 0.75) { startBoard(); break; } }
           if (hero.stillFor > 20 && !stoppedAtPickup()) sim.clearAhead(hero);
         }
+        if (own && !hero) { const d = doorStand(); if (!walker.tumble && Math.hypot(walker.x - d.x, walker.z - d.z) < 0.75) { startBoard(); break; } if (!walker.following && !walker.tumble) { const r = nav.plan(walker.x, walker.z, d.x, d.z, { ignore: new Set(["own"]) }); if (r.ok) walker.follow(r, { goal: d, tolerance: 0.4, ignore: new Set(["own"]) }); else { notice("You cannot get to your car from here."); end("unreachable"); } } break; }   // a parked car of your own: walk to its door and get in
         waitedForVehicle += dt; if (waitedForVehicle > plan.tVeh + plan.parts.walkIn + 60) { notice("The " + kindName() + " could not get to you. Try again."); end("unavailable"); }
         break; }
       case "board": { // turn to the door, open it, step through it and sit down (in a car: close it too)
@@ -443,6 +504,8 @@ export function createTripFlow(env, o) {
         walker.x = seat.x + (alightTo.x - seat.x) * m; walker.z = seat.z + (alightTo.z - seat.z) * m; const fx = alightTo.x - seat.x, fz = alightTo.z - seat.z, fl = Math.hypot(fx, fz) || 1; walker.hx = fx / fl; walker.hz = fz / fl;
         if (S.t >= ALIGHT_SECONDS) { person.seated = false; walker.place(alightTo.x, alightTo.z); startWalk(); } break; }
       case "exit": exitCar(heroPose(), dt); break;
+      case "jackwalk": jackWalk(dt); break;
+      case "jack": jackAct(dt); break;
       case "afoot": { // out of the car, on foot: walk where you like, close the door, or get back in
         walker.step(dt, walkIn); const d = distToCar(walker.x, walker.z);
         if (inp.close || d > CLOSE_AUTO_M) closeAsk = true; if (closeAsk) doorTarget = 0; stepDoor(dt, doorTarget);
@@ -481,6 +544,8 @@ export function createTripFlow(env, o) {
     if (S.phase === "door" || S.phase === "enter") { doorTarget = 0; stepDoor(dt, 0); }
     S.auto = !!walker.path && walker.mode === "auto" && ["trek", "afoot", "walk"].includes(S.phase);
     S.canFly = S.phase === "drive" && !!own?.P?.flies; S.airborne = !!(own?.air && isAirborne(own.air)); S.alt = own ? Math.round(own.h) : 0; S.fan = own?.air ? fanOut(own.air) : 0; S.fanSpin = own?.air?.spin ?? 0;
+    if (jk?.victim) { if (S.phase !== "jack" && !jk.stepped) jk.victim.update(dt); jk.stepped = false; if (jk.victim.V.done) { jk = null; } }   // the driver runs off while the player gets in, and is gone when it is done
+    { const tg = jackEligible() ? jackTarget(sim.vehicles, walker) : null; S.canJack = !!tg; S.jackSide = tg?.side ?? 0; }
     S.canExit = S.phase === "drive" && !exitAsk && !S.airborne; S.canEnter = (S.phase === "afoot" || (S.phase === "roam" && !!own)) && distToCar(walker.x, walker.z) < ENTER_REACH_M; S.canEnterOther = (S.phase === "afoot" || S.phase === "roam") && !S.canEnter && !walker.tumble && !!o.otherCar?.(walker.x, walker.z); S.canClose = S.phase === "afoot" && S.vehDoorK > 0.02 && doorTarget === 1;
     // the person
     person.x = walker.x; person.z = walker.z; person.hx = walker.hx; person.hz = walker.hz; S.speed = S.phase === "drive" ? own.v : S.phase === "ride" && hero ? hero.v : walker.speed;
@@ -491,7 +556,16 @@ export function createTripFlow(env, o) {
     if (S.time - lastEta > 0.2) { lastEta = S.time; S.eta = etaNow(); }
     return S;
   }
-  function finishEnter() { if (S.entered) return; S.entered = true; holdT = 0; world.removeBody(LEAF_ID); go("inside"); o.onEnter?.(); }
+  /**
+   * Tells the page where your own car stands now that you have left it (o.onCarLeft(pose, { arrived })), so a later trip can put it back there (lib/roadParking.js). `arrived` is true once the
+   * trip has reached its place: only then is the pose "in front of" that place. A car being driven is not parked, so nothing is reported for it.
+   */
+  const reachedPlace = () => S.pay !== "none" || ["door", "enter", "inside", "leave", "roam"].includes(S.phase);
+  function carLeft() {
+    if (!own || !ownCar || S.phase === "drive" || exitAsk) return;
+    try { o.onCarLeft?.({ x: own.x, z: own.z, hx: own.hx, hz: own.hz, len: own.len, wid: own.wid }, { arrived: reachedPlace() }); } catch { /* the page's save must never stop the game */ }
+  }
+  function finishEnter() { if (S.entered) return; S.entered = true; holdT = 0; world.removeBody(LEAF_ID); carLeft(); go("inside"); o.onEnter?.(); }
   /**
    * May the person go in now? Not while the fare is still being settled, and not while the room behind the door is still being got ready (o.holdEnter(): true = wait): they stand in the
    * doorway instead, so there is never a loading screen, just a person at a door for a moment on a slow device. The wait is capped (ENTRY_HOLD_MAX), so a room that never reports ready cannot trap anyone outside.
@@ -533,6 +607,7 @@ export function createTripFlow(env, o) {
 
   /** Seconds to go, by the planner's own arithmetic from where everything is now. */
   function etaNow() {
+    if (S.stolen) return 0;
     const ph = S.phase, walkLeft = walker.path ? Math.max(0, walker.path.len - walker.ps) : Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z);
     switch (ph) {
       case "intro": return Math.max(0, plan.secs - S.t);
@@ -553,7 +628,8 @@ export function createTripFlow(env, o) {
   function remainMetres() { const ph = S.phase; if (ph === "ride" && hero) return Math.max(0, hero.route.len - hero.s); if (ph === "drive") return free ? 0 : Math.max(0, Math.hypot(own.x - plan.drop.x, own.z - plan.drop.z)); if (ph === "approach") return walker.path ? Math.max(0, walker.path.len - walker.ps) : 0; return Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z); }
 
   function dispose() {
-    S.ended = true; sim.removeExternal("player"); sim.removePerson("player"); sim.removeExternal("own"); world.removeBody("own"); world.removeBody(LEAF_ID);
+    if (jk?.veh) jk.veh.hold = false;
+    carLeft(); S.ended = true; sim.removeExternal("player"); sim.removePerson("player"); sim.removeExternal("own"); world.removeBody("own"); world.removeBody(LEAF_ID);
     if (hero) { if (departed) hero.role = "npc"; else sim.remove(hero); }
   }
   if (o.spawn && o.parked && ownCar) bootAt(o.parked, o.spawn.v);   // driving out of the compound gate: at the wheel, already rolling, on the compound ground
@@ -562,5 +638,5 @@ export function createTripFlow(env, o) {
   if (o.roam && o.roamPose) roamAt(o.roamPose, o.roam);   // the home screen's exact pose: on foot right there, no walk out of the door
   else if (o.roam) exitBuilding(o.roam);
   if (o.autoEnter && own && S.phase === "roam") startReenter();   // restarted beside the car they chose: they walk to its door and get in   // a trip that begins on the doorstep: the person walks out of the door at once (o.roam is the building's portal)
-  return { update, dispose, state: S, roamAt, get free() { return free; }, get roaming() { return S.phase === "roam"; }, exitBuilding, walker, person, get plan() { return plan; }, kind, pressDoor, enterNow, retarget: retargetTrip, stopAuto, get doorFrame() { return dframe; }, get hero() { return hero; }, get approachDoor() { return approachDoor ?? plan.doorIn; }, get own() { return own; }, get vehicle() { return own ?? hero; }, eta: () => S.eta, remainMetres, cancel: () => end("cancelled"), get driving() { return S.phase === "drive"; } };
+  return { update, dispose, state: S, roamAt, get free() { return free; }, get roaming() { return S.phase === "roam"; }, exitBuilding, walker, person, get plan() { return plan; }, pressDoor, enterNow, retarget: retargetTrip, stopAuto, get doorFrame() { return dframe; }, get hero() { return hero; }, get approachDoor() { return approachDoor ?? plan.doorIn; }, get own() { return own; }, get victim() { return jk?.victim?.V ?? null; }, get kind() { return kind; }, get vehicle() { return own ?? hero; }, eta: () => S.eta, remainMetres, cancel: () => end("cancelled"), get driving() { return S.phase === "drive"; } };
 }

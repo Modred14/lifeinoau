@@ -16,6 +16,7 @@ import { fmtDuration } from "@/lib/travel.js";
 import "./travel.css";
 
 const TEXT = {
+  jackwalk: "Going round to the driver's door…", jack: "Taking the car…",
   intro: "Getting ready…", approach: "Walking to your ride", board: "Getting in…", ride: "On the way", paying: "Paying the fare…", alight: "Getting out…", exit: "Getting out…", afoot: "Out of the car", reenter: "Getting back in…", walk: "Walking to the door", door: "Going in…", enter: "Going in…", inside: "Going in…", leave: "Stepping out…", roam: "Walk on · tap a place name to go there",
 };
 
@@ -32,7 +33,7 @@ export function Stick({ input }) {
     onPointerMove={(e) => { if (e.pointerId === id.current) move(e); }} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}><i style={{ transform: `translate(${dot[0]}px, ${dot[1]}px)` }} /></div>;
 }
 export default function TripHud({ trip, placeName, st, input, miniRef, previewRef, onCancel }) {
-  const [preview, setPreview] = useState(false), phase = st?.phase ?? "intro", drive = trip.mode === "car" && !trip.driver, steering = phase === "drive", walking = ["trek", "approach", "walk", "afoot", "door", "roam", "leave"].includes(phase), doorOn = phase === "door" && st?.hasDoor;
+  const [preview, setPreview] = useState(false), phase = st?.phase ?? "intro", drive = trip.mode === "car" && !trip.driver, steering = phase === "drive", walking = ["trek", "jackwalk", "approach", "walk", "afoot", "door", "roam", "leave"].includes(phase), doorOn = phase === "door" && st?.hasDoor;
   // the H key is the horn on a keyboard too: it is read with the other keys (lib3d/tripkeys.js, lib3d/vehicleInput.js), so it drops with them when focus is lost
   useEffect(() => { if (!preview) return; const k = (e) => e.key === "Escape" && setPreview(false); document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [preview]);
   const m = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + " km" : n + " m");
@@ -102,6 +103,11 @@ export default function TripHud({ trip, placeName, st, input, miniRef, previewRe
         <div className="th-act">
           {(st.canEnter || st.canEnterOther) && <button type="button" className="th-btn th-act-btn" data-sound="none" onClick={() => { input.enter = true; playSound("tap"); }}><Icon name="ride" size={20} weight="bold" /> Get in car</button>}
           {st.canClose && <button type="button" className="th-btn th-act-btn" data-sound="none" onClick={() => { input.close = true; playSound("tap"); }}><Icon name="door" size={20} weight="bold" /> Close door</button>}
+        </div>
+      )}
+      {(phase === "trek" || phase === "roam") && st?.canJack && (
+        <div className="th-act">
+          <button type="button" className="th-btn th-act-btn" data-sound="none" onClick={() => { input.jack = true; playSound("tap"); }}><Icon name="ride" size={20} weight="bold" /> {st.jackSide > 0 ? "Steal Vehicle" : "Take Vehicle (go round to the driver)"}</button>
         </div>
       )}
       {preview && (

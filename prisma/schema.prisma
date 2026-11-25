@@ -95,6 +95,7 @@ model Character {
   tripH              Float? // heading, radians
   tripMode           String         @default("")
   tripAt             DateTime? // last position ping; the player counts as on the road for a few seconds after
+  tripVeh            String         @default("") // "npc:#rrggbb" while the player is driving a car taken from a traffic driver (lib3d/carjack.js); "" otherwise
   tripSeq            Float? // the sender's counter of the newest road report stored (or trip end): an older report never overwrites a newer one
   // 0-100 stats, clamped in the engine
   health             Int            @default(80)

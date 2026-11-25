@@ -53,7 +53,7 @@ const model = schema.slice(schema.indexOf("model OwnedCar"), schema.indexOf("}",
 for (const [col, type] of [["parked", "BOOLEAN NOT NULL DEFAULT false"], ["parkX", "DOUBLE PRECISION"], ["parkZ", "DOUBLE PRECISION"], ["parkYaw", "DOUBLE PRECISION"], ["parkLot", "TEXT"], ["parkedAt", "TIMESTAMP(3)"]]) chk(`the migration adds "${col}" ${type}, and the schema has it`, sql.includes(`ADD COLUMN "${col}"`) && new RegExp(`ADD COLUMN "${col}"\\s+${type.replace(/[()]/g, "\\$&")}`).test(sql) && new RegExp(`\\b${col}\\b`).test(model));
 chk("the migration only adds nullable or defaulted columns (nothing existing breaks) and drops nothing", !/DROP |NOT NULL(?! DEFAULT)/.test(sql.replace(/CHECK[\s\S]*$/, "")) && !/ALTER COLUMN/.test(sql));
 const dirs = fs.readdirSync(new URL("../prisma/migrations", import.meta.url)).filter((d) => /^\d{14}_/.test(d)).sort();
-chk("the migration is the newest one (applies last)", dirs.at(-1) === "20261124120000_owned_car_parking");
+chk("the migration applies after the migration before it and is not the first (later migrations may follow)", dirs.includes("20261124120000_owned_car_parking") && dirs.indexOf("20261124120000_owned_car_parking") === dirs.indexOf("20261121120000_club_dance") + 1);
 
 // the screens read and write it
 const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), "utf8");

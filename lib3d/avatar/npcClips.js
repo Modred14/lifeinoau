@@ -166,6 +166,34 @@ function sitClip(root, bones) {
   return clip;
 }
 
+// Taking a car from its driver (lib3d/carjack.js). Generated like the others: no authored enter/exit-car animation exists in the assets, so these are the honest stand-ins.
+function handsUpClip(root, bones) { // the driver: both hands up and open, flinching
+  const D = 0.5;
+  return bake(root, bones, "handsUp", D, (t, S) => {
+    const ps = (t / D) * TAU, tr = Math.sin(ps * 2) * 0.03;
+    for (const [side, pre] of [[1, "Left"], [-1, "Right"]]) {
+      S.aim(pre + "Arm", pre + "ForeArm", [side * (0.7 + tr), 0.55, 0.15]);
+      S.aim(pre + "ForeArm", pre + "Hand", [side * (0.22 + tr), 1, 0.2]);
+    }
+    legs(S, 0.02, 0.12, -0.02, 0.12, 0.1);
+    spine(S, -0.1, -0.05 + tr);
+    S.hipsAt(0, -0.03 + 0.01 * Math.sin(ps), 0);
+  });
+}
+function jackReachClip(root, bones) { // the thief: leaning in, one arm reaching and pulling in the direction of the door
+  const D = 1.2;
+  return bake(root, bones, "jackReach", D, (t, S) => {
+    const ps = (t / D) * TAU, pull = 0.5 - 0.5 * Math.cos(ps);
+    S.aim("LeftArm", "LeftForeArm", [0.5 - 0.3 * pull, 0.2, 0.8 - 0.5 * pull]);
+    S.aim("LeftForeArm", "LeftHand", [0.3 - 0.2 * pull, 0.1, 0.9 - 0.6 * pull]);
+    S.aim("RightArm", "RightForeArm", [-0.3, -0.2, 0.7]);
+    S.aim("RightForeArm", "RightHand", [-0.2, -0.1, 0.8]);
+    legs(S, 0.3, 0.2, -0.2, 0.15, 0.1);
+    spine(S, 0.12 + 0.1 * pull, 0.15);
+    S.hipsAt(0, -0.04, 0);
+  });
+}
+
 /* ------------------------------------------------------------------ public */
 
 const cache = new Map();
@@ -184,7 +212,7 @@ export function npcClips(root, gender = "F", existing = []) {
       const keep = { p: root.position.clone(), q: root.quaternion.clone(), s: root.scale.clone(), parent: root.parent };
       root.position.set(0, 0, 0); root.quaternion.identity(); root.scale.set(1, 1, 1);
       try {
-        cache.set(gender, [runClip, cheerClip, phoneClip, talkClip, lookAroundClip, sitClip].map((f) => { try { return f(root, bones); } catch (e) { console.warn("npc clip failed:", f.name, e); return null; } }).filter(Boolean));
+        cache.set(gender, [runClip, cheerClip, phoneClip, talkClip, lookAroundClip, sitClip, handsUpClip, jackReachClip].map((f) => { try { return f(root, bones); } catch (e) { console.warn("npc clip failed:", f.name, e); return null; } }).filter(Boolean));
       } finally { root.position.copy(keep.p); root.quaternion.copy(keep.q); root.scale.copy(keep.s); root.updateMatrixWorld(true); }
     }
   }

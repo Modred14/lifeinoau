@@ -55,4 +55,23 @@ Object.assign(me(), { tripX: 1, tripZ: 1, tripMode: "trek", tripAt: new Date(), 
 me().jailedUntil = new Date(Date.now() + 60_000);
 await assert.rejects(() => tripPing(db, "u1", { x: 1, z: 1, h: 0, mode: "trek", seq: 999 }), (e) => e.status === 403);
 assert.equal(me().tripAt, null, "a prisoner does not linger on the road");
+
+// ---- a car taken from a traffic driver (lib3d/carjack.js): shown to others, but only for someone who was just on foot beside it ----
+{
+  Object.assign(me(), { jailedUntil: null, transport: "", activeCar: "", tripX: 100, tripZ: 100, tripMode: "trek", tripVeh: "", tripAt: new Date(), tripSeq: 1000 });
+  const car = (o) => tripPing(db, "u1", { x: 101, z: 100, h: 0, mode: "car", veh: "npc:#1a2b3c", ...o });
+  await assert.rejects(() => car({ veh: "" }), (e) => e.status === 409); // no car, no claim: refused as before
+  Object.assign(me(), { tripX: 100, tripZ: 100, tripMode: "trek", tripVeh: "", tripAt: new Date() });
+  await assert.rejects(() => car({ veh: "camry-2014" }), (e) => e.status === 409); // junk claim
+  Object.assign(me(), { tripX: 100, tripZ: 100, tripMode: "trek", tripVeh: "", tripAt: new Date() });
+  await assert.rejects(() => car({ x: 900 }), (e) => e.status === 409); // far from where they were on foot
+  Object.assign(me(), { tripX: 100, tripZ: 100, tripMode: "trek", tripVeh: "", tripAt: new Date() });
+  assert.deepEqual(await car(), { ok: true }); assert.equal(me().tripMode, "car"); assert.equal(me().tripVeh, "npc:#1a2b3c");
+  assert.deepEqual(await car({ x: 105 }), { ok: true }, "carries on in the same car");
+  const seen = (await onTheRoad(db, "u2")).travellers.find((t) => t.name === "Ada");
+  assert.ok(seen && seen.mode === "car" && seen.car === "camry-2014" && seen.carColor === "#1a2b3c", "others see the thief in the taken car: " + JSON.stringify(seen));
+  assert.deepEqual(await tripPing(db, "u1", { x: 105, z: 100, h: 0, mode: "trek" }), { ok: true }); assert.equal(me().tripVeh, "", "out of the car: the claim is dropped");
+  Object.assign(me(), { tripX: 5, tripZ: 5, tripMode: "car", tripVeh: "", tripAt: new Date(Date.now() - 60_000) });
+  await assert.rejects(() => car({ x: 5, z: 5 }), (e) => e.status === 409); // stale: not "just on foot"
+}
 console.log("trip ping passed");

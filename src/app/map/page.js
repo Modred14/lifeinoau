@@ -21,6 +21,7 @@ import { hasInterior } from "@/lib3d/interiors/registry.js";
 import { call, naira } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { game, useGame, run, cash } from "@/lib/gameStore";
+import { saveRoadParking, takeRoadParking } from "@/lib/roadParking.js";
 import { fareKobo, placeOf, ownsCar, driverActive, homePlace, MODE_INFO } from "@/lib/travel.js";
 import { playSound } from "@/lib/sound";
 import { serverTime } from "@/lib/serverClock";
@@ -153,6 +154,9 @@ export default function MapPage() {
   // ---- travelling ----
   // The trip starts the moment the player taps Go. The real players standing at the door are fetched alongside (handed over as a promise)
   // and drawn when the list arrives; if that request is slow or fails, the trip is not held up and the door is simply empty.
+  // Where the player left their own car on the road (lib/roadParking.js): reported by the trip when they walk away from it, handed back to the next trip that starts at that place.
+  const parkKey = (c, placeId) => ({ playerId: c?.id ?? c?.name, modelId: c?.activeCar || "", placeId });
+  const rememberCar = (c) => (pose, info) => { if (info?.arrived && info.placeId && c?.activeCar) saveRoadParking({ ...parkKey(c, info.placeId), color: c.activeCarColor || "", pose }); };
   function begin(mode, withDriver, act = null) {
     const dest = L; if (!dest) return; setSheet(false);
     if (held) return toast.error(`You are held in ${CUSTODY_NAME}. You cannot travel until your sentence ends.`);
@@ -162,7 +166,7 @@ export default function MapPage() {
     const fetchPeople = () => target.answer(call("/api/travel?at=" + encodeURIComponent(target.id)).then((r) => (r.failed ? [] : r.people ?? [])), null);
     const people = fetchPeople();
     setTripSt(null); input.jx = input.jy = input.steer = input.gas = input.brake = 0; input.run = false;
-    setTrip({ id: crypto.randomUUID(), from: here, to: dest.id, mode, driver: withDriver, act, look: ch?.look ?? null, gender: ch?.gender ?? "M", car: ch?.activeCar || "", carColor: ch?.activeCarColor || "", people, pollPeople: fetchPeople, isEnterable: (id) => { const p = find(id); return !!p && hasInterior(p.id, p.kind); }, selfName: ch?.name ?? "", name: dest.name });
+    setTrip({ id: crypto.randomUUID(), from: here, to: dest.id, mode, driver: withDriver, act, look: ch?.look ?? null, gender: ch?.gender ?? "M", car: ch?.activeCar || "", carColor: ch?.activeCarColor || "", parked: mode === "car" && !withDriver && ch?.activeCar ? takeRoadParking(parkKey(ch, here))?.pose ?? null : null, onCarLeft: mode === "car" && !withDriver ? rememberCar(ch) : undefined, people, pollPeople: fetchPeople, isEnterable: (id) => { const p = find(id); return !!p && hasInterior(p.id, p.kind); }, selfName: ch?.name ?? "", name: dest.name });
     setSel(null);
   }
   /** A tapped name tag has already sent the trip there (locally, at once). This keeps the page in step: the destination, its name, the people at its door. Nothing here waits for the server. */
@@ -193,10 +197,15 @@ export default function MapPage() {
     // there is no live world to step into (the player got in from the place card, or the page was reloaded): start one on the doorstep. The room stays on screen until it is drawn.
     const p = find(id); if (!p) { setInside(null); return; }
     targetRef.current = createTargetTracker(id);
-    setTrip({ id: crypto.randomUUID(), from: id, to: id, mode: "trek", roam: true, driver: false, act: null, look: ch?.look ?? null, gender: ch?.gender ?? "M", car: "", carColor: "", people: [], pollPeople: () => targetRef.current.answer(call("/api/travel?at=" + encodeURIComponent(id)).then((x) => (x.failed ? [] : x.people ?? [])), null), isEnterable: (i) => { const q = find(i); return !!q && hasInterior(q.id, q.kind); }, selfName: ch?.name ?? "", name: p.name });
+    // the car they parked in front of this building (if they came by it) is still there: the doorstep world has it standing where they left it
+    const left = ch && ownsCar(ch) && ch.activeCar ? takeRoadParking(parkKey(ch, id)) : null;
+    setTrip({ id: crypto.randomUUID(), from: id, to: id, mode: left ? "car" : "trek", parked: left?.pose ?? null, onCarLeft: left ? rememberCar(ch) : undefined, roam: true, driver: false, act: null, look: ch?.look ?? null, gender: ch?.gender ?? "M", car: left ? ch.activeCar : "", carColor: left ? ch.activeCarColor || "" : "", people: [], pollPeople: () => targetRef.current.answer(call("/api/travel?at=" + encodeURIComponent(id)).then((x) => (x.failed ? [] : x.people ?? [])), null), isEnterable: (i) => { const q = find(i); return !!q && hasInterior(q.id, q.kind); }, selfName: ch?.name ?? "", name: p.name });
   }
   const tripReady = () => { if (tripRef.current?.roam) setInside(null); };   // the doorstep world is drawn and the player is already walking out of the door: now the room can go
-  const tripEnded = (why) => { setTrip(null); setEntering(false); if (why === "error") toast.error("The trip could not start. Try again."); };
+  const tripEnded = (why) => {
+    const t = tripRef.current;
+    if (t?.roam && t.mode === "car" && !t.retried && ch && ["noroad", "unreachable", "error"].includes(why)) { setTrip({ ...t, id: crypto.randomUUID(), mode: "trek", parked: null, onCarLeft: undefined, car: "", carColor: "", retried: true }); return; }   // the car could not be put on the doorstep: come out on foot, as before
+    setTrip(null); setEntering(false); if (why === "error") toast.error("The trip could not start. Try again."); };
   const tripNotice = (m) => toast.error(m); // a ride that cannot reach you, a way that is blocked: said plainly, and you can try again from the sheet
   const tripPlace = trip ? find(trip.to) : null, insidePlace = inside ? find(inside) : null;
   // Which building this player is inside, for the live "N people inside" on everybody's map (docs/BUILDING-OCCUPANCY.md). Only the id is sent: the realtime server checks it
