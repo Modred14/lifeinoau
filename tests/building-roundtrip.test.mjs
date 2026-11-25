@@ -64,7 +64,7 @@ assert.equal(Object.keys(portals).length, enterable.length, "every enterable bui
   assert.ok(onRoad <= 8, `only a few doors open straight onto the carriageway (${onRoad})`);
 }
 // a building with no map position, or no outline, has no portal and says why (never a made-up one)
-assert.equal(portalFor(svc, { id: "nowhere" }).reason, "nopos"); assert.equal(portalFor(svc, byId("main_bowl") ?? { id: "x", x: 1, z: 1 }).ok, false);
+assert.equal(portalFor(svc, { id: "nowhere" }).reason, "nopos"); { const open = svc.data.places.find((q) => q.x != null && !svc.data.buildings.some((b) => b.id === q.bid)) ?? { id: "x", x: 1, z: 1 }; assert.equal(portalFor(svc, open).ok, false, `${open.id}: a place with no outline has no portal`); }
 // the override hook is data: one building can be told where to put its exit without touching the code
 {
   const id = "library", base = portalFor(svc, byId(id)), forced = portalFor(svc, byId(id), { overrides: { [id]: { out: [base.out + 0.9], shift: [base.shift] } } });

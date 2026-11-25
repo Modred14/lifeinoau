@@ -45,7 +45,9 @@ const hot = (data.places ?? []).filter((p) => p.x != null && HOT_KINDS[p.kind] &
 
 // 3. the traffic on the sloped roads: both axles on the road, no jumps, flat roads flat
 const project = (e, x, z, around) => { let best = Infinity, bs = 0; for (let s = Math.max(0, around - 12); s <= Math.min(e.len, around + 12); s += 0.5) { const p = e.path.at(s, {}), d = Math.hypot(p.x - x, p.z - z); if (d < best) { best = d; bs = s; } } return bs; };
-const sim = createTrafficSim({ graph: g, world, focus: () => ({ x: -493, z: 759 }), rnd: rng(7), density: { vehicles: 70, hwVehicles: 44, peds: 0, hotspots: hot, limits: { car: 80, keke: 10, bus: 8, minibus: 12 } } });
+// traffic is seeded round the west interchange's ramps (a fixed point (-493, 759) on the old map, which is outside the frame of the new map)
+const rampFocus = (ic) => { const r = raw.expressway.ramps.find((q) => q.ic === ic) ?? raw.expressway.ramps[0], p = r.pts[r.pts.length >> 1]; return { x: p[0], z: p[1] }; };
+const sim = createTrafficSim({ graph: g, world, focus: () => rampFocus("west"), rnd: rng(7), density: { vehicles: 70, hwVehicles: 44, peds: 0, hotspots: hot, limits: { car: 80, keke: 10, bus: 8, minibus: 12 } } });
 const last = new Map(); let onSlope = 0, worst = 0, flat = 0, maxStepY = 0, maxStepP = 0; const kinds = new Set();
 for (let i = 0; i < 30 * 420; i++) {
   sim.update(1 / 30);

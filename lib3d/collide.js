@@ -14,10 +14,11 @@ const inPoly = (x, z, pts) => { let c = false; for (let i = 0, j = pts.length - 
 
 export class CollisionWorld {
   constructor(cell = 12) {
-    this.cell = cell; this.hash = new Map(); this.phash = new Map(); this.polys = []; this.E = []; this.bodies = new Map(); this.stamp = 0; this.sd = [];
+    this.cell = cell; this.hash = new Map(); this.phash = new Map(); this.polys = []; this.E = []; this.bodies = new Map(); this.stamp = 0; this.rev = 0; this.sd = [];   // rev: counts every change to the static solids (a home's walls going up or coming down), so a cache built from them can tell it is stale
   }
   /** A solid area (a building, a lake). `pts` is a ring of [x, z]. */
   addPolygon(pts, tag = null) {
+    this.rev++;
     if (pts.length < 3) return -1;
     let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const p of pts) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]); }
     const pi = this.polys.length, first = this.E.length; this.polys.push({ pts, tag, bb: [x0, z0, x1, z1], first, count: pts.length });
@@ -26,13 +27,14 @@ export class CollisionWorld {
     return pi;
   }
   /** A thin barrier with no inside (a wall, a fence). */
-  addWall(ax, az, bx, bz, tag = null) { this._edge([ax, az], [bx, bz], -1, tag); }
+  addWall(ax, az, bx, bz, tag = null) { this.rev++; this._edge([ax, az], [bx, bz], -1, tag); }
   addRect(x0, z0, x1, z1, tag = null) { return this.addPolygon([[x0, z0], [x1, z0], [x1, z1], [x0, z1]], tag); }
   /** Takes away everything that was added with `{ owner }` in its tag (a home compound that is no longer there). The slots stay, marked dead, so nothing else's index moves. Returns how many solids went. */
   removeOwned(owner) {
     let n = 0;
     for (const p of this.polys) if (!p.dead && p.tag?.owner === owner) { p.dead = true; n++; }
     for (const e of this.E) if (!e.dead && (e.poly >= 0 ? this.polys[e.poly].tag : e.tag)?.owner === owner) { e.dead = true; if (e.poly < 0) n++; }
+    if (n) this.rev++;
     return n;
   }
   /** A post or pole: a small octagon. */

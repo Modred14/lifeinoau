@@ -287,9 +287,11 @@ export function drivePlan(net, from, to) {
 }
 
 /** Where the front door of a building is: the point on its outline closest to a road, with the wall's outward direction. Cached per building. */
-export function doorOf(net, bd) {
+export function doorOf(net, bd, hint = null) {
   const hit = net.doors.get(bd.id); if (hit) return hit;
-  const pts = bd.pts, c = centroid(pts); let best = null;
+  // `hint` is an entrance the map itself gives ([x, z], the new map has one for its named buildings): the sample of the outline nearest to it wins, as long as it is within 10 m of it and its front is walkable.
+  // Without a hint, or when nothing near the hint is usable, the point closest to a road is chosen, as before.
+  const pts = bd.pts, c = centroid(pts); let best = null, bestHint = null;
   for (let e = 0; e < pts.length; e++) {
     const a = pts[e], b = pts[(e + 1) % pts.length], l = Math.hypot(b[0] - a[0], b[1] - a[1]); if (l < 1) continue;
     const ux = (b[0] - a[0]) / l, uz = (b[1] - a[1]) / l; let nx = uz, nz = -ux; // a normal; flip it so it points out of the building
@@ -298,11 +300,13 @@ export function doorOf(net, bd) {
     for (let s = 0; s <= steps; s++) {
       const t = steps ? s / steps : 0.5, px = a[0] + (b[0] - a[0]) * t, pz = a[1] + (b[1] - a[1]) * t, ox = px + nx * 1.6, oz = pz + nz * 1.6;
       if (!walkable(net, ox, oz)) continue;
+      if (hint) { const hd = Math.hypot(px - hint[0], pz - hint[1]) + (Math.min(s * l / steps, (steps - s) * l / steps) < 2.5 ? 4 : 0); if (hd < 10 && (!bestHint || hd < bestHint.score)) bestHint = { score: hd, x: px, z: pz, nx, nz, ox, oz, len: l }; }
       const i = ci(net, ox), j = cj(net, oz); let score = net.toRoad[j * net.nx + i] * CELL;
       const edgeGap = Math.min(s * l / steps, (steps - s) * l / steps); if (edgeGap < 2.5) score += 4; // not on a corner
       if (!best || score < best.score) best = { score, x: px, z: pz, nx, nz, ox, oz, len: l };
     }
   }
+  if (bestHint) best = bestHint;
   const door = best ? { x: best.x, z: best.z, nx: best.nx, nz: best.nz, ox: best.ox, oz: best.oz, width: Math.min(3, Math.max(1.6, best.len * 0.25)) } : { x: c[0], z: c[1], nx: 0, nz: 1, ox: c[0], oz: c[1] + 3, width: 2 };
   net.doors.set(bd.id, door); return door;
 }
@@ -314,7 +318,7 @@ export function doorOf(net, bd) {
 export function destinationOf(net, place) {
   const bd = place.bid != null ? net.buildingById.get(place.bid) : null;
   if (bd) {
-    const d = doorOf(net, bd), kerb = nearestRoad(net, d.ox, d.oz) ?? { x: d.ox, z: d.oz };
+    const d = doorOf(net, bd, place.door ?? null), kerb = nearestRoad(net, d.ox, d.oz) ?? { x: d.ox, z: d.oz };
     return { id: place.id, building: bd, centre: centroid(bd.pts), door: { x: d.x, z: d.z, nx: d.nx, nz: d.nz, width: d.width }, front: { x: d.ox, z: d.oz }, kerb };
   }
   const p = nearestWalkable(net, place.x, place.z) ?? { x: place.x, z: place.z }, kerb = nearestRoad(net, p.x, p.z) ?? p;

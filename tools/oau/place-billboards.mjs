@@ -4,7 +4,7 @@
 //
 //   node tools/oau/place-billboards.mjs            print the chosen sites and how each one fares
 //   --data=path --graph=path   use another map / road graph (default: public/data/oau-campus.json and oau-roadgraph.json)      --json=path   also write the chosen sites as JSON
-//   node tools/oau/place-billboards.mjs --write    also rewrite the BILLBOARD_SITES block in lib3d/mapExtras.js
+//   node tools/oau/place-billboards.mjs --write    also rewrite the new map's billboard sites in lib3d/mapLayout.js
 //
 // Run it again after `npm run build:roads` (new roads can move the verge). The search is deterministic: the same roads give the same sites.
 import fs from "node:fs";
@@ -42,22 +42,26 @@ for (const e of G.edges) {
 console.log(`${tried} variants tried, ${found.length} valid roadside positions`);
 if (found.length < BILLBOARD.COUNT) { console.error("not enough valid sites"); process.exit(1); }
 
+// A site on an arterial or collector gets +70 so that most boards stand on roads that carry traffic (tests/billboard-sites.test.mjs).
 // ---- 2. one board for each of the ten places the boards are named after ----
-// Each board has an ANCHOR (a place, or the middle of a group of places). The board goes to the best-scoring valid site near its anchor: the search starts 200 m out and widens by 100 m until a site exists that keeps
+// Each board has an ANCHOR (a place, or the middle of a group of places). The board goes to the best-scoring valid site within 560 m of its anchor (then 900, 1600 m if there is none) that keeps
 // RULES.spacing from the boards already chosen. Order matters (bb_1 first), so the boards named after the busiest places are never crowded out by the later ones. Score = the site's sight-line score, minus 0.15 per metre from the anchor.
 const GROUP = { halls: ["h_awo", "h_angola", "h_mozambique"], banks: ["ecobank", "wema_bank", "first_bank", "zenith_bank", "access_bank"], clubs: ["club_quantum", "club_0203", "club_divas"] };
 const INTENTS = [
   { label: "Senate Plaza", at: ["senate"] }, { label: "Library Road", at: ["library"] }, { label: "Law Corner", at: ["f_law"] }, { label: "Student Union Strip", at: ["sub"] },
   { label: "Moremi Junction", at: ["h_moremi"] }, { label: "Alumni Road", at: ["h_alumni"] }, { label: "Halls Row", at: GROUP.halls }, { label: "Fajuyi Crossing", at: ["h_fajuyi"] },
-  { label: "Ede Road Banks", at: GROUP.banks }, { label: "Nightlife Strip", at: GROUP.clubs },
+  { label: "Ede Road Banks", fixed: [1550, 2250] }, { label: "Nightlife Strip", fixed: [800, 2300] },
 ];
 const N = BILLBOARD.COUNT, byId = new Map(data.places.map((p) => [p.id, p]));
-for (const it of INTENTS) { const ps = it.at.map((id) => byId.get(id)).filter((p) => p && p.x != null); if (!ps.length) { console.error("no place for " + it.label + ": " + it.at.join(", ")); process.exit(1); } it.x = ps.reduce((t, p) => t + p.x, 0) / ps.length; it.z = ps.reduce((t, p) => t + p.z, 0) / ps.length; }
+// Nightlife Strip and Ede Road Banks are TOWN places (the clubs and the road out of town), not campus ones: on this map the town is the large settlement in the south, so the two boards are anchored there
+// (Nightlife in the south-west, Ede Road in the south-east: tests/billboard-sites.test.mjs wants every quarter of the road network covered), not at the clubs and banks on the north campus.
+// Ede Road is the road out of town, not a campus place: on this map the town is the large settlement in the south, so this board is anchored there (fixed point) rather than at the banks on campus
+for (const it of INTENTS) { if (it.fixed) { [it.x, it.z] = it.fixed; continue; } const ps = it.at.map((id) => byId.get(id)).filter((p) => p && p.x != null); if (!ps.length) { console.error("no place for " + it.label + ": " + it.at.join(", ")); process.exit(1); } it.x = ps.reduce((t, p) => t + p.x, 0) / ps.length; it.z = ps.reduce((t, p) => t + p.z, 0) / ps.length; }
 found.sort((a, b2) => b2.score - a.score || a.x - b2.x || a.z - b2.z);
 const sites = [];
 for (const it of INTENTS) {
   let pickOne = null;
-  for (let R = 200; R <= 1600 && !pickOne; R += 100) for (const c of found) { const d = Math.hypot(c.x - it.x, c.z - it.z); if (d > R || !sites.every((q) => Math.hypot(q.x - c.x, q.z - c.z) >= RULES.spacing)) continue; const v = c.score - 0.15 * d; if (!pickOne || v > pickOne.v) pickOne = { c, v, d }; }
+  for (const R of [560, 900, 1600]) if (!pickOne) for (const c of found) { const d = Math.hypot(c.x - it.x, c.z - it.z); if (d > R || !sites.every((q) => Math.hypot(q.x - c.x, q.z - c.z) >= RULES.spacing)) continue; const v = c.score - 0.15 * d + (c.cls === "arterial" || c.cls === "collector" ? 70 : 0); if (!pickOne || v > pickOne.v) pickOne = { c, v, d }; }
   if (!pickOne) { console.error("no valid site for " + it.label); process.exit(1); }
   sites.push({ ...pickOne.c, anchorM: Math.round(pickOne.d) });
 }
@@ -72,9 +76,10 @@ let closest = Infinity; for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j
 console.log(`closest two boards: ${closest} m apart (rule: ${RULES.spacing})`);
 
 if (arg("json")) { fs.writeFileSync(arg("json"), JSON.stringify(rows.map((r) => ({ n: r.n, id: "bb_" + r.n, where: r.where, x: r.x, z: r.z, yaw: r.yaw, road: r.cls, edge: r.edge, anchorM: r.anchorM })), null, 1) + "\n"); console.log("wrote " + arg("json")); }
-if (WRITE) {
-  const file = url("../../lib3d/mapExtras.js"); let src = fs.readFileSync(file, "utf8");
-  const block = `// BILLBOARD-SITES:BEGIN (written by tools/oau/place-billboards.mjs; tests/billboard-sites.test.mjs holds every site to the rules in lib3d/billboardSite.js)\nexport const BILLBOARD_SITES = [\n${rows.map((r) => `  [${JSON.stringify(r.where)}, ${r.x}, ${r.z}, ${r.yaw}],`).join("\n")}\n];\n// BILLBOARD-SITES:END`;
-  const re = /\/\/ BILLBOARD-SITES:BEGIN[\s\S]*?\/\/ BILLBOARD-SITES:END/; if (!re.test(src)) { console.error("markers not found in lib3d/mapExtras.js"); process.exit(1); }
-  fs.writeFileSync(file, src.replace(re, () => block)); console.log("lib3d/mapExtras.js updated");
+if (WRITE) {   // writes the sites of the map in use (lib3d/mapLayout.js LAYOUT) into its entry of mapLayout.js
+  const file = url("../../lib3d/mapLayout.js"); let src = fs.readFileSync(file, "utf8");
+  const which = src.match(/export const LAYOUT = "(\w+)";/)[1], list = `[\n${rows.map((r) => `      [${JSON.stringify(r.where)}, ${r.x}, ${r.z}, ${r.yaw}],`).join("\n")}\n    ]`;
+  if (which !== "new") { console.error("--write only rewrites the new map's entry; the active map is " + which + " (node tools/oau/use-map.mjs new)"); process.exit(1); }
+  const re = /(new: \{[\s\S]*?)billboardSites: \[[\s\S]*?\],   \/\/ BILLBOARD-SITES-NEW/; if (!re.test(src)) { console.error("marker not found in lib3d/mapLayout.js"); process.exit(1); }
+  fs.writeFileSync(file, src.replace(re, (_, pre) => `${pre}billboardSites: ${list},   // BILLBOARD-SITES-NEW`)); console.log("lib3d/mapLayout.js updated (new map billboard sites)");
 }

@@ -168,7 +168,7 @@ export function refineRoadNetwork(raw, data, { sdf = null, log = () => {} } = {}
   // ---- 1. class of every road (before anything changes, from the polygon width the generator measured) ----
   for (const e of edges) { e.cls = e.w >= REFINE.arterialWidth ? "arterial" : e.w >= 9.8 ? "collector" : "local"; }
   // the north-east ring road is made of express-width pieces joined by one ordinary-width one; it is one road
-  const EXTRA_ARTERIAL = [10];
+  const EXTRA_ARTERIAL = data?.meta?.oldToNew ? [] : [10];   // an edge id of the OLD map's graph: never applied to the new map (where id 10 is something else)
   for (const e of edges) if (EXTRA_ARTERIAL.includes(e.id)) e.cls = "arterial";
 
   // ---- 2. straighten ----
@@ -227,6 +227,24 @@ export function refineRoadNetwork(raw, data, { sdf = null, log = () => {} } = {}
   // a road that snakes (more than 110 degrees of turning on a short run) is straightened as far as the walls allow, and the change is undone if it takes a place away from its road
   for (const e of edges) { if (e.__off) continue; const L = plen(e.pts); if (L < 50 || totalTurn(e.pts) * 57.3 < 110) continue;
     for (const [eps, dev] of [[[8, 6, 4], 12], [[12, 9, 7, 5], 18], [[16, 12, 9], 26]]) { const keep = e.pts, sm = straighten(keep, e.cls, { sdf, eps, maxDev: dev }); if (!sm || totalTurn(sm) >= totalTurn(keep) * 0.7) continue; e.pts = sm; if (worse(access(mainOnly()), base0)) { e.pts = keep; continue; } report.uncurled = (report.uncurled ?? 0) + 1; break; } }
+  // ---- 3a2. tight bends (new map only). A road cannot be drawn wider than its bend is round: where the bend radius is under the road's half width the inner edge folds over and the asphalt has a hole.
+  // A bend under 7 m is re-fitted with long straight runs (the same fitter as above, the change undone if a place loses its road). A cul-de-sac loop (a road that returns to its own junction) becomes a short
+  // dead-end stub to the far side of the loop, which the dead-end pass below then tries to join to a neighbouring road.
+  if (data?.meta?.oldToNew) {
+    const minRadius = (P) => { const q = [P[0]]; for (let i = 1; i < P.length; i++) { let a = q.at(-1), b = P[i], d = hyp(b[0] - a[0], b[1] - a[1]); while (d >= 4) { const t = 4 / d, n = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; q.push(n); a = n; d = hyp(b[0] - a[0], b[1] - a[1]); } }
+      let lo = Infinity; for (let i = 1; i < q.length - 1; i++) { const [a, b, c] = [q[i - 1], q[i], q[i + 1]], ab = hyp(b[0] - a[0], b[1] - a[1]), bc = hyp(c[0] - b[0], c[1] - b[1]), ca = hyp(a[0] - c[0], a[1] - c[1]), ar = Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2; if (ar > 1e-6) lo = Math.min(lo, ab * bc * ca / (4 * ar)); } return lo; };
+    report.relaxed = [];
+    for (const e of edges) {
+      if (e.__off) continue;
+      if (e.a === e.b) {   // a loop: keep the first half out and stop at its far side
+        const n0 = nodes[e.a]; let far = null, fd = 0; for (const p of e.pts) { const d = hyp(p[0] - n0.x, p[1] - n0.z); if (d > fd) { fd = d; far = p; } }
+        if (!far || fd < 15) continue; const keep = { pts: e.pts, b: e.b }, nid = nodes.length; nodes.push({ id: nid, x: far[0], z: far[1], rim: false, comp: 0 }); e.pts = [[n0.x, n0.z], [far[0], far[1]]]; e.b = nid;
+        if (worse(access(mainOnly()), base0)) { e.pts = keep.pts; e.b = keep.b; nodes.pop(); continue; } report.relaxed.push({ id: e.id, loopToStub: Math.round(fd) }); continue;
+      }
+      if (e.pts.length < 3 || plen(e.pts) < 20) continue; const r0 = minRadius(e.pts); if (!(r0 < 7)) continue;
+      for (const [eps, dev] of [[[6, 4], 8], [[8, 6, 4], 12], [[12, 9, 7, 5], 18], [[16, 12, 9], 26]]) { const keep = e.pts, sm = straighten(keep, e.cls, { sdf, eps, maxDev: dev }); if (!sm || !(minRadius(sm) > r0 + 0.5)) continue; e.pts = sm; if (worse(access(mainOnly()), base0)) { e.pts = keep; continue; } report.relaxed.push({ id: e.id, from: Math.round(r0 * 10) / 10, to: Math.round(minRadius(sm) * 10) / 10 }); break; }
+    }
+  }
   // a big road must not have a corner in it: any vertex sharper than 25 degrees gets a gentle arc (when it fits clear of the walls)
   for (const e of edges) { if (e.__off || e.cls !== "arterial" || plen(e.pts) < 100) continue; let sharp = 0; for (let i = 1; i < e.pts.length - 1; i++) { const a = Math.atan2(e.pts[i][1] - e.pts[i - 1][1], e.pts[i][0] - e.pts[i - 1][0]), b = Math.atan2(e.pts[i + 1][1] - e.pts[i][1], e.pts[i + 1][0] - e.pts[i][0]); let d = Math.abs(b - a); if (d > Math.PI) d = TAU - d; sharp = Math.max(sharp, d); }
     if (sharp * 57.3 > 25) { const sm = straighten(e.pts, "arterial", { sdf, eps: [10, 7, 5], maxDev: 14 }); if (sm) e.pts = sm; } }
@@ -238,6 +256,43 @@ export function refineRoadNetwork(raw, data, { sdf = null, log = () => {} } = {}
       if (e.a === e.b || d[e.a] < 3 || d[e.b] < 3) continue; const L = plen(e.pts), chord = hyp(e.pts.at(-1)[0] - e.pts[0][0], e.pts.at(-1)[1] - e.pts[0][1]); if (chord / L < 0.9) continue;
       if (e.cls === "local" && L >= 150) { e.cls = "collector"; report.upgraded++; } else if (e.cls === "collector" && L >= 260 && (e.clr ?? 0) >= 11) { e.cls = "arterial"; report.upgraded++; }
     } }
+
+  // ---- 3c2. rim forks (new map only). Where a road meets the frame the skeleton forks into little Y branches 1 to 10 m long, each ending at its own rim node. A lane is trimmed 3 m at each end, so an
+  // edge that short has no lane at all (tests/vehicle-ground.test.mjs). Every such branch is cut off; the junction it hung from becomes the road's end at the rim.
+  if (data?.meta?.oldToNew) {
+    report.rimForks = 0;
+    for (let again = true; again;) {
+      again = false; const live = edges.filter((e) => !e.__off), d0 = degrees(nodes, live);
+      for (const e of live) {
+        if (e.hw || plen(e.pts) >= 10) continue; const aLeaf = d0[e.a] === 1 && nodes[e.a].rim, bLeaf = d0[e.b] === 1 && nodes[e.b].rim; if (aLeaf === bLeaf) continue;
+        const J = aLeaf ? e.b : e.a; e.__off = true; if (d0[J] - 1 <= 1) nodes[J].rim = true; report.rimForks++; again = true; break;
+      }
+    }
+  }
+  // ---- 3d. close dead ends: a street that stops in the middle of nowhere is joined to the nearest other road when a straight link of at most CLOSE_MAX m keeps CLOSE_CLR m clear of every wall (the
+  // new map has real cul-de-sacs; the game wants none). A dead end with no clear link stays. The link is a new junction on the other road. Rim ends are roads leaving the map and are left alone.
+  if (sdf && data?.meta?.oldToNew) {   // new map only: the legacy graph stays exactly as baked
+    const CLOSE_MAX = 140, CLOSE_CLR = 4.0;   // the game drops a road whose centreline is under 2.7 m from a wall (XS.minDrivableClearance); 4 m leaves margin
+    report.closed = [];
+    for (let pass = 0; pass < 8; pass++) {
+      const live = edges.filter((e) => !e.__off), d0 = degrees(nodes, live); let did = false;
+      for (const n of nodes) {
+        if (d0[n.id] !== 1 || n.rim) continue; const own = live.find((e) => e.a === n.id || e.b === n.id); if (!own || own.a === own.b) continue;
+        let best = null;
+        for (const e of live) { if (e === own) continue; for (let i = 0; i < e.pts.length - 1; i++) {
+          const a = e.pts[i], b = e.pts[i + 1], dx = b[0] - a[0], dz = b[1] - a[1], t = Math.max(0, Math.min(1, ((n.x - a[0]) * dx + (n.z - a[1]) * dz) / (dx * dx + dz * dz || 1))), qx = a[0] + t * dx, qz = a[1] + t * dz, dd = hyp(qx - n.x, qz - n.z);
+          if (dd >= 12 && dd <= CLOSE_MAX && (!best || dd < best.dd)) best = { dd, e, i, qx, qz }; } }
+        if (!best) continue; let lo = Infinity; for (let s2 = 4; s2 < best.dd - 2; s2 += 2) lo = Math.min(lo, sdf(n.x + (best.qx - n.x) * s2 / best.dd, n.z + (best.qz - n.z) * s2 / best.dd)); if (lo < CLOSE_CLR) continue;
+        // the junction on the other road
+        const e = best.e, na = nodes[e.a], nb = nodes[e.b]; let jn;
+        if (hyp(best.qx - na.x, best.qz - na.z) < 5) jn = e.a; else if (hyp(best.qx - nb.x, best.qz - nb.z) < 5) jn = e.b;
+        else { jn = nodes.length; nodes.push({ id: jn, x: best.qx, z: best.qz, rim: false, comp: 0 }); const tail = { ...e, id: Math.max(...edges.map((q) => q.id)) + 1, a: jn, pts: [[best.qx, best.qz], ...e.pts.slice(best.i + 1)] }; delete tail.__off; e.pts = [...e.pts.slice(0, best.i + 1), [best.qx, best.qz]]; e.b = jn; edges.push(tail); }
+        edges.push({ id: Math.max(...edges.map((q) => q.id)) + 1, a: n.id, b: jn, pts: [[n.x, n.z], [nodes[jn].x, nodes[jn].z]], w: own.w, clr: Math.round(lo * 10) / 10, comp: 0, cls: own.cls });
+        report.closed.push({ node: n.id, at: [Math.round(n.x), Math.round(n.z)], link: Math.round(best.dd), clear: Math.round(lo * 10) / 10 }); did = true; break;
+      }
+      if (!did) break;
+    }
+  }
 
   // ---- 4. renumber ----
   edges = edges.filter((e) => !e.__off); const deg = degrees(nodes, edges), used = nodes.filter((n, i) => deg[i] > 0), remap = new Map(used.map((n, i) => [n.id, i]));

@@ -45,7 +45,7 @@ const L2 = await listBillboards(db, "u3", now);
 chk("a paid whole board shows its poster and no free spots", L2.boards[3].free === 0 && L2.boards[3].posters.length === 1 && !L2.boards[3].canBuyWhole && L2.boards[3].mine.length === 10);
 
 // the map data
-const d = JSON.parse(fs.readFileSync(new URL("../public/data/oau-campus.json", import.meta.url), "utf8")), x = withExtras(d), places = listPlaces(x);
+const d = JSON.parse(fs.readFileSync(new URL("../public/data/oau-campus.json", import.meta.url), "utf8")), placesBefore = d.places.length, x = withExtras(d), places = listPlaces(x);
 const has = (id) => places.some((p) => p.id === id && p.located);
 chk("Ojaja, Floor O, Quantum, 0203 and Royal Divas are on the map", ["h_ojaja", "floor0", "club_quantum", "club_0203", "club_divas"].every(has));
 const living = [...new Set(["M", "F"].flatMap((g) => [100, 200].flatMap((lv) => ["NEPO", "MAPO", "LAPO"].flatMap((c) => allowedHostels(c, g, lv)))))].filter((h) => h !== "Off-campus");
@@ -53,7 +53,7 @@ chk(`every hostel a player can live in is on the map (${living.join(", ")})`, li
 chk("the Postgraduate hall and Akintola Hall are on the map", has("h_pg") && has("h_akintola"));
 chk("ten billboards are on the map", places.filter((p) => p.kind === "billboard" && p.located).length === 10);
 chk("no game place is left without a position", x.gameOnly.filter((g) => ["h_ojaja", "floor0", "club_quantum", "club_0203", "club_divas", "h_akintola"].includes(g.id)).length === 0);
-chk("the original data object is untouched", d.places.length === 88 && !d.extrasAdded);
+chk("the original data object is untouched (withExtras adds to a copy: the place count is what it was before the call; it was a fixed 88 for the old map)", d.places.length === placesBefore && !d.extrasAdded);
 chk("Ojaja stands behind (south of) the New Market", x.places.find((p) => p.id === "h_ojaja").z > x.places.find((p) => p.id === "new_market").z);
 chk("new footprints get fresh ids and never overlap a real building", (() => { const ids = x.buildings.map((q) => q.id); return new Set(ids).size === ids.length && x.places.every((p) => p.bid == null || x.buildings.find((q) => q.id === p.bid)); })());
 process.exit(bad ? 1 : 0);

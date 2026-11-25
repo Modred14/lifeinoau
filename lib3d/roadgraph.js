@@ -447,11 +447,11 @@ export function buildRoadGraph(raw, { sdf = null } = {}) {
       if (fromLane === toLane && toS >= fromS) return G.makeRoute([{ kind: "lane", id: fromLane, s0: fromS, s1: toS }], opts);
       const START = -1, dist = new Map(), prev = new Map(), heap = new Heap(), done = new Set(), tx = T.path.pts[0][0], tz = T.path.pts[0][1];
       const cost = (c, base) => base + c.len + Math.abs(c.turn) * 2 + (c.kind === "uturn" ? 80 : 0) + (c.to === toLane ? 0 : lanes[c.to].len);
-      const useHw = L.hw || T.hw, relax = (from, c, base) => { if (opts.avoid?.has(c.to) || (lanes[c.to].hw && !useHw)) return; const g = cost(c, base); if (!dist.has(c.to) || g < dist.get(c.to)) { dist.set(c.to, g); prev.set(c.to, [from, c.id]); heap.push(g + Math.hypot(lanes[c.to].path.pts.at(-1)[0] - tx, lanes[c.to].path.pts.at(-1)[1] - tz) * 0.9, c.to); } };
+      const useHw = L.hw || T.hw || opts.allowHw, relax = (from, c, base) => { if (opts.avoid?.has(c.to) || (lanes[c.to].hw && !useHw)) return; const g = cost(c, base); if (!dist.has(c.to) || g < dist.get(c.to)) { dist.set(c.to, g); prev.set(c.to, [from, c.id]); heap.push(g + Math.hypot(lanes[c.to].path.pts.at(-1)[0] - tx, lanes[c.to].path.pts.at(-1)[1] - tz) * 0.9, c.to); } };
       for (const cid of L.out) relax(START, conns[cid], L.len - fromS);
       let steps = 0;
       while (heap.size && ++steps < 80000) { const [, cur] = heap.pop(); if (done.has(cur)) continue; done.add(cur); if (cur === toLane) break; for (const cid of lanes[cur].out) relax(cur, conns[cid], dist.get(cur)); }
-      if (!prev.has(toLane)) return null;
+      if (!prev.has(toLane)) return opts.allowHw ? null : G.route(fromLane, fromS, toLane, toS, { ...opts, allowHw: true });   // a ground road that ends on the expressway's tail has no other way on: only then may a ground route use the expressway
       const chain = []; let cur = toLane, guard = 0;
       while (cur !== START && guard++ < 5000) { const [p, cid] = prev.get(cur); chain.push({ lane: cur, cid }); cur = p; }
       chain.reverse();

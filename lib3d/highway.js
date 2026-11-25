@@ -18,6 +18,7 @@ import { fillet, resample } from "./roadrefine.js";
 import { heightOn } from "./roadgraph.js";
 import { DECK } from "./roadsurface.js";
 import { fullAlignment, DESCENT, PIER_MIN_H, deckHeight, TAILS } from "./highwaytails.js";
+import { ACTIVE as LAYOUT_NOW } from "./mapLayout.js";   // waypoints, end extension, interchanges and tails of the map in use (lib3d/mapLayout.js)
 
 export const HW = {
   H: 10,                      // deck height above the ground (m)
@@ -26,15 +27,15 @@ export const HW = {
   parapet: DECK.parapet,      // concrete parapet: thickness (m); the drivable half-width is this much less (lib3d/roadsurface.js)
   girder: 2.2,                // depth of the box girder under the deck
   apron: 80,                  // an end apron with no median (m)
-  extend: 480,                // how far the road runs on past the edge of the map at each end (m)
+  extend: LAYOUT_NOW.extend,  // how far the road runs on past the edge of the map at each end (m): 480 on the old map, 600 on the new map
   radius: 2500,               // arc radius at the two bends
-  ramp: { half: 4.2, minLen: 235, maxGrade: 0.047 },   // a ramp: one lane, two shoulders; at most 4.7 % on average (it is steeper mid-way, ease5)
+  ramp: { half: 4.2, minLen: 365, maxGrade: 0.038 },   // a ramp: one lane, two shoulders; under 4 % on average (tests/road-network.test.mjs demands it; the old minLen 235 gave 5.2 to 6.4 % on the original map, it is steeper mid-way, ease5). The ramp starts minLen + 40 m before its junction and is about 41 m shorter than that, over a deck 14.2 m up
   pier: { land: 38, water: 50, col: [3.0, 2.2], head: [21.0, 1.7], clear: 3.5 },     // spacing (m), column (w x d), cross-head (w x d), clearance to a ground road
   lamp: 42,                   // lamp spacing in the median (m)
   clearance: 24,              // the corridor is this clear of buildings on each side of the centreline
 };
 /** The waypoints the straight legs join (metres, the map's own grid): found by the search described above. */
-export const WAYPOINTS = [[-1760, 380], [-460, 690], [560, 870], [1440, 560]];
+export const WAYPOINTS = LAYOUT_NOW.waypoints;
 
 const hyp = Math.hypot;
 const unit = (x, z) => { const l = hyp(x, z) || 1; return [x / l, z / l]; };
@@ -69,10 +70,7 @@ const nearestNode = (nodes, x, z, tol) => { let best = null; for (const n of nod
  *   west    a half diamond (east-bound ramps only) on the south side, at the end of the road that stops 60 m short of the deck on the west side
  * Both leave a car heading east on the south side and west on the north side, as traffic keeps right.
  */
-export const INTERCHANGES = [
-  { id: "west", name: "West interchange", sides: ["S"], south: { at: [-493, 759], tol: 8 } },
-  { id: "campus", name: "Campus interchange", sides: ["N", "S"], north: { at: [63, 730], tol: 8 }, south: { road: [98, 782], dist: 110 } },
-];
+export const INTERCHANGES = LAYOUT_NOW.interchanges;
 
 /**
  * Adds the expressway to the refined graph `raw` ({nodes, edges}). Returns a new graph with the expressway's nodes and edges (edges carry `fixed`: the geometry is exact) and an `expressway`

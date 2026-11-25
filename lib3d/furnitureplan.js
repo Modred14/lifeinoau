@@ -11,6 +11,8 @@ export const SOLID = { lamp: 0.22, tree: 0.24, sign: 0.1 };
 /** graph: from buildRoadGraph. Returns { seed, lamps, trees, signs, taken, posts, solids }: `lamps` has one entry per arm [x, z, yaw] (a median pole carries two), `solids` one [x, z, r, kind] per standing thing. */
 export function planFurniture(graph, { seed = 11 } = {}) {
   const rnd = rng(seed), keep = corridorKeepOut(), sdf = graph.sdf ?? (() => Infinity), surf = {};
+  // the expressway's ramps and descents are driven on at ground level where they meet the road, so nothing is put on them either (the main deck is in corridorKeepOut; a ramp's foot is 100 to 200 m from the deck)
+  for (const e of graph.edges ?? []) if (e.kind === "ramp" || e.kind === "express-descent") for (let s = 0; s <= e.len; s += 15) { const a = e.path.at(s, {}); keep.push([a.x, a.z, 9]); }
   const inCorridor = (x, z) => { for (const [kx, kz, kr] of keep) if (Math.abs(kx - x) < kr && Math.abs(kz - z) < kr && Math.hypot(kx - x, kz - z) < kr) return true; return false; };
   const crossings = graph.crossings, nearCrossing = (x, z, r) => { for (const c of crossings) if (Math.abs(c.x - x) < r && Math.abs(c.z - z) < r && Math.hypot(c.x - x, c.z - z) < r) return true; return false; };
   const lamps = [], trees = [], signs = [], taken = [], solids = []; let posts = 0;   // `lamps` holds one entry per arm (a median pole carries two); `posts` counts the poles

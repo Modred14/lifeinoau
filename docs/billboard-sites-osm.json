@@ -1,0 +1,112 @@
+[
+ {
+  "n": 1,
+  "id": "bb_1",
+  "where": "Senate Plaza",
+  "x": 1594.3,
+  "z": 348.2,
+  "yaw": 0.63,
+  "road": "collector",
+  "edge": 10,
+  "anchorM": 343
+ },
+ {
+  "n": 2,
+  "id": "bb_2",
+  "where": "Library Road",
+  "x": 1762,
+  "z": 579.9,
+  "yaw": -0.913,
+  "road": "collector",
+  "edge": 22,
+  "anchorM": 212
+ },
+ {
+  "n": 3,
+  "id": "bb_3",
+  "where": "Law Corner",
+  "x": 1307.9,
+  "z": 565.6,
+  "yaw": 2.018,
+  "road": "collector",
+  "edge": 32,
+  "anchorM": 220
+ },
+ {
+  "n": 4,
+  "id": "bb_4",
+  "where": "Student Union Strip",
+  "x": 1538.8,
+  "z": 1290.5,
+  "yaw": -1.877,
+  "road": "collector",
+  "edge": 129,
+  "anchorM": 550
+ },
+ {
+  "n": 5,
+  "id": "bb_5",
+  "where": "Moremi Junction",
+  "x": 786,
+  "z": 700,
+  "yaw": -0.119,
+  "road": "collector",
+  "edge": 39,
+  "anchorM": 302
+ },
+ {
+  "n": 6,
+  "id": "bb_6",
+  "where": "Alumni Road",
+  "x": 936.3,
+  "z": 302.2,
+  "yaw": 2.277,
+  "road": "local",
+  "edge": 289,
+  "anchorM": 61
+ },
+ {
+  "n": 7,
+  "id": "bb_7",
+  "where": "Halls Row",
+  "x": 435.7,
+  "z": 255.5,
+  "yaw": 2.311,
+  "road": "local",
+  "edge": 338,
+  "anchorM": 163
+ },
+ {
+  "n": 8,
+  "id": "bb_8",
+  "where": "Fajuyi Crossing",
+  "x": 651.4,
+  "z": 1136.3,
+  "yaw": -0.06,
+  "road": "local",
+  "edge": 346,
+  "anchorM": 456
+ },
+ {
+  "n": 9,
+  "id": "bb_9",
+  "where": "Ede Road Banks",
+  "x": 1860.4,
+  "z": 2333.2,
+  "yaw": 0.262,
+  "road": "collector",
+  "edge": 153,
+  "anchorM": 321
+ },
+ {
+  "n": 10,
+  "id": "bb_10",
+  "where": "Nightlife Strip",
+  "x": 729.9,
+  "z": 2671,
+  "yaw": -1.536,
+  "road": "collector",
+  "edge": 187,
+  "anchorM": 378
+ }
+]

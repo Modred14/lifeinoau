@@ -10,6 +10,7 @@
 // Everything is a pure function of the constants here and of the main alignment's two end points, so the tools, the meshes, the collision and the tests all see the same road.
 import { resample } from "./roadrefine.js";
 import { climbFrac } from "./roadgraph.js";
+import { ACTIVE as LAYOUT_NOW } from "./mapLayout.js";
 
 /** Length of each descent (m): 10 m of height over 330 m is 3 % on average, a gentler grade than the interchange ramps. */
 export const DESCENT = 330;
@@ -27,10 +28,7 @@ const unit = (x, z) => { const l = hyp(x, z) || 1; return [x / l, z / l]; };
  * The numbers were found by tools: R is the largest that leaves the return leg long enough for the 330 m descent; the target nodes are the open end of the arterial that leaves the map's east rim
  * (node 28) and the north-west corner of the campus grid (node 51), which has open land to its west.
  */
-export const TAILS = {
-  west: { side: 1, R: 130, ret: { q: [0, 0], h: [1, 0] }, touch: [-1620, 0], ground: [-1575, 0], target: [-1290.5, 104.5], via: [[-1400, 0]], bend: 120 },
-  east: { side: -1, R: 250, ret: { q: [1427.5, -121.5], h: [-1, 0] }, touch: [1527.5, -121.5], ground: [1482.5, -121.5], target: [1427.5, -121.5], via: [], bend: 120 },
-};
+export const TAILS = LAYOUT_NOW.tails;   // per map: lib3d/mapLayout.js
 
 /** The arc that leaves P0 along d, turns `side` with radius R and ends going along the return line (q, h). */
 export function solveArc(P0, d, q, h, side, R) {

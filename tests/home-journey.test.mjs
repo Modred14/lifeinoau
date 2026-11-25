@@ -122,5 +122,7 @@ for (const hostel of ["Awo", "Ojaja", "Off-campus", "2-Bedroom Flat", "3-Bedroom
   chk(`${tag} the second car drives out of the gate onto the carriageway (${roadB?.toFixed(1)}s), clear of the first car`, roadB != null && penB === 0);
   f2.dispose(); svc.world.removeBody("park:a"); removeSiteCollision(svc.world);
   chk(`${tag} nothing is left behind in the collision world`, !svc.world.blockedAt(slotA.x, slotA.z, 0.3) && !svc.world.blockedAt(slotB.x, slotB.z, 0.3));
+  // this home's traffic simulation is finished, and its vehicles must not stay in the shared world as frozen obstacles for the next home (they did, wherever they happened to stop)
+  for (const id of [...svc.world.bodies.keys()]) svc.world.removeBody(id);
 }
 console.log(bad ? `\n${bad} check(s) failed` : "\nAll checks passed"); process.exit(bad ? 1 : 0);

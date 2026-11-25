@@ -1,26 +1,30 @@
-# New OpenStreetMap campus map: status (branch `new-campus-map`, NOT merged)
+# New campus map: what changed and what to know (branch `new-campus-map`)
 
-The ACTIVE map is still the old one, so the app behaves exactly as on `main`. The converted map is stored beside it as `public/data/oau-campus.osm.json`
-(regenerate with `sh tools/oau/import-campus.sh`; needs numpy and shapely). Tag `pre-new-map` marks the original `main` tip (7f617fc).
+Switch maps with `node tools/oau/use-map.mjs new|legacy` (see the README, "The campus map"). `pre-new-map` is the tag on the `main` commit this work started from.
 
-## Done
-- `tools/oau/dump-merged.mjs` was missing from the repo and its history, so `npm run build:roads` could not run. Recreated; run on the old map it reproduces the committed raw graph (213/213 nodes, 253/255 edges identical; 2 differ in the `clr` value only).
-- `tools/oau/import_campus.py` converts campus.json + building-heights.json into the game's schema. Heights credit: Google Open Buildings 2.5D Temporal 2023 (CC BY 4.0), added to `meta.attribution` next to OpenStreetMap (ODbL).
-  Result: 1,824 buildings, 98 places (46 matched to real buildings, 52 game placements, all 16 faculties kept), fit median error 4.1 m. Report: `docs/new-map-import-report.json`.
-- Grounds and churches: `groundsFor()` in `lib3d/mapExtras.js` shifts the Motion Ground, Religious Ground and four churches by `meta.groundOffsets`. On the new map both grounds clear every building, road, lake and car park by 3 m or more including their apron (checked by script).
-- `landmarks.js`: nothing to convert. Its x/z are schematic units used only by the old schematic scene (lib3d/campus.js), and the town areas are meant to have no coordinates (tests/campus-real.test.mjs enforces it).
-- `BUILDING_TRIMS` (keyed by OLD building ids) applies only to the legacy map.
-- Billboards: the script was misfiled as `tests/place-billboards.mjs` (its imports only resolve from `tools/oau/`); moved to `tools/oau/place-billboards.mjs`. It now takes `--data=`, `--graph=`, `--json=` and picks one board per intent (Senate Plaza, Library Road, Law Corner, Student Union Strip, Moremi Junction, Alumni Road, Halls Row, Fajuyi Crossing, Ede Road Banks, Nightlife Strip).
-  PROVISIONAL result on the new GROUND road graph: `docs/billboard-sites-provisional.json` (10 boards, all pass the rule checker, closest pair 289 m). Boards sit 106 to 595 m from their anchor places. These must be re-run once the expressway exists (24 m from deck, 14 m from pier, 90 m from ramps).
-- Old-data checks after these edits: campus-real, billboards, billboard-sites, landmarks, osm, interiors all pass.
+## What the new map is
+1,803 buildings (2.4 x 3.2 km), 98 places, one road network of about 46 km, a re-laid expressway and ten billboards. It is produced by `tools/oau/import_campus.py` from the campus-archive branch's `campus.json` and `building-heights.json`; nothing in it is edited by hand. The old map is kept untouched in `tools/oau/maps/legacy/`.
 
-## Blocked: the expressway (decision needed)
-`tools/oau/search_expressway_routes.py`: straight + 24 m clearance + 4.2 km + over the lake cannot all hold on the new map. 4 straight lines clear 24 m; longest 4.06 km; none crosses the lake.
-Options: (1) best straight line with ~600 m extensions (about 4.3 km, no lake); (2) a 3-leg route like the old one; (3) less than 24 m clearance. `INTERCHANGES` (highway.js) and `TAILS` (highwaytails.js) hold old-map coordinates and must be re-laid.
+## Decisions taken (change them in one place each)
+- **Expressway:** straight, not over the lake. On the new map a straight line, 24 m clear of every building, 4.2 km long and over the lake cannot all hold (`tools/oau/search_expressway_routes.py`: 4 straight lines clear 24 m, the longest 4.06 km, none crosses the lake). The layout is the best straight line, (0, 1260) to (2340, 3240), 55 m from the nearest building, with 600 m ends: 4,265 m of deck, 9,018 m with its tails. Waypoints, interchanges and tails are in `lib3d/mapLayout.js`.
+- **Places:** all 16 faculties are kept. Only Pit Theatre, Biological Gardens and the University Zoo are dropped. Places with no building on the new map are placed where the old position lands, clear of buildings, roads, water, car parks and pitches (`docs/new-map-import-report.json` lists each one and how far it moved). Akintola Hall is inside the frame. The Motion and Religious Grounds and the four churches moved furthest (about 260 m and 180 m).
+- **Billboards:** ids bb_1..bb_10, prices and slot counts are unchanged; only positions differ. Their names are Senate Plaza, Library Road, Law Corner, Student Union Strip, Moremi Junction, Alumni Road, Halls Row, Fajuyi Crossing, Ede Road Banks and Nightlife Strip. Ede Road Banks and Nightlife Strip are anchored in the large settlement in the south, so every quarter of the map has a board; the others are within 550 m of the place they are named after.
+- **Houses:** player homes are not stored in the map or the database; `lib3d/homeLot.js` finds each lot from the map's roads and collision world, so a home stands on whatever lot that map gives it.
 
-## Tests that encode OLD-map facts (they fail with the new data and must be rewritten for it, not loosened silently)
-With `oau-campus.osm.json` swapped in: campus-real (scale, 450-700 buildings, extent, Senate 24 m), billboards ("original data untouched"), features, building-panel, destination-doors (h_moremi has a building outline), club-features. interiors, landmarks, osm pass.
-Not yet investigated: why destination-doors cannot find the h_moremi outline (the converter matches the name "Moremi Hall" to a real new building, so the link from place to building may need `place`/`bid` checked).
+## Changes outside the map data
+- `lib3d/roadrefine.js` (new map only): tight bends are re-fitted, loops become stubs, rim forks are cut off, dead-end streets are joined to a neighbouring road when a clear link of 140 m or less exists.
+- `lib3d/highway.js`: ramps are longer (`minLen` 365 m) so every ramp climbs under 4 %.
+- `lib3d/roadgraph.js`: `route()` may use the expressway when a ground road ends on its tail and has no other way on.
+- `lib3d/furnitureplan.js`: no lamps or signs on expressway ramps.
+- `lib3d/roadnet.js`: a place may carry an `entrance` hint that the door chooser follows (46 places do).
+- `lib3d/walker.js`, `lib3d/collide.js`: the walking planner can aim at a point next to a post; its clearance cache is dropped when the world's solids change (a home going up or down).
+- `lib3d/tripflow.js`: the first walking leg after leaving a vehicle is planned past that vehicle.
+- `lib3d/homeLot.js`: a lot is refused if a lamp, sign or tree stands in the driveway corridor in front of its gate.
+- `tools/oau/dump-merged.mjs` was missing from the repository and was recreated (run on the old map it reproduces the committed raw road graph).
 
-## Not started
-Expressway re-lay, final road graph, final billboard sites in mapExtras.js, swapping the active data, README/ROAD-SYSTEM docs, screenshots, merge. The clean `main` baseline of the test suite was never obtained (background runs died).
+## Tests
+Tests that encoded the old map's size, counts or positions now work on either map (`campus-real`, `billboards`, `billboard-sites`, `world-obstructions`, `car-doors`, `vehicle-ground`, `vehicle-controls`, `traffic-persistence`, `building-roundtrip`, `home-journey`); each change is explained in a comment next to it. Eleven test files fail identically on `main` and are not caused by this work: admin-console, building-panel, club-features, developer-app, features, hub-actions, invest-screen, room-size, sug-schedule, traffic-persistence (a traffic jam at the campus interchange).
+`node tools/oau/verify-map.mjs` checks the expressway, the billboards and the building/place/road clearances by script.
+
+## Not verified
+A full `npm run build` (needs the Prisma engine and Google Fonts downloads) and a look at every screen in a browser.

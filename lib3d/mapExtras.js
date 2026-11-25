@@ -1,4 +1,5 @@
 // lib3d/mapExtras.js
+import { ACTIVE as ACTIVE_LAYOUT } from "./mapLayout.js";
 // Game places the OpenStreetMap render does not show: Ojaja, Akintola, the Postgraduate hall, six faculty buildings, Floor O, the three clubs and the ten billboards.
 // They are merged onto the real map data when it loads (withExtras), so public/data/oau-campus.json stays exactly as the generator wrote it.
 // Positions are GAME PLACEMENTS in the same metre grid as the real data (x east, z south). Each one was checked to sit clear of every
@@ -20,20 +21,7 @@ export const BILLBOARD = {
 // These are not guesses: tools/oau/place-billboards.mjs finds them on the real road graph (beside a road, never on it, clear of junctions, bridge ends, buildings, lakes, car parks and
 // street furniture, turned toward the traffic, visible from the lane, and spread so every part of the road network has one in view) and writes this block. The rules are in
 // lib3d/billboardSite.js and tests/billboard-sites.test.mjs holds every site to them, so a rebuilt road network that moves a verge shows up as a failing test, not a board in the road.
-// BILLBOARD-SITES:BEGIN (written by tools/oau/place-billboards.mjs; tests/billboard-sites.test.mjs holds every site to the rules in lib3d/billboardSite.js)
-export const BILLBOARD_SITES = [
-  ["Agriculture Road", 1225.1, -325.7, -2.484],
-  ["Technology Road", 860, -449.2, -2.562],
-  ["Arts Road", 372.7, -390.1, -2.495],
-  ["Senate Building Road", 329.7, 132.5, -0.961],
-  ["Architecture Road", -375.6, -320.7, 0.354],
-  ["Mozambique Hall Road", -959.4, -344.8, -2.577],
-  ["ETF Hall Road", -1025.5, 154.9, -0.886],
-  ["Postgraduate Hall Road", -604.2, 41.3, 2.65],
-  ["Postgraduate College Road", 968.6, 197.4, 2.843],
-  ["Pharmacy Road", 390.3, 602.1, 0.671],
-];
-// BILLBOARD-SITES:END
+export const BILLBOARD_SITES = ACTIVE_LAYOUT.billboardSites;   // per map, in lib3d/mapLayout.js (tools/oau/place-billboards.mjs --write rewrites the OSM entry)
 /** Billboard positions (metres), the road they stand beside, and which way they face. */
 export const BILLBOARDS = BILLBOARD_SITES.map(([where, x, z, yaw], i) => ({ id: "bb_" + (i + 1), n: i + 1, where, name: `Billboard ${i + 1} · ${where}`, x, z, yaw }));
 
@@ -55,7 +43,7 @@ export const GROUNDS = {
 };
 
 /**
- * The grounds and churches for one map. The rectangles above are in the OLD traced map's metres. The OpenStreetMap map carries `meta.groundOffsets` ({ motion: [dx, dz], religious: [dx, dz] }, written by
+ * The grounds and churches for one map. The rectangles above are in the OLD traced map's metres. The new map carries `meta.groundOffsets` ({ motion: [dx, dz], religious: [dx, dz] }, written by
  * tools/oau/import_campus.py: where each ground fits clear of the new map's buildings, roads and lake), and every rectangle and church is shifted by its ground's offset, so the layout inside a ground never changes.
  */
 export function groundsFor(data) {
@@ -128,7 +116,7 @@ export const BUILDING_TRIMS = {
 const polyArea = (P) => { let a = 0; for (let i = 0, j = P.length - 1; i < P.length; j = i++) a += (P[j][0] + P[i][0]) * (P[j][1] - P[i][1]); return Math.abs(a / 2); };
 export function withExtras(data) {
   if (data.extrasAdded) return data;
-  const legacy = !data.meta?.oldToNew;   // BUILDING_TRIMS is keyed by the OLD traced map's building ids: it must never touch the OpenStreetMap map (tools/oau/import_campus.py sets meta.oldToNew)
+  const legacy = !data.meta?.oldToNew;   // BUILDING_TRIMS is keyed by the OLD traced map's building ids: it must never touch the new map (tools/oau/import_campus.py sets meta.oldToNew)
   const buildings = data.buildings.map((b) => (legacy && BUILDING_TRIMS[b.id] ? { ...b, pts: BUILDING_TRIMS[b.id].map((p) => p.slice()), area: Math.round(polyArea(BUILDING_TRIMS[b.id])), trimmed: true } : b)), places = [...data.places];
   let next = buildings.reduce((m, q) => Math.max(m, q.id), -1) + 1;
   const GR = groundsFor(data), GROUNDS_HERE = { motion: GR.motion, religious: GR.religious };
