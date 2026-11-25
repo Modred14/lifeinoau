@@ -11,7 +11,7 @@ import TravelSheet from "@/components/TravelSheet";
 import TripHud from "@/components/TripHud";
 import RoadTransition from "@/components/RoadTransition";
 import { peekDriveHandoff, takeDriveHandoff } from "@/lib/driveHandoff.js";
-import { loadHomeOption } from "@/lib/homeOption.js";
+import { loadHomeOption, forgetHomeOption } from "@/lib/homeOption.js";
 import PlaceActivities from "@/components/PlaceActivities";
 import { featuresAt } from "@/lib/features.js";
 import BuildingInside from "@/components/BuildingInside";
@@ -43,16 +43,35 @@ export default function MapPage() {
   tripRef.current = trip;
   // Driving out of the home compound: the "Entering Main Road…" screen is up from the first frame, and as soon as the map is ready the same vehicle (model, paint, speed) is put on the road
   // beside the player's home, at the wheel, as a free drive (lib3d/tripflow.js): the usual controls, the usual name tags, and the position goes to other players as for any trip.
-  const [entering, setEntering] = useState(() => !!peekDriveHandoff()), [mapReady, setMapReady] = useState(false);
+  const [entering, setEntering] = useState(() => !!peekDriveHandoff()), [mapReady, setMapReady] = useState(false), [enterSnap] = useState(() => peekDriveHandoff()?.snap ?? ""); // enterSnap: the home screen's last frame, shown instead of a dark screen
+  // the home option is fetched the moment the map page opens (in parallel with the map's own loading), not after it
+  const parkP = useRef(null);   // the save of the last parked car, so a car swap never reads the server before it has landed
+  // The trip that stands in the player's own compound: on foot at the pose, or at the wheel in the gate. `x` = { home, walk, pose, v, modelId, color, autoEnter }.
+  const homeTrip = (ch, hm, x) => { const home = x.home; return ({ id: crypto.randomUUID(), from: home, to: home, mode: ownsCar(ch) || x.modelId ? "car" : "trek", driver: false, act: null, free: true, home: hm, roam: !!(hm && x.walk), onHomePark: hm ? (pose) => { const m = game.get()?.character?.activeCar; if (m) parkP.current = call("/api/rides", { action: "park", modelId: m, pose }); } : undefined, onSwitchCar: hm ? switchCar : undefined, autoEnter: !!x.autoEnter, pose: hm ? x.pose ?? null : null, spawn: x.walk ? null : { v: x.v }, look: ch.look ?? null, gender: ch.gender ?? "M", car: x.modelId, carColor: x.color, people: [], isEnterable: (id) => { const p = find(id); return !!p && hasInterior(p.id, p.kind); }, selfName: ch.name ?? "", name: "the main road" }); };
+  // Get into another car of yours that stands in the compound: it becomes the active car (local first, the same "use" call the compound screen makes), the compound is re-read with every
+  // car where it stands, and the trip restarts on foot at the same spot with the walk to that car's door already begun.
+  const switchCar = async ({ id, pose, pinned }) => {
+    const ownedNow = (await loadHomeOption(ch, game.get()?.character?.activeCar ?? "")), v = ownedNow?.vehicles?.find((q) => String(q.id) === String(id)); if (!v) return;
+    const before = game.get()?.character, op = game.push((s) => (s ? { ...s, character: { ...s.character, activeCar: v.modelId, activeCarColor: v.family ? "" : v.color } } : s));
+    try { await parkP.current; } catch {}
+    const r = await call("/api/rides", { action: "use", modelId: v.modelId });
+    if (r.failed) { if (op != null) game.rollback(op); toast.error(r.error || "That vehicle could not be selected."); return; }
+    if (op != null) game.done(op);
+    forgetHomeOption(); const hm = await loadHomeOption(game.get()?.character ?? ch, v.modelId);
+    if (hm && pinned) { const at = new Map(pinned.map((q) => [String(q.id), q.saved])); hm.vehicles = hm.vehicles.map((q) => (q.saved ? q : { ...q, saved: at.get(String(q.id)) ?? null })); }   // a car nobody has parked yet stays exactly where it stands, whatever order the cars are planned in
+    setTrip(homeTrip(game.get()?.character ?? ch, hm, { home: homePlace((game.get()?.character ?? ch).hostel), walk: true, pose, modelId: v.modelId, color: v.family ? "" : v.color, autoEnter: true }));
+  };
+  useEffect(() => { if (entering && ch) loadHomeOption(ch, peekDriveHandoff()?.modelId ?? ""); }, [entering, !!ch]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!entering || !mapReady || !data || !ch || trip) return;
     const h = takeDriveHandoff(); if (!h) { setEntering(false); return; }
     if (held || (!h.walk && !ownsCar(ch))) { setEntering(false); return; }
     const home = homePlace(ch.hostel); input.jx = input.jy = input.steer = input.gas = input.brake = 0; input.run = false; setTripSt(null);
     // the player's own compound (house, yard, garage, parked vehicles) is drawn on its lot beside the road; a drive-out starts at the wheel in the gate, a walk-out on the doorstep
-    loadHomeOption(ch, h.modelId).then((hm) => setTrip({ id: crypto.randomUUID(), from: home, to: home, mode: ownsCar(ch) ? "car" : "trek", driver: false, act: null, free: true, home: hm, roam: !!(hm && h.walk), spawn: h.walk ? null : { v: h.v }, look: ch.look ?? null, gender: ch.gender ?? "M", car: h.modelId, carColor: h.color, people: [], isEnterable: (id) => { const p = find(id); return !!p && hasInterior(p.id, p.kind); }, selfName: ch.name ?? "", name: "the main road" }));
+    try { performance.mark("oau:arrival-start"); } catch {} loadHomeOption(ch, h.modelId).then((hm) => { try { performance.mark("oau:home-option"); } catch {} return hm; }).then((hm) => setTrip(homeTrip(ch, hm, { home, walk: h.walk, pose: h.pose ?? null, v: h.v, modelId: h.modelId, color: h.color })));
   }, [entering, mapReady, data, !!ch, !!trip]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (!entering) return; const t = tripSt?.phase === "drive" ? setTimeout(() => setEntering(false), 450) : setTimeout(() => setEntering(false), 9000); return () => clearTimeout(t); }, [entering, tripSt?.phase]);
+  useEffect(() => { try { if (entering && tripSt?.phase) performance.mark("oau:phase-" + tripSt.phase); } catch {} }, [entering, tripSt?.phase]);
+  useEffect(() => { if (!entering) return; const t = tripSt?.phase === "drive" || (enterSnap && tripSt?.phase === "roam") ? setTimeout(() => setEntering(false), enterSnap ? 120 : 450) : setTimeout(() => setEntering(false), 9000); return () => clearTimeout(t); }, [entering, tripSt?.phase]);
   // Serving a sentence: held at Floor O (N-QRS Custody) and not allowed to travel. The server refuses every trip too; this only stops offering it.
   const held = !!g?.floorZero && +new Date(g.floorZero.releaseAt) > serverTime();
   // Caught: whatever flow got you arrested, you are taken straight into the cell at Floor O on the map (never to the house).
@@ -214,7 +233,7 @@ export default function MapPage() {
           onTripArrive={pay}
           onTripEnter={entered}
           onTripEnd={tripEnded}
-          onReady={() => setMapReady(true)}
+          onReady={() => { try { performance.mark("oau:map-ready"); } catch {} setMapReady(true); }}
           onTripNotice={tripNotice}
           onTripRetarget={retargeted}
           tripGuard={tripGuard}
@@ -224,7 +243,7 @@ export default function MapPage() {
         />
       </div>
       {trip && !inside && <TripHud trip={trip} placeName={trip.name} st={tripSt} input={input} miniRef={miniRef} previewRef={previewRef} onCancel={() => setTrip(null)} />}
-      <RoadTransition on={entering} />
+      <RoadTransition on={entering} snap={enterSnap} />
       <div className="trip-fade" data-on={fade ? "1" : undefined} aria-hidden="true" />
       {insidePlace && held && insidePlace.id === "floor0" ? <CustodyCell st={g ?? {}} look={ch?.look ?? null} gender={ch?.gender ?? "M"} selfName={ch?.name ?? ""} onFree={() => { setInside(null); setFocus(null); }} /> : (insidePlace || standbyPlace) && <BuildingInside key={(insidePlace ?? standbyPlace).id} place={insidePlace ?? standbyPlace} standby={!insidePlace} onReady={roomReady} onCustody={() => { setFocus(null); setInside("floor0"); }} look={ch?.look ?? null} gender={ch?.gender ?? "M"} focus={focus} selfName={ch?.name ?? ""} onLeave={leaveBuilding} />}
       {(sheet || direct) && L && <TravelSheet place={L} here={youPlace?.name} hasCar={ownsCar(ch)} driver={driverActive(ch, g?.week) ? { name: ch.driverName } : null} people={counts[L.id] ?? 0} distanceM={youPlace && L.located && youPlace.located ? Math.round(Math.hypot(L.x - youPlace.x, L.z - youPlace.z)) : null} character={ch} balanceKobo={g?.balanceKobo ?? null} jailed={held} highlight={want} eta={eta} onGo={begin} onClose={() => { closeSheet(); setWant(null); }} />}

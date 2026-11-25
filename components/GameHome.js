@@ -116,11 +116,12 @@ export default function GameHome({
   }, [sleeping]);
   // Build the 3D models this player will need (their own vehicles, their plot, what the map shows) in idle moments, so entering the garage or the map finds them ready.
   useEffect(() => { let live = true; import("../lib3d/assets/index.js").then((a) => { if (live) a.initAssets(); }).catch(() => {}); /* saved assets are checked for freshness and the critical ones are fetched in the background (lib3d/assets) */ import("../lib3d/worldPreload.js").then((w) => { if (live) w.preloadRoad(); }).catch(() => {}); return () => { live = false; }; }, []); // the main road is prepared in idle time from the moment the world opens, so it is ready before anyone heads for it
+  useEffect(() => { import("../lib/homeOption.js").then((m) => m.forgetHomeOption()).catch(() => {}); }, [rd]); // the room or its things changed: what the map would be handed is out of date
   const roomKeyForPreload = rd?.room ? `${rd.room.w}x${rd.room.d}:${rd.room.layout ?? ""}` : "";
   useEffect(() => {
     if (!vehicles && !roomKeyForPreload) return;
     let live = true;
-    import("../lib3d/worldPreload.js").then((w) => { if (!live) return; if (vehicles) w.preloadOwnVehicles(vehicles, c.activeCar ?? null); if (rd?.room) w.preloadHome(rd.room); w.preloadMapBasics(); }).catch(() => {});
+    import("../lib3d/worldPreload.js").then((w) => { if (!live) return; if (vehicles) w.preloadOwnVehicles(vehicles, c.activeCar ?? null); if (rd?.room) w.preloadHome(rd.room); w.preloadMapBasics(); w.preloadMapArrival(c, { room: rd?.room ?? null }); }).catch(() => {});
     return () => { live = false; };
   }, [vehicles, roomKeyForPreload]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -410,6 +411,7 @@ export default function GameHome({
           onVehicle={(id) => fleetHandlers.current.onVehicle?.(id)}
           onDrive={(d) => fleetHandlers.current.onDrive?.(d)}
           onLeave={(d) => fleetHandlers.current.onLeave?.(d)}
+          onPark={(d) => fleetHandlers.current.onPark?.(d)}
           onEntry={(e) => fleetHandlers.current.onEntry?.(e)}
           onPlace={(p) => setOutdoors(!!p.outdoors)}
         />
@@ -503,7 +505,7 @@ export default function GameHome({
           onClick={() => {
             const r = outdoors ? api.current?.goInside?.() : api.current?.goOutside?.();
             if (!r) toast.error(outdoors ? "You cannot go in right now." : "You cannot go outside right now.");
-            else if (!outdoors) { try { router.prefetch("/map"); } catch {} import("../lib3d/worldPreload.js").then((w) => w.preloadRoadNow()).catch(() => {}); } // the street (route, road data, collision world) is warmed up with priority while they walk out
+            else if (!outdoors) { try { router.prefetch("/map"); } catch {} import("../lib3d/worldPreload.js").then((w) => { w.preloadRoadNow(); w.preloadMapArrival(game.get()?.character, { room: rd?.room ?? null, urgent: true }); }).catch(() => {}); } // the street (route, road data, collision world) is warmed up with priority while they walk out
           }}
         >
           <Icon name={outdoors ? "home" : "farm"} size={18} />
@@ -513,7 +515,7 @@ export default function GameHome({
 
       {/* from the compound on to the street: the map draws the same house, yard and parked vehicles on the same lot, so they go on walking from where they stand */}
       {!buying && !sleeping && !driving && outdoors && (
-        <button type="button" className="gx-out gx-street" onClick={() => { const ch = game.get()?.character; setDriveHandoff({ modelId: ch?.activeCar ?? "", color: ch?.activeCarColor ?? "", v: 0, walk: true }); router.push("/map"); }}>
+        <button type="button" className="gx-out gx-street" onClick={() => { const ch = game.get()?.character; setDriveHandoff({ modelId: ch?.activeCar ?? "", color: ch?.activeCarColor ?? "", v: 0, walk: true, pose: api.current?.getPose?.() ?? null, snap: api.current?.snapshot?.() ?? "", go: true }); router.push("/map"); }}>
           <Icon name="map" size={18} />
           <span>TO THE STREET</span>
         </button>

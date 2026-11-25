@@ -35,4 +35,5 @@ export function preloadRoad() { return import("./roadPreload.js").then((m) => m.
 /** The player is heading for the road (picked a travel mode): whatever is still waiting for an idle moment runs now. */
 export function preloadRoadNow() { return import("./roadPreload.js").then((m) => m.preloadMainRoad({ urgent: true })).catch(() => null); }
 /** The player is heading for something (tapped a vehicle, picked a travel mode): build it first. */
-export function preloadSoon(what, paint) { preloadVehicle(what, paint, 0); }
+export function preloadSoon(what, paint) { preloadVehicle(what, paint, 0); }/** The player is on the home screen: everything the map needs to show their compound on arrival (lib3d/mapArrival.js). `urgent` once they press GO OUTSIDE. */
+export function preloadMapArrival(ch, o = {}) { return import("./mapArrival.js").then((m) => m.preloadMapArrival(ch, o)).catch(() => false); }

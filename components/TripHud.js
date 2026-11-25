@@ -98,9 +98,9 @@ export default function TripHud({ trip, placeName, st, input, miniRef, previewRe
         </>
       )}
       {phase === "ride" && <CarRadio active float />}
-      {phase === "afoot" && (st?.canEnter || st?.canClose) && (
+      {(phase === "afoot" || phase === "roam") && (st?.canEnter || st?.canEnterOther || st?.canClose) && (
         <div className="th-act">
-          {st.canEnter && <button type="button" className="th-btn th-act-btn" data-sound="none" onClick={() => { input.enter = true; playSound("tap"); }}><Icon name="ride" size={20} weight="bold" /> Get in car</button>}
+          {(st.canEnter || st.canEnterOther) && <button type="button" className="th-btn th-act-btn" data-sound="none" onClick={() => { input.enter = true; playSound("tap"); }}><Icon name="ride" size={20} weight="bold" /> Get in car</button>}
           {st.canClose && <button type="button" className="th-btn th-act-btn" data-sound="none" onClick={() => { input.close = true; playSound("tap"); }}><Icon name="door" size={20} weight="bold" /> Close door</button>}
         </div>
       )}

@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import { call } from "@/lib/client";
 import { game } from "@/lib/gameStore";
 import { toast } from "@/lib/toast";
-import { setDriveHandoff, clearDriveHandoff } from "@/lib/driveHandoff.js";
+import { setDriveHandoff, dropUncommittedHandoff } from "@/lib/driveHandoff.js";
 import RoadTransition from "./RoadTransition";
 import DrivePad from "./DrivePad";
 import "./home-garage.css";
@@ -29,15 +29,15 @@ export function useVehicles() {
   }, [load]);
   const list = useMemo(() => {
     if (!rides) return null;
-    const cars = rides.owned.map((o) => { const c = rides.cars.find((x) => x.id === o.modelId); return c ? { id: c.id, modelId: c.id, name: c.name, color: o.color } : null; }).filter(Boolean);
+    const cars = rides.owned.map((o) => { const c = rides.cars.find((x) => x.id === o.modelId); return c ? { id: c.id, modelId: c.id, name: c.name, color: o.color, saved: o.park ?? null } : null; }).filter(Boolean); // saved: where it was left
     return rides.family ? [FAMILY, ...cars] : cars;
   }, [rides]);
-  const key = list ? list.map((v) => `${v.id}:${v.color}`).join("|") : null;
+  const key = list ? list.map((v) => `${v.id}:${v.color}:${v.saved ? [v.saved.x, v.saved.z, v.saved.yaw, v.saved.lot].join(",") : ""}`).join("|") : null;
   return useMemo(() => list, [key]); // eslint-disable-line react-hooks/exhaustive-deps -- a new array only when ownership or paint really changed
 }
 
 export default function CompoundDrive({ vehicles, api, handlers, onDriving }) {
-  const router = useRouter(), [drv, setDrv] = useState(null), [entry, setEntry] = useState(null), [leaving, setLeaving] = useState(false), pending = useRef(null), live = useRef({ vehicles, drv });
+  const router = useRouter(), [drv, setDrv] = useState(null), [entry, setEntry] = useState(null), [leaving, setLeaving] = useState(false), [leaveSnap, setLeaveSnap] = useState(""), pending = useRef(null), live = useRef({ vehicles, drv });
   live.current = { vehicles, drv };
   const driving = !!drv; useEffect(() => { onDriving?.(driving); }, [driving]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -46,6 +46,9 @@ export default function CompoundDrive({ vehicles, api, handlers, onDriving }) {
   useEffect(() => {
     handlers.current = {
       onDrive: (d) => setDrv(d.driving ? d : null),
+      async onPark({ modelId, pose }) { // the car was left where it stands: remember the place (the server checks it with the same rules and says no to a place that cannot be)
+        const r = await call("/api/rides", { action: "park", modelId, pose }); if (r.failed) toast.error(r.error || "That parking place could not be saved.");
+      },
       onEntry: (e) => setEntry(e?.phase ? e : null),
       onVehicle(id) {
         const v = live.current.vehicles?.find((x) => String(x.id) === String(id)); if (!v || live.current.drv || !api.current) return;
@@ -57,17 +60,18 @@ export default function CompoundDrive({ vehicles, api, handlers, onDriving }) {
           if (op != null) game.done(op); return true;
         });
       },
-      async onLeave({ id, modelId, color, v }) {
+      async onLeave({ id, modelId, color, v, yaw, x, z }) {
         setLeaving(true); // the drive is in the vehicle's own hands until the server has agreed to it
+        const snap = api.current?.snapshot?.() ?? ""; setLeaveSnap(snap);
         const ok = await (pending.current ?? Promise.resolve(true)); if (!ok) return;
         const cur = live.current.vehicles?.find((x) => String(x.id) === String(id));
-        setDriveHandoff({ modelId: modelId ?? cur?.modelId ?? "", color: cur?.family ? color : (color ?? cur?.color ?? ""), v: Math.max(0, v ?? 0) });
-        setTimeout(() => router.push("/map"), 380); // long enough for the screen to go dark first
+        setDriveHandoff({ modelId: modelId ?? cur?.modelId ?? "", color: cur?.family ? color : (color ?? cur?.color ?? ""), v: Math.max(0, v ?? 0), snap, go: true, pose: Number.isFinite(x) && Number.isFinite(z) && Number.isFinite(yaw) ? { cx: x, cz: z, hx: Math.sin(yaw), hz: Math.cos(yaw) } : null });
+        router.push("/map"); // the last frame stays up (RoadTransition) until the map's first frame replaces it
       },
     };
     return () => { handlers.current = {}; };
   }, [api, handlers, router, abort]);
-  useEffect(() => () => { if (!live.current.drv) clearDriveHandoff(); }, []);
+  useEffect(() => () => { if (!live.current.drv) dropUncommittedHandoff(); }, []);
 
   useEffect(() => { // Escape cancels a walk to a vehicle
     if (entry?.phase !== "walk") return; const k = (e) => { if (e.key === "Escape") api.current?.cancelEntry?.(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
@@ -80,6 +84,6 @@ export default function CompoundDrive({ vehicles, api, handlers, onDriving }) {
       <section className="hg-hud" aria-live="polite"><b>{drv.speed}<small> km/h</small></b><span>{drv.hit ? "Blocked. Reverse and steer around it." : "Drive down the driveway, through the gate and out onto the main road."}</span>
         <div className="hg-hud-btns"><button type="button" onClick={() => { const r = api.current?.exitCar?.(); if (r && !r.ok) toast.error(r.why); }}>Park</button></div></section>
       <DrivePad setInput={(v) => api.current?.setDriveInput(v)} /></>}
-    <RoadTransition on={leaving} />
+    <RoadTransition on={leaving} snap={leaveSnap} />
   </>;
 }

@@ -7,9 +7,9 @@ import { Icon } from "./Icon";
  *  `apiRef.current` gives the parent the scene's methods (rotateView, pulse, rotateSelected, goToBed, wakeUp, cancelSleep, ...).
  *  Sleep callbacks: onAsleep(id) the character is lying down; onAwake() fully standing again; onWakeTap() the player tapped the floor
  *  to get up (the scene already runs the get-up); onSleepCancel() the player tapped the floor while still walking to the bed. */
-export default function RoomStage({ room, items, roomError, onRetry, look, gender, mode, selected, onSelect, onMove, onBlocked, onUse, onAsleep, onAwake, onWakeTap, onSleepCancel, apiRef, tool, vehicles, onVehicle, onDrive, onLeave, onEntry, onPlace }) {
+export default function RoomStage({ room, items, roomError, onRetry, look, gender, mode, selected, onSelect, onMove, onBlocked, onUse, onAsleep, onAwake, onWakeTap, onSleepCancel, apiRef, tool, vehicles, onVehicle, onDrive, onLeave, onPark, onEntry, onPlace }) {
   const box = useRef(null), bar = useRef(null), scene = useRef(null), cbs = useRef({}), [ready, setReady] = useState(false), [failed, setFailed] = useState(false);
-  cbs.current = { onSelect, onMove, onBlocked, onUse, onAsleep, onAwake, onWakeTap, onSleepCancel, onVehicle, onDrive, onLeave, onEntry, onPlace };
+  cbs.current = { onSelect, onMove, onBlocked, onUse, onAsleep, onAwake, onWakeTap, onSleepCancel, onVehicle, onDrive, onLeave, onPark, onEntry, onPlace };
   const roomKey = room ? `${room.w}x${room.d}:${room.theme}:${room.layout ?? ""}:${room.grime ?? 0}` : "", lookKey = JSON.stringify([look ?? null, gender]);
 
   useEffect(() => {
@@ -29,6 +29,7 @@ export default function RoomStage({ room, items, roomError, onRetry, look, gende
           onVehicle: (id) => cbs.current.onVehicle?.(id),   // a tap on a parked vehicle in the compound
           onDrive: (d) => cbs.current.onDrive?.(d),
           onLeave: (d) => cbs.current.onLeave?.(d),
+          onPark: (d) => cbs.current.onPark?.(d),
           onEntry: (e) => cbs.current.onEntry?.(e),         // walking to, getting into or out of a vehicle
           onPlace: (p) => cbs.current.onPlace?.(p),         // the character is now indoors or outdoors (walked through the front door)
         });

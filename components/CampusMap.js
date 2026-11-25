@@ -119,11 +119,11 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
     const end = (why) => { if (dead) return; tripCb.current.onTripEnd?.(why); };
     (async () => {
       try {
-        const { startTrip } = await import("../lib3d/travel.js"); if (dead) return;
+        const { startTrip } = await import("../lib3d/travel.js"); if (dead) return; try { performance.mark("oau:trip-begin"); } catch {}
         box.current.dataset.trip = "1";
         handle = await startTrip({ stage: a.stage, campus: a.campus, light: a.light, data: a.data }, { ...trip, input: tripCb.current.tripInput ?? {}, miniCanvas: () => tripCb.current.getMini?.() ?? null, previewCanvas: () => tripCb.current.getPreview?.() ?? null,
           onState: (st) => { const on = st.mode === "trek" ? ["trek", "walk", "door", "roam"].includes(st.phase) : !!st.ownCar && ["drive", "afoot", "roam"].includes(st.phase); if (box.current) { if (on) box.current.dataset.tags = "1"; else delete box.current.dataset.tags; } /* inside a building the player is counted there (docs/BUILDING-OCCUPANCY.md), not also standing on the road: the road reports stop at the door and start again when they come out */ if (sync && (st.phase === "inside") !== wasIn) { wasIn = st.phase === "inside"; try { if (wasIn) sync.stop({ clear: true }); else sync.start(); } catch { /* best effort */ } } tripCb.current.onTripState?.(st); }, onNotice: (m) => tripCb.current.onTripNotice?.(m), onArrive: () => tripCb.current.onTripArrive?.() ?? true, onEnter: () => { entered = true; tripCb.current.onTripEnter?.(); }, holdEnter: () => tripCb.current.tripHoldEnter?.() ?? false, onEnd: end });
-        if (dead) { handle?.dispose(); return; } tripRef.current = handle; if (tripExit) tripExit.current = () => handle.exitBuilding(); tripCb.current.onTripReady?.();   // the page walks the player out of the building through here: the world stays, nothing reloads
+        try { performance.mark("oau:trip-ready"); } catch {} if (dead) { handle?.dispose(); return; } tripRef.current = handle; if (tripExit) tripExit.current = () => handle.exitBuilding(); tripCb.current.onTripReady?.();   // the page walks the player out of the building through here: the world stays, nothing reloads
         if (!handle) return end("error");
         // real players on the road, in the BACKGROUND: where we are goes to the server and who else is out there comes back without ever touching how the player moves (that is local and
         // immediate). lib/tripSync.js sends the latest pose only, never two requests at once, backs off when the connection is slow or down, and sends at once when it comes back.

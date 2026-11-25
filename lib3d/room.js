@@ -1013,11 +1013,14 @@ export function createRoomScene(container, cb = {}) {
   function exitCar() {
     if (act) return { ok: false, why: "busy" };
     const d = fleet.driveInfo(), env = d && walkEnv(), slot = d && fleet.slotOf(d.id); if (!slot) return { ok: false, why: "You are not in a vehicle." };
-    const r = planExit(env, slot);
+    // it is left where it stands when that is a place it may stand (lib3d/compoundParking.js validParkedPose), else it goes back to its own place; either way the person must be able to step out
+    let at = fleet.parkCandidate(), target = at ? { ...slot, ...at } : slot, r = planExit(at ? { ...env, slots: env.slots.map((s) => (String(s.id) === String(d.id) ? { ...s, ...at } : s)) } : env, target);
+    if (!r.ok && at) { at = null; target = slot; r = planExit(env, slot); }
     if (!r.ok) return { ok: false, why: r.why === "no-stand" ? "There is no room to get out beside this parking place. Move the furniture or the other vehicles away from it, then try again." : "You could not get anywhere from the only place to step out here. Make some room around the vehicle and try again." };
-    fleet.stop({ park: true });
+    fleet.stop({ park: true, at });
+    if (at) cb.onPark?.({ id: String(d.id), modelId: slot.modelId, pose: at });
     const s = toScene(r.geom.seat); me.x = s.x; me.z = s.z; me.yaw = Math.atan2(r.geom.hx, r.geom.hz); me.path = []; me.faceCam = false;
-    act = { kind: "exit", id: String(d.id), phase: "door", t: 0, slot: { x: slot.x, z: slot.z, yaw: slot.yaw, modelId: slot.modelId }, geom: r.geom, dirty: false, replans: 0, pose: exitPose(0, r.geom) };
+    act = { kind: "exit", id: String(d.id), phase: "door", t: 0, slot: { x: target.x, z: target.z, yaw: target.yaw, modelId: slot.modelId }, geom: r.geom, dirty: false, replans: 0, pose: exitPose(0, r.geom) };
     showYard(); tell("exit", act.id); return { ok: true };
   }
   /** One frame of whatever is going on. */
@@ -1453,6 +1456,10 @@ export function createRoomScene(container, cb = {}) {
     goOutside,
     goInside,
     isOutdoors: () => (room && av ? isOutdoors() : false),
+    /** Where the character stands and which way they face, in the compound's cells ({ cx, cz, hx, hz }): handed to the map so it starts them on the very same spot (lib/driveHandoff.js). */
+    /** The current frame as a small JPEG data URL (or ""): the home screen hands it to the map so the street arrives without a dark screen between (lib/driveHandoff.js). */
+    snapshot: () => { try { stage.renderer.render(stage.scene, stage.camera); const src = stage.renderer.domElement, k = Math.min(1, 960 / Math.max(1, src.width)), c = document.createElement("canvas"); c.width = Math.round(src.width * k); c.height = Math.round(src.height * k); c.getContext("2d").drawImage(src, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.6); } catch { return ""; } },
+    getPose: () => (room && av ? { cx: me.x + W / 2, cz: me.z + D / 2, hx: Math.sin(me.yaw), hz: Math.cos(me.yaw) } : null),
     getExteriorMix: () => extMix,
     goToBed,
     lieInBed,

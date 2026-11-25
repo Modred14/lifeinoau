@@ -21,7 +21,7 @@ import { SWING } from "./doorway.js";
 import { createTripFlow } from "./tripflow.js";
 import { portalFor } from "./buildingPortals.js";
 import { createHomeCompound } from "./homeCompound.js";
-import { gateStand } from "./homeSite.js";
+import { gateStand, poseOnSite, cellsPose, nearestParkedSlot, pinnedVehicles } from "./homeSite.js";
 import { ROAD_TOP } from "./roadsurface.js";
 import { wheelContacts } from "./vehiclepose.js";
 import { rigSuspension, leanBody } from "./suspension.js";
@@ -100,10 +100,12 @@ const WHY = { noroad: "No road reaches that place, so no ride can take you there
  * Returns { setTravellers(list), pos(), route(), plan, dispose(), horn() }. Resolves once the scene is set up. Throws an Error with .reason when the trip cannot be planned.
  */
 export async function startTrip(env, o) {
+  const mk = (n) => { try { performance.mark("oau:st-" + n); } catch { /* no timing */ } }; mk("begin");
   const { stage, campus, light, data } = env, cam = stage.camera, ctl = stage.controls;
   const fromP = resolvePlace(data, o.from) ?? resolvePlace(data, "senate"), toP = resolvePlace(data, o.to);
   if (!toP) throw Object.assign(new Error("That place has no position on the map yet."), { reason: "error" });
   const svc = await loadServices(data), net = svc.net, base = paintBase(data, net, svc.graph), input = o.input ?? {}, mode = o.mode;
+  mk("services");
   let plan = planTrip(svc, { from: fromP, to: toP, mode, driver: !!o.driver }), curTo = toP.id, enterable = o.isEnterable ? !!o.isEnterable(toP.id) : true;
   if (!plan.ok) { const e = Object.assign(new Error(WHY[plan.reason] ?? "That trip cannot be planned."), { reason: plan.reason === "unreachable" ? "unreachable" : "noroad", text: WHY[plan.reason] }); throw e; }
   let B = plan.B; const driven = !!plan.driven, auto = driven;
@@ -135,12 +137,15 @@ export async function startTrip(env, o) {
   bay.add(bayMesh); bay.position.y = 0.2; bay.visible = false; world.add(bay); disposers.push(() => { bayMesh.geometry.dispose(); bayMesh.material.dispose(); });
   const setBay = () => { if (plan.drop) { bay.position.set(plan.drop.x, 0.2, plan.drop.z); bay.rotation.y = Math.atan2(plan.drop.hx, plan.drop.hz); } };
 
+  mk("home");
   // ---- the person and the vehicle ----
   let avatar = null; const mkAvatar = async () => { try { return await createAvatar(o.look, o.gender); } catch { const w = makeWalker("#7f5236", "#1f2f55", "#a8946a"); return { root: w.root, play: () => false, has: () => false, setSpeed() {}, update: () => {}, dispose() {}, walker: w }; } };
   avatar = await mkAvatar(); if (!alive) { avatar.dispose(); return null; } world.add(avatar.root); disposers.push(() => { world.remove(avatar.root); avatar.dispose(); });
+  mk("avatar");
   let vehicle = null;
   if (mode !== "trek") { const m = mode === "keke" ? makeKeke() : mode === "bus" ? makeBus() : makeVehicle(o.car, o.carColor); if (plan.driven && (m.driver ?? KINDS[plan.kind].driver)) addDriver(m, m.driver ?? KINDS[plan.kind].driver, mode === "bus" ? "#c0762b" : "#3b6ea5"); m.root.visible = false; rigSuspension(m); vehicle = m; world.add(m.root); disposers.push(() => { world.remove(m.root); if (m.dispose) m.dispose(); else m.root.traverse((x) => x.geometry?.dispose?.()); }); }
 
+  mk("vehicle");
   // name tags for real players (the ones waiting at the destination and the ones on the road); never for you, never for NPCs
   const tags = createPlayerTags({ container: stage.renderer.domElement.parentElement, camera: stage.camera, selfName: o.selfName ?? "", unit: S, maxDist: 45, fadeFrom: 30 });
   disposers.push(() => tags.dispose());
@@ -171,9 +176,12 @@ export async function startTrip(env, o) {
   try { const { createTripAudio } = await import("../lib/audio/tripAudio.js"); audio = createTripAudio({ places: (data.places ?? []).filter((p) => p.x != null && !p.offmap).map((p) => ({ x: p.x, z: p.z, kind: p.kind })), low: densityFor() === DENSITY_LOW }); disposers.push(() => audio.dispose()); } catch (e) { console.warn("trip sound unavailable", e); }
   let hornWas = false;
 
+  mk("audio");
   // ---- the journey ----
-  const homeParked = () => { const d = vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width } : { len: 4.5, wid: 1.85 }; if (o.spawn) return { ...gateStand(home.site), ...d }; const a = home.activeSlot; return a ? { x: a.x, z: a.z, hx: a.hx, hz: a.hz, len: a.len, wid: a.wid } : null; };
-  const flow = createTripFlow({ svc, sim: traffic.sim }, { plan, enterable, dims: vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width, id: vehicle.id, seat: vehicle.seat, driver: vehicle.driver, wheels: wheelContacts(vehicle) } : null, rnd: Math.random, free: !!o.free, spawn: o.spawn ?? null, onArrive: () => o.onArrive?.() ?? true, onEnter: () => o.onEnter?.(), holdEnter: () => !!o.holdEnter?.(), roam: o.roam ? (home ? home.portal : portalFor(svc, toP)) : null, drivable: home?.drivable ?? null, parked: home ? homeParked() : null, onEnd: (why) => { if (alive) o.onEnd?.(why); }, onNotice: (m) => o.onNotice?.(m) });
+  const inLot = (site, c) => { const pl = site.cw.P.plot; return c.x >= pl.x0 && c.x <= pl.x1 && c.z >= pl.z0 && c.z <= pl.z1; };   // the car was left inside the player's own plot
+  const startPose = home && o.pose ? poseOnSite(home.site, o.pose, { car: !!o.spawn }) : null; // the exact place the home screen ended on, when it is a valid one on this lot (else the doorstep or the gate)
+  const homeParked = () => { const d = vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width } : { len: 4.5, wid: 1.85 }; if (o.spawn) return { ...(startPose ?? gateStand(home.site)), ...d }; const a = home.activeSlot; return a ? { x: a.x, z: a.z, hx: a.hx, hz: a.hz, len: a.len, wid: a.wid } : null; };
+  const flow = createTripFlow({ svc, sim: traffic.sim }, { plan, enterable, dims: vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width, id: vehicle.id, seat: vehicle.seat, driver: vehicle.driver, wheels: wheelContacts(vehicle) } : null, rnd: Math.random, free: !!o.free, spawn: o.spawn ?? null, onArrive: () => o.onArrive?.() ?? true, onEnter: () => o.onEnter?.(), holdEnter: () => !!o.holdEnter?.(), roam: o.roam ? (home ? home.portal : portalFor(svc, toP)) : null, roamPose: o.roam && !o.spawn ? startPose : null, autoEnter: !!o.autoEnter, otherCar: home ? (x, z) => nearestParkedSlot(home.site, x, z, 3.2, o.home?.activeId ?? null) : undefined, onEnterOther: home && o.onSwitchCar ? (slot, at) => o.onSwitchCar({ id: slot.id, pose: cellsPose(home.site, at), pinned: pinnedVehicles(home.site, o.home.room, o.home.vehicles ?? []) }) : undefined, onParked: home && o.onHomePark ? (p) => { const c = cellsPose(home.site, p); if (inLot(home.site, c)) o.onHomePark(c); } : undefined, drivable: home?.drivable ?? null, parked: home ? homeParked() : null, onEnd: (why) => { if (alive) o.onEnd?.(why); }, onNotice: (m) => o.onNotice?.(m) });
   disposers.push(() => flow.dispose()); setBay();
   const P = flow.person, F = flow.state, WK = flow.walker;
   let camYaw = Math.atan2(-(plan.start.x - (plan.doorIn?.x ?? plan.goal.x)), -(plan.start.z - (plan.doorIn?.z ?? plan.goal.z))), userYaw = 0, userPitch = 0, userAt = -9, time = 0, hornT = 0, lastState = 0, camBack = CAM.walk.back, zoomW = 1, zoomV = 1, leadX = 0, leadZ = 0;
@@ -209,7 +217,7 @@ export async function startTrip(env, o) {
     hornNow = vr.horn;
     return { fwd: Math.max(kk.up, input.jy > 0 ? input.jy : 0), back: Math.max(kk.down, input.jy < 0 ? -input.jy : 0), right: Math.max(kk.right, input.jx > 0 ? input.jx : 0) - Math.max(kk.left, input.jx < 0 ? -input.jx : 0), run: !!kk.run || !!input.run,
       gas: vr.gas, brake: vr.brake, steer: vr.steer, fly: drive && (flyBtn || flyKey), climb: vr.climb,
-      exit: drive && (exitBtn || act), enter: afoot && (enterBtn || (act && F.canEnter)), close: afoot && (closeBtn || (act && !F.canEnter && F.canClose)),
+      exit: drive && (exitBtn || act), enter: (afoot || F.phase === "roam") && (enterBtn || (act && (F.canEnter || F.canEnterOther))), close: afoot && (closeBtn || (act && !F.canEnter && F.canClose)),
       door: atDoor && (doorBtn || (act && F.door === "closed")), goIn: atDoor && (goInBtn || (act && F.door === "open")), stop: stopBtn };   // Open Door / Go in / stop the automatic walk: the buttons, and E or F for the door
   };
 

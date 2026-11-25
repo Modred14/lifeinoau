@@ -56,3 +56,7 @@ setup.sh
 
 # copied from node_modules/three by scripts/copy-draco.mjs at build time
 /public/draco/
+
+# real-browser journey output (tests/e2e)
+tests/e2e/shots/
+__pycache__/
