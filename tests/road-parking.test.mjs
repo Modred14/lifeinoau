@@ -14,9 +14,10 @@ import { createTrafficSim } from "../lib3d/trafficsim.js";
 import { portalFor } from "../lib3d/buildingPortals.js";
 import { hasInterior } from "../lib3d/interiors/registry.js";
 import { isOpenSpace } from "../lib3d/interiors/openSpaces.js";
+import { createNav } from "../lib3d/walker.js";
 import { saveRoadParking, peekRoadParking, takeRoadParking, cleanRoadPose, forgetRoadParking, _resetRoadParking, PARK_TTL_MS } from "../lib/roadParking.js";
 
-let n = 0; const ok = (name, c) => { assert.ok(c, name); n++; };
+let n = 0; const ok = (name, c, more = "") => { assert.ok(c, more ? `${name} (${more})` : name); n++; };
 
 // ---------- 1. the store ----------
 {
@@ -91,8 +92,13 @@ const out = flow.exitBuilding(portalFor(svc, to)); ok("walks out of the door", o
 ok("comes out on foot beside the street", until(() => S.phase === "roam", 30));
 ok("the car is where it was left", flow.own === car && car.x === park.x && car.z === park.z && heroes(A.sim) === 0);
 // walk back to the car (the way a player does: towards it) and get in
-const toward = () => { const dx = car.x - flow.walker.x, dz = car.z - flow.walker.z, l = Math.hypot(dx, dz) || 1; return { dx: dx / l, dz: dz / l, mag: 1 }; };
-ok("the car is offered when the player reaches it (Get in car)", until(() => S.canEnter, 40, toward));
+// walk back the way the game walks a player to a place: along a planned route (a straight line can be held up by a building)
+{
+  const nav = createNav({ world: svc.world, graph: svc.graph }), r = nav.plan(flow.walker.x, flow.walker.z, car.x, car.z, { ignore: new Set(["own"]) });
+  ok("a way back to the car exists", r.ok, `from ${flow.walker.x.toFixed(1)},${flow.walker.z.toFixed(1)}`);
+  flow.walker.follow(r, { goal: { x: car.x, z: car.z }, tolerance: 2 });
+}
+ok("the car is offered when the player reaches it (Get in car)", until(() => S.canEnter, 150), `walker ${flow.walker.x.toFixed(1)},${flow.walker.z.toFixed(1)} car ${car.x.toFixed(1)},${car.z.toFixed(1)}`);
 tick({ enter: true }); ok("pressing enter walks to the door", S.phase === "reenter");
 ok("and sits in it", until(() => S.phase === "board", 20) && until(() => S.phase === "drive", 10));
 ok("same car object, same place: it is driveable again", flow.own === car && Math.hypot(car.x - park.x, car.z - park.z) < 1e-9);
