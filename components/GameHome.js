@@ -23,6 +23,17 @@ import PlayerAvatar from "./PlayerAvatar";
 import CompoundDrive, { useVehicles } from "./CompoundDrive";
 import "./game-home.css";
 
+const HomeWorld = dynamic(() => import("./HomeWorld"), {
+  ssr: false,
+  loading: () => (
+    <div className="rs-loading" aria-busy="true">
+      <span className="rs-spin" />
+      Opening your home
+    </div>
+  ),
+});
+const isBedKey = (k) => /(^|_)bed$/.test(String(k ?? ""));
+
 const RoomStage = dynamic(() => import("./RoomStage"), {
   ssr: false,
   loading: () => (
@@ -128,11 +139,23 @@ export default function GameHome({
     if (sleeping) setGoing(null); // the server's answer (or the optimistic state) has arrived
   }, [sleeping]);
 
+  // The walkable home has no bed to lie on: going to sleep brings up the room scene (it is the bedroom view), and the character walks to the bed there. Waking up goes back to the walkable home.
+  const [bedPending, setBedPending] = useState(null);
   const lieDown = (u) => {
     setUse(null);
+    if (!api.current) { setGoing(u.id); setBedPending(u.id); return; } // the room scene is not up yet: it comes up now, and the walk to bed starts as soon as it can
     if (api.current?.goToBed(u.id)) setGoing(u.id); // walk, sit, lie: starts this instant
     else toast.error("Your character is not ready yet. Try again in a moment.");
   };
+  useEffect(() => {
+    if (bedPending == null) return; let t, tries = 0;
+    const attempt = () => {
+      if (api.current?.goToBed(bedPending)) { setBedPending(null); return; }
+      if (++tries > 30) { setBedPending(null); setGoing(null); toast.error("Your character is not ready yet. Try again in a moment."); return; }
+      t = setTimeout(attempt, 400);
+    };
+    attempt(); return () => clearTimeout(t);
+  }, [bedPending]);
   // the character is now lying on the bed: only NOW is the server told
   const onAsleep = async (id) => {
     const res = await onSleep(id);
@@ -376,9 +399,13 @@ export default function GameHome({
     stopped = !!fz;
   const hours = fz ? left : 0;
 
+  // The walkable home is the home screen; the room scene (components/RoomStage.js) is only for decorating (Buy mode) and sleeping.
+  const showRoom = buying || sleeping || !!going || bedPending != null, world = !showRoom;
+  const bed = items.find((i) => i && i.placed !== false && i.x != null && isBedKey(i.key));
   return (
     <div
       className="gx"
+      data-world={world ? "1" : undefined}
       data-mode={buying ? "buy" : "home"}
       data-sheet={collapsed ? "min" : "full"}
       data-drive={driving ? "1" : undefined}
@@ -389,7 +416,8 @@ export default function GameHome({
         <i />
       </div>
       <div className="gx-scene">
-        <RoomStage
+        {world && <HomeWorld onSleep={bed ? () => setUse({ id: bed.id, key: bed.key, kind: "bed" }) : null} />}
+        {showRoom && <><RoomStage
           room={roomReady ? rd.room : null}
           items={roomReady ? rd.items : null}
           roomError={roomReady ? null : roomErr}
@@ -415,7 +443,7 @@ export default function GameHome({
           onEntry={(e) => fleetHandlers.current.onEntry?.(e)}
           onPlace={(p) => setOutdoors(!!p.outdoors)}
         />
-        <CompoundDrive vehicles={vehicles} api={api} handlers={fleetHandlers} onDriving={setDriving} />
+        <CompoundDrive vehicles={vehicles} api={api} handlers={fleetHandlers} onDriving={setDriving} /></>}
       </div>
 
       {/* top left: what needs attention */}

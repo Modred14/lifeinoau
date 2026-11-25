@@ -1,0 +1,18 @@
+/* components/home-world.css: the walkable home (components/HomeWorld.js) and how the home screen's overlays make room for it. */
+.hw { position: absolute; inset: 0; z-index: 1; }
+.hw .stage { position: absolute; inset: 0; }
+.hw .th { z-index: 3; }
+.hw .th-cancel { display: none; }   /* there is no trip to call off at home */
+.hw-loading { position: absolute; inset: 0; z-index: 2; display: flex; gap: 12px; align-items: center; justify-content: center; color: var(--muted); background: #0b1424; font-size: 0.95rem; }
+.hw-tools { position: absolute; z-index: 4; left: 50%; transform: translateX(-50%); top: calc(var(--safe-t) + 86px); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; max-width: calc(100% - 24px); }
+.hw-seg { display: inline-flex; border-radius: 22px; overflow: hidden; background: rgba(15, 23, 41, 0.72); border: 1px solid rgba(255, 255, 255, 0.14); backdrop-filter: blur(14px); }
+.hw-seg button, .hw-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; font-weight: 700; font-size: 0.82rem; color: #fff; background: transparent; border: 0; }
+.hw-seg button[aria-pressed="true"] { background: #3fd08a; color: #07210f; }
+.hw-btn { border-radius: 22px; background: rgba(15, 23, 41, 0.72); border: 1px solid rgba(255, 255, 255, 0.14); backdrop-filter: blur(14px); }
+/* the old room's own buttons mean nothing in the walkable world */
+.gx[data-world="1"] .gx-out, .gx[data-world="1"] .gx-tr { display: none; }
+/* the needs card steps out of the way of the walking stick: just the face, centred above the bottom bar, until tapped */
+.gx[data-world="1"] .gx-me { left: 50%; transform: translateX(-50%); }
+.gx[data-world="1"] .gx-me[data-open="0"] .gx-needs, .gx[data-world="1"] .gx-me[data-open="0"] .gx-status { display: none; }
+.gx[data-world="1"] .gx-me[data-open="0"] .gx-me-card { padding: 6px; border-radius: 50%; }
+.hw-err { flex-direction: column; text-align: center; }
