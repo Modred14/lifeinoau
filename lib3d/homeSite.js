@@ -3,10 +3,13 @@
 // It is the SAME compound the home screen draws and drives in (lib/plot.js, lib3d/compoundParking.js), only carried onto the map's coordinates, so a vehicle that leaves the gate on the home screen is at the
 // very same place on the very same lot when the map takes over. Pure JS (no three.js): the tests run it against the real map.
 import { CELL_M } from "./compoundUnits.js";
-import { compoundWorld, planParking } from "./compoundParking.js";
+import { compoundWorld, planParking, lotSignature } from "./compoundParking.js";
 import { lotFrame, lotShape } from "./homeLot.js";
 import { entranceOf, WALL_T as SHELL_T, HOLE_W } from "./houseShell.js";
 import { doorLink } from "./compoundWalk.js";
+import { sizeOf, isOutdoor } from "../lib/furniture.js";
+import { isOutside } from "../lib/room.js";
+import { ITEMS } from "../lib/furniture.js";
 
 export const HOME_OWNER = "home"; // the tag on every solid a compound adds to the shared collision world (CollisionWorld.removeOwned)
 const WALL_T = SHELL_T;  // a wall of the house is this thick (lib3d/houseShell.js): the house is solid out to its outer face
@@ -16,16 +19,34 @@ const inRect = (r, x, z) => x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1;
  * The site of a compound. `items` are the player's placed things (outdoor ones are solid), `vehicles` the owned ones: [{ id, modelId, color }].
  * Returns { F, polys, walls, drivable(x, z), toCell(x, z), slots, spawn, door, cw }.
  */
-export function homeSite(room, items, vehicles, lot) {
+export function homeSite(room, items, vehicles, lot, { interior = false } = {}) {
   const { P, anchor } = lotShape(room), F = lotFrame(room, lot), cw = compoundWorld(room, items ?? []), pl = P.plot, ax = [lot.dz, -lot.dx], az = [lot.dx, lot.dz];
   const toCell = (x, z) => { const u = ((x - lot.x) * ax[0] + (z - lot.z) * ax[1]) / CELL_M, v = ((x - lot.x) * az[0] + (z - lot.z) * az[1]) / CELL_M; return [anchor.x + u, anchor.z + v]; };
   const dirOf = (hx, hz) => [hx * ax[0] + hz * az[0], hx * ax[1] + hz * az[1]]; // a heading in cells -> in metres
   const rectPts = (r) => [[r.x0, r.z0], [r.x1, r.z0], [r.x1, r.z1], [r.x0, r.z1]].map(([x, z]) => F.toWorld(x, z));
   // the house is solid out to its outer wall face exactly (the door sits on that edge); the wider margin round it is only for parking and driving (planParking)
   const footprint = { x0: -WALL_T, x1: room.w + WALL_T, z0: -WALL_T, z1: room.d + WALL_T };
-  const polys = cw.solids.map((s) => ({ kind: s.kind, pts: rectPts(s.kind === "house" ? footprint : s) }));
+  const housePts = rectPts(footprint);
+  // `interior`: the house is not one solid block: its four walls are walls (open at the front doorway) and the things standing indoors are solid, so a person can walk in and about
+  const polys = cw.solids.filter((s) => !(interior && s.kind === "house")).map((s) => ({ kind: s.kind, pts: rectPts(s.kind === "house" ? footprint : s) }));
+  const houseWalls = [];
+  if (interior) {
+    const W = room.w, D = room.d, t = SHELL_T / 2, ent = entranceOf(room), gx = ent.cx + W / 2, gz = ent.cz + D / 2, half = HOLE_W / 2;
+    const run = (xa, za, xb, zb) => { if (Math.hypot(xb - xa, zb - za) > 0.05) { const [a1, a2] = F.toWorld(xa, za), [b1, b2] = F.toWorld(xb, zb); houseWalls.push([a1, a2, b1, b2]); } };
+    const lines = { N: [-SHELL_T, -t, W + SHELL_T, -t, "x"], S: [-SHELL_T, D + t, W + SHELL_T, D + t, "x"], W: [-t, -SHELL_T, -t, D + SHELL_T, "z"], E: [W + t, -SHELL_T, W + t, D + SHELL_T, "z"] };
+    for (const [k, [xa, za, xb, zb, axis]] of Object.entries(lines)) {
+      if (k !== ent.side) { run(xa, za, xb, zb); continue; }
+      const c = axis === "x" ? gx : gz; // the doorway: a gap in the wall that has the front door
+      if (axis === "x") { run(xa, za, c - half, zb); run(c + half, za, xb, zb); } else { run(xa, za, xb, c - half); run(xa, c + half, xb, zb); }
+    }
+    // what stands indoors is solid (rugs and other flat things are not), and the person goes round it
+    for (const it of items ?? []) {
+      if (!it || it.placed === false || it.x == null || !ITEMS[it.key] || ITEMS[it.key].flat || isOutdoor(it.key) || isOutside(room, it)) continue;
+      const [w, d] = sizeOf(it.key, it.rot ?? 0); polys.push({ kind: "indoor", pts: rectPts({ x0: it.x, x1: it.x + w, z0: it.z, z1: it.z + d }) });
+    }
+  }
   // the boundary wall, a hand's width inside the plot's edge, open at the vehicle gate and the footgate
-  const e = 0.2, walls = [], seg = (xa, za, xb, zb) => { if (Math.hypot(xb - xa, zb - za) > 0.05) { const [ax1, az1] = F.toWorld(xa, za), [bx1, bz1] = F.toWorld(xb, zb); walls.push([ax1, az1, bx1, bz1]); } };
+  const e = 0.2, walls = [...houseWalls], seg = (xa, za, xb, zb) => { if (Math.hypot(xb - xa, zb - za) > 0.05) { const [ax1, az1] = F.toWorld(xa, za), [bx1, bz1] = F.toWorld(xb, zb); walls.push([ax1, az1, bx1, bz1]); } };
   seg(pl.x0 + e, pl.z0 + e, pl.x1 - e, pl.z0 + e); seg(pl.x0 + e, pl.z0 + e, pl.x0 + e, pl.z1 - e); seg(pl.x1 - e, pl.z0 + e, pl.x1 - e, pl.z1 - e);
   let cx = pl.x0 + e; for (const gp of [P.gate, P.footGate].sort((a, b) => a.x0 - b.x0)) { seg(cx, pl.z1 - e, gp.x0, pl.z1 - e); cx = gp.x1; } seg(cx, pl.z1 - e, pl.x1 - e, pl.z1 - e);
   // where a car may drive besides the real road: the lawn, the driveway, the gate and a lip over the kerb so there is no gap between the gate and the asphalt (the map's road is the carriageway beyond)
@@ -37,7 +58,7 @@ export function homeSite(room, items, vehicles, lot) {
   const doorStep = step(P.doorOut.x, P.doorOut.z, 1.6), footGateMid = step((P.footGate.x0 + P.footGate.x1) / 2, pl.z1, 1.0);
   const spawn = { doorStep: { x: doorStep[0], z: doorStep[1], hx: out[0], hz: out[1] }, footGate: { x: footGateMid[0], z: footGateMid[1], hx: out[0], hz: out[1] } };
   const [dX, dZ] = F.toWorld(P.doorOut.x, P.doorOut.z);
-  return { F, polys, walls, drivable, toCell, slots: park, spawn, door: { x: dX, z: dZ, nx: out[0], nz: out[1] }, cw, dirOf, lot };
+  return { F, polys, walls, drivable, toCell, slots: park, spawn, door: { x: dX, z: dZ, nx: out[0], nz: out[1] }, cw, dirOf, lot, interior, housePts, insideHouse: (x, z) => { const [cx1, cz1] = toCell(x, z); return cx1 > 0 && cx1 < room.w && cz1 > 0 && cz1 < room.d; } };
 }
 
 /** Registers the compound's solids in the shared collision world, tagged so the whole compound can be taken away again. */
@@ -61,10 +82,55 @@ export function homePortal(room, site) {
 }
 
 
+/** Where a person stands when the home opens: just inside the front door, looking into the house. { x, z, hx, hz } in metres. Pure. */
+export function indoorSpawn(portal) { const e = portal.entrance; return { x: e.x, z: e.z, hx: -portal.door.nx, hz: -portal.door.nz }; }
+
 /** The home as the trip logic sees a building to go into (the shape lib3d/roadnet.js destinationOf gives): its door, and the ground in front of it. Pure. */
 export function homeBuilding(site, portal) {
-  const pts = site.polys.find((p) => p.kind === "house")?.pts ?? [];
+  const pts = site.housePts ?? site.polys.find((p) => p.kind === "house")?.pts ?? [];
   return { building: { id: "home", bid: -1, pts }, door: portal.door, front: { x: portal.exit.x, z: portal.exit.z }, kerb: { x: portal.exit.x, z: portal.exit.z } };
+}
+
+/** A pose on the map ({ x, z, hx, hz }) as the compound's own { x, z, yaw } in cells (the inverse of poseOnSite), for saving where a car was left. */
+export function cellsPose(site, p) {
+  const [cx, cz] = site.toCell(p.x, p.z), [qx, qz] = site.toCell(p.x + p.hx, p.z + p.hz); return { x: cx, z: cz, yaw: Math.atan2(qx - cx, qz - cz) };
+}
+
+/**
+ * The parked owned vehicle nearest to (x, z) that a person standing there could get into: its body (an oriented box, metres) within `reach` of the point, never `activeId` (that one is the
+ * trip's own car and is handled by the trip). Returns the slot ({ id, x, z, hx, hz, len, wid }, on the map) or null. Pure.
+ */
+export function nearestParkedSlot(site, x, z, reach, activeId = null) {
+  let best = null, bd = Infinity;
+  for (const s of site.slots) {
+    if (activeId != null && String(s.id) === String(activeId)) continue;
+    const dx = x - s.x, dz = z - s.z, lx = Math.abs(dx * s.hx + dz * s.hz), lw = Math.abs(dx * -s.hz + dz * s.hx), ex = Math.max(0, lx - s.len / 2), ew = Math.max(0, lw - s.wid / 2), d = Math.hypot(ex, ew);
+    if (d <= reach && d < bd) { bd = d; best = s; }
+  }
+  return best;
+}
+
+/**
+ * The vehicles [{ id, modelId, color, saved }] of the next trip, each pinned to the place it stands at NOW (cells, with the lot signature), so that swapping which car is the trip's own car
+ * re-plans the compound to exactly the same picture: nothing moves, nothing doubles, and the car that was driven stays where it was left. `site` is the one that was drawn, `room` its room. Pure.
+ */
+export function pinnedVehicles(site, room, vehicles, leftAt = {}) {
+  const lot = lotSignature(room), byId = new Map(site.slots.map((s) => [String(s.id), s]));
+  return vehicles.map((v) => { const at = leftAt[String(v.id)] ?? (byId.get(String(v.id)) ? cellsPose(site, byId.get(String(v.id))) : null); return at ? { ...v, saved: { x: at.x, z: at.z, yaw: at.yaw, lot } } : { ...v, saved: null }; });
+}
+
+/**
+ * The exact place the home screen ended on (lib/driveHandoff.js `pose`: { cx, cz, hx, hz } in the compound's cells) as a pose on the map in metres { x, z, hx, hz }, or null when it cannot be
+ * trusted (not numbers, off the lot, or inside the house or another solid): then the caller falls back to the doorstep or the gate. A vehicle that has just left the gate is allowed to be
+ * out on the carriageway beside the plot (`car`), a person on foot only on the plot itself. Pure.
+ */
+export function poseOnSite(site, pose, { car = false } = {}) {
+  if (!pose || ![pose.cx, pose.cz, pose.hx, pose.hz].every(Number.isFinite)) return null;
+  const P = site.cw.P, pl = P.plot, reach = car ? { x0: pl.x0, x1: pl.x1, z0: pl.z0, z1: P.road.z1 } : pl;
+  if (!inRect(reach, pose.cx, pose.cz)) return null;
+  if (!car && site.cw.solids.some((r) => inRect(r, pose.cx, pose.cz))) return null;
+  const [x, z] = site.F.toWorld(pose.cx, pose.cz), [hx, hz] = site.dirOf(pose.hx, pose.hz), l = Math.hypot(hx, hz) || 1;
+  return { x, z, hx: hx / l, hz: hz / l };
 }
 
 /** Where a car stands in the middle of the vehicle gate, nose towards the street, as a pose in metres { x, z, hx, hz }: where the home screen's drive-out hands over to the map. Pure. */

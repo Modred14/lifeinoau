@@ -114,13 +114,53 @@ export function bayPose(P, n, len) {
   return { x: b.nose + (b.side < 0 ? -1 : 1) * (PLOT_RULES.bayNose + len / 2), z: b.z, yaw: b.side < 0 ? Math.PI / 2 : -Math.PI / 2, bay: n };
 }
 
+/** The signature of the ground a saved parking pose was made for: when the room or the plot changes, every saved pose of the old one is void (planParking then parks automatically). */
+export const lotSignature = (room) => `${room.w}x${room.d}:${room.layout ?? ""}`;
+
+/** What a client or the server may send as "where this vehicle stands": three finite numbers, rounded to the millimetre, the heading turned into (-pi, pi]. Anything else is null. */
+export function cleanParkPose(p) {
+  if (!p || ![p.x, p.z, p.yaw].every((n) => typeof n === "number" && Number.isFinite(n)) || Math.abs(p.x) > 500 || Math.abs(p.z) > 500) return null;
+  let yaw = p.yaw % (2 * Math.PI); if (yaw > Math.PI) yaw -= 2 * Math.PI; if (yaw <= -Math.PI) yaw += 2 * Math.PI;
+  const r = (n) => Math.round(n * 1000) / 1000; return { x: r(p.x), z: r(p.z), yaw: r(yaw) };
+}
+
+/**
+ * May this vehicle stand at `pose` (cells) on this ground, beside the vehicles already in `slots`? The one rule for the home screen, the map and the server:
+ * the whole body is inside the plot's lawn or inside the garage hall; it touches no wall, outdoor furniture, the driveway, the doorstep or another vehicle; and it can still drive out
+ * to the gate (exitRoute), so a saved place never shuts anybody in. Pure.
+ */
+export function validParkedPose(cw, room, slots, v, pose) {
+  const p = cleanParkPose(pose); if (!p || !v?.modelId) return false;
+  const { len, wid } = vehicleCells(v.modelId), box = poseBox(p.x, p.z, p.yaw, len, wid), ga = cw.P.garage;
+  const inGarage = inside(ga, box), onLawn = inside(cw.lawn, box);
+  if (!inGarage && !onLawn) return false;
+  const o = doorLink(room).outside, doorstep = { x0: o.x - APRON, x1: o.x + APRON, z0: o.z - APRON, z1: o.z + APRON };
+  if (cw.solids.some((k) => hit(k, grow(box, inGarage ? -0.02 : 0.15)) && !(inGarage && k.kind === "house"))) return false;
+  if (onLawn && !inGarage && [grow(cw.drive, 0.35), grow(ga, 0.1), doorstep].some((k) => hit(k, grow(box, 0.15)))) return false;
+  if (slots.some((s) => hit(poseBox(s.x, s.z, s.yaw, s.len, s.wid), grow(box, inGarage ? 0.02 : 0.15)))) return false;
+  const me = { ...v, ...p, len, wid, garage: inGarage };
+  return !!exitRoute(cw, [...slots, me], me);
+}
+
 export function planParking(room, vehicles = [], items = []) {
   const cw = compoundWorld(room, items), { lawn, drive, target } = cw;
   // the ground outside the front door is for people: nothing parks across it, so the way out of the house is never shut (a person walks round the vehicles from there)
   const o = doorLink(room).outside, doorstep = { x0: o.x - APRON, x1: o.x + APRON, z0: o.z - APRON, z1: o.z + APRON };
   const keepOut = [...cw.solids, grow(drive, 0.35), grow(cw.P.garage, 0.1), doorstep], bodyOf = (s) => poseBox(s.x, s.z, s.yaw, s.len, s.wid);
-  // the garage first: vehicle n stands in bay n, tidy and square, every one with the lane open in front of its nose
-  const inGarage = vehicles.slice(0, cw.P.bays.length).map((v, n) => { const { len, wid } = vehicleCells(v.modelId); return { ...v, ...bayPose(cw.P, n, len), len, wid, garage: true }; }), rest = vehicles.slice(inGarage.length);
+  // a vehicle the player left somewhere (v.saved = { x, z, yaw, lot }) stays there while the pose is still valid on this ground (same room and plot, nothing in the way, a way out);
+  // an invalid one is ignored and the vehicle is parked automatically, so a changed room can never leave a vehicle inside a wall
+  const bodyOf0 = (s) => poseBox(s.x, s.z, s.yaw, s.len, s.wid), fixed = [];
+  for (const v of vehicles) {
+    const sv = v.saved; if (!sv || sv.lot !== lotSignature(room)) continue;
+    const pose = cleanParkPose(sv); if (pose && validParkedPose(cw, room, fixed, v, pose)) { const { len, wid } = vehicleCells(v.modelId); fixed.push({ ...v, ...pose, len, wid, garage: inside(cw.P.garage, poseBox(pose.x, pose.z, pose.yaw, len, wid)), fixed: true }); }
+  }
+  // the garage first: vehicle n stands in bay n, tidy and square, every one with the lane open in front of its nose (a bay a saved vehicle already stands in is skipped)
+  const loose = vehicles.filter((v) => !fixed.some((f) => String(f.id) === String(v.id))), inGarage = [];
+  for (let n = 0; n < cw.P.bays.length && inGarage.length < loose.length; n++) {
+    const v = loose[inGarage.length], { len, wid } = vehicleCells(v.modelId), bp = bayPose(cw.P, n, len), b = { ...v, ...bp, len, wid, garage: true };
+    if (fixed.some((f) => hit(bodyOf0(f), grow(bodyOf0(b), 0.05)))) continue; inGarage.push(b);
+  }
+  const rest = loose.slice(inGarage.length);
   // candidate centres on a half-cell grid over the lawn, nearest the gate first (ties: west to east, so the result never depends on iteration luck)
   const cand = [];
   for (let x = lawn.x0; x <= lawn.x1; x += 0.5) for (let z = lawn.z0; z <= lawn.z1; z += 0.5) cand.push({ x, z, d: Math.hypot(x - target.x, z - target.z) });
@@ -129,7 +169,7 @@ export function planParking(room, vehicles = [], items = []) {
   const hasDoorRoom = (list, s) => hasStandSpot(walkWorld(cw, list), s);
   /** Parks what it can with these passes, in order. While a pass has `door` set, a vehicle is only parked where a person can stand at one of its doors (the door able to swing), and where it takes that away from no vehicle already parked nearby. */
   function park(passes) {
-    const slots = [...inGarage], todo = [...rest];
+    const slots = [...fixed, ...inGarage], todo = [...rest];
     for (const { gap, strip, door } of passes) {
       if (!todo.length) break;
       for (const v of [...todo]) {

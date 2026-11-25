@@ -905,6 +905,14 @@ model OwnedCar {
   color       String    @default("")
   pricePaid   BigInt
   createdAt   DateTime  @default(now())
+  // Where the player last left this car in their home compound (lib3d/compoundParking.js: cells from the plot's corner, heading in radians), `parked` true while that is
+  // meant to stand. parkLot is the room-and-plot signature it was made for: when the room or plot changes the pose is void and the car is parked automatically.
+  parked      Boolean   @default(false)
+  parkX       Float?
+  parkZ       Float?
+  parkYaw     Float?
+  parkLot     String?
+  parkedAt    DateTime?
   character   Character @relation(fields: [characterId], references: [id])
 
   @@unique([characterId, modelId])

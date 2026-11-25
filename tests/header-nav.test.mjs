@@ -9,8 +9,9 @@ for (const word of [/week/i, /level/i, /happ/i, /mood/i]) assert.ok(!word.test(h
 assert.ok(header.includes("naira(st.balanceKobo)"), "cash stays in the header");
 const css = rd("src/app/globals.css"), nav = rd("components/bottom-nav.css");
 assert.match(css, /height: var\(--hud-bar-h, 36px\)/, "header is 36px");
-assert.match(nav, /--nav-bar-h: 44px/, "bar is a slim 44px");
-assert.match(nav, /min-height: 36px/, "tabs are 36px tall");
+assert.match(nav, /:root \{[^}]*--nav-bar-h: 32px/, "bar is a compact 32px");
+assert.match(nav, /:root \{[^}]*--nav-btn-h: 28px/, "tabs are 28px tall");
+assert.match(nav, /min-height: var\(--nav-btn-h\)/, "tabs take their height from the token");
 assert.match(rd("components/BottomNav.js"), /nav-handset/, "the phone button is drawn as a handset");
 assert.match(nav, /prefers-reduced-motion: reduce/, "nav respects reduced motion");
 const bet = rd("lib/bet/betClient.js"), games = rd("lib/games/gamesClient.js");

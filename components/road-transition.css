@@ -6,3 +6,5 @@
 .road-tr i::after { content: ""; display: block; width: 40%; height: 100%; border-radius: 3px; background: #3fd08a; animation: road-tr-run 1.1s ease-in-out infinite; }
 @keyframes road-tr-run { 0% { transform: translateX(-110%); } 100% { transform: translateX(260%); } }
 @media (prefers-reduced-motion: reduce) { .road-tr { transition-duration: 1ms; } .road-tr i::after { animation: none; width: 100%; } }
+.road-tr-snap { display: block; background: #04060b; transition: opacity 240ms ease-out; }
+.road-tr-snap img { display: block; width: 100%; height: 100%; object-fit: cover; user-select: none; }

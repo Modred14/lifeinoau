@@ -54,7 +54,7 @@ export function createTripFlow(env, o) {
   let plan = o.plan, B = plan.B, enterable = o.enterable !== false;   // enterable: the place has a door to open (an open-air place, a statue or a gate has none: you simply stop there)   // dims: { len, wid, id (the car model, for its handling), seat, driver } of the model, when it is not the standard size (a purchased car)
   const driven = !!plan.driven, ownCar = mode === "car" && !plan.driven, vehicleTrip = mode !== "trek", kind = plan.kind;
   const walker = new Walker(world, nav, { x: plan.start.x, z: plan.start.z, hx: 0, hz: 1 });
-  const S = { phase: "intro", t: 0, time: 0, eta: plan.secs, notice: null, ended: false, entered: false, pay: "none", doorK: 0, boardK: 0, alightK: 0, speed: 0, vehDoorK: 0, vehDoorSide: -1, seatK: 0, exiting: false, canExit: false, canEnter: false, canClose: false,
+  const S = { phase: "intro", t: 0, time: 0, eta: plan.secs, notice: null, ended: false, entered: false, pay: "none", doorK: 0, boardK: 0, alightK: 0, speed: 0, vehDoorK: 0, vehDoorSide: -1, seatK: 0, exiting: false, canExit: false, canEnterOther: false, canEnter: false, canClose: false,
     door: "closed", hinge: "left", canOpen: false, canGoIn: false, auto: false, target: 0, hits: 0, down: false, struck: 0 };   // door: "closed" | "back" | "opening" | "open" | "closing"
   let free = !!o.free;   // a free drive: your own car on the road with no destination yet (leaving your compound). Nothing is "arrived at" until a place is chosen (retarget).
   let hero = null, own = null, inProf = null, heroT = 0, spawnAt = 0, spawnTries = 0, waitedForVehicle = 0, boardFrom = null, alightTo = null, lastEta = -1, retargeted = false, approachDoor = null, departed = false, alightFrom = null;
@@ -275,8 +275,10 @@ export function createTripFlow(env, o) {
     moveWalkerTo(x, z, dt, exitTo.door.x - exitSeat.x, exitTo.door.z - exitSeat.z); S.alightK = Math.min(1, t / T);
     if (t < T) return;
     person.seated = false; S.seatK = 0; walker.ignore = null; walker.place(exitTo.x, exitTo.z);
-    if (exitArrival) { S.vehDoorK = 0; startWalk(); } else { S.vehDoorK = 1; doorTarget = 1; closeAsk = false; go("afoot"); }
+    if (exitArrival) { S.vehDoorK = 0; startWalk(); } else { S.vehDoorK = 1; doorTarget = 1; closeAsk = false; go("afoot"); if (ownCar) { try { o.onParked?.(heroPose()); } catch { /* a refused save must never stop the game */ } } }   // your own car now stands where you left it
   }
+  /** Enter was pressed beside another of the player's own parked cars: hand it to the trip owner (the map), which swaps the active car and restarts the trip on foot beside it. */
+  function enterOther() { const slot = o.otherCar?.(walker.x, walker.z); if (!slot) return false; walker.vx = walker.vz = 0; try { o.onEnterOther?.(slot, { x: walker.x, z: walker.z, hx: walker.hx, hz: walker.hz }); } catch { /* a refused switch leaves them standing */ } return true; }
   function startReenter() {
     const hp = heroPose(); doorSide = chooseDoorSide(); S.vehDoorSide = doorSide; reTo = doorStand(hp);
     const r = nav.plan(walker.x, walker.z, reTo.x, reTo.z, { ignore: new Set(["own"]) }); if (!r.ok) { notice("You cannot get to the car door from here."); return; }
@@ -445,6 +447,7 @@ export function createTripFlow(env, o) {
         walker.step(dt, walkIn); const d = distToCar(walker.x, walker.z);
         if (inp.close || d > CLOSE_AUTO_M) closeAsk = true; if (closeAsk) doorTarget = 0; stepDoor(dt, doorTarget);
         if (inp.enter && d < ENTER_REACH_M && !walker.tumble) { startReenter(); break; }
+        if (inp.enter && !walker.tumble && enterOther()) break;
         if (!walker.tumble && Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z) < 1.2) { walker.vx = walker.vz = 0; doorTarget = 0; payFare(); go("door"); }
         break; }
       case "reenter": {
@@ -466,7 +469,8 @@ export function createTripFlow(env, o) {
         break; }
       case "roam": { // on foot, free, at the door you came out of
         walker.step(dt, walkIn);
-        if (own && inp.enter && distToCar(walker.x, walker.z) < ENTER_REACH_M && !walker.tumble) { startReenter(); break; }   // your own car is parked here (the compound): get in it
+        if (own && inp.enter && distToCar(walker.x, walker.z) < ENTER_REACH_M && !walker.tumble) { startReenter(); break; }
+        if (inp.enter && !walker.tumble && enterOther()) break;   // another car of yours parked here: the map swaps it in as the trip's own car   // your own car is parked here (the compound): get in it
         if (S.door === "closing") { S.doorK = Math.max(0, S.doorK - (dt / DOOR_OPEN) * 1.4); setLeaf(); if (S.doorK <= 0) shutDoor(); }   // the leaf swings shut behind them (the exit spot is out of its way)
         const dGoal = Math.hypot(walker.x - plan.goal.x, walker.z - plan.goal.z); if (dGoal > ROAM_REARM_M) roamArmed = true;
         // back at the door you came out of: the same door sequence as arriving (Open Door, step in). Walking elsewhere never gets here.
@@ -477,7 +481,7 @@ export function createTripFlow(env, o) {
     if (S.phase === "door" || S.phase === "enter") { doorTarget = 0; stepDoor(dt, 0); }
     S.auto = !!walker.path && walker.mode === "auto" && ["trek", "afoot", "walk"].includes(S.phase);
     S.canFly = S.phase === "drive" && !!own?.P?.flies; S.airborne = !!(own?.air && isAirborne(own.air)); S.alt = own ? Math.round(own.h) : 0; S.fan = own?.air ? fanOut(own.air) : 0; S.fanSpin = own?.air?.spin ?? 0;
-    S.canExit = S.phase === "drive" && !exitAsk && !S.airborne; S.canEnter = (S.phase === "afoot" || (S.phase === "roam" && !!own)) && distToCar(walker.x, walker.z) < ENTER_REACH_M; S.canClose = S.phase === "afoot" && S.vehDoorK > 0.02 && doorTarget === 1;
+    S.canExit = S.phase === "drive" && !exitAsk && !S.airborne; S.canEnter = (S.phase === "afoot" || (S.phase === "roam" && !!own)) && distToCar(walker.x, walker.z) < ENTER_REACH_M; S.canEnterOther = (S.phase === "afoot" || S.phase === "roam") && !S.canEnter && !walker.tumble && !!o.otherCar?.(walker.x, walker.z); S.canClose = S.phase === "afoot" && S.vehDoorK > 0.02 && doorTarget === 1;
     // the person
     person.x = walker.x; person.z = walker.z; person.hx = walker.hx; person.hz = walker.hz; S.speed = S.phase === "drive" ? own.v : S.phase === "ride" && hero ? hero.v : walker.speed;
     if (!person.seated && S.phase !== "board") sim.setExternal("player", { x: walker.x, z: walker.z, hx: walker.hx, hz: walker.hz, len: 0.6, wid: 0.6, v: walker.speed }); else sim.removeExternal("player");
@@ -515,6 +519,16 @@ export function createTripFlow(env, o) {
     const a = portal.entrance; walker.cancelRoute(); walker.ignore = null; walker.x = a.x; walker.z = a.z; walker.vx = walker.vz = 0; walker.speed = 0; walker.hx = portal.door.nx; walker.hz = portal.door.nz;
     person.visible = false; go("leave"); return { ok: true };
   }
+  /**
+   * A trip that begins on foot at an EXACT place of the compound (the home screen's "TO THE STREET" hands the pose over): the person is put there, facing that way, the door is shut
+   * behind them and they are free at once, with no walk out of the door. `portal` is the building's door (it is still where they come back to). `p` = { x, z, hx, hz } in metres.
+   */
+  function roamAt(p, portal) {
+    const fresh = S.phase === "intro" && S.t === 0; if (S.ended || !fresh || !p) return { ok: false, reason: "phase" };
+    arrivals++; holdT = 0; enterPts = null; free = true; closeAsk = false; S.entered = false; S.pay = "none"; if (portal?.hinge != null) S.hinge = portal.hinge; shutDoor();
+    walker.cancelRoute(); walker.ignore = null; walker.x = p.x; walker.z = p.z; walker.vx = walker.vz = 0; walker.speed = 0; walker.hx = p.hx; walker.hz = p.hz;
+    person.visible = true; startRoam(); S.door = "closed"; return { ok: true };
+  }
   function startRoam() { go("roam"); roamArmed = false; S.door = "closing"; S.target++; }
 
   /** Seconds to go, by the planner's own arithmetic from where everything is now. */
@@ -545,6 +559,8 @@ export function createTripFlow(env, o) {
   if (o.spawn && o.parked && ownCar) bootAt(o.parked, o.spawn.v);   // driving out of the compound gate: at the wheel, already rolling, on the compound ground
   else if (o.spawn && ownCar) bootDrive(o.spawn);
   else if (o.parked && ownCar) makeOwnAt(o.parked);   // the own car waits where it is parked (the compound)
-  if (o.roam) exitBuilding(o.roam);   // a trip that begins on the doorstep: the person walks out of the door at once (o.roam is the building's portal)
-  return { update, dispose, state: S, get free() { return free; }, get roaming() { return S.phase === "roam"; }, exitBuilding, walker, person, get plan() { return plan; }, kind, pressDoor, enterNow, retarget: retargetTrip, stopAuto, get doorFrame() { return dframe; }, get hero() { return hero; }, get approachDoor() { return approachDoor ?? plan.doorIn; }, get own() { return own; }, get vehicle() { return own ?? hero; }, eta: () => S.eta, remainMetres, cancel: () => end("cancelled"), get driving() { return S.phase === "drive"; } };
+  if (o.roam && o.roamPose) roamAt(o.roamPose, o.roam);   // the home screen's exact pose: on foot right there, no walk out of the door
+  else if (o.roam) exitBuilding(o.roam);
+  if (o.autoEnter && own && S.phase === "roam") startReenter();   // restarted beside the car they chose: they walk to its door and get in   // a trip that begins on the doorstep: the person walks out of the door at once (o.roam is the building's portal)
+  return { update, dispose, state: S, roamAt, get free() { return free; }, get roaming() { return S.phase === "roam"; }, exitBuilding, walker, person, get plan() { return plan; }, kind, pressDoor, enterNow, retarget: retargetTrip, stopAuto, get doorFrame() { return dframe; }, get hero() { return hero; }, get approachDoor() { return approachDoor ?? plan.doorIn; }, get own() { return own; }, get vehicle() { return own ?? hero; }, eta: () => S.eta, remainMetres, cancel: () => end("cancelled"), get driving() { return S.phase === "drive"; } };
 }

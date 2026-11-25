@@ -5,7 +5,7 @@
 // Browser side (three.js). The pure parts (lot, site, collision) are in homeLot.js / homeSite.js and are tested headlessly.
 import * as THREE from "three";
 import { buildPlot, GROUND } from "./plot3d.js";
-import { buildHouseShell, WALL_T } from "./houseShell.js";
+import { buildHouseShell, WALL_T, entranceOf, HOLE_W } from "./houseShell.js";
 import { buildFurniture } from "./furnitureModels.js";
 import { tree } from "./trees.js";
 import { makeVehicle } from "./vehicles.js";
@@ -25,9 +25,9 @@ const LAWN_Y = -0.3;      // an outdoor piece stands this far down from the floo
  * `activeId` is the vehicle the trip itself draws and drives (the others are parked here as scenery with a solid body).
  * Returns null when there is no free lot, else { site, lot, portal, B, drivable, activeSlot, update(dt, x, z), dispose() }.
  */
-export function createHomeCompound({ parent, svc, room, items = [], vehicles = [], anchor, seed = "", activeId = null }) {
+export function createHomeCompound({ parent, svc, room, items = [], vehicles = [], anchor, seed = "", activeId = null, interior = false }) {
   const lot = homeLot(svc, room, anchor, seed); if (!lot) return null;
-  const site = homeSite(room, items, vehicles, lot), portal = homePortal(room, site), F = site.F;
+  const site = homeSite(room, items, vehicles, lot, { interior }), portal = homePortal(room, site), F = site.F;
   removeSiteCollision(svc.world); addSiteCollision(svc.world, site);
   // the house is its footprint exactly (the solid the walker plans round and the door opens in), not the wider apron the vehicles keep clear
   const root = new THREE.Group(); root.name = "home-compound"; parent.add(root);
@@ -37,7 +37,25 @@ export function createHomeCompound({ parent, svc, room, items = [], vehicles = [
   const plot = buildPlot(room, { mat, tree, embedded: true }); frame.add(plot.group);
   const shell = buildHouseShell(room, WALL_H); frame.add(shell.group);
   // the walls behind the cladding: a solid house (nobody goes inside here; the door leads to the home screen), a shade inside the cladding so the two never fight
-  const W = room.w, D = room.d, core = new THREE.Mesh(new THREE.BoxGeometry(W + WALL_T * 2 - 0.1, WALL_H, D + WALL_T * 2 - 0.1), mat("#2a2622", { roughness: 1 })); core.position.y = WALL_H / 2; frame.add(core);
+  const W = room.w, D = room.d, indoor = [];
+  if (!interior) { const core = new THREE.Mesh(new THREE.BoxGeometry(W + WALL_T * 2 - 0.1, WALL_H, D + WALL_T * 2 - 0.1), mat("#2a2622", { roughness: 1 })); core.position.y = WALL_H / 2; frame.add(core); }
+  else { // a house you can walk into: the inner faces of the four walls (a doorway in the front one) and the things that stand indoors
+    const ent = entranceOf(room), wallM = mat("#dcd5c5", { roughness: 0.95 }), HW = HOLE_W / 2, DOOR_TOP = 2.32, T = 0.06;
+    const interiorG = new THREE.Group(); interiorG.name = "home-interior"; frame.add(interiorG);
+    const panel = (w, h, x, y, z, rotY) => { const g = new THREE.Mesh(new THREE.BoxGeometry(w, h, T), wallM); g.position.set(x, y, z); g.rotation.y = rotY; g.receiveShadow = true; interiorG.add(g); };
+    const sides = { N: [0, -D / 2 + T / 2, 0, W], S: [0, D / 2 - T / 2, 0, W], W: [-W / 2 + T / 2, 0, Math.PI / 2, D], E: [W / 2 - T / 2, 0, Math.PI / 2, D] };
+    for (const [k, [x, z, rot, len]] of Object.entries(sides)) {
+      if (k !== ent.side) { panel(len, WALL_H, x, WALL_H / 2, z, rot); continue; }
+      const along = k === "S" || k === "N" ? ent.cx : ent.cz, put = (lo, hi, y, h) => { if (hi - lo < 0.02) return; const c = (lo + hi) / 2; if (rot) panel(hi - lo, h, x, y, z + c, rot); else panel(hi - lo, h, x + c, y, z, rot); };
+      put(-len / 2, along - HW, WALL_H / 2, WALL_H); put(along + HW, len / 2, WALL_H / 2, WALL_H); put(along - HW, along + HW, DOOR_TOP + (WALL_H - DOOR_TOP) / 2, WALL_H - DOOR_TOP);
+    }
+    // the things placed indoors, where the home screen puts them
+    for (const it of items) {
+      if (!it || it.placed === false || it.x == null || !ITEMS[it.key] || isOutside(room, it)) continue;
+      const g = buildFurniture(it.key), [w, d] = sizeOf(it.key, it.rot ?? 0);
+      g.position.set(it.x + w / 2 - W / 2, 0, it.z + d / 2 - D / 2); g.rotation.y = (-(it.rot ?? 0) * Math.PI) / 2; indoor.push(g); interiorG.add(g);
+    }
+  }
   const floor = new THREE.Mesh(new THREE.BoxGeometry(W + 0.3, 0.34, D + 0.3), mat("#bdb6a6", { roughness: 1 })); floor.position.y = -0.17; frame.add(floor);
 
   // whatever is out on the lawn (the same pieces, the same places as the home screen)
@@ -58,18 +76,22 @@ export function createHomeCompound({ parent, svc, room, items = [], vehicles = [
     const id = "park:" + s.id; svc.world.setBody(id, { x: s.x, z: s.z, hx: s.hx, hz: s.hz, hl: s.len / 2, hw: s.wid / 2 }); bodies.push(id);
   }
 
-  const doorAt = portal.door;
+  const doorAt = portal.door; let view = "chase", mix = 1, inNow = false;
+  /** "chase": third person; the roof and the outer skin of the walls melt away while the person is inside. "cutaway": roof and outer skin are always off, so the whole inside can be seen. */
+  const setView = (v) => { view = v === "cutaway" ? "cutaway" : "chase"; };
   function update(dt, px, pz) { // the front door opens as someone comes close to it, from either side
     const near = Math.min(1, Math.max(0, 1 - (Math.hypot(px - doorAt.x, pz - doorAt.z) / CELL_M - 0.9) / 1.9));
-    shell.update(dt, { mix: 1, near });
+    inNow = interior && site.insideHouse(px, pz);
+    const want = !interior ? 1 : view === "cutaway" ? 0 : inNow ? 0 : 1; mix += (want - mix) * (1 - Math.exp(-dt * 6));
+    shell.update(dt, { mix: Math.abs(want - mix) < 0.01 ? want : mix, near });
   }
   function dispose() {
     for (const id of bodies) svc.world.removeBody(id);
     removeSiteCollision(svc.world);
     parent.remove(root); for (const c of cars) { parent.remove(c.root); c.dispose?.(); }
     plot.group.traverse((o) => { if (!o.geometry?.userData?.shared) o.geometry?.dispose?.(); }); plot.release?.(); shell.dispose();
-    frame.traverse((o) => { if (o.parent && outdoor.includes(o)) o.traverse((q) => { q.geometry?.dispose?.(); }); }); for (const m of mats) m.dispose();
+    frame.traverse((o) => { if (o.parent && (outdoor.includes(o) || indoor.includes(o))) o.traverse((q) => { q.geometry?.dispose?.(); }); }); for (const m of mats) m.dispose();
   }
   const B = homeBuilding(site, portal);
-  return { site, lot, portal, B, drivable: site.drivable, activeSlot, update, dispose, root };
+  return { site, lot, portal, B, drivable: site.drivable, activeSlot, update, dispose, root, setView, get view() { return view; }, get inside() { return inNow; } };
 }

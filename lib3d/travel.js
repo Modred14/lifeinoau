@@ -21,7 +21,7 @@ import { SWING } from "./doorway.js";
 import { createTripFlow } from "./tripflow.js";
 import { portalFor } from "./buildingPortals.js";
 import { createHomeCompound } from "./homeCompound.js";
-import { gateStand } from "./homeSite.js";
+import { gateStand, poseOnSite, cellsPose, nearestParkedSlot, pinnedVehicles, indoorSpawn } from "./homeSite.js";
 import { ROAD_TOP } from "./roadsurface.js";
 import { wheelContacts } from "./vehiclepose.js";
 import { rigSuspension, leanBody } from "./suspension.js";
@@ -100,10 +100,12 @@ const WHY = { noroad: "No road reaches that place, so no ride can take you there
  * Returns { setTravellers(list), pos(), route(), plan, dispose(), horn() }. Resolves once the scene is set up. Throws an Error with .reason when the trip cannot be planned.
  */
 export async function startTrip(env, o) {
+  const mk = (n) => { try { performance.mark("oau:st-" + n); } catch { /* no timing */ } }; mk("begin");
   const { stage, campus, light, data } = env, cam = stage.camera, ctl = stage.controls;
   const fromP = resolvePlace(data, o.from) ?? resolvePlace(data, "senate"), toP = resolvePlace(data, o.to);
   if (!toP) throw Object.assign(new Error("That place has no position on the map yet."), { reason: "error" });
   const svc = await loadServices(data), net = svc.net, base = paintBase(data, net, svc.graph), input = o.input ?? {}, mode = o.mode;
+  mk("services");
   let plan = planTrip(svc, { from: fromP, to: toP, mode, driver: !!o.driver }), curTo = toP.id, enterable = o.isEnterable ? !!o.isEnterable(toP.id) : true;
   if (!plan.ok) { const e = Object.assign(new Error(WHY[plan.reason] ?? "That trip cannot be planned."), { reason: plan.reason === "unreachable" ? "unreachable" : "noroad", text: WHY[plan.reason] }); throw e; }
   let B = plan.B; const driven = !!plan.driven, auto = driven;
@@ -114,9 +116,9 @@ export async function startTrip(env, o) {
   const disposers = []; let alive = true;
 
   // ---- the player's own home compound, standing on its lot beside a real road: one world, so the door, the yard, the garage and the street need no loading between them ----
-  let home = null;
+  let home = null, homeView = "chase";
   if (o.home) {
-    try { home = createHomeCompound({ parent: world, svc, room: o.home.room, items: o.home.items ?? [], vehicles: o.home.vehicles ?? [], anchor: fromP, seed: o.home.seed ?? "", activeId: o.home.activeId ?? null }); } catch (e) { console.warn("home compound", e); home = null; }
+    try { home = createHomeCompound({ parent: world, svc, room: o.home.room, items: o.home.items ?? [], vehicles: o.home.vehicles ?? [], anchor: fromP, seed: o.home.seed ?? "", activeId: o.home.activeId ?? null, interior: !!o.homeInterior }); } catch (e) { console.warn("home compound", e); home = null; }
     if (home) { disposers.push(() => home.dispose()); const e = home.portal.exit; plan = { ...plan, B: home.B, goal: { x: e.x, z: e.z }, start: { x: e.x, z: e.z } }; B = plan.B; }
   }
 
@@ -135,12 +137,15 @@ export async function startTrip(env, o) {
   bay.add(bayMesh); bay.position.y = 0.2; bay.visible = false; world.add(bay); disposers.push(() => { bayMesh.geometry.dispose(); bayMesh.material.dispose(); });
   const setBay = () => { if (plan.drop) { bay.position.set(plan.drop.x, 0.2, plan.drop.z); bay.rotation.y = Math.atan2(plan.drop.hx, plan.drop.hz); } };
 
+  mk("home");
   // ---- the person and the vehicle ----
   let avatar = null; const mkAvatar = async () => { try { return await createAvatar(o.look, o.gender); } catch { const w = makeWalker("#7f5236", "#1f2f55", "#a8946a"); return { root: w.root, play: () => false, has: () => false, setSpeed() {}, update: () => {}, dispose() {}, walker: w }; } };
   avatar = await mkAvatar(); if (!alive) { avatar.dispose(); return null; } world.add(avatar.root); disposers.push(() => { world.remove(avatar.root); avatar.dispose(); });
+  mk("avatar");
   let vehicle = null;
   if (mode !== "trek") { const m = mode === "keke" ? makeKeke() : mode === "bus" ? makeBus() : makeVehicle(o.car, o.carColor); if (plan.driven && (m.driver ?? KINDS[plan.kind].driver)) addDriver(m, m.driver ?? KINDS[plan.kind].driver, mode === "bus" ? "#c0762b" : "#3b6ea5"); m.root.visible = false; rigSuspension(m); vehicle = m; world.add(m.root); disposers.push(() => { world.remove(m.root); if (m.dispose) m.dispose(); else m.root.traverse((x) => x.geometry?.dispose?.()); }); }
 
+  mk("vehicle");
   // name tags for real players (the ones waiting at the destination and the ones on the road); never for you, never for NPCs
   const tags = createPlayerTags({ container: stage.renderer.domElement.parentElement, camera: stage.camera, selfName: o.selfName ?? "", unit: S, maxDist: 45, fadeFrom: 30 });
   disposers.push(() => tags.dispose());
@@ -171,9 +176,12 @@ export async function startTrip(env, o) {
   try { const { createTripAudio } = await import("../lib/audio/tripAudio.js"); audio = createTripAudio({ places: (data.places ?? []).filter((p) => p.x != null && !p.offmap).map((p) => ({ x: p.x, z: p.z, kind: p.kind })), low: densityFor() === DENSITY_LOW }); disposers.push(() => audio.dispose()); } catch (e) { console.warn("trip sound unavailable", e); }
   let hornWas = false;
 
+  mk("audio");
   // ---- the journey ----
-  const homeParked = () => { const d = vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width } : { len: 4.5, wid: 1.85 }; if (o.spawn) return { ...gateStand(home.site), ...d }; const a = home.activeSlot; return a ? { x: a.x, z: a.z, hx: a.hx, hz: a.hz, len: a.len, wid: a.wid } : null; };
-  const flow = createTripFlow({ svc, sim: traffic.sim }, { plan, enterable, dims: vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width, id: vehicle.id, seat: vehicle.seat, driver: vehicle.driver, wheels: wheelContacts(vehicle) } : null, rnd: Math.random, free: !!o.free, spawn: o.spawn ?? null, onArrive: () => o.onArrive?.() ?? true, onEnter: () => o.onEnter?.(), holdEnter: () => !!o.holdEnter?.(), roam: o.roam ? (home ? home.portal : portalFor(svc, toP)) : null, drivable: home?.drivable ?? null, parked: home ? homeParked() : null, onEnd: (why) => { if (alive) o.onEnd?.(why); }, onNotice: (m) => o.onNotice?.(m) });
+  const inLot = (site, c) => { const pl = site.cw.P.plot; return c.x >= pl.x0 && c.x <= pl.x1 && c.z >= pl.z0 && c.z <= pl.z1; };   // the car was left inside the player's own plot
+  const startPose = home && o.homeInterior && !o.pose && !o.spawn ? indoorSpawn(home.portal) : home && o.pose ? poseOnSite(home.site, o.pose, { car: !!o.spawn }) : null; // the exact place the home screen ended on, when it is a valid one on this lot (else the doorstep or the gate)
+  const homeParked = () => { const d = vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width } : { len: 4.5, wid: 1.85 }; if (o.spawn) return { ...(startPose ?? gateStand(home.site)), ...d }; const a = home.activeSlot; return a ? { x: a.x, z: a.z, hx: a.hx, hz: a.hz, len: a.len, wid: a.wid } : null; };
+  const flow = createTripFlow({ svc, sim: traffic.sim }, { plan, enterable, dims: vehicle && mode === "car" ? { len: vehicle.length, wid: vehicle.width, id: vehicle.id, seat: vehicle.seat, driver: vehicle.driver, wheels: wheelContacts(vehicle) } : null, rnd: Math.random, free: !!o.free, spawn: o.spawn ?? null, onArrive: () => o.onArrive?.() ?? true, onEnter: () => o.onEnter?.(), holdEnter: () => !!o.holdEnter?.(), roam: o.roam ? (home ? home.portal : portalFor(svc, toP)) : null, roamPose: o.roam && !o.spawn ? startPose : null, autoEnter: !!o.autoEnter, otherCar: home ? (x, z) => nearestParkedSlot(home.site, x, z, 3.2, o.home?.activeId ?? null) : undefined, onEnterOther: home && o.onSwitchCar ? (slot, at) => o.onSwitchCar({ id: slot.id, pose: cellsPose(home.site, at), pinned: pinnedVehicles(home.site, o.home.room, o.home.vehicles ?? []) }) : undefined, onParked: home && o.onHomePark ? (p) => { const c = cellsPose(home.site, p); if (inLot(home.site, c)) o.onHomePark(c); } : undefined, drivable: home?.drivable ?? null, parked: home ? homeParked() : null, onEnd: (why) => { if (alive) o.onEnd?.(why); }, onNotice: (m) => o.onNotice?.(m) });
   disposers.push(() => flow.dispose()); setBay();
   const P = flow.person, F = flow.state, WK = flow.walker;
   let camYaw = Math.atan2(-(plan.start.x - (plan.doorIn?.x ?? plan.goal.x)), -(plan.start.z - (plan.doorIn?.z ?? plan.goal.z))), userYaw = 0, userPitch = 0, userAt = -9, time = 0, hornT = 0, lastState = 0, camBack = CAM.walk.back, zoomW = 1, zoomV = 1, leadX = 0, leadZ = 0;
@@ -209,7 +217,7 @@ export async function startTrip(env, o) {
     hornNow = vr.horn;
     return { fwd: Math.max(kk.up, input.jy > 0 ? input.jy : 0), back: Math.max(kk.down, input.jy < 0 ? -input.jy : 0), right: Math.max(kk.right, input.jx > 0 ? input.jx : 0) - Math.max(kk.left, input.jx < 0 ? -input.jx : 0), run: !!kk.run || !!input.run,
       gas: vr.gas, brake: vr.brake, steer: vr.steer, fly: drive && (flyBtn || flyKey), climb: vr.climb,
-      exit: drive && (exitBtn || act), enter: afoot && (enterBtn || (act && F.canEnter)), close: afoot && (closeBtn || (act && !F.canEnter && F.canClose)),
+      exit: drive && (exitBtn || act), enter: (afoot || F.phase === "roam") && (enterBtn || (act && (F.canEnter || F.canEnterOther))), close: afoot && (closeBtn || (act && !F.canEnter && F.canClose)),
       door: atDoor && (doorBtn || (act && F.door === "closed")), goIn: atDoor && (goInBtn || (act && F.door === "open")), stop: stopBtn };   // Open Door / Go in / stop the automatic walk: the buttons, and E or F for the door
   };
 
@@ -275,11 +283,12 @@ export async function startTrip(env, o) {
     if (inVeh && !pointer.active && time - userAt > 1.2) { userYaw *= Math.exp(-dt * 2.2); userPitch *= Math.exp(-dt * 1.4); }
     if (!inVeh) userYaw *= Math.exp(-dt * 6);
     const fw = frame({ inVeh: false, speed: 0, zoom: zoomW, pitch: userPitch }), fv = frame({ inVeh: true, speed: sp, zoom: zoomV, pitch: userPitch }), fr = { back: lerp(fw.back, fv.back, m), height: lerp(fw.height, fv.height, m), aim: lerp(fw.aim, fv.aim, m), fov: lerp(fw.fov, fv.fov, m) };
+    const cut = homeView === "cutaway" && !!home && !inVeh; if (cut) { fr.back = Math.min(fr.back, 4.5); fr.height = Math.max(fr.height, 12); fr.aim = 0.4; }   // the house seen from above, roof off: the whole inside in view
     const yaw = camYaw + userYaw, bx = Math.sin(yaw), bz = Math.cos(yaw);
     camPt.x = tgt.x; camPt.z = tgt.z;
     // a wall between the person and the camera (centre and either side, so corners too) pulls the camera in at once; it eases back out when the wall is gone
     vehH = ease(vehH, v && flow.own ? (v.h ?? 0) * m : 0, 5, dt);
-    camBack = followBack(camBack, clearBack(vehH > 2.5 ? null : svc.world, tgt.x, tgt.z, bx, bz, fr.back), dt);   // high on the deck the walls below are not in the camera's way
+    camBack = followBack(camBack, clearBack(vehH > 2.5 || cut ? null : svc.world, tgt.x, tgt.z, bx, bz, fr.back), dt);   // high on the deck the walls below are not in the camera's way
     const hgt = fr.height * (0.7 + 0.3 * Math.min(1, camBack / fr.back)), cx = tgt.x + bx * camBack, cz = tgt.z + bz * camBack, k = 1 - Math.exp(-dt * (time < 1.4 ? 3.2 : 12)), ky = 1 - Math.exp(-dt * (time < 1.4 ? 3.2 : 7));
     cam.position.x += (cx * S - cam.position.x) * k; cam.position.z += (cz * S - cam.position.z) * k; cam.position.y += ((hgt + vehH) * S - cam.position.y) * ky;
     // look a little ahead of a walking person, so where they are going stays in view; smoothed so a change of direction never snaps the view
@@ -346,6 +355,8 @@ export async function startTrip(env, o) {
     tagView: () => { camM.x = cam.position.x / S; camM.y = cam.position.y / S; camM.z = cam.position.z / S; return { me: { x: P.x, z: P.z }, cam: camM, occluded: (it) => sightBlocked(svc.world, heights, camM, it, it.bid) }; }, setTravellers: (l) => traffic.setTravellers(l), pos: () => { const inV = !!flow.vehicle && ["ride", "drive", "paying"].includes(F.phase), p = inV ? flow.vehicle : P; return { x: p.x, z: p.z, h: Math.atan2(p.hx, p.hz), mode: inV ? mode : "trek" }; }, route: () => gd, cancel: () => flow.cancel(),
     /** Walk out of the building the trip went into, through its own door onto its own exit spot (lib3d/buildingPortals.js); the world, traffic and trip carry on. { ok } or { ok: false, reason } */
     exitBuilding() { if (!alive) return { ok: false, reason: "phase" }; const pl = resolvePlace(data, curTo); return flow.exitBuilding(pl ? portalFor(svc, pl) : null); },
+    /** The home's view: "chase" (third person) or "cutaway" (from above, roof off). Only for a trip that has a home compound. */
+    setHomeView(v) { homeView = v === "cutaway" ? "cutaway" : "chase"; home?.setView(homeView); return homeView; }, get homeView() { return homeView; }, get insideHome() { return !!home?.inside; },
     get phase() { return F.phase; },
     horn() { if (hornT > 0) return; hornT = 0.4; o.onHorn?.(); },
     dispose() { if (!alive) return; alive = false; off?.(); for (const d of disposers.reverse()) { try { d(); } catch { /* clean up as much as possible */ } } /* the map may already be torn down (the player tapped Home mid-drive): put the shared scene back as far as it still exists, and never throw */

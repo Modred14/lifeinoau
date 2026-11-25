@@ -12,7 +12,7 @@ const { planTrip } = await import("../lib3d/tripplan.js");
 const { createTripFlow } = await import("../lib3d/tripflow.js");
 const { createTrafficSim } = await import("../lib3d/trafficsim.js");
 const { homeLot, lotFrame, lotShape } = await import("../lib3d/homeLot.js");
-const { homeSite, homePortal, homeBuilding, addSiteCollision, removeSiteCollision } = await import("../lib3d/homeSite.js");
+const { homeSite, homePortal, homeBuilding, addSiteCollision, removeSiteCollision, nearestParkedSlot, pinnedVehicles } = await import("../lib3d/homeSite.js");
 const { exitRoute, planParking } = await import("../lib3d/compoundParking.js");
 const { HOME_PLACE } = await import("../lib/travel.js");
 
@@ -90,8 +90,39 @@ for (const hostel of ["Awo", "Ojaja", "Off-campus", "2-Bedroom Flat", "3-Bedroom
   chk(`${tag} the car drives out of the gate onto the real carriageway (${onRoadAt?.toFixed(1)}s), never inside a wall or another car`, onRoadAt != null && maxPen === 0, `t=${td.toFixed(0)}s pos=${o.x.toFixed(1)},${o.z.toFixed(1)} v=${o.v.toFixed(1)} stuck=${stuck}`);
   const x0 = o.x, z0 = o.z; let tt = 0; while (tt < 6) { flow.update(1 / 30, { gas: 0.7, brake: 0, steer: 0 }); sim.update(1 / 30); tt += 1 / 30; }
   chk(`${tag} and it carries on along the street (the same trip, the free drive continues)`, !end && flow.state.phase === "drive" && flow.free);
-  flow.dispose(); for (const s of site.slots) svc.world.removeBody("park:" + s.id); removeSiteCollision(svc.world);
+  flow.dispose(); for (const s of site.slots) svc.world.removeBody("park:" + s.id); void x0; void z0;
+
+  // a second car of yours: stand beside it, press Enter, the trip hands the swap to its owner; restarted on foot beside it the person walks to its door, gets in and drives out of the gate
+  const slotB = site.slots.find((q) => q.id === "b"), slotA = site.slots.find((q) => q.id === "a");
+  const sideB = { x: slotB.x - slotB.hz * (slotB.wid / 2 + 1.2), z: slotB.z + slotB.hx * (slotB.wid / 2 + 1.2) };
+  chk(`${tag} a parked car of yours is found beside it, and never the active one`, nearestParkedSlot(site, sideB.x, sideB.z, 3.2, "a")?.id === "b" && nearestParkedSlot(site, sideB.x, sideB.z, 3.2, "b") == null || nearestParkedSlot(site, sideB.x, sideB.z, 3.2, "b")?.id === "a");
+  const pins = pinnedVehicles(site, room, cars), pa = pins.find((q) => q.id === "a").saved, pb = pins.find((q) => q.id === "b").saved;
+  chk(`${tag} every car is pinned to the place it stands, so swapping the active car moves nothing`, !!pa && !!pb && planParking(room, pins, []).slots.every((q) => { const o2 = site.slots.find((z) => z.id === q.id), c = pins.find((z) => z.id === q.id).saved; return o2 && Math.abs(q.x - c.x) < 0.01 && Math.abs(q.z - c.z) < 0.01; }));
+  svc.world.setBody("park:a", { x: slotA.x, z: slotA.z, hx: slotA.hx, hz: slotA.hz, hl: slotA.len / 2, hw: slotA.wid / 2 });
+  let asked = null;
+  const f1 = createTripFlow({ svc, sim }, { plan, free: true, drivable: site.drivable, parked: { x: slotA.x, z: slotA.z, hx: slotA.hx, hz: slotA.hz, len: slotA.len, wid: slotA.wid }, roam: portal, roamPose: { x: sideB.x, z: sideB.z, hx: -slotB.hz, hz: slotB.hx }, dims: { len: slotA.len, wid: slotA.wid, id: "a" }, rnd, otherCar: (x, z) => nearestParkedSlot(site, x, z, 3.2, "a"), onEnterOther: (sl) => { asked = sl.id; }, onArrive: () => true, onEnter() {}, onEnd() {}, onNotice() {} });
+  f1.update(1 / 30, {}); chk(`${tag} beside the second car the interaction offers it`, f1.state.canEnterOther === true && f1.state.canEnter === false);
+  f1.update(1 / 30, { enter: true }); chk(`${tag} pressing Enter asks the owner to switch to that car`, asked === "b");
+  f1.dispose(); svc.world.removeBody("park:a");
+  // the restarted trip: car b is the trip's own car, a stands where it was; auto-enter walks to the door
+  svc.world.setBody("park:a", { x: slotA.x, z: slotA.z, hx: slotA.hx, hz: slotA.hz, hl: slotA.len / 2, hw: slotA.wid / 2 });
+  const f2 = createTripFlow({ svc, sim }, { plan, free: true, drivable: site.drivable, parked: { x: slotB.x, z: slotB.z, hx: slotB.hx, hz: slotB.hz, len: slotB.len, wid: slotB.wid }, roam: portal, roamPose: { x: sideB.x, z: sideB.z, hx: -slotB.hz, hz: slotB.hx }, autoEnter: true, dims: { len: slotB.len, wid: slotB.wid, id: "b" }, rnd, otherCar: (x, z) => nearestParkedSlot(site, x, z, 3.2, "b"), onArrive: () => true, onEnter() {}, onEnd() {}, onNotice() {} });
+  let tg = 0; while (f2.state.phase !== "drive" && tg < 15) { f2.update(1 / 30, {}); sim.update(1 / 30); tg += 1 / 30; }
+  chk(`${tag} the second car: they walk to its door and are at the wheel (${tg.toFixed(1)}s)`, f2.state.phase === "drive");
+  const parkB = planParking(room, pins, []).slots, slotPB = parkB.find((q) => q.id === "b"), routeB = exitRoute(site.cw, parkB, slotPB), rawB = routeB.map((p) => F.toWorld(Array.isArray(p) ? p[0] : p.x, Array.isArray(p) ? p[1] : p.z)), wpB = [rawB[0]], ob = f2.own;
+  for (let i = 1; i < rawB.length; i++) { const a = rawB[i - 1], b = rawB[i], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.8)); for (let q = 1; q <= n; q++) wpB.push([a[0] + ((b[0] - a[0]) * q) / n, a[1] + ((b[1] - a[1]) * q) / n]); }
+  let kb = 1, tdb = 0, roadB = null, penB = 0;
+  while (tdb < 120 && roadB == null && ob) {
+    while (kb < wpB.length - 1 && Math.hypot(wpB[kb][0] - ob.x, wpB[kb][1] - ob.z) < 2.0) kb++;
+    const look = wpB[Math.min(wpB.length - 1, kb + 2)], dx = look[0] - ob.x, dz = look[1] - ob.z, d = Math.hypot(dx, dz) || 1, err = (dx * -ob.hz + dz * ob.hx) / d, fwd = (dx * ob.hx + dz * ob.hz) / d, want = fwd > 0.3 ? 2.6 : 1.2;
+    f2.update(1 / 30, { gas: ob.v < want ? 0.5 : 0, brake: ob.v > want + 0.6 ? 0.5 : 0, steer: fwd < -0.2 ? (err >= 0 ? 1 : -1) : Math.max(-1, Math.min(1, err * 2.2)) }); sim.update(1 / 30); tdb += 1 / 30;
+    penB = Math.max(penB, svc.world.boxBlocked(ob.x, ob.z, ob.hx, ob.hz, ob.len / 2 - 0.05, ob.wid / 2 - 0.05, 0) ? 1 : 0);
+    if (svc.graph.surfaceAt(ob.x, ob.z, scratch).cls === 1 && !site.drivable(ob.x, ob.z)) roadB = tdb;
+  }
+  chk(`${tag} the second car drives out of the gate onto the carriageway (${roadB?.toFixed(1)}s), clear of the first car`, roadB != null && penB === 0);
+  f2.dispose(); svc.world.removeBody("park:a"); removeSiteCollision(svc.world);
+  chk(`${tag} nothing is left behind in the collision world`, !svc.world.blockedAt(slotA.x, slotA.z, 0.3) && !svc.world.blockedAt(slotB.x, slotB.z, 0.3));
   // this home's traffic simulation is finished, and its vehicles must not stay in the shared world as frozen obstacles for the next home (they did, wherever they happened to stop)
-  for (const id of [...svc.world.bodies.keys()]) svc.world.removeBody(id); void x0; void z0;
+  for (const id of [...svc.world.bodies.keys()]) svc.world.removeBody(id);
 }
 console.log(bad ? `\n${bad} check(s) failed` : "\nAll checks passed"); process.exit(bad ? 1 : 0);

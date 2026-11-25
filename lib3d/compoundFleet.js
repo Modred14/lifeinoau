@@ -7,11 +7,11 @@
 //   fleet.pick(raycaster) -> id | null;  fleet.start(id) -> boolean;  fleet.stop({ park });  fleet.setInput({ throttle, steer });  fleet.update(dt)
 //   fleet.slotOf(id) -> where a parked vehicle stands | null;  fleet.canStart(id);  fleet.driveInfo();  fleet.setDoor(id, side, k)   (getting in and out on foot: lib3d/room.js)
 //
-// onDrive({ driving, speed (km/h), hit, reverse }) reports the car while it is driven; onLeave({ id, modelId, color, v (m/s), yaw }) fires once, when the whole vehicle is on the road
+// onDrive({ driving, speed (km/h), hit, reverse }) reports the car while it is driven; onLeave({ id, modelId, color, v (m/s), yaw, x, z (the vehicle's middle, in cells) }) fires once, when the whole vehicle is on the road
 // outside the gate. The room scene is in cells and the models in metres, so a model is scaled by 1 / CELL_M and the physics runs in metres.
 import * as THREE from "three";
 import { makeVehicle, rollWheels } from "./vehicles.js";
-import { planParking, compoundWorld, metresWorld, onCarriageway, CELL_M } from "./compoundParking.js";
+import { planParking, compoundWorld, metresWorld, onCarriageway, validParkedPose, cleanParkPose, lotSignature, poseBox, CELL_M } from "./compoundParking.js";
 import { createDriver } from "./garageDrive.js";
 import { garageVehicleSize } from "./garageLayout.js";
 import { GROUND } from "./plot3d.js";
@@ -21,7 +21,7 @@ const K = 1 / CELL_M;
 
 export function createCompoundFleet({ scene, camera, stage, cb = {} }) {
   const root = new THREE.Group(); scene.add(root);
-  const meshes = new Map(), pad = { throttle: 0, steer: 0 }, padMat = new THREE.MeshStandardMaterial({ color: "#a3a6a1", roughness: 0.95 });
+  const left = new Map(), meshes = new Map(), pad = { throttle: 0, steer: 0 }, padMat = new THREE.MeshStandardMaterial({ color: "#a3a6a1", roughness: 0.95 });
   let room = null, items = [], vehicles = [], plan = null, half = [0, 0], timer = 0, dirty = false, drive = null, alive = true, steerShown = 0, lastReport = "", saved = null, builtKey = "";
 
   function clear() {
@@ -35,7 +35,8 @@ export function createCompoundFleet({ scene, camera, stage, cb = {} }) {
     dirty = false; if (!room || !alive) { clear(); plan = null; builtKey = ""; return; }
     const key = keyOf(); if (plan && key === builtKey) return;
     clear(); plan = null; builtKey = key;
-    plan = planParking(room, vehicles, items); half = [room.w / 2, room.d / 2];
+    // a car parked by hand in this visit stays where it was left even if the list from the server has not caught up yet
+    plan = planParking(room, vehicles.map((v) => (left.has(String(v.id)) ? { ...v, saved: { ...left.get(String(v.id)), lot: lotSignature(room) } } : v)), items); half = [room.w / 2, room.d / 2];
     for (const s of plan.slots) {
       const v = makeVehicle(s.modelId || "", s.color); v.root.scale.setScalar(K);
       v.root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } o.userData.fleetId = String(s.id); });
@@ -64,8 +65,19 @@ export function createCompoundFleet({ scene, camera, stage, cb = {} }) {
     saved = { pos: camera.position.clone(), target: stage.controls.target.clone() }; stage.setManual(true); cam.ready = false; steerShown = 0; lastReport = ""; clearInput();
     cb.onDrive?.({ driving: true, speed: 0, hit: null, reverse: false }); return true;
   }
-  function stop({ park = true } = {}) {
+  /** Where the vehicle being driven would be left if it stopped right here ({ x, z, yaw } in cells), or null when that is not a place it may stand (the rules of validParkedPose): then it goes back to its own place. */
+  function parkCandidate() {
+    if (!drive || !plan) return null; const S = drive.driver.state, pose = cleanParkPose({ x: S.x / CELL_M, z: S.z / CELL_M, yaw: S.yaw }); if (!pose) return null;
+    const id = String(drive.m.slot.id), others = plan.slots.filter((s) => String(s.id) !== id);
+    return validParkedPose(plan.cw, room, others, drive.m.slot, pose) ? pose : null;
+  }
+  function stop({ park = true, at = null } = {}) {
     if (!drive) return; const { m } = drive; drive = null; clearInput();
+    if (park && at) { // left where it stands: that is its place now
+      const s = m.slot, box = poseBox(at.x, at.z, at.yaw, s.len, s.wid), ga = plan.cw.P.garage, garage = box.x0 >= ga.x0 && box.x1 <= ga.x1 && box.z0 >= ga.z0 && box.z1 <= ga.z1;
+      Object.assign(s, { x: at.x, z: at.z, yaw: at.yaw, garage, fixed: true }); left.set(String(s.id), { x: at.x, z: at.z, yaw: at.yaw });
+      m.pad.visible = !garage; m.pad.position.set(s.x - half[0], GROUND + 0.015, s.z - half[1]); m.pad.rotation.y = s.yaw;
+    }
     if (park) place(m.vehicle, m.slot.x, m.slot.z, m.slot.yaw, false);
     stage.setManual(false); if (saved) { camera.position.copy(saved.pos); stage.controls.target.copy(saved.target); stage.controls.update(); saved = null; }
     cb.onDrive?.({ driving: false, speed: 0, hit: null, reverse: false }); if (dirty) later();
@@ -83,15 +95,15 @@ export function createCompoundFleet({ scene, camera, stage, cb = {} }) {
     camera.position.copy(cam.pos); camera.lookAt(cam.look);
     const kmh = Math.round(v * 3.6), rep = `${kmh}|${S.hit ?? ""}|${S.v < -0.2}`;
     if (rep !== lastReport) { lastReport = rep; cb.onDrive?.({ driving: true, speed: kmh, hit: S.hit, reverse: S.v < -0.2 }); }
-    if (!drive.left && onCarriageway(plan.cw, cx, cz, S.yaw, m.slot.len, m.slot.wid)) { drive.left = true; cb.onLeave?.({ id: m.slot.id, modelId: m.slot.modelId, color: m.slot.color, v: S.v, yaw: S.yaw, size }); }
+    if (!drive.left && onCarriageway(plan.cw, cx, cz, S.yaw, m.slot.len, m.slot.wid)) { drive.left = true; cb.onLeave?.({ id: m.slot.id, modelId: m.slot.modelId, color: m.slot.color, v: S.v, yaw: S.yaw, x: cx, z: cz, size }); }
   }
 
   return {
     setRoom(r, its) { room = r; items = its ?? items; later(); },
     setItems(its) { items = its ?? []; if (room) later(); },
-    setVehicles(list) { const key = (l) => l.map((v) => `${v.id}:${v.modelId}:${v.color}`).join("|"); if (key(list) === key(vehicles)) return; vehicles = list; if (room) later(); },
+    setVehicles(list) { const key = (l) => l.map((v) => `${v.id}:${v.modelId}:${v.color}`).join("|"), changed = key(list) !== key(vehicles); vehicles = list; if (changed && room) later(); }, // (the saved places in the list are kept fresh without re-planning)
     pick(ray) { const hits = ray.intersectObjects([...meshes.values()].map((m) => m.vehicle.root), true); for (const h of hits) { let o = h.object; while (o && o.userData.fleetId == null) o = o.parent; if (o) return o.userData.fleetId; } return null; },
-    start, stop, update, isDriving: () => !!drive, plan: () => plan,
+    start, stop, update, parkCandidate, isDriving: () => !!drive, plan: () => plan,
     /** Where a parked vehicle stands (a copy of its slot, cells), or null when there is no such vehicle (it was sold, or never fitted). */
     slotOf: (id) => { const m = meshes.get(String(id)); return m ? { ...m.slot } : null; },
     /** May this vehicle be got into now? It must be parked here and nobody may be driving. */
