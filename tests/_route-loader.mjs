@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 const root = new URL("../", import.meta.url);
 export async function resolve(specifier, context, next) {
   if (specifier === "@/lib/auth") return { url: "data:text/javascript,export const getUserId=async()=>globalThis.__uid??null", shortCircuit: true };
+  if (specifier === "next/headers") return next("next/headers.js", context); // Node needs the file name that Next's bundler fills in
   if (specifier.startsWith("@/")) {
     const rel = specifier.slice(2), hit = [rel, rel + ".js", rel + "/index.js"].find((t) => existsSync(new URL(t, root)) && /\.[a-z]+$/.test(t));
     if (hit) return { url: new URL(hit, root).href, shortCircuit: true };

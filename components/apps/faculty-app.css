@@ -55,3 +55,27 @@
 .fg-res { display: grid; gap: 6px; padding: 10px; border-radius: 14px; background: var(--bg); } .fg-res > small { color: var(--muted); font-weight: 600; } .fg-res p { margin: 0; font-size: 0.9rem; }
 .fg-tally { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 0.86rem; } .fg-tally li { display: flex; justify-content: space-between; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .fg-act, .fg-person { transition: none; } .fg-act:active, .fg-person:active { transform: none; } }
+/* Groups: the three sections, custom groups and group discussions */
+.pa-content .gr-sections { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.pa-content .gr-sections > button { min-width: 0; padding: 8px 4px; font-weight: 700; font-size: 0.84rem; }
+.pa-content .gr-sections > button[aria-current="page"] { background: var(--green); border-color: transparent; color: #fff; }
+.gr-emblem { flex: none; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 14px; background: #dff3ee; color: #12594f; font: 700 1.2rem var(--font-head); }
+.gr-hero { overflow-wrap: anywhere; background: linear-gradient(140deg, #3a5bd9, #2a3fa3); }
+.gr-member { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 16px; background: var(--surface); }
+.gr-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-left: auto; }
+.pa-content .gr-acts > button { min-height: 38px; padding: 6px 10px; font-size: 0.8rem; }
+.gr-form { display: grid; gap: 10px; }
+.gr-form label { display: grid; gap: 5px; font-size: 0.86rem; font-weight: 600; color: var(--text); }
+.gr-form :is(input, select) { width: 100%; box-sizing: border-box; padding: 0 12px; font: inherit; }
+.gr-compose { display: flex; gap: 8px; }
+.gr-compose input { flex: 1; min-width: 0; padding: 0 12px; font: inherit; }
+.gr-chat { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.gr-chat li { display: flex; align-items: flex-end; gap: 8px; }
+.gr-chat li[data-mine] { flex-direction: row-reverse; }
+.gr-bubble { display: grid; gap: 2px; max-width: 78%; min-width: 0; padding: 8px 12px; border-radius: 16px; background: var(--surface); color: var(--text); }
+.gr-chat li[data-mine] .gr-bubble { background: #dff3e6; }
+.gr-bubble b { font-size: 0.78rem; color: var(--green-text); }
+.gr-bubble p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.92rem; line-height: 1.4; }
+.gr-bubble small { color: var(--muted); font-size: 0.68rem; }
+.gr-chat li[data-deleted] p { font-style: italic; color: var(--muted); }
+.pa-content .gr-del { min-height: 34px; width: 34px; padding: 0; background: transparent; border: 0; box-shadow: none; color: var(--muted); }

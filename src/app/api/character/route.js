@@ -31,9 +31,9 @@ export async function POST(req) {
     })
   )
     return bad("That name is taken.", 409);
-  const faculty = await db.faculty.findUnique({
-    where: { id: Number(b.facultyId) },
-  });
+  const facultyId = Number(b.facultyId); // never guessed: without a valid choice there is no character, so no faculty group either
+  if (!Number.isInteger(facultyId) || facultyId < 1) return bad("Choose your faculty.");
+  const faculty = await db.faculty.findUnique({ where: { id: facultyId } });
   if (!faculty) return bad("Unknown faculty.");
   const cls = drawClass(); // drawn once and saved immediately: retrying can never reroll it
   const week = await currentWeek(db);

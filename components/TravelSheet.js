@@ -10,6 +10,7 @@ import { MODES, MODE_INFO, fareKobo } from "@/lib/travel.js";
 import { canAfford } from "@/lib/gameStore";
 import PlaceActivities from "./PlaceActivities";
 import { featuresAt } from "@/lib/features.js";
+import { showsActivitiesOutside, wantedAct } from "@/lib/activityVisibility.js";
 import "./travel.css";
 
 export default function TravelSheet({ place, here, hasCar, driver, people, distanceM = null, character = null, balanceKobo = null, jailed = false, highlight = null, eta = {}, onGo, onClose }) {
@@ -24,7 +25,7 @@ export default function TravelSheet({ place, here, hasCar, driver, people, dista
   // the sheet docks on the bottom bar like the activities panel: the two read as one surface (components/bottom-nav.css)
   useLayoutEffect(() => { document.body.dataset.dock = "on"; return () => { delete document.body.dataset.dock; }; }, []);
   const fare = fareKobo(mode), poor = fare > 0n && !canAfford(fare), useDriver = mode === "car" && !!driver && withDriver;
-  const { activities } = featuresAt(place.id, place.kind);
+  const { activities } = featuresAt(place.id, place.kind), openAir = showsActivitiesOutside(place); // a building's activities are not listed before you are inside it
   // the estimate for a choice: "2 min 05 s" once worked out, "…" while it is being worked out, "No route" when the road does not reach there
   const key = (m) => (m === "car" && driver && withDriver ? "carDriver" : m), est = (m) => eta[key(m)];
   const reach = (m) => { const e = est(m); return e != null && !e.ok ? "No route" : ""; };
@@ -44,7 +45,7 @@ export default function TravelSheet({ place, here, hasCar, driver, people, dista
         </header>
         <div className="ts-scroll">
           {place.blurb && <p className="ts-blurb">{place.blurb}</p>}
-          <PlaceActivities activities={activities} links={place.actions ?? []} character={character} balanceKobo={balanceKobo} jailed={jailed} highlight={highlight} picked={picked?.key ?? null} onPick={setPicked} />
+          {openAir && <PlaceActivities activities={activities} links={place.actions ?? []} character={character} balanceKobo={balanceKobo} jailed={jailed} highlight={highlight} picked={picked?.key ?? null} onPick={setPicked} />}
           <div className="ts-modes" role="radiogroup" aria-label="How to travel">
             {MODES.map((m) => {
               const off = m === "car" && !hasCar, price = fareKobo(m);
@@ -69,7 +70,7 @@ export default function TravelSheet({ place, here, hasCar, driver, people, dista
           {(mode === "keke" || mode === "bus") && <p className="ts-note">The {MODE_INFO[mode].name.toLowerCase()} drops you at the nearest kerb, then you walk.{noRoute ? " No road reaches there, so trek instead." : ""} Fare is paid on arrival.</p>}
         </div>
         <footer className="ts-foot">
-          <button type="button" className="go ts-go" disabled={poor || noRoute} data-sound="confirm" onClick={() => onGo(mode, useDriver, picked?.act ?? null)}>
+          <button type="button" className="go ts-go" disabled={poor || noRoute} data-sound="confirm" onClick={() => onGo(mode, useDriver, picked?.act ?? wantedAct(activities, highlight))}>
             <Icon name="nav" size={20} weight="fill" /> {poor ? `You need ${naira(fare.toString())}` : noRoute ? "No route" : picked ? `Go and ${picked.label.toLowerCase()} · ${fareText}` : `Go · ${fareText}`}
           </button>
         </footer>

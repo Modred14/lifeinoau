@@ -92,6 +92,9 @@ export default function HomeWorld({ onAsleep = null, onWakeTap = null, onSleepCa
   useEffect(() => { try { localStorage.setItem(VIEW_KEY, view); } catch { /* the choice is just not remembered */ } tripApi.current?.setHomeView?.(view); }, [view]);
   useEffect(() => { document.body.dataset.trip = "1"; return () => { delete document.body.dataset.trip; }; }, []);
 
+  // Home activities (the button and the panel) exist only while the player is physically inside the house, never in the yard, the garage or a car.
+  const indoors = !!st?.indoors;
+  useEffect(() => { if (!indoors) { setPanel(false); setFilter(null); pendingItem.current = null; } }, [indoors]);
   const loading = !trip || !st;
   return (
     <div className="hw" data-view={view}>
@@ -100,14 +103,14 @@ export default function HomeWorld({ onAsleep = null, onWakeTap = null, onSleepCa
       {trip && <TripHud trip={trip} placeName="Your home" st={st} input={input} miniRef={miniRef} previewRef={previewRef} onCancel={() => setTrip(null)} />}
       {loading && !failed && <div className="hw-loading" role="status" aria-busy="true"><span className="rs-spin" />Opening your home</div>}
       {failed && <div className="hw-loading hw-err" role="alert"><span>Your home could not open right now.</span><button type="button" className="hw-btn" onClick={() => setFailed(false)}>Try again</button></div>}
-      {trip && st && <HomeActivityPanel list={list} act={act} filter={filter} open={panel} onOpen={() => setPanel(true)} onClose={() => { setPanel(false); setFilter(null); }} onStart={(id, why) => startAct(id, why ?? null)} onStop={stopAct} />}
+      {trip && st && (indoors || act) && <HomeActivityPanel list={list} act={act} filter={filter} open={panel} onOpen={() => setPanel(true)} onClose={() => { setPanel(false); setFilter(null); }} onStart={(id, why) => startAct(id, why ?? null)} onStop={stopAct} />}
       {trip && st && (
         <div className="hw-tools" role="toolbar" aria-label="Home">
           <div className="hw-seg" role="group" aria-label="View">
             <button type="button" aria-pressed={view === "chase"} onClick={() => setView("chase")}><Icon name="person" size={16} /> Behind you</button>
             <button type="button" aria-pressed={view === "cutaway"} onClick={() => setView("cutaway")}><Icon name="hostel" size={16} /> Cutaway</button>
           </div>
-          {room && !act && <button type="button" className="hw-btn" aria-expanded={panel} onClick={() => { setFilter(null); pendingItem.current = null; setPanel((v) => !v); }}><Icon name="home" size={16} /> Activities</button>}
+          {room && !act && indoors && <button type="button" className="hw-btn" aria-expanded={panel} onClick={() => { setFilter(null); pendingItem.current = null; setPanel((v) => !v); }}><Icon name="home" size={16} /> Activities</button>}
           <button type="button" className="hw-btn" onClick={() => router.push("/map")}><Icon name="map" size={16} /> Map</button>
         </div>
       )}

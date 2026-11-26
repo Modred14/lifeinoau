@@ -1,4 +1,5 @@
-// components/apps/FacultyApp.js: Faculty Groups. Your faculty's community inside the phone: the group, its members, a colleague's profile
+// components/apps/FacultyApp.js: the Groups app. "My Faculty" is the official faculty group; "My Groups" and "Discover" are player-made groups
+// (components/apps/CustomGroups.js). Faculty Groups: your faculty's community inside the phone: the group, its members, a colleague's profile
 // (with a Message button), and the faculty elections. Like every app here it only SHOWS what the server says and sends one request per tap:
 // who is in the group, who may vote and who wins are decided by lib/facultyGroupService.js and lib/facultyElectionService.js.
 // Private messages open the real Messages app (components/apps/MessagesApp.js): one chat system, with its history, unread counts and live delivery.
@@ -14,6 +15,8 @@ import PlayerAvatar from "../PlayerAvatar";
 import { useLive, useDo, Countdown, when, Note, Empty, Section } from "./sugKit";
 import "./sug-app.css";
 import "./faculty-app.css";
+import GroupChat from "./GroupChat";
+import { MyGroups, Discover, Create, GroupScreen } from "./CustomGroups";
 
 const ago = (t) => {
   if (!t) return "a while ago";
@@ -53,7 +56,7 @@ function Home({ d, el, go }) {
   return (
     <div className="fg-stack">
       <div className="fg-hero">
-        <small>Your faculty</small>
+        <small>Your official faculty group</small>
         <h2>{d.group.name}</h2>
         <p>{d.group.faculty}</p>
         <div className="fg-stats">
@@ -62,6 +65,7 @@ function Home({ d, el, go }) {
           <div><b>{d.unread}</b><span>unread</span></div>
         </div>
       </div>
+      <button type="button" className="go sg-cta" onClick={() => go("discussion")}><Icon name="talk" size={20} weight="fill" /> Faculty discussion{d.discussionUnread ? ` (${d.discussionUnread > 99 ? "99+" : d.discussionUnread} new)` : ""}</button>
       <div className="fg-actions">
         <button type="button" className="fg-act" onClick={() => go("members")}><Icon name="users" size={22} weight="fill" /><span>Members</span></button>
         <button type="button" className="fg-act" onClick={() => go("messages")}>
@@ -224,9 +228,29 @@ function Elections({ ovReload, onOpenApp }) {
 }
 
 // ================================================================================================================ the app
-const TABS = [["group", "Group"], ["members", "Members"], ["elections", "Elections"]];
+const TABS = [["group", "Group"], ["discussion", "Chat"], ["members", "Members"], ["elections", "Elections"]];
+const SECTIONS = [["faculty", "My Faculty"], ["mine", "My Groups"], ["discover", "Discover"]];
 
-export default function FacultyApp({ onOpenApp }) {
+export default function GroupsApp({ onOpenApp }) {
+  const [section, setSection] = useState("faculty"), [open, setOpen] = useState(null), [creating, setCreating] = useState(false);
+  const pick = (k) => { setSection(k); setOpen(null); setCreating(false); };
+  return (
+    <div className="fg">
+      {!open && !creating ? (
+        <nav className="gr-sections" aria-label="Groups">
+          {SECTIONS.map(([k, label]) => <button key={k} type="button" aria-current={section === k ? "page" : undefined} onClick={() => pick(k)}>{label}</button>)}
+        </nav>
+      ) : null}
+      {open ? <GroupScreen key={open} id={open} onBack={() => setOpen(null)} />
+        : creating ? <Create onBack={() => setCreating(false)} onCreated={(id) => { setCreating(false); setSection("mine"); setOpen(id); }} />
+        : section === "faculty" ? <MyFaculty onOpenApp={onOpenApp} />
+        : section === "mine" ? <MyGroups onOpen={setOpen} onCreate={() => setCreating(true)} />
+        : <Discover onOpen={setOpen} />}
+    </div>
+  );
+}
+
+function MyFaculty({ onOpenApp }) {
   const [tab, setTab] = useState("group"), [who, setWho] = useState(null);
   const ov = useLive("/api/faculty-groups", 20000), el = useLive("/api/faculty-groups/elections", 20000);
   const unread = useChat((s) => s.unread), first = useRef(true);
@@ -245,6 +269,7 @@ export default function FacultyApp({ onOpenApp }) {
       ) : null}
       {who ? <Profile name={who} onBack={() => setWho(null)} onMessage={openMessages} />
         : tab === "group" ? <Home d={ov.d} el={el.d} go={go} />
+        : tab === "discussion" ? <GroupChat path="/api/faculty-groups/messages" onChanged={ov.load} />
         : tab === "members" ? <Members onOpen={setWho} />
         : <Elections ovReload={ov.load} onOpenApp={onOpenApp} />}
     </div>

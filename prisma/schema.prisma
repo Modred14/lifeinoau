@@ -158,6 +158,9 @@ model Character {
   notifications      Notification[]
   voucherRedemptions VoucherRedemption[]
   facultyMembership  FacultyGroupMember?
+  customMemberships  CustomGroupMember[]
+  customGroupAccess  CustomGroupAccess[]
+  groupMessages      GroupMessage[]
 
   @@index([facultyId])
   @@index([placeId, placeAt])
@@ -1494,6 +1497,7 @@ model FacultyGroup {
   createdAt DateTime @default(now())
   faculty   Faculty  @relation(fields: [facultyId], references: [id], onDelete: Cascade)
   members   FacultyGroupMember[]
+  messages  GroupMessage[]
 }
 
 model FacultyGroupMember {
@@ -1501,8 +1505,67 @@ model FacultyGroupMember {
   groupId     Int
   characterId String       @unique // a player is in one group only
   joinedAt    DateTime     @default(now())
+  lastReadId  BigInt       @default(0) // newest group message this player has seen
   group       FacultyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   character   Character    @relation(fields: [characterId], references: [id], onDelete: Cascade)
 
   @@index([groupId])
+}
+
+// ---- Custom groups: made and run by players, kept apart from the official faculty groups so no custom-group action can ever touch one. ----
+// One OWNER per group, unique lower(name) and the value checks live in migration 20261125130000_custom_groups.
+model CustomGroup {
+  id          Int                 @id @default(autoincrement())
+  name        String
+  description String              @default("")
+  privacy     String              @default("PUBLIC") // PUBLIC (anyone joins) | PRIVATE (invitation or approval)
+  createdById String
+  createdAt   DateTime            @default(now())
+  members     CustomGroupMember[]
+  access      CustomGroupAccess[]
+  messages    GroupMessage[]
+}
+
+model CustomGroupMember {
+  groupId     Int
+  characterId String
+  role        String      @default("MEMBER") // OWNER | ADMIN | MEMBER
+  joinedAt    DateTime    @default(now())
+  lastReadId  BigInt      @default(0)
+  group       CustomGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  character   Character   @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, characterId])
+  @@index([characterId])
+}
+
+// A player who is not a member but has a standing with the group: invited, asking to join, or removed from it.
+model CustomGroupAccess {
+  groupId     Int
+  characterId String
+  status      String // INVITED | REQUESTED | REMOVED
+  createdAt   DateTime    @default(now())
+  group       CustomGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  character   Character   @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, characterId])
+  @@index([characterId, status])
+}
+
+// The discussion of a faculty group or a custom group (exactly one of the two ids is set, checked by the database).
+model GroupMessage {
+  id             BigInt        @id @default(autoincrement())
+  facultyGroupId Int?
+  customGroupId  Int?
+  senderId       String
+  body           String
+  createdAt      DateTime      @default(now())
+  deletedAt      DateTime?
+  facultyGroup   FacultyGroup? @relation(fields: [facultyGroupId], references: [id], onDelete: Cascade)
+  customGroup    CustomGroup?  @relation(fields: [customGroupId], references: [id], onDelete: Cascade)
+  sender         Character     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([facultyGroupId, id])
+  @@index([customGroupId, id])
+  @@index([senderId])
 }

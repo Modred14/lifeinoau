@@ -45,3 +45,14 @@ The app refreshes while it is open (every 15 to 20 seconds, and straight away wh
 * `tests/faculty-groups.routes.e2e.mjs`: the real route handlers (login required, status codes, nothing sensitive, rate limits).
 
 Run an e2e as `DATABASE_URL=... node tests/faculty-groups.e2e.mjs` (migrations applied). See the header of each file.
+
+## Discussion and custom groups
+
+The Groups phone app has three sections: **My Faculty** (above, now with a Chat tab), **My Groups** and **Discover**.
+
+* **Tables** (migration `20261125130000_custom_groups`): `CustomGroup`, `CustomGroupMember` (`OWNER` / `ADMIN` / `MEMBER`), `CustomGroupAccess` (`INVITED` / `REQUESTED` / `REMOVED`), and `GroupMessage`, which belongs to exactly one faculty group or one custom group. The migration also re-runs the faculty membership repair.
+* **Rules** (`lib/customGroupRules.js`, enforced in `lib/customGroupService.js`): public groups can be joined directly; private groups need an invitation or an approved request. The owner may do everything; an administrator edits details, invites, answers requests and removes regular members. An owner hands over before leaving. One owner per group and unique names (any letter case) are database constraints. Official-sounding names are refused. Faculty groups have no create, rename or delete route.
+* **Limits**: 5 groups owned, 50 joined, 500 members per group.
+* **Discussion** (`lib/groupChat.js`): text only, the app polls for new posts, the newest 300 posts of a group are kept, and posts of blocked players are hidden.
+* **Not built**: group images, notifications for invitations, and administrator moderation or reporting of custom groups.
+* **Tests**: `tests/custom-groups.test.mjs` (in `npm test`) and `tests/custom-groups.e2e.mjs` (needs a disposable database, like the others).

@@ -55,7 +55,7 @@ const APPS = {
   offishall: { name: "Clothing", icon: "shirt", tone: "fashion", C: OffishallApp }, // clothes shop + wardrobe
   bet: { name: "Bet", icon: "ticket", tone: "bet", own: true, C: BetApp }, // draws its own header and tab bar, like Messages
   games: { name: "Games", icon: "game", tone: "games", own: true, C: GamesApp }, // draws its own header, like Bet and Messages
-  faculty: { name: "Faculty", icon: "faculty", tone: "teal", C: FacultyApp }, // your faculty group: members, private chats, and the faculty elections
+  faculty: { name: "Groups", icon: "faculty", tone: "teal", C: FacultyApp }, // your faculty group (members, discussion, private chats, elections) and player-made groups
   sug: { name: "SUG", icon: "hall", tone: "navy", C: SugApp }, // the Students' Union Government: elections, government, Assembly
   settings: { name: "Settings", icon: "gear", tone: "graphite", own: true, C: SettingsApp }, // draws its own header: it has pages of its own, so Back steps out of a page before it leaves the app
   guide: { name: "OAU Guide", icon: "study", tone: "lime", C: GuideApp }, // generated from lib/features.js

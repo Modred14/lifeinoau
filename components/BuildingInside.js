@@ -18,6 +18,7 @@ import LectureFight, { ResultCard } from "./LectureFight";
 import ActivityLayer from "./ActivityLayer";
 import BuildingPanel from "./BuildingPanel";
 import ClubLayer from "./ClubLayer";
+import { showsRoomActivities } from "@/lib/activityVisibility.js";
 import { isClub, clubStatus, HOURS_LABEL } from "@/lib/clubs.js";
 import { resolveHub } from "@/lib/hubActions.js";
 import { ICON_OF } from "@/lib3d/landmarks.js";
@@ -32,7 +33,7 @@ import "./travel.css";
 // In the custody building every cell is locked to anyone who is not a prisoner (the server refuses those positions too, lib/custodyCells.js).
 const lockedOf = (c, place) => (place.id === "floor0" ? cellsOf(c) : null);
 
-export default function BuildingInside({ place, look = null, gender = "M", focus = null, selfName = "", onLeave, onCustody = null, cell = null, banner = null, standby = false, onReady = null }) {
+export default function BuildingInside({ place, look = null, gender = "M", focus = null, selfName = "", onLeave, onCustody = null, cell = null, banner = null, standby = false, leaving = false, onReady = null }) {
   const [people, setPeople] = useState(null), [status, setStatus] = useState("loading"), [info, setInfo] = useState(false), [room, setRoom] = useState(""), [near, setNear] = useState(null), [view, setView] = useState(cell ? "overhead" : getPrefs().gameplay.interiorView), [note, setNote] = useState(""), [rings, setRings] = useState([]), [open, setOpen] = useState(null);
   // the lecturers who teach in this building, the confrontation in progress, and the N-QRS response being acted out (all decided by the server: /api/lecture)
   const [fight, setFight] = useState(null), [incident, setIncident] = useState(null), [after, setAfter] = useState(null), [fade, setFade] = useState(0), lec = useRef({ courses: [] }), played = useRef(null), [lecList, setLecList] = useState([]);
@@ -222,6 +223,7 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
       </div>
     </div>
   );
+  const inRoom = showsRoomActivities({ standby, leaving }); // the activity panel, cards and club screens exist only while the player is physically in here
   const card = (
     <div className="bi" role="dialog" aria-modal="true" aria-label={`About ${place.name}`} data-over={status === "ready" ? "1" : undefined} onClick={(e) => { if (status === "ready" && e.target === e.currentTarget) setInfo(false); }}>
       <div className="bi-card">
@@ -261,9 +263,9 @@ export default function BuildingInside({ place, look = null, gender = "M", focus
               <Icon name={near.activity ? "timer" : "sparkle"} size={18} weight="fill" /> {near.label}{isLec && near.name && near.name !== "Lecturer" ? `: ${near.name}` : ""} <kbd>F</kbd>
               {isLec && lecInfo?.canConfront === false && lecInfo.reason && <span className="why">{lecInfo.reason}</span>}
             </button>); })()}
-          <ActivityLayer api={api} rings={rings} open={open} ready onClose={() => setOpen(null)} onLeave={onLeave} onState={setActState} onRun={setRunHub} controlRef={actCtl} />
-          <BuildingPanel place={place} rings={rings} state={actState} api={api} ready={sceneReady} runHubId={runHub} ringOpen={open} character={gs?.character} jailed={isJailed(gs?.character ?? {}, serverTime())} balanceKobo={gs?.balanceKobo ?? null} onArrive={onArrive} controlRef={panelCtl} lecturers={lecList} onBeat={(l) => confrontRef.current?.(l.code, l.npcIndex)} onReload={() => { setActState(null); actCtl.current?.refresh(); }} />
-          {isClub(place.id) && <ClubLayer place={place} api={api} ready={sceneReady} selfName={selfName} people={people ?? []} onLeave={onLeave} />}
+          {inRoom && <ActivityLayer api={api} rings={rings} open={open} ready onClose={() => setOpen(null)} onLeave={onLeave} onState={setActState} onRun={setRunHub} controlRef={actCtl} />}
+          {inRoom && <BuildingPanel place={place} rings={rings} state={actState} api={api} ready={sceneReady} runHubId={runHub} ringOpen={open} character={gs?.character} jailed={isJailed(gs?.character ?? {}, serverTime())} balanceKobo={gs?.balanceKobo ?? null} onArrive={onArrive} controlRef={panelCtl} lecturers={lecList} onBeat={(l) => confrontRef.current?.(l.code, l.npcIndex)} onReload={() => { setActState(null); actCtl.current?.refresh(); }} />}
+          {inRoom && isClub(place.id) && <ClubLayer place={place} api={api} ready={sceneReady} selfName={selfName} people={people ?? []} onLeave={onLeave} />}
           {banner}
           <p className="bi3-help">{cell ? "Walk around your cell with WASD or the stick · drag to look · V changes view · open the phone for messages, bank and games" : "Walk with WASD or the stick · Shift to run · drag to look · V changes view · walk out of the door to leave"}</p>
           <Stick input={input} />
