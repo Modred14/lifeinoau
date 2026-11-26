@@ -1,5 +1,6 @@
 // components/Icon.js
 "use client";
+import { Shower, Toilet, Television, Bathtub, HandSoap, Drop, Tooth, Flower, ForkKnife } from "@phosphor-icons/react";
 import { Radio, SkipBack, SkipForward, Power, TShirt, House, MapTrifold, DeviceMobile, Briefcase, ChatCircleText, TrendUp, Heart, GraduationCap, Trophy, Medal, Confetti, Wallet, Bell, ArrowClockwise, ArrowCounterClockwise,
   Plus, Minus, X, CaretLeft, Buildings, Books, FirstAidKit, Plant, Bed, UsersThree, Star, Door, MusicNotes, Storefront, Eye, EyeSlash, ListBullets, ArrowRight, Check, Crosshair,
   Lightning, Smiley, BookOpen, HeartStraight, Coins, Gift, Car, PersonSimpleWalk, Warning, DiceFive, FastForward, Moon, Sun, ChatsCircle, UserFocus, CaretRight, Lock, Phone, HandCoins, Siren, Timer,
@@ -23,7 +24,7 @@ const ICONS = { home: House, map: MapTrifold, phone: DeviceMobile, jobs: Briefca
   meh: SmileyMeh, sad: SmileySad, wink: SmileyWink, down: CaretDown, up: CaretUp, cube: Cube, backpack: Backpack, bank: Bank, deal: Handshake, news: Newspaper, sparkle: Sparkle, move: ArrowsOutCardinal, fan: Fan, wrench: Wrench, billboard: Presentation, image: Image, upload: UploadSimple, music: MusicNotes, sound: SpeakerHigh, mute: SpeakerSlash,
   bus: Bus, keke: Taxi, wheel: SteeringWheel, pin: MapPin, nav: NavigationArrow, driver: IdentificationBadge, door: DoorOpen, horn: Megaphone, users: Users, left: ArrowLeft, right: ArrowRight,
   ball: SoccerBall, plane: AirplaneTilt, ticket: Ticket, receipt: Receipt, undo: ArrowUUpLeft, trash: Trash, clock: Clock, lockS: LockSimple, win: CheckCircle, lose: XCircle, shield: ShieldCheck, repeat: Repeat, roulette: Roulette,
-  pause: Pause, play: Play, radio: Radio, prevStation: SkipBack, nextStation: SkipForward, power: Power, more: DotsThreeVertical, search: MagnifyingGlass, send: PaperPlaneRight, block: Prohibit, flag: Flag, person: UserCircle, arrowDown: ArrowDown, alert: WarningCircle, code: Code, copy: Copy };
+  pause: Pause, play: Play, radio: Radio, prevStation: SkipBack, nextStation: SkipForward, power: Power, more: DotsThreeVertical, search: MagnifyingGlass, send: PaperPlaneRight, block: Prohibit, flag: Flag, person: UserCircle, arrowDown: ArrowDown, alert: WarningCircle, code: Code, copy: Copy, shower: Shower, toilet: Toilet, tv: Television, bath: Bathtub, wash: HandSoap, drop: Drop, tooth: Tooth, mind: Flower, meal: ForkKnife };
 export const KIND_ICON = { hall: "hall", library: "library", faculty: "faculty", hospital: "hospital", farm: "farm", hostel: "hostel", social: "social", statue: "statue", gate: "gate", club: "club", town: "town" };
 
 /** One consistent icon set (Phosphor, regular weight). Decorative by default; pass `label` when the icon stands alone. */

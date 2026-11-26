@@ -21,6 +21,7 @@ import { resolveAction, hustleBlock, safeHustleAt, bailFor, waitText, HUSTLE } f
 import { confirmAction } from "@/lib/confirm";
 import { serverTime } from "@/lib/serverClock";
 import { isJailed, isSuspended, isExpelled } from "@/lib/discipline";
+import { resolveHomeAction } from "@/lib/homeActions.js";
 import { Suspension, Expulsion } from "@/components/DisciplineScreens";
 import CustodyCell from "@/components/CustodyCell";
 import { fmtN } from "@/lib/classes";
@@ -214,6 +215,17 @@ export default function Play() {
           : undefined,
     });
   };
+  // A finished home activity (cooking, a meal, a rest on the sofa): the same rules as the server (lib/homeActions.js) change the screen at once, then the server is asked; refused -> taken back.
+  const homeAct = async (name) => {
+    const c = st.character, pred = resolveHomeAction(c, name, serverTime());
+    if (!pred || pred.error) { toast.error(pred?.error ?? "You cannot do that now."); return { failed: true }; }
+    return go({
+      key: "home:" + name, router,
+      ok: name === "home_cook" ? "You cooked a meal." : name === "home_eat" ? "You ate your meal." : "You rested and feel better.",
+      request: () => call("/api/action", { action: name, requestId: crypto.randomUUID() }),
+      effects: [{ store: game, patch: chain(bump(deltas(c, pred.stats)), pred.spend ? cash(-pred.spend) : (s) => s) }],
+    });
+  };
   const goTo = (what, where) => toast.info(`${what} is done inside ${where}. Open the map, go there and walk to the gold ring.`);
   const exam = () => goTo("The examination", "your faculty building or a lecture theatre"); // exams are sat at the examination ring there
   const call_ = () =>
@@ -404,6 +416,7 @@ export default function Play() {
       bail={bail}
       onSleep={sleep_}
       onWake={wake_}
+      onHomeAct={homeAct}
       onCall={call_}
     />
   );

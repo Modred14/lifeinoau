@@ -16,3 +16,18 @@
 .gx[data-world="1"] .gx-me[data-open="0"] .gx-needs, .gx[data-world="1"] .gx-me[data-open="0"] .gx-status { display: none; }
 .gx[data-world="1"] .gx-me[data-open="0"] .gx-me-card { padding: 6px; border-radius: 50%; }
 .hw-err { flex-direction: column; text-align: center; }
+
+/* the Home Activity Panel (components/HomeActivityPanel.js): a compact sheet above the bottom bar, a one-line status while an activity runs */
+.hap { position: absolute; z-index: 5; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-b, 0px) + 96px); width: min(460px, calc(100% - 20px)); max-height: 46vh; display: flex; flex-direction: column; border-radius: 16px; background: rgba(15, 23, 41, 0.86); border: 1px solid rgba(255, 255, 255, 0.14); backdrop-filter: blur(16px); color: #fff; overflow: hidden; }
+.hap-h { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 4px 14px; font-size: 0.9rem; }
+.hap-x, .hap-stop { min-width: 40px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; color: #fff; font-weight: 700; }
+.hap-tabs { display: flex; gap: 6px; padding: 0 10px 6px; overflow-x: auto; scrollbar-width: none; }
+.hap-tabs button { flex: none; display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 0 11px; border-radius: 17px; border: 1px solid rgba(255, 255, 255, 0.16); background: transparent; color: #fff; font-size: 0.76rem; font-weight: 700; }
+.hap-tabs button[aria-selected="true"] { background: #3fd08a; color: #07210f; border-color: transparent; }
+.hap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; padding: 4px 10px 12px; overflow-y: auto; }
+.hap-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-height: 64px; padding: 10px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.06); color: #fff; text-align: left; }
+.hap-card[data-off="1"] { opacity: 0.55; }
+.hap-l { font-weight: 700; font-size: 0.82rem; } .hap-w { font-size: 0.68rem; color: var(--muted, #9fb0c8); line-height: 1.2; }
+.hap-none { padding: 8px 14px; color: var(--muted, #9fb0c8); font-size: 0.85rem; }
+.hap-run { flex-direction: row; align-items: center; gap: 10px; padding: 4px 6px 4px 14px; width: auto; max-width: calc(100% - 20px); border-radius: 24px; }
+.hap-run-t { font-weight: 700; font-size: 0.86rem; } .hap-stop { padding: 0 12px; color: #ffcf5c; }

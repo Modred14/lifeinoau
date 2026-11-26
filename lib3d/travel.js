@@ -37,6 +37,10 @@ import { CAM, PITCH, clamp, ease, frame, clearBack, followBack, zoomByPinch, zoo
 import { attachVehicleKeys, createVehicleReader } from "./vehicleInput.js";
 import { poseRotation } from "./heading.js";
 import { attachTripPointer } from "./tripinput.js";
+import { createHomeActivity } from "./homeActivity.js";
+import { chooseSpot } from "../lib/homeActivities.js";
+import { createIndoorRouter } from "./homeRoute.js";
+import { WALK_R } from "./walker.js";
 
 let netCache = null;
 /** The road net for this campus data, built once (about a tenth of a second). */
@@ -219,7 +223,21 @@ export async function startTrip(env, o) {
   const inVehNow = () => !!vehicle && ["ride", "drive", "paying"].includes(F.phase);
   // the camera frames the vehicle while you are in it, and eases between the two framings (never a jump): 0 = on foot, 1 = in the vehicle
   let vehMix = flow.own ? 1 : 0, vehH = 0;   // vehH: how high above the ground the camera's world is (your car on the expressway), eased so a ramp is a smooth climb
+  // ---- life at home: walking to a piece of furniture and using it (lib3d/homeActivity.js); the page decides what each tap means (o.onHomeTap) and is told how it goes (o.onHomeAct)
+  let act = null, homeEnv = null; const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  if (home && o.homeInterior) {
+    const router = createIndoorRouter(home.site, o.home.room, o.home.items ?? [], svc.world), env = homeEnv = { toWorld: (x, z) => home.site.F.toWorld(x, z), dirOf: (x, z) => home.site.dirOf(x, z) };
+    act = createHomeActivity({ walker: flow.walker, router, env, room: o.home.room, getItems: () => o.home.items ?? [], height: () => avatar?.height ?? 1.76,
+      free: (x, z) => !svc.world.blockedAt(x, z, WALK_R + 0.04) && home.site.insideHouse(x, z) && !!router.route({ x: flow.walker.x, z: flow.walker.z }, { x, z }),
+      hooks: { onStart: (sp) => o.onHomeAct?.({ type: "start", id: sp.id, itemId: sp.item?.id, def: sp.def }), onActive: (sp) => o.onHomeAct?.({ type: "active", id: sp.id, itemId: sp.item?.id, def: sp.def }),
+        onExitStart: (sp, why) => o.onHomeAct?.({ type: "exit", id: sp.id, itemId: sp.item?.id, def: sp.def, why }), onEnd: (sp, why) => o.onHomeAct?.({ type: "end", id: sp?.id ?? null, itemId: sp?.item?.id, why }) } });
+    disposers.push(() => act?.abort());
+  }
   const el = stage.renderer.domElement, pointer = attachTripPointer(el, {
+    tap: (x, y) => {
+      if (!act || !home || F.phase !== "roam") return; const r = el.getBoundingClientRect(); ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, cam);
+      const hit = home.pick(ray); o.onHomeTap?.(hit ? { itemId: String(hit.item.id), key: hit.item.key } : { floor: true });
+    },
     mode: () => (!alive || F.phase === "inside" ? "none" : "look"),
     look: (dYaw, dPitch) => { if (inVehNow()) userYaw = clamp(userYaw - dYaw, -1.7, 1.7); else camYaw -= dYaw; userPitch = clamp(userPitch + dPitch, PITCH.min, PITCH.max); userAt = time; },
     zoom: (scale) => { if (inVehNow()) zoomV = zoomByPinch(zoomV, scale, "veh"); else zoomW = zoomByPinch(zoomW, scale, "walk"); },
@@ -243,7 +261,7 @@ export async function startTrip(env, o) {
   };
 
   // ---- drawing what the journey says ----
-  let gait = "", lastPhase = "";
+  let gait = "", lastPhase = "", posed = false;
   // Your saved look changed while you are travelling (Settings): swap the body, keep everything else. Only the newest request counts.
   let selfTicket = 0, selfKey = lookKey(o.look, o.gender);
   const setLook = async (look, gender) => {
@@ -256,6 +274,13 @@ export async function startTrip(env, o) {
     // struck by a vehicle: thrown, sliding, lying, getting up (lib3d/impact.js). The body is the same character, rotated about its centre of mass.
     if (WK.tumble) { wasDown = true; avatar.root.visible = true; drawTumble(avatar.root, WK.tumble, 0.1); if (gait !== "idle") { gait = "idle"; avatar.play("idle"); avatar.setSpeed?.(1); } return; }
     if (wasDown) { wasDown = false; endTumble(avatar.root, yawOf2(P.hx, P.hz)); }
+    // doing something at home: the controller says where the body is (on the bed, at the cooker...) and which clip plays
+    const ap = act?.pose();
+    if (ap) {
+      posed = true; avatar.root.visible = true; avatar.root.rotation.order = "YXZ"; avatar.root.position.set(ap.x, 0.1 + ap.lift, ap.z); avatar.root.rotation.set(-ap.th, ap.yaw, 0);
+      const want = ap.clip ?? "idle", key = "act:" + want; if (gait !== key) { gait = key; if (!(avatar.has?.(want) && avatar.play(want))) avatar.play("idle"); avatar.setSpeed?.(1); } return;
+    }
+    if (posed) { posed = false; avatar.root.rotation.order = "XYZ"; avatar.root.rotation.x = 0; gait = ""; }
     const veh = flow.vehicle, doors = !!vehicle?.doors, sk = doors ? F.seatK ?? 0 : P.seated && veh ? 1 : 0, sp = WK.speed, vehYaw = veh ? veh.yaw ?? veh.ang ?? yawOf2(veh.hx, veh.hz) : 0, onFootYaw = yawOf2(P.hx, P.hz);
     // hidden only while sitting inside a closed car (its glass is dark); visible the whole time the door is open and while stepping in or out
     const inside = sk >= 0.98 && !vehicle?.open && !(doors && F.vehDoorK > 0.03) && ["ride", "drive", "paying"].includes(F.phase);
@@ -359,11 +384,15 @@ export async function startTrip(env, o) {
     const inp = read(dt), viewYaw = camYaw + (inVehNow() ? userYaw : 0), f = { x: Math.sin(viewYaw + Math.PI), z: Math.cos(viewYaw + Math.PI) }, // the stick is relative to the view the player SEES
        r = { x: -f.z, z: f.x }, ax = (inp.fwd - inp.back) * f.x + inp.right * r.x, az = (inp.fwd - inp.back) * f.z + inp.right * r.z, m = Math.min(1, Math.hypot(ax, az));
     traffic.update(dt);
+    let ax2 = ax, az2 = az, m2 = m;
+    if (act) { // the person is walking to, or doing, something at home: steering ignores the stick unless it is a real push (which gets them up / stops the walk), and a sleeper is only woken by the page
+      const own = act.update(dt), sleeper = act.state?.def?.server === "sleep" && act.state.stage !== "walk";
+      if (m > 0.3 && act.busy && !sleeper) act.stop(); if (own) { ax2 = az2 = 0; m2 = 0; } }
     // a vehicle hit somebody (an NPC, you, another player): the sound by how hard, and the page told (o.onHit), for a message or a log
     for (const ev of traffic.sim.takeEvents()) { if (Math.hypot(ev.x - camPt.x, ev.z - camPt.z) < 70) playSound(ev.kind === "launch" ? "crash" : ev.kind === "knockdown" ? "thump" : "bump"); try { o.onHit?.(ev); } catch { /* the page's handler must never stop the trip */ } }
     if (inp.stop) flow.stopAuto(); if (inp.door) flow.pressDoor(); if (inp.goIn) flow.enterNow();
     home?.update(dt, flow.walker.x, flow.walker.z);
-    flow.update(dt, { dx: ax, dz: az, mag: m, run: inp.run, gas: inp.gas, brake: inp.brake, steer: inp.steer, exit: inp.exit, enter: inp.enter, close: inp.close, fly: inp.fly, climb: inp.climb });
+    flow.update(dt, { dx: ax2, dz: az2, mag: m2, run: inp.run, gas: inp.gas, brake: inp.brake, steer: inp.steer, exit: inp.exit, enter: inp.enter, close: inp.close, fly: inp.fly, climb: inp.climb });
     lastPhase = F.phase;
     // sound: where the listener is and which way the view faces, what you are riding or driving, who is near. The horn is the held HUD button / H key (input.horn).
     { const vv = inVehNow() ? flow.vehicle : null, who = vv ?? P, sp = vv ? (vv.v ?? 0) : WK.speed, hx = who.hx ?? 0, hz = who.hz ?? 1, horn = hornNow;
@@ -381,7 +410,7 @@ export async function startTrip(env, o) {
     const live = { x: pos.x, z: pos.z, hx: pos.hx, hz: pos.hz, route: { pts: gd.pts, len: gd.len }, mode: gd.kind === "walk" ? "trek" : "drive", dest: { x: B.front.x, z: B.front.z } }, mini = o.miniCanvas?.(), prev = o.previewCanvas?.();
     if (mini) drawMini(mini, base, live); if (prev) drawPreview(prev, base, live);
     if (time - lastState > 0.1) { lastState = time; o.onState?.({ phase: F.phase, mode, auto, free: flow.free, eta: flow.free ? null : F.eta, left: flow.free ? null : F.eta, remain: Math.round(flow.remainMetres()), speed: Math.round(Math.abs(F.speed ?? 0) * 3.6), canHorn: mode === "car" && F.phase === "drive", ownCar: mode === "car" && !plan.driven, canExit: !!F.canExit, exiting: !!F.exiting, canFly: !!F.canFly, airborne: !!F.airborne, alt: F.alt ?? 0, canEnter: !!F.canEnter, canClose: !!F.canClose, canJack: !!F.canJack, jackSide: F.jackSide ?? 0, jackStage: F.jackStage ?? "", steerAngle: flow.own ? flow.own.steer : 0, gear: flow.own ? (flow.own.reversing || flow.own.v < -0.05 ? "R" : "D") : "", estimate: plan.secs, notice: F.notice, routeKind: gd.kind, routeLen: Math.round(gd.len), settling: F.pay === "pending" && ["door", "enter"].includes(F.phase), walking: F.phase === "approach" && WK.mode, autoWalk: WK.mode === "auto", parts: plan.parts,
-        door: F.door, hasDoor: !!(B.building && enterable), canOpen: !!F.canOpen, canGoIn: !!F.canGoIn, auto: !!F.auto, to: curTo, turn: F.phase === "drive" && !flow.free ? turnTo() : null }); }
+        act: act?.state ? { id: act.state.id, stage: act.state.stage, left: Math.ceil(act.state.left), private: act.state.private, sleep: act.state.def?.server === "sleep" } : null, door: F.door, hasDoor: !!(B.building && enterable), canOpen: !!F.canOpen, canGoIn: !!F.canGoIn, auto: !!F.auto, to: curTo, turn: F.phase === "drive" && !flow.free ? turnTo() : null }); }
   });
 
   const api = {
@@ -391,6 +420,18 @@ export async function startTrip(env, o) {
     exitBuilding() { if (!alive) return { ok: false, reason: "phase" }; const pl = resolvePlace(data, curTo); return flow.exitBuilding(pl ? portalFor(svc, pl) : null); },
     /** The home's view: "chase" (third person) or "cutaway" (from above, roof off). Only for a trip that has a home compound. */
     setHomeView(v) { homeView = v === "cutaway" ? "cutaway" : "chase"; home?.setView(homeView); return homeView; }, get homeView() { return homeView; }, get insideHome() { return !!home?.inside; },
+    /** Start a home activity (lib/homeActivities.js) on the tapped piece. { ok } or { ok: false, why } */
+    startActivity(id, { itemId = null } = {}) {
+      if (!act || !alive) return { ok: false, why: "You can only do that at home." }; if (F.phase !== "roam") return { ok: false, why: "Not right now." }; if (!home.inside) return { ok: false, why: "Go inside first." };
+      const item = itemId != null ? (o.home.items ?? []).find((i) => String(i.id) === String(itemId)) ?? null : null; return act.start(id, { item });
+    },
+    /** The page opened while the player is already asleep (the server says so): lie in that bed at once. */
+    resumeActivity(id, { itemId = null } = {}) {
+      if (!act || !alive || act.busy) return false; const item = itemId != null ? (o.home.items ?? []).find((i) => String(i.id) === String(itemId)) ?? null : null;
+      const spot = chooseSpot(id, { items: o.home.items ?? [], room: o.home.room, from: { x: flow.walker.x, z: flow.walker.z }, env: homeEnv, item, free: () => true }); return !!spot && !spot.why && act.resume(id, spot);
+    },
+    /** Stop what is being done: walking there stops, otherwise the person gets up. */
+    stopActivity(why = "cancel") { return !!act?.stop(why); }, get activity() { return act?.state ?? null; },
     get phase() { return F.phase; },
     horn() { if (hornT > 0) return; hornT = 0.4; o.onHorn?.(); },
     dispose() { if (!alive) return; alive = false; off?.(); for (const d of disposers.reverse()) { try { d(); } catch { /* clean up as much as possible */ } } /* the map may already be torn down (the player tapped Home mid-drive): put the shared scene back as far as it still exists, and never throw */

@@ -53,7 +53,7 @@ export function createHomeCompound({ parent, svc, room, items = [], vehicles = [
     for (const it of items) {
       if (!it || it.placed === false || it.x == null || !ITEMS[it.key] || isOutside(room, it)) continue;
       const g = buildFurniture(it.key), [w, d] = sizeOf(it.key, it.rot ?? 0);
-      g.position.set(it.x + w / 2 - W / 2, 0, it.z + d / 2 - D / 2); g.rotation.y = (-(it.rot ?? 0) * Math.PI) / 2; indoor.push(g); interiorG.add(g);
+      g.position.set(it.x + w / 2 - W / 2, 0, it.z + d / 2 - D / 2); g.rotation.y = (-(it.rot ?? 0) * Math.PI) / 2; g.userData.itemId = String(it.id); g.userData.item = it; indoor.push(g); interiorG.add(g);
     }
   }
   const floor = new THREE.Mesh(new THREE.BoxGeometry(W + 0.3, 0.34, D + 0.3), mat("#bdb6a6", { roughness: 1 })); floor.position.y = -0.17; frame.add(floor);
@@ -92,6 +92,8 @@ export function createHomeCompound({ parent, svc, room, items = [], vehicles = [
     plot.group.traverse((o) => { if (!o.geometry?.userData?.shared) o.geometry?.dispose?.(); }); plot.release?.(); shell.dispose();
     frame.traverse((o) => { if (o.parent && (outdoor.includes(o) || indoor.includes(o))) o.traverse((q) => { q.geometry?.dispose?.(); }); }); for (const m of mats) m.dispose();
   }
+  /** The piece of furniture under a ray (a THREE.Raycaster already aimed), or null: { item, point }. Only things indoors can be picked. */
+  const pick = (ray) => { if (!indoor.length) return null; const hit = ray.intersectObjects(indoor, true)[0]; if (!hit) return null; let o = hit.object; while (o && !o.userData.item) o = o.parent; return o ? { item: o.userData.item, point: hit.point } : null; };
   const B = homeBuilding(site, portal);
-  return { site, lot, portal, B, drivable: site.drivable, activeSlot, update, dispose, root, setView, get view() { return view; }, get inside() { return inNow; } };
+  return { pick, site, lot, portal, B, drivable: site.drivable, activeSlot, update, dispose, root, setView, get view() { return view; }, get inside() { return inNow; } };
 }

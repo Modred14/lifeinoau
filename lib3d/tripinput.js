@@ -9,7 +9,7 @@
 // Nothing here moves anything itself: it reports gestures through callbacks, and the trip loop applies them once per frame.
 
 /**
- * el: the canvas. cb: { mode(): "look" | "none", look(dYaw, dPitch), zoom(scale), wheel(deltaY) }.
+ * el: the canvas. cb: { mode(): "look" | "none", look(dYaw, dPitch), zoom(scale), wheel(deltaY), tap(x, y) }  (tap: a press and release in about the same place, one finger).
  * Returns { detach(), active } (active = a finger or button is down on the canvas).
  */
 export function attachTripPointer(el, cb) {
@@ -20,20 +20,22 @@ export function attachTripPointer(el, cb) {
   const down = (e) => {
     if (e.target !== el || (e.pointerType === "mouse" && e.button !== 0 && e.button !== 2)) return;
     if (ptrs.size >= 2) return; // a third finger is ignored rather than fighting the other two
-    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY, px: e.clientX, py: e.clientY, type: e.pointerType });
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY, px: e.clientX, py: e.clientY, type: e.pointerType, sx: e.clientX, sy: e.clientY, t0: performance.now(), far: false, multi: ptrs.size > 0 });
+    if (ptrs.size >= 2) for (const q of ptrs.values()) q.multi = true;
     try { el.setPointerCapture(e.pointerId); } catch { /* the pointer may already be gone */ }
     if (ptrs.size === 2) rebase();
     e.preventDefault();
   };
   const move = (e) => {
     const p = ptrs.get(e.pointerId); if (!p) return; // not one of ours: ignore it
-    p.x = e.clientX; p.y = e.clientY;
+    p.x = e.clientX; p.y = e.clientY; if (Math.hypot(p.x - p.sx, p.y - p.sy) > 8) p.far = true;
     if (ptrs.size === 2) { const d = dist(); if (pinchD > 0) cb.zoom?.(d / pinchD); pinchD = d; p.px = p.x; p.py = p.y; return; }
     if (cb.mode() === "look") cb.look?.((p.x - p.px) * 0.0055, (p.y - p.py) * 0.0045);
     p.px = p.x; p.py = p.y;
   };
   const up = (e) => {
-    if (!ptrs.has(e.pointerId)) return;
+    const p = ptrs.get(e.pointerId); if (!p) return;
+    if (e.type === "pointerup" && !p.far && !p.multi && ptrs.size === 1 && performance.now() - p.t0 < 600) { try { cb.tap?.(e.clientX, e.clientY); } catch { /* a tap handler must never break the camera */ } }
     ptrs.delete(e.pointerId); rebase();
     try { el.releasePointerCapture(e.pointerId); } catch { /* already released */ }
   };

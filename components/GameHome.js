@@ -69,6 +69,7 @@ export default function GameHome({
   busy,
   onSleep,
   onWake,
+  onHomeAct,
   onCall,
   bail,
   left,
@@ -139,37 +140,28 @@ export default function GameHome({
     if (sleeping) setGoing(null); // the server's answer (or the optimistic state) has arrived
   }, [sleeping]);
 
-  // The walkable home has no bed to lie on: going to sleep brings up the room scene (it is the bedroom view), and the character walks to the bed there. Waking up goes back to the walkable home.
-  const [bedPending, setBedPending] = useState(null);
+  // Sleeping happens in the walkable home itself: the character walks to the bed, lies down, and only then is the server told (onAsleep, from the home world). The room scene is for Buy mode only.
+  const homeApi = useRef(null);
   const lieDown = (u) => {
-    setUse(null);
-    if (!api.current) { setGoing(u.id); setBedPending(u.id); return; } // the room scene is not up yet: it comes up now, and the walk to bed starts as soon as it can
-    if (api.current?.goToBed(u.id)) setGoing(u.id); // walk, sit, lie: starts this instant
-    else toast.error("Your character is not ready yet. Try again in a moment.");
+    setUse(null); setGoing(u.id);
+    const r = homeApi.current?.start("sleep", { itemId: u.id });
+    if (!r?.ok) { setGoing(null); if (!homeApi.current) toast.error("Your home is still opening. Try again in a moment."); }
   };
-  useEffect(() => {
-    if (bedPending == null) return; let t, tries = 0;
-    const attempt = () => {
-      if (api.current?.goToBed(bedPending)) { setBedPending(null); return; }
-      if (++tries > 30) { setBedPending(null); setGoing(null); toast.error("Your character is not ready yet. Try again in a moment."); return; }
-      t = setTimeout(attempt, 400);
-    };
-    attempt(); return () => clearTimeout(t);
-  }, [bedPending]);
   // the character is now lying on the bed: only NOW is the server told
   const onAsleep = async (id) => {
     const res = await onSleep(id);
     if (res?.failed) {
-      api.current?.wakeUp(); // refused: get up again (the page already showed why)
+      homeApi.current?.stop("refused"); // refused: get up again (the page already showed why)
       setGoing(null);
     }
+    return res;
   };
   const waking = useRef(false);
   /** Wake up. `visual` is false when the scene has already started the get-up itself (the player tapped the floor). */
   const wakeNow = async (visual = true) => {
     if (waking.current) return;
     waking.current = true;
-    if (visual) api.current?.wakeUp(); // sit up, stand: the screen does not wait for the server
+    if (visual) homeApi.current?.stop("wake"); // sit up, stand: the screen does not wait for the server
     await onWake();
     waking.current = false;
   };
@@ -185,14 +177,6 @@ export default function GameHome({
       wakeNow();
     }
   }, [sleeping, elapsedMs, endMs]); // eslint-disable-line react-hooks/exhaustive-deps
-  // came back to the page while asleep: lie in the bed straight away (the room and the character may still be loading, so keep trying for a few seconds)
-  useEffect(() => {
-    if (!sleeping || !st.sleep.bedId) return;
-    let tries = 0, t;
-    const attempt = () => { if (api.current?.isSleepBusy?.() || api.current?.lieInBed(st.sleep.bedId) || ++tries > 20) return; t = setTimeout(attempt, 400); };
-    attempt();
-    return () => clearTimeout(t);
-  }, [sleeping, st.sleep?.bedId, items.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const fail = useCallback(
     (r) =>
       r.status === 401
@@ -400,7 +384,7 @@ export default function GameHome({
   const hours = fz ? left : 0;
 
   // The walkable home is the home screen; the room scene (components/RoomStage.js) is only for decorating (Buy mode) and sleeping.
-  const showRoom = buying || sleeping || !!going || bedPending != null, world = !showRoom;
+  const showRoom = buying, world = !showRoom;
   const bed = items.find((i) => i && i.placed !== false && i.x != null && isBedKey(i.key));
   return (
     <div
@@ -416,7 +400,7 @@ export default function GameHome({
         <i />
       </div>
       <div className="gx-scene">
-        {world && <HomeWorld onSleep={bed ? () => setUse({ id: bed.id, key: bed.key, kind: "bed" }) : null} />}
+        {world && <HomeWorld apiRef={homeApi} sleepBedId={sleeping ? st.sleep.bedId : null} onAsleep={onAsleep} onWakeTap={() => wakeNow(true)} onSleepCancel={() => setGoing(null)} onHomeAction={onHomeAct} />}
         {showRoom && <><RoomStage
           room={roomReady ? rd.room : null}
           items={roomReady ? rd.items : null}

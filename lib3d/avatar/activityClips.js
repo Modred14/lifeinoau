@@ -17,6 +17,7 @@ import { boneKey } from "./manifest.js";
 import { bake, legs, arms, spine, NEED, TAU } from "./npcClips.js";
 import { POLICE_CLIPS, POLICE_SEATED } from "./policeClips.js";
 import { DANCE_CLIPS } from "./danceClips.js";
+import { HOME_CLIPS, HOME_SEATED } from "./homeClips.js";
 import { resolveClip } from "./animation.js";
 
 const wave = (ps, k = 1) => Math.sin(ps * k);
@@ -165,8 +166,8 @@ const clips = {
     spine(S, -0.01 + 0.012 * br, 0.04, 0);
   }),
 };
-Object.assign(clips, POLICE_CLIPS, DANCE_CLIPS); // club dances (danceClips.js) too; // officer and custody clips (policeClips.js) are baked and shared the same way
-const SEATED = new Set(["listen", "write", "type", "read", "eatSit", ...POLICE_SEATED]);
+Object.assign(clips, POLICE_CLIPS, DANCE_CLIPS, HOME_CLIPS); // life at home (homeClips.js): cook, shower, wash, brush, TV, rest, phone, meditate; // club dances (danceClips.js) too; // officer and custody clips (policeClips.js) are baked and shared the same way
+const SEATED = new Set(["listen", "write", "type", "read", "eatSit", ...POLICE_SEATED, ...HOME_SEATED]);
 
 const cache = new Map();
 /** The activity clips for this body (built once per gender and shared). Names the model already has are skipped. Returns [] if the skeleton is incomplete. */
