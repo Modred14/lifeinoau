@@ -9,7 +9,8 @@ import { corridorKeepOut, connectorKeepOut, tailJoins } from "./highway.js";
 import { woodlandTrees, treeOnRoad } from "./woodland.js";
 import { SCENE_S, TRIP_LOWER, ROAD_LAYER_Y } from "./roadsurface.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { buildGround } from "./ground.js";
+import { buildGround, buildArchiveGround } from "./ground.js";
+import { ARCHIVE_ONLY } from "./mapScope.js";
 import { buildEdges } from "./edges.js";
 import { buildBillboards } from "./billboards3d.js";
 import { buildGrounds } from "./grounds.js";
@@ -46,10 +47,10 @@ export function buildRealCampus(data, meta = {}) {
   const root = new THREE.Group(), b = data.bounds, disposables = [];
   const x0 = b.x0 * S, x1 = b.x1 * S, z0 = b.z0 * S, z1 = b.z1 * S;
   // ---- ground: patchy grass and sand that fades into the sky-blue at its rim, so the map ends softly (ground.js). Water stays blue. ----
-  const ground = buildGround(data, S); root.add(ground);
+  const ground = ARCHIVE_ONLY ? buildArchiveGround(data, S) : buildGround(data, S); root.add(ground);   // ARCHIVE_ONLY (lib3d/mapScope.js): plain ground on the archive map's own frame, no coast or sea around it
   const rimKeep = data.places.filter((p) => p.x < b.x0 + 60 || p.x > b.x1 - 60 || p.z < b.z0 + 60 || p.z > b.z1 - 160).map((p) => [p.x, p.z, 60]).concat(corridorKeepOut(), connectorKeepOut());
   let roadFlat = null, roadSurface = null, highway = null, furniture = null, roadScene = null, tripOn = false;
-  const edges = buildEdges(data, S, { keepOut: rimKeep, joins: tailJoins() }); root.add(edges.group); // roads that run off the map, and a belt of trees along its rim
+  const edges = ARCHIVE_ONLY ? { group: new THREE.Group(), dispose() {} } : buildEdges(data, S, { keepOut: rimKeep, joins: tailJoins() }); root.add(edges.group);   // archive only: no road stubs or tree belt past the map's rim (an empty group keeps tripMode and dispose below working) // roads that run off the map, and a belt of trees along its rim
   for (const m of [flat(data.areas.park, "#5aa064", 0.03, { layer: 2 }), flat(data.areas.sports, "#4c9a68", 0.035, { layer: 2 }), flat(data.areas.wood, "#2f6b3b", 0.04, { layer: 2 }),
     flat(data.areas.pitch, "#2fb98a", 0.06, { layer: 3 }), flat(data.areas.water, "#2f6f95", 0.05, { layer: 3, rough: 0.15, metal: 0.2 }), flat(data.areas.parking, "#46505c", 0.06, { layer: 3 }), (roadFlat = flat(data.roads, "#343b46", 0.08, { layer: 4 }))]) if (m) root.add(m);
 

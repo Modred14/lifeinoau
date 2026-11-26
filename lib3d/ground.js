@@ -52,3 +52,13 @@ export function buildGround(data, S, { margin = 700, cell = 6, px = 3072 } = {})
   mesh.rotation.x = -Math.PI / 2; mesh.position.set(((x0 + x1) / 2) * S, 0, ((z0 + z1) / 2) * S); mesh.receiveShadow = true; mesh.renderOrder = -2; mesh.name = "ground";
   return mesh;
 }
+/**
+ * The ground for the archive-only map (lib3d/mapScope.js): one flat slab of plain grass that covers the map's own frame and a thin margin, and nothing else. No coast, no beach, no sea,
+ * no canvas painting (so it also works where there is no DOM). Same mesh name, height, render order and polygon offset as buildGround, so everything that sits on the ground sits on this the same way.
+ */
+export function buildArchiveGround(data, S, { margin = 30, color = "#8bb86f" } = {}) {
+  const b = data.bounds, x0 = b.x0 - margin, x1 = b.x1 + margin, z0 = b.z0 - margin, z1 = b.z1 + margin;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry((x1 - x0) * S, (z1 - z0) * S), new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
+  mesh.rotation.x = -Math.PI / 2; mesh.position.set(((x0 + x1) / 2) * S, 0, ((z0 + z1) / 2) * S); mesh.receiveShadow = true; mesh.renderOrder = -2; mesh.name = "ground";
+  return mesh;
+}
