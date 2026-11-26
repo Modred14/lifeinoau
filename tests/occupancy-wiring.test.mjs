@@ -8,7 +8,8 @@ assert.match(map, /occupancy\.count\(it\.id\) > 0/, "an occupied building keeps 
 assert.match(badge, /if \(!n\) return null/, "nothing is drawn at zero");
 assert.match(badge, /person.*people/s, "singular and plural");
 assert.match(page, /inside !== "floor0"/, "custody is never reported"); assert.match(page, /occupancy\.setInside\(null\)/, "leaving the map leaves the building");
-assert.ok(shell.includes("<CampusPopulation />") && shell.includes("<CampusEntry"), "the header shows the population and the entry is reported");
+assert.ok(shell.includes("<CampusPopulation />"), "the header shows the population");
+assert.ok(!shell.includes("<CampusEntry"), "CampusEntry was deleted: using it again without the component crashes every screen");
 const header = shell.slice(shell.indexOf('<header className="hud">'), shell.indexOf("</header>"));
 assert.ok(header.includes("naira(st.balanceKobo)") && header.indexOf("<CampusPopulation />") < header.indexOf("naira(st.balanceKobo)"), "the cash stays in the header, after the population");
 assert.match(css, /\.bl \.occ/); assert.match(css, /height: var\(--hud-bar-h, 36px\)/, "the header is still 36px");

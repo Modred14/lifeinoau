@@ -41,7 +41,7 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
     (async () => {
       try {
         const [{ createStage }, { buildRealCampus, addRealLighting, S: SC }, { CSS2DRenderer, CSS2DObject }, data] = await Promise.all([import("../lib3d/stage.js"), import("../lib3d/campusReal.js"), import("three/addons/renderers/CSS2DRenderer.js"), loadCampusData()]);
-        if (!alive) return;
+        if (!alive || !box.current) return;
         const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches, host = box.current.querySelector("[data-canvas]");
         stage = createStage(host, { fov: 42, far: 1800, controls: { maxPolarAngle: 1.38, minPolarAngle: interactive ? 0.08 : 0.35, minDistance: interactive ? 6 : 50, maxDistance: interactive ? 520 : 360, enablePan: interactive, enableRotate: interactive, enableZoom: canZoom, autoRotate: autoRotate && !reduce, autoRotateSpeed: 0.45, screenSpacePanning: false, zoomToCursor: interactive } });
         const light = addRealLighting(stage.scene, { renderer: stage.renderer }); campus = buildRealCampus(data, placeMeta(data)); stage.scene.add(campus.root);
@@ -68,7 +68,7 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
           lab = new CSS2DRenderer(); lab.domElement.style.cssText = "position:absolute;inset:0;pointer-events:none;overflow:hidden"; host.appendChild(lab.domElement);
           const list = campus.places.map((L) => { const el = document.createElement("div"); el.style.pointerEvents = "auto"; const o = new CSS2DObject(el); o.position.copy(L.pos); stage.scene.add(o); return { id: L.id, el, o, L, w: labelWidth(L.name, L.tier), roofY: L.pos.y - ROOF_LIFT }; });
           list.sort((a, b) => a.L.tier - b.L.tier); setMounts(list.map(({ id, el }) => ({ id, el, L: campus.places.find((p) => p.id === id) })));
-          const kick = { n: 30 }; /* frames the tags are redrawn for even if the camera is still (first paint, resize, a building's head count changing) */ off.push(occupancy.subscribe(() => { kick.n = 30; })); const size = () => { lab.setSize(box.current.clientWidth, box.current.clientHeight); kick.n = 30; }; size(); ro = new ResizeObserver(size); ro.observe(box.current);
+          const kick = { n: 30 }; /* frames the tags are redrawn for even if the camera is still (first paint, resize, a building's head count changing) */ off.push(occupancy.subscribe(() => { kick.n = 30; })); const size = () => { const el = box.current; if (!el) return; /* React drops the ref as the screen closes, before the observer is disconnected */ lab.setSize(el.clientWidth, el.clientHeight); kick.n = 30; }; size(); ro = new ResizeObserver(size); ro.observe(box.current);
           const v = new stage.THREE.Vector3(); let frame = 0; let tagLow = false; const tagState = new Map(), items = list.map((it) => ({ id: it.id, tier: it.L.tier, x: it.L.x / SC, z: it.L.z / SC, y: (it.L.pos?.y ?? 3) / SC, bid: it.L.bid, w: it.w }));
           // on a trip: name tags of the places near the traveller (lib3d/destinations.js decides which), a click on one sends the trip there
           const tripTags = () => {
@@ -92,6 +92,7 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
           // The name tags only need their screen positions recomputed when the camera moved or the box was resized: standing still costs nothing (before, every tag was re-projected on every frame).
           const pPos = new stage.THREE.Vector3(NaN, 0, 0), pQuat = new stage.THREE.Quaternion(); let pAsp = 0, pZoom = 0;
           stage.onAfterRender(() => {
+            if (!box.current) return; // leaving the map: the ref is already gone but one more frame can still be drawn before the clean-up runs
             const cam = stage.camera, moved = cam.position.distanceToSquared(pPos) > 1e-10 || !pQuat.equals(cam.quaternion) || cam.aspect !== pAsp || cam.zoom !== pZoom;
             if (moved || kick.n > 0) { lab.render(stage.scene, cam); pPos.copy(cam.position); pQuat.copy(cam.quaternion); pAsp = cam.aspect; pZoom = cam.zoom; if (!moved) kick.n--; }
             if (frame++ % 3 === 0) declutter();

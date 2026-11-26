@@ -298,7 +298,6 @@ export default function Shell({ children }) {
       />
       {st && <PlayerMenu />}
       {st && !held && <BusyAlerts characterId={String(st.character.id ?? "")} />}
-      {st && <CampusEntry characterId={String(st.character.id ?? "")} />}
     </>
   );
 }
