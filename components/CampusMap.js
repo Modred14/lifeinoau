@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ICON_OF } from "../lib3d/landmarks.js";
-import { loadCampusData, placeMeta } from "../lib3d/campusData.js";
+import { loadCampusData, loadCampusLook, placeMeta } from "../lib3d/campusData.js";
 import { Icon } from "./Icon";
 import OccupancyBadge from "./OccupancyBadge";
 import { occupancy } from "@/lib/occupancyClient";
@@ -40,11 +40,11 @@ export default function CampusMap({ youId = null, trip = null, tripInput = null,
     if (box.current) box.current.style.background = toCss(skyAt(overrideMinute() ?? minuteAt(serverTime())).sky); // until the 3D scene draws, show the sky it will start with (not the daytime blue at night)
     (async () => {
       try {
-        const [{ createStage }, { buildRealCampus, addRealLighting, S: SC }, { CSS2DRenderer, CSS2DObject }, data] = await Promise.all([import("../lib3d/stage.js"), import("../lib3d/campusReal.js"), import("three/addons/renderers/CSS2DRenderer.js"), loadCampusData()]);
+        const [{ createStage }, { buildRealCampus, addRealLighting, S: SC }, { CSS2DRenderer, CSS2DObject }, data, look] = await Promise.all([import("../lib3d/stage.js"), import("../lib3d/campusReal.js"), import("three/addons/renderers/CSS2DRenderer.js"), loadCampusData(), loadCampusLook()]);
         if (!alive || !box.current) return;
         const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches, host = box.current.querySelector("[data-canvas]");
         stage = createStage(host, { fov: 42, far: 1800, controls: { maxPolarAngle: 1.38, minPolarAngle: interactive ? 0.08 : 0.35, minDistance: interactive ? 6 : 50, maxDistance: interactive ? 520 : 360, enablePan: interactive, enableRotate: interactive, enableZoom: canZoom, autoRotate: autoRotate && !reduce, autoRotateSpeed: 0.45, screenSpacePanning: false, zoomToCursor: interactive } });
-        const light = addRealLighting(stage.scene, { renderer: stage.renderer }); campus = buildRealCampus(data, placeMeta(data)); stage.scene.add(campus.root);
+        const light = addRealLighting(stage.scene, { renderer: stage.renderer }); campus = buildRealCampus(data, placeMeta(data), look); stage.scene.add(campus.root);
         off.push(light.rig.onNight((n) => campus.setNight(n))); // lit windows and street lights follow the sky
         // the roads get their proper shape (lanes, pavements, markings) as soon as the road graph has loaded; the map is usable before then
         import("../lib3d/worldsvc.js").then((m) => m.peekServices(data) ?? m.loadServices(data)).then((svc) => { if (alive && campus) campus.setRoadGraph(svc.graph); }).catch((e) => console.warn("road graph unavailable, drawing the plain roads", e));

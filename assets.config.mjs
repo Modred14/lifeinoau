@@ -13,7 +13,7 @@ export const ASSET_ROOTS = ["models", "data", "textures", "maps", "audio"];
 
 /** First match wins. `match` is tested against the URL path ("/models/avatars/base_male.glb"). */
 export const TIER_RULES = [
-  { match: /^\/data\/oau-(campus|roadgraph)\.json$/, tier: "critical" },
+  { match: /^\/data\/oau-(campus|campuslife|roadgraph)\.json$/, tier: "critical" },
   { match: /^\/models\/avatars\/base_[mf]\w*\.glb$/, tier: "high" },
   { match: /^\/models\/avatars\/anim\//, tier: "high" },
 ];

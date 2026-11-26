@@ -22,6 +22,7 @@ import { SWING } from "./doorway.js";
 import { createTripFlow } from "./tripflow.js";
 import { portalFor } from "./buildingPortals.js";
 import { createHomeCompound } from "./homeCompound.js";
+import { compoundRing } from "./homeLot.js";
 import { gateStand, poseOnSite, cellsPose, nearestParkedSlot, pinnedVehicles, indoorSpawn } from "./homeSite.js";
 import { ROAD_TOP } from "./roadsurface.js";
 import { wheelContacts } from "./vehiclepose.js";
@@ -124,6 +125,7 @@ export async function startTrip(env, o) {
   let home = null, homeView = "chase";
   if (o.home) {
     try { home = createHomeCompound({ parent: world, svc, room: o.home.room, items: o.home.items ?? [], vehicles: o.home.vehicles ?? [], anchor: fromP, seed: o.home.seed ?? "", activeId: o.home.activeId ?? null, interior: !!o.homeInterior }); } catch (e) { console.warn("home compound", e); home = null; }
+    if (home) { campus.clearScenery?.([compoundRing(o.home.room, home.lot)]); disposers.push(() => campus.clearScenery?.([])); }   // no tree or bush stands in the yard, the house or the driveway
     if (home) { disposers.push(() => home.dispose()); const e = home.portal.exit; plan = { ...plan, B: home.B, goal: { x: e.x, z: e.z }, start: { x: e.x, z: e.z } }; B = plan.B; }
   }
 
@@ -363,7 +365,7 @@ export async function startTrip(env, o) {
     const dx = tx - v.x, dz = tz - v.z, l = Math.hypot(dx, dz) || 1; return Math.atan2((dx * -v.hz + dz * v.hx) / l, (dx * v.hx + dz * v.hz) / l);
   }
   // what the destination tags need to know: where the traveller is, where the camera is, and whether a building hides a tag
-  const heights = new Map(data.buildings.map((b) => [b.id, b.h * EX])), camM = { x: 0, y: 0, z: 0 };
+  const heights = new Map(data.buildings.map((b) => [b.id, campus.drawnHeight?.(b) ?? b.h * EX])), camM = { x: 0, y: 0, z: 0 };
   /** Sends the trip to another place (a tapped name tag). Nothing changes unless it works: { ok: true } or { ok: false, reason, text }. */
   function retarget(toId) {
     if (!alive) return { ok: false, reason: "phase", text: RETARGET_WHY.phase };

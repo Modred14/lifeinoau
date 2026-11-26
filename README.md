@@ -75,6 +75,17 @@ Tests: `node tests/admin-console.test.mjs` (no database) runs with `npm test`. `
 
 ## The campus map
 
+### How it looks
+
+The main map is drawn in the Campuslife style of commit `c2b9477`: its facades and roofs, grass, paving, footpaths, verges, and trees at their surveyed positions, with buildings at their real height. Only the drawing differs; footprints, roads, places and driving come from the map data below. Trees and plants are decoration and are not solid.
+
+- To go back to the plain buildings, set `MAP_LOOK = "classic"` in `lib3d/mapLook.js`. The legacy map always uses them.
+- The look data is `public/data/oau-campuslife.json`. Rebuild it with `node tools/oau/bake-campuslife.mjs && npm run assets:manifest` (the commit must be in the git history).
+- The drawing code is in `lib3d/campuslife/`.
+- The data licences require credit: see "Source and credits" below.
+
+### Which map
+
 Two maps are kept in the repository and either can be switched on with one command. The game reads the plain-named copies (`public/data/oau-campus.json`, `public/data/oau-roadgraph.json`) and `lib3d/mapLayout.js`.
 
 | map | what it is | where it is stored |

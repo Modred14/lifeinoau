@@ -21,6 +21,14 @@ export function lotShape(room) {
 }
 
 /**
+ * The ground a compound takes, as a ring of [x, z] metres: the plot with `margin` metres round it, running on past the gate to the kerb. For taking decoration out of the way.
+ */
+export function compoundRing(room, lot, margin = 4) {
+  const { P } = lotShape(room), F = lotFrame(room, lot), m = margin / CELL_M, p = P.plot, z1 = Math.max(p.z1, P.kerb);
+  return [[p.x0 - m, p.z0 - m], [p.x1 + m, p.z0 - m], [p.x1 + m, z1 + m], [p.x0 - m, z1 + m]].map(([x, z]) => F.toWorld(x, z));
+}
+
+/**
  * The frame of a lot: how plot cells map to world metres. `lot` is { x, z, dx, dz }: the anchor's position on the road edge, and the unit vector from the lot TOWARDS the road (the plot's +z).
  * Returns { toWorld(cx, cz) -> [x, z], rotY, group: { x, z, rotY, scale } } where `group` places a three.js Group built in room-centred cells (lib3d/plot3d.js, lib3d/houseShell.js).
  */

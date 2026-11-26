@@ -1,6 +1,7 @@
 // lib3d/campusReal.js
 // The OAU campus drawn from real footprints, roads and landcover (public/data/oau-campus.json, made by tools/oau/vectorize.py).
-// 1 scene unit = 10 m. Building heights are exaggerated by EX for readability; the true height of every building stays in the data.
+// 1 scene unit = 10 m. Building heights are drawn EX times their size (lib3d/mapLook.js); the true height of every building stays in the data.
+// With the Campuslife look (lib3d/mapLook.js, the default) buildings, ground, footpaths and planting come from lib3d/campuslife/; everything else here is the same for both looks.
 // Layout, footprints and road shapes come from the supplied OpenStreetMap render. Facades and roofs are generic, NOT photo-verified.
 import * as THREE from "three";
 import { ROAD_COLORS } from "./roadmesh.js";
@@ -14,9 +15,11 @@ import { buildEdges } from "./edges.js";
 import { buildBillboards } from "./billboards3d.js";
 import { buildGrounds } from "./grounds.js";
 import { createSkyRig } from "./daylightRig.js";
+import { MAP_LOOK, LOOK_EX } from "./mapLook.js";
+import { createCampuslifeLook } from "./campuslife/index.js";
 
 export const S = SCENE_S;   // metres -> scene units
-export const EX = 2;    // visual height exaggeration (buildings only)
+export const EX = LOOK_EX;    // visual height scale (buildings only): 1 with the Campuslife look, 2 with the classic one
 export const MAP_BG = "#a9cbe8"; // sky and horizon (and what shows past the faded rim of the ground). The ground itself is grass and sand (ground.js). Keep .mapwrap .stage in globals.css the same.
 const WALLS = ["#d9ceb4", "#c6b08a", "#d8d8d0", "#aab7c4", "#d3c3a6", "#b98b73", "#e2dccb"];
 const KIND_WALL = { hostel: "#c58b6e", block: "#c58b6e", library: "#cdbb92", hall: "#e4dcc6", faculty: "#d8d2bf", lecture: "#d3cdb9", bank: "#9fb4c8", shop: "#d9a86a", worship: "#e8e4d4", sports: "#b9c9a9", admin: "#d6d0c0", club: "#5b4a8a", jail: "#8d99a8" };
@@ -37,40 +40,51 @@ const inPoly = (x, z, pts) => { let c = false; for (let i = 0, j = pts.length - 
 
 function flat(areas, color, y, o = {}) { // flat polygons (roads, parking, pitches ...) as one mesh
   const gs = []; for (const a of areas) { try { const s = new THREE.Shape(a.pts.map(V)); for (const h of a.holes ?? []) s.holes.push(new THREE.Path(h.map(V))); const g = new THREE.ShapeGeometry(s); g.rotateX(-Math.PI / 2); gs.push(g); } catch { /* a malformed outline is skipped */ } }
-  if (!gs.length) return null; const m = new THREE.Mesh(mergeGeometries(gs), new THREE.MeshStandardMaterial({ color, roughness: o.rough ?? 0.95, metalness: o.metal ?? 0, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -(o.layer ?? 1), polygonOffsetUnits: -(o.layer ?? 1) }));
+  if (!gs.length) return null; const m = new THREE.Mesh(mergeGeometries(gs), new THREE.MeshStandardMaterial({ color, roughness: o.rough ?? 0.95, metalness: o.metal ?? 0, side: THREE.DoubleSide, map: o.map ?? null, polygonOffset: true, polygonOffsetFactor: -(o.layer ?? 1), polygonOffsetUnits: -(o.layer ?? 1) }));
   m.position.y = y; m.userData.layerY = y; m.receiveShadow = true; gs.forEach((g) => g.dispose()); return m;
 }
 
-/** data: parsed oau-campus.json. meta: optional { [placeId]: {blurb, actions, ...} } merged onto the places. */
-export function buildRealCampus(data, meta = {}) {
+/** data: parsed oau-campus.json. meta: optional { [placeId]: {blurb, actions, ...} } merged onto the places. look: parsed oau-campuslife.json (lib3d/campusData.js loadCampusLook), or null for the classic drawing. */
+export function buildRealCampus(data, meta = {}, look = null) {
   const root = new THREE.Group(), b = data.bounds, disposables = [];
   const x0 = b.x0 * S, x1 = b.x1 * S, z0 = b.z0 * S, z1 = b.z1 * S;
-  // ---- ground: patchy grass and sand that fades into the sky-blue at its rim, so the map ends softly (ground.js). Water stays blue. ----
-  const ground = buildGround(data, S); root.add(ground);
+  // the Campuslife look is laid out on the new map (data.meta.oldToNew marks it); anything else is drawn the classic way. A failure here must never take the map down.
+  let cl = null; if (MAP_LOOK === "campuslife" && look && data.meta.oldToNew) { try { cl = createCampuslifeLook(data, look, S); } catch (e) { console.warn("Campuslife look unavailable, drawing the classic map", e); } }
+  // ---- ground: Campuslife grass, or patchy grass and sand that fades into the sky-blue at its rim (ground.js). Water stays blue. ----
+  const ground = cl ? cl.ground : buildGround(data, S); root.add(ground);
   const rimKeep = data.places.filter((p) => p.x < b.x0 + 60 || p.x > b.x1 - 60 || p.z < b.z0 + 60 || p.z > b.z1 - 160).map((p) => [p.x, p.z, 60]).concat(corridorKeepOut(), connectorKeepOut());
   let roadFlat = null, roadSurface = null, highway = null, furniture = null, roadScene = null, tripOn = false;
   const edges = buildEdges(data, S, { keepOut: rimKeep, joins: tailJoins() }); root.add(edges.group); // roads that run off the map, and a belt of trees along its rim
-  for (const m of [flat(data.areas.park, "#5aa064", 0.03, { layer: 2 }), flat(data.areas.sports, "#4c9a68", 0.035, { layer: 2 }), flat(data.areas.wood, "#2f6b3b", 0.04, { layer: 2 }),
-    flat(data.areas.pitch, "#2fb98a", 0.06, { layer: 3 }), flat(data.areas.water, "#2f6f95", 0.05, { layer: 3, rough: 0.15, metal: 0.2 }), flat(data.areas.parking, "#46505c", 0.06, { layer: 3 }), (roadFlat = flat(data.roads, "#343b46", 0.08, { layer: 4 }))]) if (m) root.add(m);
+  const skin = (kind, color) => { const map = cl?.areaMap(kind); return map ? { color: "#ffffff", map } : { color }; };
+  const area = (list, { color, map }, y, o) => flat(list, color, y, { ...o, map });
+  for (const m of [cl ? null : flat(data.areas.park, "#5aa064", 0.03, { layer: 2 }), flat(data.areas.sports, "#4c9a68", 0.035, { layer: 2 }), flat(data.areas.wood, "#2f6b3b", 0.04, { layer: 2 }), cl?.paths,
+    area(data.areas.pitch, skin("pitch", "#2fb98a"), 0.06, { layer: 3 }), flat(data.areas.water, cl ? "#4f8fbf" : "#2f6f95", 0.05, { layer: 3, rough: 0.15, metal: 0.2 }), area(data.areas.parking, skin("parking", "#46505c"), 0.06, { layer: 3 }), (roadFlat = flat(data.roads, "#343b46", 0.08, { layer: 4 }))]) if (m) root.add(m);
 
-  // ---- buildings: real footprints, merged into one wall mesh and one roof mesh ----
-  const win = windowTextures(5), rep = 1 / (12 * S); for (const t of [win.map, win.emis]) t.repeat.set(rep, rep);
+  // ---- buildings: real footprints. Campuslife look: lib3d/campuslife/ (facades and roofs). Classic: merged into one wall mesh and one roof mesh ----
   const placeAt = new Map(); for (const p of data.places) if (p.bid != null) placeAt.set(p.bid, p);
-  const sides = [], caps = [], ranges = []; let vs = 0, vc = 0;
-  const extrude = (pts, depth, y = 0) => { const shape = new THREE.Shape(pts.map(V)), g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false }); g.rotateX(-Math.PI / 2); if (y) g.translate(0, y, 0); return g; };
-  const scaled = (pts, k) => { const [cx, cz] = centroid(pts); return pts.map(([x, z]) => [cx + (x - cx) * k, cz + (z - cz) * k]); };
-  data.buildings.forEach((bd, i) => { try {
-    const pl = placeAt.get(bd.id), kind = pl?.kind, col = bd.wall ?? KIND_WALL[kind] ?? WALLS[i % WALLS.length], roof = bd.roof ?? (kind === "hostel" || kind === "block" ? "#5a4638" : "#3a4452"), H = bd.h * S * EX;
-    const parts = pl?.id === "amphitheatre" ? [0.9, 0.7, 0.5].map((k, j) => [scaled(bd.pts, k), 1.5 * S * EX, j * 1.5 * S * EX]) : [[bd.pts, H, 0]]; // stylised tiers; the real seating is not surveyed
-    const s0 = vs, c0 = vc;
-    for (const [pts, d, y] of parts) { const g = extrude(pts, d, y), [capG, sideG] = g.groups.length >= 2 ? g.groups : [g.groups[0], { start: 0, count: 0 }];
-      const cg = paint(slice(g, capG.start, capG.count), roof); caps.push(cg); vc += cg.attributes.position.count;
-      if (sideG.count) { const sg = paint(slice(g, sideG.start, sideG.count), col); sides.push(sg); vs += sg.attributes.position.count; } g.dispose(); }
-    ranges.push({ bid: bd.id, s0, s1: vs, c0, c1: vc });
-  } catch { /* a malformed footprint is skipped, never fatal */ } });
-  const wallMesh = sides.length ? new THREE.Mesh(mergeGeometries(sides), new THREE.MeshStandardMaterial({ vertexColors: true, map: win.map, emissive: 0xffffff, emissiveMap: win.emis, emissiveIntensity: 0.18, roughness: 0.8 })) : null;
-  const capMesh = caps.length ? new THREE.Mesh(mergeGeometries(caps), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 })) : null;
-  for (const m of [wallMesh, capMesh]) if (m) { m.castShadow = m.receiveShadow = true; root.add(m); } sides.forEach((g) => g.dispose()); caps.forEach((g) => g.dispose());
+  let win = null, wallMesh = null, capMesh = null; const ranges = [];
+  if (cl) root.add(cl.buildings, cl.scenery);
+  else {
+    win = windowTextures(5); const rep = 1 / (12 * S); for (const t of [win.map, win.emis]) t.repeat.set(rep, rep);
+    const sides = [], caps = []; let vs = 0, vc = 0;
+    const extrude = (pts, depth, y = 0) => { const shape = new THREE.Shape(pts.map(V)), g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false }); g.rotateX(-Math.PI / 2); if (y) g.translate(0, y, 0); return g; };
+    const scaled = (pts, k) => { const [cx, cz] = centroid(pts); return pts.map(([x, z]) => [cx + (x - cx) * k, cz + (z - cz) * k]); };
+    data.buildings.forEach((bd, i) => { try {
+      const pl = placeAt.get(bd.id), kind = pl?.kind, col = bd.wall ?? KIND_WALL[kind] ?? WALLS[i % WALLS.length], roof = bd.roof ?? (kind === "hostel" || kind === "block" ? "#5a4638" : "#3a4452"), H = bd.h * S * EX;
+      const parts = pl?.id === "amphitheatre" ? [0.9, 0.7, 0.5].map((k, j) => [scaled(bd.pts, k), 1.5 * S * EX, j * 1.5 * S * EX]) : [[bd.pts, H, 0]]; // stylised tiers; the real seating is not surveyed
+      const s0 = vs, c0 = vc;
+      for (const [pts, d, y] of parts) { const g = extrude(pts, d, y), [capG, sideG] = g.groups.length >= 2 ? g.groups : [g.groups[0], { start: 0, count: 0 }];
+        const cg = paint(slice(g, capG.start, capG.count), roof); caps.push(cg); vc += cg.attributes.position.count;
+        if (sideG.count) { const sg = paint(slice(g, sideG.start, sideG.count), col); sides.push(sg); vs += sg.attributes.position.count; } g.dispose(); }
+      ranges.push({ bid: bd.id, s0, s1: vs, c0, c1: vc });
+    } catch { /* a malformed footprint is skipped, never fatal */ } });
+    wallMesh = sides.length ? new THREE.Mesh(mergeGeometries(sides), new THREE.MeshStandardMaterial({ vertexColors: true, map: win.map, emissive: 0xffffff, emissiveMap: win.emis, emissiveIntensity: 0.18, roughness: 0.8 })) : null;
+    capMesh = caps.length ? new THREE.Mesh(mergeGeometries(caps), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 })) : null;
+    for (const m of [wallMesh, capMesh]) if (m) { m.castShadow = m.receiveShadow = true; root.add(m); } sides.forEach((g) => g.dispose()); caps.forEach((g) => g.dispose());
+  }
+  const solids = cl ? cl.meshes : [wallMesh, capMesh].filter(Boolean);
+  /** How high a building is drawn, in scene units: its labels, signs and lamps stand on that. */
+  const roofOf = (bd) => (cl?.tops.get(bd.id) ?? bd.h) * S * EX;
 
   // ---- the Motion Ground and the Religious Ground (game placements in clear space; mapExtras.js) ----
   if (data.grounds) root.add(buildGrounds(data.grounds, { S, EX }));
@@ -85,9 +99,9 @@ export function buildRealCampus(data, meta = {}) {
   // ---- club neon and the Floor O siren (decoration on the game-placed buildings) ----
   const glow = [];
   for (const p of data.places) { const bd = p.bid != null ? data.buildings.find((q) => q.id === p.bid) : null; if (!bd) continue;
-    if (bd.neon) { const [cx, cz] = centroid(bd.pts), xs = bd.pts.map((q) => q[0]), zs = bd.pts.map((q) => q[1]), w = (Math.max(...xs) - Math.min(...xs)) * S, d = (Math.max(...zs) - Math.min(...zs)) * S, top = bd.h * S * EX, m = new THREE.MeshBasicMaterial({ color: bd.neon, toneMapped: false });
+    if (bd.neon) { const [cx, cz] = centroid(bd.pts), xs = bd.pts.map((q) => q[0]), zs = bd.pts.map((q) => q[1]), w = (Math.max(...xs) - Math.min(...xs)) * S, d = (Math.max(...zs) - Math.min(...zs)) * S, top = roofOf(bd), m = new THREE.MeshBasicMaterial({ color: bd.neon, toneMapped: false });
       const bar = new THREE.Mesh(new THREE.BoxGeometry(w * 1.02, 0.16, 0.16), m); bar.position.set(cx * S, top + 0.06, (cz * S) + d / 2); const sign = new THREE.Mesh(new THREE.BoxGeometry(w * 0.6, 0.6, 0.1), m); sign.position.set(cx * S, top + 0.6, (cz * S) + d / 2 - 0.1); root.add(bar, sign); }
-    if (p.id === "floor0") { const top = bd.h * S * EX, m = new THREE.MeshBasicMaterial({ color: "#ff3b30", toneMapped: false }), [cx, cz] = centroid(bd.pts), lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 8), m); lamp.position.set(cx * S, top + 0.18, cz * S); root.add(lamp); glow.push(m); } }
+    if (p.id === "floor0") { const top = roofOf(bd), m = new THREE.MeshBasicMaterial({ color: "#ff3b30", toneMapped: false }), [cx, cz] = centroid(bd.pts), lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 8), m); lamp.position.set(cx * S, top + 0.18, cz * S); root.add(lamp); glow.push(m); } }
   // ---- billboards: ten boards that cycle their posters ----
   const bbEntries = data.places.filter((p) => p.kind === "billboard").map((p) => ({ id: p.id, x: p.x * S, z: p.z * S, yaw: p.yaw, board: p.board })), bb = buildBillboards(bbEntries); root.add(bb.group);
 
@@ -97,14 +111,14 @@ export function buildRealCampus(data, meta = {}) {
   for (const p of data.places) {
     const bd = p.bid != null ? bById.get(p.bid) : null, x = p.x * S, z = p.z * S; let top, h;
     if (p.kind === "billboard") { h = null; top = bb.height; }
-    else if (bd) { h = bd.h; top = h * S * EX; if (p.id === "amphitheatre") top = 4.5 * S * EX; }
+    else if (bd) { h = bd.h; top = roofOf(bd); if (p.id === "amphitheatre" && !cl) top = 4.5 * S * EX; }
     else { h = null; top = 1.6; if (!NO_PIN.has(p.id)) { const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, top, 6), pinMat), cap = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), pinMat); pole.position.set(x, top / 2, z); cap.position.set(x, top, z); root.add(pole, cap); } } // no footprint known: a marker, not an invented building (except where the place is an open field that needs no marker)
     const pos = new THREE.Vector3(x, top + 1.2, z); anchors.set(p.id, pos);
     places.push({ ...meta[p.id], id: p.id, name: p.name, kind: p.kind, tier: p.tier, conf: p.conf, src: p.src, x, z, h, hSrc: bd?.hSrc ?? null, hasFootprint: !!bd, approx: p.conf === "approximate" || p.conf === "game", offmap: !!p.offmap, unnamed: !!p.unnamed, osmLabel: p.osmLabel, pos, radius: bd ? Math.max(3, Math.sqrt(bd.area) * S * 0.7) : p.kind === "billboard" ? 1.3 : 3 });
   }
   const sel = new THREE.Mesh(new THREE.RingGeometry(1, 1.2, 48), new THREE.MeshBasicMaterial({ color: "#3fd08a", transparent: true, opacity: 0.9, side: THREE.DoubleSide })); sel.rotation.x = -Math.PI / 2; sel.visible = false; root.add(sel);
   /** Any place the player can pick: a named place, or a building with no name ("bld_12"). Returns { id, x, z, radius, pos, bid } in scene units, or null. */
-  const unnamed = new Map(), resolve = (id) => { const L = places.find((l) => l.id === id); if (L) return L; if (!id?.startsWith("bld_")) return null; if (unnamed.has(id)) return unnamed.get(id); const bd = bById.get(Number(id.slice(4))); if (!bd) return null; const [cx, cz] = centroid(bd.pts), r = { id, name: "Building", kind: "building", bid: bd.id, x: cx * S, z: cz * S, radius: Math.max(3, Math.sqrt(bd.area ?? 400) * S * 0.7), pos: new THREE.Vector3(cx * S, bd.h * S * EX + 1.2, cz * S) }; unnamed.set(id, r); return r; };
+  const unnamed = new Map(), resolve = (id) => { const L = places.find((l) => l.id === id); if (L) return L; if (!id?.startsWith("bld_")) return null; if (unnamed.has(id)) return unnamed.get(id); const bd = bById.get(Number(id.slice(4))); if (!bd) return null; const [cx, cz] = centroid(bd.pts), r = { id, name: "Building", kind: "building", bid: bd.id, x: cx * S, z: cz * S, radius: Math.max(3, Math.sqrt(bd.area ?? 400) * S * 0.7), pos: new THREE.Vector3(cx * S, roofOf(bd) + 1.2, cz * S) }; unnamed.set(id, r); return r; };
   const setSelected = (id) => { const L = resolve(id); if (!L) { sel.visible = false; return; } sel.position.set(L.x, 0.2, L.z); sel.scale.setScalar(L.radius); sel.visible = true; };
   // "You are here": the gold ring and arrow over the player's building are gone. setYou stays so callers keep working, but it draws nothing.
   const setYou = () => {};
@@ -113,16 +127,19 @@ export function buildRealCampus(data, meta = {}) {
   const tripMode = (on) => { tripOn = on; root.traverse((o) => { if (o.userData?.layerY != null) o.position.y = on ? o.userData.layerY * TRIP_LOWER : o.userData.layerY; }); edges.group.traverse((o) => { if (o.name === "road-stubs") { o.userData.layerY ??= o.position.y; o.position.y = on ? o.userData.layerY * TRIP_LOWER : o.userData.layerY; } }); };
 
   /** Which place is under a raycaster? Returns a place id, "bld_<n>" for a building with no name, or null. */
-  const pick = (ray) => { const bh = ray.intersectObjects(bb.meshes, false)[0], h0 = ray.intersectObjects([wallMesh, capMesh].filter(Boolean), false)[0]; if (bh && (!h0 || bh.distance <= h0.distance)) return bh.object.userData.placeId; const hit = ray.intersectObjects([wallMesh, capMesh].filter(Boolean), false)[0]; if (!hit) return null; const isW = hit.object === wallMesh, v = hit.face.a;
-    const r = ranges.find((q) => (isW ? v >= q.s0 && v < q.s1 : v >= q.c0 && v < q.c1)); return r ? placeAt.get(r.bid)?.id ?? "bld_" + r.bid : null; };
-  const extent = Math.max(x1 - x0, z1 - z0) / 2, dispose = () => { dropRoads(); bb.dispose(); edges.dispose(); root.traverse((o) => { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : m ? [m] : []).forEach((q) => q.dispose()); }); win.map.dispose(); win.emis.dispose(); };
+  const pick = (ray) => { const bh = ray.intersectObjects(bb.meshes, false)[0], hit = ray.intersectObjects(solids, false)[0]; if (bh && (!hit || bh.distance <= hit.distance)) return bh.object.userData.placeId; if (!hit) return null;
+    let bid; if (cl) bid = cl.buildingOf(hit); else { const isW = hit.object === wallMesh, v = hit.face.a; bid = ranges.find((q) => (isW ? v >= q.s0 && v < q.s1 : v >= q.c0 && v < q.c1))?.bid ?? null; }
+    return bid != null ? placeAt.get(bid)?.id ?? "bld_" + bid : null; };
+  /** A building's drawn height in metres times EX: what can hide a name tag behind it. */
+  const drawnHeight = (bd) => roofOf(bd) / S;
+  const extent = Math.max(x1 - x0, z1 - z0) / 2, dispose = () => { dropRoads(); bb.dispose(); edges.dispose(); root.traverse((o) => { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : m ? [m] : []).forEach((q) => q.dispose()); }); win?.map.dispose(); win?.emis.dispose(); cl?.dispose(); };
   const setBillboards = (list) => bb.setBoards(list);
   // ---- night: lit windows and street lights ----
   // `n` is the night level (0 day .. 1 night, lib3d/daylight.js), arriving from the sky rig a few times a minute at most. Windows are the wall material's emissive map (the lit panes of the
   // window texture), so more emissive = more windows glowing; street lights are the glowing lamp heads and the pools of light on the road (lib3d/roadfurniture.js). Nothing here allocates.
-  let night = 0;
+  let night = 0, verge = null;
   const applyLamps = (n) => { for (const grp of [furniture, highway]) grp?.traverse((o) => { if (o.userData.lampHead) o.material.emissiveIntensity = 2.6 * n; else if (o.userData.lampPool) o.material.opacity = 0.6 * n; }); };   // the street lights of the roads and of the expressway
-  const setNight = (n) => { night = n; if (wallMesh) wallMesh.material.emissiveIntensity = 0.18 + 1.1 * n; applyLamps(n); };
+  const setNight = (n) => { night = n; if (wallMesh) wallMesh.material.emissiveIntensity = 0.18 + 1.1 * n; cl?.setNight(n); applyLamps(n); };
 
   /**
    * Gives the roads their proper shape: carriageways of the real width with a pavement each side, kerbs, centre dashes, stop lines and crossings, all drawn
@@ -140,19 +157,23 @@ export function buildRealCampus(data, meta = {}) {
   const dropRoads = () => {
     for (const g of [roadSurface, highway, furniture]) if (g) root.remove(g);   // the groups are this map's own; the geometry, materials and textures inside belong to the road cache (lib3d/roadAssets.js)
     roadSurface = highway = furniture = null; roadScene?.release(); roadScene = null;
+    if (verge) { root.remove(verge); verge = null; }
   };
   const setRoadGraph = (graph) => {
     dropRoads();
-    if (!graph) { clearForest(null); if (roadFlat) { roadFlat.visible = true; roadFlat.material.color.set("#343b46"); roadFlat.userData.layerY = ROAD_LAYER_Y; } tripMode(tripOn); return; }
+    if (!graph) { cl?.setRoadGraph(null); clearForest(null); if (roadFlat) { roadFlat.visible = true; roadFlat.material.color.set("#343b46"); roadFlat.userData.layerY = ROAD_LAYER_Y; } tripMode(tripOn); return; }
     roadScene = acquireRoadScene(graph, S, ROAD_LAYER_Y); ({ surface: roadSurface, highway, furniture } = roadScene);   // built once per graph, reused by every later map
     root.add(roadSurface); if (highway) root.add(highway);
     root.add(furniture);   // street lights, trees and stop signs, placed from the graph
     applyLamps(night);   // the lamps are shared, cached parts: show them at the sky's current level straight away
     clearForest(graph);
+    verge = cl?.setRoadGraph(graph) ?? null; if (verge) root.add(verge);   // laterite verges, and no plant on a carriageway
     if (roadFlat) roadFlat.visible = false;   // the old polygons include roads that were pruned or straightened: the graph is the road now
     tripMode(tripOn);
   };
-  return { root, anchors, places, pick, resolve, update, setNight, setSelected, setYou, tripMode, setTripMode: tripMode, setRoadGraph, setBillboards, dispose, bounds: { x0, x1, z0, z1 }, extent, attribution: data.meta.attribution,
+  /** Takes decoration (the Campuslife planting) out of these rings of [x, z] metres: the home compound stands there. [] puts it back. */
+  const clearScenery = (rings) => cl?.clear(rings);
+  return { root, look: cl ? "campuslife" : "classic", clearScenery, drawnHeight, anchors, places, pick, resolve, update, setNight, setSelected, setYou, tripMode, setTripMode: tripMode, setRoadGraph, setBillboards, dispose, bounds: { x0, x1, z0, z1 }, extent, attribution: data.meta.attribution,
     camera: { home: { x: 0, z: 8, dist: 210, az: 0.7, pol: 0.95 }, min: 10, max: 520 } };
 }
 

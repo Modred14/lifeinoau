@@ -8,6 +8,10 @@ let cache;
 /** Fetches /data/oau-campus.json once and adds the game-only places (Ojaja, Floor O, clubs, billboards). A failed load is not cached, so a retry can succeed. */
 export const loadCampusData = () => (cache ??= loadJson("/data/oau-campus.json", { priority: 0 }).then(withExtras).catch((e) => { cache = undefined; throw e; }));
 
+let lookCache;
+/** The Campuslife look of the map (/data/oau-campuslife.json, see lib3d/mapLook.js). Resolves to null if it cannot be loaded: the map is then drawn the classic way. A failed load is retried next time. */
+export const loadCampusLook = () => (lookCache ??= loadJson("/data/oau-campuslife.json", { priority: 0 }).catch((e) => { lookCache = undefined; console.warn("map look unavailable", e); return null; }));
+
 /** Game details by place id: { blurb, actions, verified }. New real-map places get a plain default blurb. */
 export function placeMeta(data) {
   const meta = { ...Object.fromEntries(LANDMARKS.map((l) => [l.id, { blurb: l.blurb, actions: l.actions, verified: l.verified }])), ...EXTRA_META };

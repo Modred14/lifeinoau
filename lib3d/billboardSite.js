@@ -2,6 +2,7 @@
 // What a roadside billboard is made of, where it may stand, and how to check that it does. Pure JS (no three.js, no DOM): runs in the browser, in the tests and in
 // tools/oau/place-billboards.mjs, so the model that is drawn (billboards3d.js), the footings that are solid (worldsvc.js) and the rules the sites are chosen by can never drift apart.
 // Metres, x east, z south, like the rest of lib3d. A board's yaw is the three.js rotation.y of its group: its front face looks along (sin yaw, cos yaw), its width runs along (cos yaw, -sin yaw).
+import { LOOK_EX } from "./mapLook.js";
 import { LV_GROUND, LV_DECK, LV_RAMP } from "./roadgraph.js";
 import { buildWorldCollision } from "./collide.js";
 
@@ -18,7 +19,7 @@ export const BB = {
 /** Half the screen's footprint seen from above, lamp arms included: across the board and out of its faces. */
 export const BOARD_HALF = [BB.W / 2 + BB.FRAME, BB.THICK / 2 + BB.LIGHT];
 /** Buildings are drawn this many times taller than they are (lib3d/campusReal.js EX); a sight line has to clear what is drawn. */
-export const BUILDING_EX = 2;
+export const BUILDING_EX = LOOK_EX;
 /** Eye height of someone driving (camera included), and the heights on the screen a sight line must reach. */
 export const EYE = 2.5;
 export const TARGETS = [[0, BB.POST_H + BB.H * 0.5], [-BB.W / 3, BB.POST_H + BB.H * 0.35], [BB.W / 3, BB.POST_H + BB.H * 0.35]];
