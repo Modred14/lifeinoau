@@ -2,6 +2,7 @@
 // The home screen: your room fills the whole window, with your needs, what you can do, and (in Buy mode) the furniture shop on top of it.
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { NEEDS, statusOf } from "@/lib/needs.js";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { call, naira, notifyError, loggedOut } from "@/lib/client";
@@ -44,24 +45,7 @@ const RoomStage = dynamic(() => import("./RoomStage"), {
   ),
 });
 
-const NEEDS = [
-  ["Health", "health", "health"],
-  ["Energy", "energy", "energy"],
-  ["Happiness", "happiness", "happy"],
-  ["Academics", "academics", "study"],
-  ["Popularity", "popularity", "social"],
-  ["Suspicion", "suspicion", "eye"],
-];
-
-/** One short line about how the player is, from their worst stat. */
-export function statusOf(c) {
-  if (c.health < 25) return { tone: "bad", text: "Very sick. Rest up" };
-  if (c.energy < 20) return { tone: "bad", text: "Exhausted. Go and rest" };
-  if (c.suspicion >= 60) return { tone: "bad", text: "N-QRS is watching you" };
-  if (c.happiness < 25) return { tone: "warn", text: "Feeling low. Call home" };
-  if (c.energy < 40) return { tone: "warn", text: "Getting tired" };
-  return null;
-}
+export { statusOf }; // moved to lib/needs.js (the bottom bar's avatar sheet reads it too)
 
 export default function GameHome({
   st,

@@ -1,0 +1,41 @@
+/* components/needs-sheet.css: the sheet opened by the avatar on the bottom bar (components/NeedsSheet.js).
+   It floats just above the bar, one layer under it (the bar stays tappable, so the avatar button that opened it also closes it), and above every game layer. */
+.ns {
+  position: fixed; z-index: calc(var(--z-nav) - 1); left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--safe-b) + var(--nav-band) + 8px);
+  width: min(460px, calc(100% - 2 * var(--edge))); box-sizing: border-box; max-height: min(640px, calc(100dvh - var(--nav-band) - var(--safe-b) - var(--hud-h, 56px) - 28px));
+  overflow-y: auto; overscroll-behavior: contain; padding: 8px 16px 16px; color: var(--text); outline: 0;
+  background: var(--bp-bg); border: 1px solid var(--bp-line); border-radius: 28px; box-shadow: 0 -16px 40px -16px rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(20px) saturate(1.3); -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  animation: ns-in 0.28s var(--ease) both;
+}
+@keyframes ns-in { from { opacity: 0; transform: translate(-50%, 14px); } }
+.ns-grab { display: block; width: 40px; height: 4px; margin: 0 auto 10px; border-radius: 4px; background: rgba(255, 255, 255, 0.28); }
+.ns-h { display: flex; align-items: center; gap: 12px; }
+.ns-who { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.ns-who b { font: 800 1.25rem/1.1 var(--font-head); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ns-who span { display: inline-flex; align-items: center; gap: 5px; font-size: 0.82rem; font-weight: 600; color: var(--muted); }
+.ns-who span[data-tone="ok"] { color: var(--green-text); } .ns-who span[data-tone="warn"] { color: var(--gold-text); } .ns-who span[data-tone="bad"] { color: #ff8a96; }
+.ns .ns-x { flex: none; width: 40px; height: 40px; min-height: 0; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.ns .ns-x:hover { background: rgba(255, 255, 255, 0.16); }
+.ns-tabs { display: flex; gap: 8px; margin: 14px -16px 6px; padding: 0 16px; overflow-x: auto; scrollbar-width: none; }
+.ns-tabs::-webkit-scrollbar { display: none; }
+.ns .ns-tabs button { flex: none; min-height: 38px; padding: 0 14px; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; border: 0; background: rgba(255, 255, 255, 0.08); color: #d4dbe8; font: 600 0.84rem var(--font-ui); }
+.ns .ns-tabs button:hover { background: rgba(255, 255, 255, 0.15); color: #fff; }
+.ns .ns-tabs button.on { background: #eef1f7; color: #0d1321; font-weight: 700; }
+.ns-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.ns-list li { display: flex; align-items: center; gap: 12px; }
+.ns-ico { flex: none; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--c, #9aa8bc) 18%, transparent); color: var(--c, #9aa8bc); }
+.ns-row { flex: 1; min-width: 0; }
+.ns-line { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.88rem; font-weight: 700; }
+.ns-line b { color: #cdd5e2; font-weight: 600; }
+.ns-bar { height: 8px; margin-top: 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.ns-bar i { display: block; height: 100%; border-radius: 4px; background: var(--c, #9aa8bc); transition: width 0.5s var(--ease); }
+.ns-list [data-k="health"] { --c: #ff7a8a; } .ns-list [data-k="energy"] { --c: #5aa2ff; } .ns-list [data-k="happiness"] { --c: #f2b84b; }
+.ns-list [data-k="academics"] { --c: #5fe3c0; } .ns-list [data-k="popularity"] { --c: #b48cff; } .ns-list [data-k="suspicion"] { --c: #ff9a5a; }
+.ns-list [data-tone="bad"] .ns-bar i { box-shadow: 0 0 0 1px rgba(255, 77, 94, 0.6); } /* a stat in trouble is outlined, so it does not rely on colour alone */
+.ns-sub { margin: 18px 0 8px; font: 700 0.72rem var(--font-ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.ns-feel { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 18px; background: rgba(255, 255, 255, 0.06); --c: #3fd08a; }
+.ns-feel[data-tone="warn"] { --c: #f2b84b; } .ns-feel[data-tone="bad"] { --c: #ff7a8a; }
+.ns-feel p { margin: 0; font-size: 0.92rem; font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { .ns { animation: none; } .ns-bar i { transition: none; } }

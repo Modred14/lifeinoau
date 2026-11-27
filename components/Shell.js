@@ -27,7 +27,7 @@ import "./prefs.css";
 const stamp = (d) =>
   `${d.toLocaleDateString("en-NG", { weekday: "short", timeZone: GAME_TIME_ZONE })} ${gameDayOfMonth(+d)} · ${d.toLocaleTimeString("en-NG", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: GAME_TIME_ZONE }).replace(/\s?(am|pm)/i, (m) => " " + m.trim().toUpperCase())}`;
 
-/** Top bar across the whole window, four-tab bottom bar (Home, Buy, Map, Phone) and the phone. Hidden on the landing page and until you have a character. */
+/** Top bar across the whole window, bottom bar (your avatar, Home, Buy, Map, Phone) and the phone. Hidden on the landing page and until you have a character. */
 export default function Shell({ children }) {
   const path = usePathname(),
     router = useRouter(),
@@ -269,6 +269,7 @@ export default function Shell({ children }) {
           phoneOpen={phone}
           unread={unreadChats}
           opener={opener}
+          character={st.character}
           onHome={goHome}
           onBuy={goBuy}
           onMap={goMap}

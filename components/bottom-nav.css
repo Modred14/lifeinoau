@@ -1,93 +1,57 @@
 /* components/bottom-nav.css: the persistent bottom bar and the layer contract that keeps it on screen.
 
-   The bar is a frosted-glass pill (Home, Buy, Map: the tab you are on opens into icon + name) with a small Phone button beside it. It is COMPACT on purpose: 32px tall (28px tabs,
-   1px / 2px padding), lifted 3px off the bottom edge, so it covers as little of the world as it can.
+   The bar is a row of three pieces: YOUR AVATAR (a picture ringed by how you are doing; tapping it opens the needs sheet, components/NeedsSheet.js), a frosted-glass pill
+   (Home, Buy, Map: the tab you are on opens into icon + name) and the Phone, a little handset. It has two looks and one size:
+   - floating: three separate pieces of glass, lifted off the bottom edge, when nothing is docked on it (the world, the home screen, the map);
+   - docked: while an activities panel, the travel sheet or the map's place card sits on top of it (<body data-dock="on">) the bar joins that panel as the lower half of ONE surface.
 
-   ONE size, everywhere except inside a building. Every dimension of the bar comes from the --nav-* tokens below. The tokens on :root are the compact bar and are the same at every
-   screen size and in every game state (walking the world, the phone and its apps, the map, the travel sheet and the map's place card docked on the bar). There is deliberately NO
-   breakpoint that makes them bigger. The ONE exception is a room you are standing in: BuildingInside.js marks <body data-inside="1"> for as long as an interior is on screen, and
-   the block "inside a building" restores the bar's original size there, token for token (the interior's panel and controls were laid out around it).
+   ONE size, everywhere: the world, the home screen, the map, the phone's apps and inside every building. Every dimension comes from the --nav-* tokens below, they are the same in every
+   game state and at every screen width (the one exception is a phone held sideways, which has little height to give, so the bar slims a little there for everyone).
    Anything new that wants the bar's footprint reads --nav-band / --nav-h, never a number.
 
-   Why the bar used to vanish: it sat at z-index 30 while the phone, travel sheets, building interiors and dialogs are full-screen layers at 60-95,
-   so every one of them covered it; the trip screen hid it outright; and none of those layers left any room for it.
-
-   The contract now:
+   The contract:
    1. The bar is one fixed layer (--z-nav) above every in-game layer (the highest is the lecture fight at 300). Only toasts (1000) and THE PHONE sit higher: the phone is a floating
-      handset over the whole game, the bar included (phone.css puts it at --z-nav + 10), and the bar is inert behind it.
+      handset over the whole game, the bar included (phone.css puts it at --z-nav + 10), and the bar is inert behind it. The needs sheet sits one layer under the bar.
    2. --nav-band is the bar's real footprint above the bottom edge. --nav-h (the spacing the pages and the home screen already use) follows it.
    3. While the bar is mounted, <body data-nav="on">. Every full-screen layer below redefines --safe-b (the bottom inset all of them already use for
       their sheets, footers and joysticks) as "device inset + the bar", so their bottom controls stop above the bar instead of under it. */
 :root {
   --z-nav: 500;
-  /* ---- the compact bar (outside buildings) ---- */
-  --nav-gap: 3px; /* between the bar and the bottom edge (the device's own inset comes on top) */
-  --nav-btn-h: 28px; /* a tab: still a usable target, WCAG 2.2's minimum is 24px */
-  --nav-bar-h: 32px; /* 28px tabs + 2 x 1px padding + 2px border */
+  --nav-gap: 8px; /* between the bar and the bottom edge (the device's own inset comes on top) */
+  --nav-btn-h: 46px; /* a tab */
+  --nav-bar-h: 54px; /* 46px tabs + 2 x 3px padding + 2px border; the avatar and the handset are the same height */
   --nav-band: calc(var(--nav-gap) + var(--nav-bar-h));
-  --nav-w: 184px; /* the floating bar: three tabs (the open one with its name) and the phone, with no slack to speak of */
-  --nav-pad: 1px 2px; /* the bar's own padding: top/bottom 1px, left/right 2px */
-  --nav-row-gap: 2px; /* between the pill and the phone button */
-  --nav-tab-gap: 1px; /* between the tabs */
-  --nav-tab-px: 8px;
-  --nav-tab-minw: 30px;
-  --nav-ico: 18px;
-  --nav-font: 0.7rem;
-  --nav-label-gap: 4px; /* icon to name, on the open tab */
-  --nav-label-max: 3.4rem;
-  --nh-u: 0.65px; /* the handset is drawn in units of this: 1px is the original size, every part of it follows */
-  --nav-badge: 13px; /* the unread count on the phone button */
-  --nav-badge-px: 3px;
-  --nav-badge-top: -5px;
-  --nav-badge-right: -7px;
-  --nav-badge-font: 0.58rem;
-  /* docked on a panel (the travel sheet, the map's place card): the bar takes the panel's width and the pill stays a small centred group in it, not stretched across it */
-  --nav-dock-pad: 1px 2px;
-  --nav-dock-gap: 2px;
-  --nav-dock-radius: 12px;
+  --nav-w: 372px; /* avatar, the pill (three tabs, the open one with its name) and the phone */
+  --nav-pad: 3px;
+  --nav-row-gap: 8px; /* between the avatar, the pill and the phone button */
+  --nav-tab-gap: 2px;
+  --nav-tab-px: 12px;
+  --nav-tab-minw: 46px;
+  --nav-ico: 22px;
+  --nav-font: 0.78rem;
+  --nav-label-gap: 6px; /* icon to name, on the open tab */
+  --nav-label-max: 3.6rem;
+  --nh-u: 1.2px; /* the handset is drawn in units of this */
+  --nav-badge: 16px; /* the unread count on the phone button */
+  --nav-badge-px: 4px;
+  --nav-badge-top: -4px;
+  --nav-badge-right: -6px;
+  --nav-badge-font: 0.62rem;
+  /* docked on a panel (the building panel, the travel sheet, the map's place card): the bar takes the panel's width and its three pieces sit as a centred group in it */
+  --nav-dock-pad: 4px 8px;
+  --nav-dock-gap: 8px;
+  --nav-dock-radius: 22px;
   --nav-dock-justify: center;
-  --nav-dock-pill-flex: 0 1 160px; /* the same width the pill has in the floating bar (184px less the phone button) */
+  --nav-dock-pill-flex: 0 1 236px;
   --nav-dock-pill-h: 100%;
   --nav-dock-pill-bw: 0px;
   --bp-bg: rgba(13, 19, 33, 0.94); /* the one surface the activities panel and the docked bar share (components/building-panel.css) */
   --bp-line: rgba(255, 255, 255, 0.12);
   --nav-on: #6ee7a8; /* the active tab: the game's green, a little brighter so it holds up on glass */
 }
-
-/* ---- inside a building: the bar exactly as it was (the room's panel, stick and buttons are laid out around these numbers) ---- */
-body[data-inside] {
-  --nav-gap: 6px;
-  --nav-btn-h: 36px;
-  --nav-bar-h: 44px; /* 36px buttons + 2 x 3px padding + 2px border */
-  --nav-band: calc(var(--nav-gap) + var(--nav-bar-h));
-  --nav-h: var(--nav-band); /* globals.css defines it on :root, where it would still see the compact band */
-  --nav-w: 300px;
-  --nav-pad: 3px;
-  --nav-row-gap: 8px;
-  --nav-tab-gap: 2px;
-  --nav-tab-px: 10px;
-  --nav-tab-minw: 38px;
-  --nav-ico: 20px;
-  --nav-font: 0.76rem;
-  --nav-label-gap: 7px;
-  --nav-label-max: 4.6rem;
-  --nh-u: 1px;
-  --nav-badge: 15px;
-  --nav-badge-px: 4px;
-  --nav-badge-top: -6px;
-  --nav-badge-right: -9px;
-  --nav-badge-font: 0.62rem;
-  --nav-dock-pad: 3px;
-  --nav-dock-gap: 4px;
-  --nav-dock-radius: 16px;
-  --nav-dock-justify: flex-start;
-  --nav-dock-pill-flex: 1;
-  --nav-dock-pill-h: var(--nav-bar-h);
-  --nav-dock-pill-bw: 1px;
-}
-/* a phone held sideways has little height to give: the room's bar gets slimmer, as it always did. (The compact bar is already as slim as it goes and does not change.) */
+/* a phone held sideways has little height to give: the bar gets slimmer, for everyone */
 @media (max-height: 480px) {
-  body[data-inside] { --nav-gap: 4px; --nav-btn-h: 34px; --nav-bar-h: 40px; --nav-ico: 18px; }
+  :root { --nav-gap: 4px; --nav-btn-h: 38px; --nav-bar-h: 46px; --nav-ico: 20px; --nh-u: 1px; }
 }
 
 /* The bar: a row holding the pill and the phone button. It has no surface of its own; each part is its own piece of glass. */
@@ -104,7 +68,7 @@ body[data-inside] {
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .nav-pill, .nav-phone { background: var(--glass-bg-strong); } }
 .nav-pill { flex: 1; min-width: 0; height: var(--nav-bar-h); display: flex; align-items: stretch; gap: var(--nav-tab-gap); padding: var(--nav-pad); border-radius: 999px; }
 /* the Phone button is a little handset standing beside the bar, a touch taller than it, so it reads as the phone you pick up */
-.nav .nav-phone:not(:where(.campus-world *)) { flex: none; width: calc(34 * var(--nh-u)); height: calc(var(--nav-bar-h) + 12 * var(--nh-u)); min-height: 0; /* the shared button skin asks for 44px, which the compact handset must not inherit */ padding: 0; border-radius: calc(10 * var(--nh-u)); display: block; position: relative; background: none; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; color: rgba(234, 240, 248, 0.82); }
+.nav .nav-phone:not(:where(.campus-world *)) { flex: none; width: calc(34 * var(--nh-u)); height: var(--nav-bar-h); min-height: 0; /* the shared button skin asks for 44px, which the compact handset must not inherit */ padding: 0; border-radius: calc(10 * var(--nh-u)); display: block; position: relative; background: none; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; color: rgba(234, 240, 248, 0.82); }
 .nav-handset { position: absolute; inset: 0; display: block; border-radius: calc(10 * var(--nh-u)); background: #0b111d; border: calc(2 * var(--nh-u)) solid #c9d0dd; box-shadow: 0 calc(8 * var(--nh-u)) calc(16 * var(--nh-u)) calc(-6 * var(--nh-u)) rgba(0, 0, 0, 0.7), inset 0 0 0 calc(1 * var(--nh-u)) rgba(0, 0, 0, 0.6); transition: transform 160ms var(--ease), border-color 200ms var(--ease); }
 .nav-handset::before { content: ""; position: absolute; left: calc(-4 * var(--nh-u)); top: calc(14 * var(--nh-u)); width: calc(2 * var(--nh-u)); height: calc(8 * var(--nh-u)); border-radius: calc(1 * var(--nh-u)); background: #c9d0dd; box-shadow: 0 calc(11 * var(--nh-u)) 0 #c9d0dd; } /* the side buttons */
 .nav-handset .nh-screen { position: absolute; inset: calc(2 * var(--nh-u)); border-radius: calc(7 * var(--nh-u)); background: #1d2b4d; overflow: hidden; display: grid; grid-template-columns: repeat(2, 1fr); gap: calc(3 * var(--nh-u)); align-content: center; justify-items: center; padding: calc(9 * var(--nh-u)) calc(4 * var(--nh-u)) calc(7 * var(--nh-u)); transition: background-color 200ms var(--ease); }
@@ -136,8 +100,22 @@ body[data-inside] {
 @media (prefers-reduced-motion: reduce) {
   .nav { animation: none; }
   .nav a, .nav button, .nav svg, .nav-pill > * > span { transition: none !important; }
+  .nav .nav-me:active { transform: none; }
   .nav a:active, .nav button:active { transform: none; }
 }
+
+/* Your avatar: your picture inside a ring of five segments (health, energy, happiness, academics, popularity), each filled to that stat (a stat below 25 turns red); a small face for your mood
+   sits on its corner. Tapping it opens the needs sheet (components/NeedsSheet.js). The same height as the bar, so the three pieces line up. */
+.nav .nav-me { position: relative; flex: none; width: var(--nav-bar-h); height: var(--nav-bar-h); min-height: 0; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--glass-line); background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); box-shadow: var(--glass-rim), var(--glass-lift); color: var(--text); -webkit-tap-highlight-color: transparent; touch-action: manipulation; transition: transform 120ms var(--ease), box-shadow 220ms var(--ease), background-color 220ms var(--ease); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .nav .nav-me { background: var(--glass-bg-strong); } }
+.nav .nav-me .nav-ring { position: absolute; inset: -1px; width: calc(100% + 2px); height: calc(100% + 2px); pointer-events: none; }
+.nav .nav-me .pav { width: calc(var(--nav-bar-h) - 16px) !important; height: calc(var(--nav-bar-h) - 16px) !important; } /* inside the ring: not a % (the button is a grid with no fixed cell) */
+.nav .nav-me:hover { background-color: rgba(255, 255, 255, 0.1); }
+.nav .nav-me:active { transform: scale(0.95); }
+.nav .nav-me[data-active="1"] { box-shadow: var(--glass-rim), var(--glass-lift), 0 0 0 2px var(--nav-on); }
+.nav .nav-mood { position: absolute; right: -2px; bottom: -2px; z-index: 2; width: 20px; height: 20px; box-sizing: border-box; display: grid; place-items: center; border-radius: 50%; background: rgb(13, 43, 27); border: 2px solid rgb(22, 32, 50); color: #6ee7a8; line-height: 0; }
+.nav .nav-mood[data-tone="warn"] { background: rgb(52, 40, 12); color: #f2b84b; } .nav .nav-mood[data-tone="bad"] { background: rgb(58, 18, 24); color: #ff8a96; }
+.nav .nav-mood svg { width: 12px; height: 12px; }
 
 /* ---- the layers that must leave room for the bar ---- */
 body[data-nav="on"] :is(.ts-scrim, .cl-scrim, .cd-scrim, .th-pre-scrim, .sheet-scrim, .bi, .bi3, .th, .lf, .sx, .er, .nf) {
@@ -174,6 +152,11 @@ body[data-dock="on"] .nav {
   box-sizing: border-box; width: min(520px, calc(100% - 2 * var(--edge))); padding: var(--nav-dock-pad); gap: var(--nav-dock-gap); justify-content: var(--nav-dock-justify); background: var(--bp-bg); border: 0 solid var(--bp-line); border-width: 0 1px 1px;
   border-radius: 0 0 var(--nav-dock-radius) var(--nav-dock-radius); box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.75);
 }
+body[data-dock="on"] .nav .nav-me { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; border-color: transparent; box-shadow: none; }
+body[data-dock="on"] .nav .nav-me[data-active="1"] { box-shadow: 0 0 0 2px var(--nav-on); }
+body[data-dock="on"] .nav .nav-me { width: calc(var(--nav-bar-h) - 8px); height: calc(var(--nav-bar-h) - 8px); } /* the docked bar has 4px of padding top and bottom: the avatar and the handset fit inside it */
+body[data-dock="on"] .nav .nav-me .pav { width: calc(var(--nav-bar-h) - 24px) !important; height: calc(var(--nav-bar-h) - 24px) !important; }
+body[data-dock="on"] .nav .nav-phone:not(:where(.campus-world *)) { height: calc(var(--nav-bar-h) - 8px); }
 body[data-dock="on"] .nav .nav-pill { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; border-color: transparent; box-shadow: none; }
 body[data-dock="on"] .nav-pill { padding: 0; flex: var(--nav-dock-pill-flex); height: var(--nav-dock-pill-h); border-width: var(--nav-dock-pill-bw); }
 /* the unread badge on the Phone button: pinned to the icon, so it never moves it */
