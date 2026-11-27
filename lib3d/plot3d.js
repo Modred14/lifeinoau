@@ -17,7 +17,7 @@ const hits = (r, x, z, w, d) => x < r.x1 && x + w > r.x0 && z < r.z1 && z + d > 
  * lib3d/modelCache.js: building the plot again (re-entering the home, resizing it) makes new meshes and materials over geometry that is already built. Each mesh keeps its own
  * position, material and shadow flags. Call release() (or dispose the group with room.js's dispose(), which does) when the plot goes.
  */
-export function buildPlot(room, { mat, tree, embedded = false }) {
+export function buildPlot(room, { mat, tree, embedded = false, garage = true }) {
   const P = plotFor(room), st = homeStyle(room), W = room.w, D = room.d, g = new THREE.Group(), trees = [], R = PLOT_RULES, hold = createHolder();
   const boxGeo = (w, h, d) => hold.get(`plot:box:${w}|${h}|${d}`, () => new THREE.BoxGeometry(w, h, d), { priority: 1 });
   const icoGeo = (r, detail) => hold.get(`plot:ico:${r}|${detail}`, () => new THREE.IcosahedronGeometry(r, detail), { priority: 1 });
@@ -77,6 +77,7 @@ export function buildPlot(room, { mat, tree, embedded = false }) {
 
   // ---- the garage: a hall east of the house, its front open to the driveway. A lane runs down the middle and the cars stand in painted bays either side of it, nose to the lane ----
   // (lib/plot.js: P.bays; lib3d/compoundParking.js puts the vehicles in them). Low walls and a frame keep it open to the camera, so every car can be seen.
+  if (garage) { // the /buy preview shows the house and a small compound only: no garage hall, bays or lane (the vehicle storage in the game itself is untouched)
   const ga = P.garage, wallW = 0.3, wallH2 = 1.15, postH = 2.9, lane = P.lane;
   slab({ x0: ga.x0, x1: ga.x1, z0: ga.z0, z1: ga.z1 }, GROUND, 0.03, M.garageFloor);
   slab({ x0: lane.x0, x1: lane.x1, z0: ga.z0 + wallW, z1: ga.z1 }, GROUND + 0.03, 0.004, M.laneFloor); // the lane is a shade lighter than the bays
@@ -101,6 +102,7 @@ export function buildPlot(room, { mat, tree, embedded = false }) {
   for (let z = ga.z0 + PLOT_RULES.bayPitch * 2; z < ga.z1 - 1; z += PLOT_RULES.bayPitch * 2) beam({ x0: ga.x0, x1: ga.x1, z0: z - bt, z1: z + bt }); // cross beams over the lane
   if (!embedded) for (const z of [ga.z1 - 4, (ga.z0 + ga.z1) / 2, ga.z0 + 4]) { const gl = new THREE.PointLight(0xffd9a0, 1.6, 12, 1.8); gl.position.set(wx((lane.x0 + lane.x1) / 2), GROUND + 2.6, wz(z)); g.add(gl); } // lamps down the lane
 
+  } // garage
   // ---- hedges inside the wall (never across a gate or the driveway), and the trees ----
   const gate = (x, z) => [P.gate, P.footGate].some((gp) => x > gp.x0 - 0.9 && x < gp.x1 + 0.9 && z > pl.z1 - 1.6);
   const bush = (x, z, k, i) => { const m = new THREE.Mesh(icoGeo(0.34 * k, 1), i % 2 ? M.hedge : M.hedge2); m.position.set(wx(x), GROUND + 0.28 * k, wz(z)); m.scale.set(1.2, 0.9, 1.2); m.castShadow = true; g.add(m); };

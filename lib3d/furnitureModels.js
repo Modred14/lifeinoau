@@ -553,6 +553,26 @@ const BUILD = {
 /** Exposed for the catalogue test: every item the shop can sell needs a real model, not the generic placeholder. */
 export const FURNITURE_MODEL_KEYS = Object.freeze(Object.keys(BUILD));
 
+/**
+ * Why big pieces (TVs, speakers, sofas, cabinets) rendered solid black: they are plain-colour materials (no texture), and several were authored in near-black
+ * (#0e1118, #101218, #1d2128, #14171f ...). The renderer uses ACES tone mapping, which crushes albedo that dark to 0, so a large flat face loses all its shading and
+ * reads as a black hole. The fix is applied to every model, so any piece placed later is covered too: an unlit, untextured material darker than MIN_L in HSL lightness
+ * is lifted to dark charcoal (sRGB lightness 0.14) that keeps its hue (and its shading). Screens (a map or an emissive), glass and glowing parts are left alone.
+ */
+export const MIN_L = 0.14; // sRGB lightness (what the eye sees; three's default getHSL is linear and would flag ordinary browns)
+const hsl = { h: 0, s: 0, l: 0 };
+export function liftBlack(group) {
+  group.traverse((o) => {
+    if (!o.isMesh) return;
+    for (const m of [].concat(o.material)) {
+      if (!m || !m.color || m.map || m.emissiveMap || m.userData.lifted || m.transparent || (m.emissiveIntensity > 0 && m.emissive && m.emissive.getHex() !== 0)) continue;
+      m.color.getHSL(hsl, THREE.SRGBColorSpace);
+      if (hsl.l < MIN_L) m.color.setHSL(hsl.h, Math.min(hsl.s, 0.35), MIN_L, THREE.SRGBColorSpace);
+      m.userData.lifted = true;
+    }
+  });
+}
+
 /** A fresh model of the item: { group, w, d } where the group is centred on its footprint and `group.userData.spin` (if any) is a part that should spin. */
 export function buildFurniture(key) {
   const def = ITEMS[key], g = new THREE.Group(); g.name = key;
@@ -560,6 +580,7 @@ export function buildFurniture(key) {
   BUILD[key](g);
   g.userData.key = key;
   g.traverse((o) => { if (o.isMesh && !o.material.map) o.material.flatShading = false; });
+  liftBlack(g);
   return g;
 }
 

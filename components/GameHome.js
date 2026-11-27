@@ -393,6 +393,7 @@ export default function GameHome({
           look={c.look ?? undefined}
           gender={c.gender}
           mode={mode}
+          garage={false}
           selected={selected}
           onSelect={setSelected}
           onMove={onMove}

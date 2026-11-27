@@ -68,3 +68,13 @@ for (const hostel of ["Awo", "Ojaja", "Off-campus", "1-Bedroom Flat", "2-Bedroom
   removeSiteCollision(svc.world);
 }
 console.log(bad ? `\n${bad} check(s) failed` : "\nAll checks passed"); process.exit(bad ? 1 : 0);
+
+// ---- the panel only offers what the home actually has ----
+{
+  const { listActivities } = await import("../lib/homeActivities.js"), { roomFor } = await import("../lib/room.js");
+  const room = roomFor("Awo", "p"), none = listActivities({ items: [], room, ctx: {} });
+  console.log(none.every((a) => a.present === false) ? "OK   an empty hostel offers no activity at all (no shower, toilet, cooker or table is invented)" : "FAIL an empty hostel offers activities: " + none.filter((a) => a.present).map((a) => a.id));
+  if (!none.every((a) => a.present === false)) process.exitCode = 1;
+  const bed = [{ id: "b1", key: "single_bed", x: 2, z: 2, rot: 0, placed: true }], withBed = listActivities({ items: bed, room, ctx: { energy: 10 } }).filter((a) => a.present).map((a) => a.id);
+  const ok = withBed.join() === "sleep"; console.log(ok ? "OK   placing a bed makes Sleep appear, and nothing else" : "FAIL a bed offers " + withBed); if (!ok) process.exitCode = 1;
+}

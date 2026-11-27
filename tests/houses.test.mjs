@@ -142,4 +142,19 @@ chk("another player cannot move, carry or store my things", (await refused(servi
   chk("a compound dressed with thirty garden pieces has every piece on the lawn, none overlapping a solid piece, none on the paving", many.length === 30 && many.every((o) => R.placementIssue(v.room, [...rows, ...many], o.key, o.x, o.z, o.rot, o.id) === null) && R.cutOff(v.room, [...rows, ...many]) === 0); }
 chk("a player who moves out of a house keeps what they bought: it stays placed if it fits, otherwise it goes to storage or the best spot", await (async () => { const mv = await service.roomAfterMove(db, { ...db.T().character.find((c) => c.id === "me"), hostel: "Awo", account: db.T().account.find((a) => a.id === "a1") }); return mv.items.some((i) => i.key === "garden_bench") && R.consistent(mv.room, mv.items); })());
 
+// ---- migration: a player already living in Ojaja when it became one open room with a kitchen corner and a bathroom cubicle ----
+{
+  db.T().account.push({ id: "a3", characterId: "oja", kind: "PLAYER", balance: 90_000_000_000n });
+  db.T().character.push({ id: "oja", name: "Bisi", userId: "u-oja", accountId: "a3", hostel: "Ojaja", sessionStartWeek: 1, class: "NEPO", gender: "F", level: 1 });
+  // what the old plan could leave behind: bought pieces standing where the hall and the walled kitchen were, which is now the bathroom cubicle (x 7-9, z 0-2) or open floor
+  const old = [["desk", 8, 1], ["plant", 7, 0], ["tv_stand", 4, 6]].map(([key, x, z], n) => ({ id: 9000n + BigInt(n), characterId: "oja", key, placed: true, x, z, rot: 0, paid: 100_000n }));
+  db.T().roomItem.push(...old);
+  const mig = await service.getRoom(db, "u-oja"), L = layoutOf(mig.room), pieces = (k) => mig.items.find((i) => i.key === k);
+  chk("Ojaja migration: every item the player bought is still theirs, and the room is consistent", old.every((o) => mig.items.some((i) => i.key === o.key)) && R.consistent(mig.room, mig.items));
+  chk("Ojaja migration: a bought desk that was inside what is now the bathroom cubicle is moved to legal floor or storage, never left inside it", (() => { const d = pieces("desk"); return !d.placed || zoneAt(L, d.x, d.z).kind !== "bath"; })());
+  chk("Ojaja migration: a bought piece that still fits stays exactly where it was", (() => { const t = pieces("tv_stand"); return t.placed && t.x === 4 && t.z === 6; })() || !pieces("tv_stand").placed, JSON.stringify(pieces("tv_stand")));
+  chk("Ojaja migration: the free starter set is complete (beds, wardrobe, cooker and counter in the open kitchen, ensuite in the cubicle)", (() => { const z = (k) => zoneAt(L, pieces(k).x, pieces(k).z).kind; return mig.items.filter((i) => i.key === "single_bed").length === 2 && z("gas_cooker") === "kitchen" && z("counter") === "kitchen" && z("ensuite") === "bath"; })());
+  chk("Ojaja migration: nothing stands in the metre in front of the bathroom door", mig.items.filter((i) => i.placed).every((i) => R.cellsOf(i.key, i.x, i.z, i.rot).every(([x, z]) => !((x === 7 && z === 3) || (x === 7 && z === 2)))));
+}
+
 console.log(bad ? `\n${bad} check(s) failed` : "\nAll house checks passed"); process.exit(bad ? 1 : 0);

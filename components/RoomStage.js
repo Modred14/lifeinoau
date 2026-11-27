@@ -7,7 +7,7 @@ import { Icon } from "./Icon";
  *  `apiRef.current` gives the parent the scene's methods (rotateView, pulse, rotateSelected, goToBed, wakeUp, cancelSleep, ...).
  *  Sleep callbacks: onAsleep(id) the character is lying down; onAwake() fully standing again; onWakeTap() the player tapped the floor
  *  to get up (the scene already runs the get-up); onSleepCancel() the player tapped the floor while still walking to the bed. */
-export default function RoomStage({ room, items, roomError, onRetry, look, gender, mode, selected, onSelect, onMove, onBlocked, onUse, onAsleep, onAwake, onWakeTap, onSleepCancel, apiRef, tool, vehicles, onVehicle, onDrive, onLeave, onPark, onEntry, onPlace }) {
+export default function RoomStage({ room, items, roomError, onRetry, look, gender, mode, selected, onSelect, onMove, onBlocked, onUse, onAsleep, onAwake, onWakeTap, onSleepCancel, apiRef, tool, vehicles, onVehicle, onDrive, onLeave, onPark, onEntry, onPlace, garage = true }) {
   const box = useRef(null), bar = useRef(null), scene = useRef(null), cbs = useRef({}), [ready, setReady] = useState(false), [failed, setFailed] = useState(false);
   cbs.current = { onSelect, onMove, onBlocked, onUse, onAsleep, onAwake, onWakeTap, onSleepCancel, onVehicle, onDrive, onLeave, onPark, onEntry, onPlace };
   const roomKey = room ? `${room.w}x${room.d}:${room.theme}:${room.layout ?? ""}:${room.grime ?? 0}` : "", lookKey = JSON.stringify([look ?? null, gender]);
@@ -18,6 +18,7 @@ export default function RoomStage({ room, items, roomError, onRetry, look, gende
       try {
         const { createRoomScene } = await import("../lib3d/room.js"); if (!alive) return;
         s = createRoomScene(box.current, {
+          garage,                                           // false: a purchase preview shows the house and a small compound only
           onSelect: (id) => cbs.current.onSelect?.(id),
           onMove: (id, p) => cbs.current.onMove?.(id, p),
           onBlocked: (why) => cbs.current.onBlocked?.(why),

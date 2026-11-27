@@ -1,6 +1,6 @@
 // components/HomeActivityPanel.js
 // The Home Activity Panel: everything the player can do at home, in categories (Rest and Sleep, Kitchen and Food, Bathroom and Hygiene, Personal Care, Relaxation, Other), shown as small cards.
-// An activity the home cannot offer stays in the list, dimmed, with the reason. Starting one minimises the panel to a one-line status while it runs. The furniture itself can be tapped too (HomeWorld).
+// An activity whose fixture or furniture is not in the home is not shown at all (it appears when the player places it); one that is only blocked for now (tired, busy) stays, dimmed, with the reason. Starting one minimises the panel to a one-line status while it runs. The furniture itself can be tapped too (HomeWorld).
 "use client";
 import { useState } from "react";
 import { Icon } from "./Icon";
@@ -20,7 +20,7 @@ export default function HomeActivityPanel({ list, act, filter = null, open, onOp
     );
   }
   if (!open) return null;
-  const shown = list.filter((a) => (!filter || filter.includes(a.id)) && (cat === "all" || a.cat === cat)), cats = CATEGORIES.filter((c) => list.some((a) => a.cat === c.id && (!filter || filter.includes(a.id))));
+  const offered = list.filter((a) => a.present !== false), shown = offered.filter((a) => (!filter || filter.includes(a.id)) && (cat === "all" || a.cat === cat)), cats = CATEGORIES.filter((c) => offered.some((a) => a.cat === c.id && (!filter || filter.includes(a.id))));
   return (
     <section className="hap" role="dialog" aria-label="Home activities">
       <header className="hap-h"><b>At home</b><button type="button" className="hap-x" aria-label="Close" onClick={onClose}><Icon name="close" size={16} /></button></header>
@@ -36,7 +36,7 @@ export default function HomeActivityPanel({ list, act, filter = null, open, onOp
             <Icon name={a.icon} size={22} /><span className="hap-l">{a.label}</span>{!a.available && <span className="hap-w">{a.why}</span>}
           </button>
         ))}
-        {!shown.length && <p className="hap-none">Nothing here yet.</p>}
+        {!shown.length && <p className="hap-none">Nothing to do here yet. Place furniture with Buy to unlock activities.</p>}
       </div>
     </section>
   );

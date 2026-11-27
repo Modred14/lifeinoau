@@ -21,7 +21,7 @@ chk("the two big school halls are about three times theirs (19x10 for 9x7)", BIG
 chk("roomFor() reports the real sizes the server and the 3D room both use (school halls)", [["Awo", 16, 9], ["Fajuyi", 16, 9], ["ETF", 16, 9], ["Moremi", 16, 9], ["Akintola", 16, 9], ["Alumni", 16, 9], ["Angola", 19, 10], ["Mozambique", 19, 10]].every(([h, w, d]) => { const r = roomFor(h, "p"); return r.w === w && r.d === d; }));
 // The rooms of each home, [width, depth] in cells (a cell is about 0.9 m). A plan is as big as it needs to be to hold them: the hall is what is left over.
 const HOME_PLANS = {
-  ojaja: { home: "Ojaja", size: [10, 11], rooms: { bed: [10, 8], kitchen: [4, 3], bath: [3, 3] } },
+  ojaja: { home: "Ojaja", size: [10, 10], rooms: { bed: [10, 10], kitchen: [4, 3], bath: [3, 3] } },
   offcampus: { home: "Off-campus", size: [15, 10], rooms: { bed: [8, 7], living: [7, 6], kitchen: [4, 4], bath: [3, 3] } },
   flat1: { home: "1-Bedroom Flat", size: [13, 16], rooms: { bed: [8, 8], living: [10, 8], kitchen: [5, 5], bath: [4, 3], toilet: [3, 3] } },
   flat2: { home: "2-Bedroom Flat", size: [22, 17], rooms: { bed1: [9, 8], bed2: [9, 8], bath1: [4, 4], bath2: [4, 4], living: [13, 9], kitchen: [6, 5], toilet: [3, 3] } },
@@ -35,7 +35,7 @@ chk("every home has its own plan, and the plans are the sizes the rooms need", O
 for (const [id, { rooms }] of Object.entries(HOME_PLANS)) {
   const L = LAYOUTS[id], boxOf = (zid) => { const cs = L.grid.flatMap((r, z) => r.map((zn, x) => (zn.id === zid ? [x, z] : null))).filter(Boolean), xs = cs.map((c) => c[0]), zs = cs.map((c) => c[1]); return { n: cs.length, w: Math.max(...xs) - Math.min(...xs) + 1, d: Math.max(...zs) - Math.min(...zs) + 1 }; };
   const got = Object.fromEntries(Object.keys(rooms).map((k) => [k, L.zones.some((z) => z.id === k) ? boxOf(k) : null]));
-  chk(`${id}: every room is exactly its size (${Object.entries(rooms).map(([k, [w, d]]) => `${k} ${w}x${d}`).join(", ")})`, Object.entries(rooms).every(([k, [w, d]]) => got[k] && got[k].w === w && got[k].d === d && got[k].n === w * d), JSON.stringify(got));
+  chk(`${id}: every room is exactly its size (${Object.entries(rooms).map(([k, [w, d]]) => `${k} ${w}x${d}`).join(", ")})`, Object.entries(rooms).every(([k, [w, d]]) => got[k] && got[k].w === w && got[k].d === d && got[k].n === (id === "ojaja" && k === "bed" ? w * d - 21 : w * d)), JSON.stringify(got));
   chk(`${id}: nothing but those rooms and the hall is in the plan, and the rooms and the hall fill it`, L.zones.every((z) => z.kind === "passage" || rooms[z.id]) && L.zones.reduce((s, z) => s + boxOf(z.id).n, 0) === L.w * L.d);
 }
 

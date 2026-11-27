@@ -35,6 +35,8 @@ import { CELL_M } from "./compoundUnits.js";
 import { planEntry, planExit, routeFromTo, walkWorld, safeSpotNear, spotStillValid, WALK_R } from "./compoundWalk.js";
 import { enterPose, exitPose } from "./compoundDoor.js";
 import { layoutOf, wallRuns, zoneAt } from "../lib/layouts.js";
+import { homeCameraFor, zoomLimits } from "../lib/homeCamera.js";
+import { createOccluder } from "./occlusion.js";
 
 const WALL_H = 3.4, // rooms are about twice the floor area they were, so the walls (the ceiling line) rise a little with them
   CUT = 0.09,
@@ -63,6 +65,8 @@ function dispose(obj) {
 
 // floors of the wet rooms and the hall in a home with several rooms: cool tiles in the kitchen, bathroom and toilet, pale ones in the hall
 const ZONE_TILE = { kitchen: ["#c3c7c9", "#b6bbbf"], bath: ["#c8ced6", "#bcc3cc"], toilet: ["#c8ced6", "#bcc3cc"], passage: ["#ece6d9", "#e2dbcb"] };
+const FLOOR_BLEND = 0.72; // 0 = full checker, 1 = one flat colour
+const mixHex = (a, b, k) => { const p = (h) => [1, 3, 5].map((n) => parseInt(String(h).replace("#", "").padEnd(6, "0").slice(n - 1, n + 1), 16)), A = p(a), B = p(b); return "#" + A.map((v, n) => Math.round(v + (B[n] - v) * k).toString(16).padStart(2, "0")).join(""); };
 function floorTexture(W, D, theme, wood, kindAt) {
   const S = 64,
     c = document.createElement("canvas");
@@ -74,27 +78,25 @@ function floorTexture(W, D, theme, wood, kindAt) {
   for (let i = 0; i < W; i++)
     for (let j = 0; j < D; j++) {
       const tint = kindAt && ZONE_TILE[kindAt(i, j)], wooden = wood && !tint;
-      g.fillStyle = (i + j) % 2 ? (tint?.[0] ?? theme.floorA) : (tint?.[1] ?? theme.floorB);
+      // the two tones of the checker are blended most of the way together: a floor reads as one material with a faint variation, not a chessboard
+      g.fillStyle = (i + j) % 2 ? (tint?.[0] ?? mixHex(theme.floorA, theme.floorB, FLOOR_BLEND)) : (tint?.[1] ?? mixHex(theme.floorB, theme.floorA, FLOOR_BLEND));
       g.fillRect(i * S, j * S, S, S);
-      if (wooden) {
+      if (wooden) { // boards about 0.22 m wide (four to a 0.9 m cell) with a staggered end joint
         for (let p = 0; p < 4; p++) {
-          g.fillStyle = `rgba(${r() > 0.5 ? "255,235,200" : "60,30,10"},${0.05 + r() * 0.07})`;
+          g.fillStyle = `rgba(${r() > 0.5 ? "255,235,200" : "60,30,10"},${0.03 + r() * 0.04})`;
           g.fillRect(i * S, j * S + p * (S / 4), S, S / 4);
-          g.fillStyle = "rgba(60,30,10,.25)";
-          g.fillRect(i * S, j * S + p * (S / 4), S, 1.5);
+          g.fillStyle = "rgba(60,30,10,.18)";
+          g.fillRect(i * S, j * S + p * (S / 4), S, 1);
+          const joint = i * S + ((p * 37 + i * 11 + j * 5) % 5) * (S / 5) + S / 10;
+          g.fillRect(joint, j * S + p * (S / 4), 1, S / 4);
         }
-      } else {
-        g.strokeStyle = "rgba(0,0,0,.09)";
-        g.lineWidth = 2;
-        g.strokeRect(i * S + 1, j * S + 1, S - 2, S - 2);
-        for (let k = 0; k < 14; k++) {
-          g.fillStyle = `rgba(${r() > 0.5 ? "255,255,255" : "70,60,50"},.1)`;
-          g.fillRect(
-            i * S + r() * S,
-            j * S + r() * S,
-            2 + r() * 3,
-            2 + r() * 3,
-          );
+      } else { // ceramic tiles 0.45 m square (2 x 2 per cell, not one huge 0.9 m slab), low-contrast grout
+        const T = S / 2;
+        for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) {
+          g.fillStyle = `rgba(${r() > 0.5 ? "255,255,255" : "70,60,50"},${0.02 + r() * 0.03})`;
+          g.fillRect(i * S + a * T, j * S + b * T, T, T);
+          g.strokeStyle = "rgba(0,0,0,.07)"; g.lineWidth = 2;
+          g.strokeRect(i * S + a * T + 1, j * S + b * T + 1, T - 2, T - 2);
         }
       }
     }
@@ -322,7 +324,8 @@ export function createRoomScene(container, cb = {}) {
   lamp.position.set(0, 2.5, 0);
   scene.add(lamp);
 
-  const world = new THREE.Group(),
+  const occluder = createOccluder(THREE),
+    world = new THREE.Group(),
     itemsRoot = new THREE.Group(),
     avRoot = new THREE.Group();
   scene.add(world, itemsRoot, avRoot);
@@ -414,7 +417,7 @@ export function createRoomScene(container, cb = {}) {
     D = room.d;
     const L = layoutOf(room);
     // the plot: a square lawn inside a boundary wall with the garage, driveway, road and neighbours (lib3d/plot3d.js)
-    const built = buildPlot(room, { mat, tree });
+    const built = buildPlot(room, { mat, tree, garage: cb.garage !== false }); // cb.garage === false: a purchase preview (house and a small compound, no garage hall)
     world.add(built.group);
     roadG = built.road; roadG.visible = roadShown = wantRoad();
     trees.push(...built.trees);
@@ -598,10 +601,16 @@ export function createRoomScene(container, cb = {}) {
     if (view === "yard") return { dist: fitR(yardR), target: [yx, 0.2, yz], max: fitR(yardR) * 1.15 };
     // the house view: the house and the garage beside it, filling the screen. (On a tall, narrow screen only the front of the garage is kept in, so the house itself stays big.)
     const g = plotFor(room).garage, tall = aspect < 0.8, full = mode === "home";
-    const box = { x0: -W / 2 - 0.9, x1: g.x1 - W / 2 + 0.9, z0: Math.min(-D / 2, tall ? g.z1 - 8 - D / 2 : g.z0 - D / 2) - 0.9, z1: Math.max(D / 2, g.z1 - D / 2) + 1.4, h: WALL_H };
+    const noGarage = cb.garage === false; // the Buy preview: frame the house and a small compound around it, not the garage hall
+    const box = noGarage ? { x0: -W / 2 - 2.4, x1: W / 2 + 2.4, z0: -D / 2 - 2.4, z1: D / 2 + 3.2, h: WALL_H } : { x0: -W / 2 - 0.9, x1: g.x1 - W / 2 + 0.9, z0: Math.min(-D / 2, tall ? g.z1 - 8 - D / 2 : g.z0 - D / 2) - 0.9, z1: Math.max(D / 2, g.z1 - D / 2) + 1.4, h: WALL_H };
     const pad = full ? { t: Math.min(74, h * 0.12), b: Math.min(86, h * 0.14), l: 14, r: 14 } : { t: 8, b: 8, l: 10, r: 10 };
     const f = fitBox(box, dir ?? camera.position.clone().sub(controls.target), pad);
     return { ...f, max: fitR(yardR) * 1.15 };
+  }
+  /** The home camera is set per accommodation (lib/homeCamera.js): the angle range, and a zoom-in limit that keeps the player at about 15% of the screen height or less. */
+  function applyHomeCamera(dist) {
+    const cfg = homeCameraFor(room), z = zoomLimits(dist, camera.fov, cfg);
+    controls.minPolarAngle = cfg.polarMin; controls.maxPolarAngle = cfg.polarMax; controls.minDistance = z.min;
   }
   function fit(reset) {
     if (!room || fleet.isDriving()) return;
@@ -609,6 +618,7 @@ export function createRoomScene(container, cb = {}) {
     const f = framing(reset ? new THREE.Vector3().setFromSpherical(sp0) : null);
     fitDist = f.dist;
     controls.minDistance = fitDist * 0.5;
+    if (mode === "home") applyHomeCamera(f.dist);
     controls.maxDistance = Math.max(fitDist * 1.35, f.max);
     if (reset || !userZoomed) {
       controls.target.set(...f.target);
@@ -633,6 +643,7 @@ export function createRoomScene(container, cb = {}) {
     const f = framing();
     controls.minDistance = f.dist * 0.5;
     controls.maxDistance = Math.max(f.dist * 1.35, f.max);
+    if (mode === "home" && view === "house") applyHomeCamera(f.dist);
     stage.flyTo(f.target[0], f.target[1], f.target[2], f.dist, view === "yard" ? 0.95 : undefined);
     return view;
   }
@@ -1279,6 +1290,10 @@ export function createRoomScene(container, cb = {}) {
       cz = az / len;
     // seen from outside (the yard view, not while arranging things): the house is whole, with its roof, and no wall is cut away; from inside it opens up as before
     const seeOutside = view === "yard" && mode !== "buy";
+    { // furniture standing between the camera and the character fades out (never while arranging, sleeping or outdoors)
+      const on = mode === "home" && view === "house" && !me.sleep && !fleet.isDriving() && !isOutdoors(), groups = [...items.values()].map((it) => it.group);
+      occluder.update(dt, camera.position, me, groups, { floor: homeCameraFor(room).fade, enabled: on });
+    }
     { const wr = wantRoad(); if (roadG && wr !== roadShown) roadG.visible = roadShown = wr; }
     extMix += ((seeOutside ? 1 : 0) - extMix) * (1 - Math.exp(-dt * 3.2));
     if (shell) {
@@ -1443,7 +1458,7 @@ export function createRoomScene(container, cb = {}) {
     rotateSelected,
     setView: (v) => { autoYard = false; return setView(v); }, // the player chose a view: it stays
     getView: () => view,
-    setVehicles: (list) => fleet.setVehicles(list),
+    setVehicles: (list) => fleet.setVehicles(cb.garage === false ? [] : list), // a purchase preview has no garage, so no parked vehicles are drawn (the player's vehicles themselves are untouched)
     startDrive: (id) => fleet.start(id),
     stopDrive: (o) => { const d = fleet.driveInfo(); fleet.stop(o); settlePerson(d?.id); }, // the drive ended without getting out (the server refused it): nobody is left inside a parked vehicle
     exitCar,

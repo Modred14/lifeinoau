@@ -88,3 +88,12 @@ const gear = fs.readFileSync(new URL("../lib3d/avatar/policeGear.js", import.met
 assert.ok(/dressPolice\(av\)/.test(npc) && !/#c8e61a/.test(npc), "officer avatars get the patrol kit and not the hi-vis colour"); assert.ok(/ReflectiveStripe/.test(gear));
 
 console.log("custody: all checks passed");
+
+// /home shows the cell, never the house, for anyone in custody: by the character's deadline OR by an active Floor O record; it lifts when custody ends.
+{
+  const page = fs.readFileSync(new URL("../src/app/home/page.js", import.meta.url), "utf8"), gate = page.indexOf("isJailed(c, now) || (st.floorZero?.releaseAt"), cell = page.indexOf("<CustodyCell"), home = page.indexOf("<GameHome");
+  assert.ok(gate > 0 && cell > gate, "the custody gate checks the character deadline and the Floor O record");
+  assert.ok(home < 0 || gate < home, "the custody screen is decided before the home is rendered, so /home cannot be used to leave the cell");
+  assert.ok(/new Date\(st\.floorZero\.releaseAt\) > now/.test(page), "custody ends by itself when the release time passes");
+  console.log("OK   /home shows the cell for a player in custody (deadline or Floor O record), before and instead of the home");
+}

@@ -386,7 +386,8 @@ export default function Play() {
     );
   // A player in custody is held INSIDE Floor O: they do not get the home room. (Expelled players in custody are told about both.)
   // The deadline on the character decides this, not whether a FloorZero record came back with the state (the server also fills it in, this is the second guard).
-  if (isJailed(c, now))
+  // Second guard: an active Floor O record with a release time still in the future also holds them, even if the character's own deadline is missing.
+  if (isJailed(c, now) || (st.floorZero?.releaseAt && new Date(st.floorZero.releaseAt) > now))
     return (
       <View key={view}>
         <CustodyCell st={st.floorZero ? st : { ...st, floorZero: { startedAt: null, releaseAt: c.jailedUntil, location: "floor0", billKobo: "0" } }} now={now} busy={busy} bail={bail} look={c.look ?? null} gender={c.gender ?? "M"} selfName={c.name ?? ""} />
