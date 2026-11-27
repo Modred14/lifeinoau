@@ -1,8 +1,8 @@
 // components/GameHome.js
-// The home screen: your room fills the whole window, with your needs, what you can do, and (in Buy mode) the furniture shop on top of it.
+// The home screen: your room fills the whole window, with what you can do and (in Buy mode) the furniture shop on top of it.
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { NEEDS, statusOf } from "@/lib/needs.js";
+import { statusOf } from "@/lib/needs.js";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { call, naira, notifyError, loggedOut } from "@/lib/client";
@@ -12,7 +12,7 @@ import { confirmAction } from "@/lib/confirm";
 import { usePlayMode, setPlayMode } from "@/lib/ui";
 import { setDriveHandoff } from "@/lib/driveHandoff.js";
 import { game, roomStore, useStore, begin, finish, cash, canAfford } from "@/lib/gameStore";
-import { ITEMS, MAX_ITEMS, ownedCount, roomScore, sellKobo, priceKobo, canGoOutside, isFixture, isOutdoor } from "@/lib/furniture.js";
+import { ITEMS, MAX_ITEMS, ownedCount, sellKobo, priceKobo, canGoOutside, isFixture, isOutdoor } from "@/lib/furniture.js";
 import { roomFor, autoPlace, isOutside } from "@/lib/room.js";
 import { fmtN } from "@/lib/classes.js";
 import { bailFor, HUSTLE } from "@/lib/engine.js";
@@ -20,7 +20,6 @@ import { SLEEP, wakeResult, msToFull, toMs } from "@/lib/sleep.js";
 import { serverTime } from "@/lib/serverClock";
 import { Icon } from "./Icon";
 import BuySheet from "./BuySheet";
-import PlayerAvatar from "./PlayerAvatar";
 import CompoundDrive, { useVehicles } from "./CompoundDrive";
 import "./game-home.css";
 
@@ -68,7 +67,6 @@ export default function GameHome({
   const rd = useStore(roomStore),
     [selected, setSelected] = useState(null),
     [collapsed, setCollapsed] = useState(false),
-    [needsOpen, setNeedsOpen] = useState(false),
     [driving, setDriving] = useState(false),
     [outdoors, setOutdoors] = useState(false), // the character is outside the house (walked out through the front door)
     [, bumpView] = useState(0); // the yard / house button reads the scene's view, so it re-renders when it is pressed
@@ -101,8 +99,7 @@ export default function GameHome({
     endMs = sleeping ? msToFull(c, bedKey) : 0, // how long this sleep lasts: until full, never more than 15 seconds
     elapsedMs = sleeping ? Math.max(0, clock - since) : 0,
     secsLeft = Math.max(0, Math.ceil((endMs - elapsedMs) / 1000)),
-    pct = endMs > 0 ? Math.min(100, Math.round((elapsedMs / endMs) * 100)) : 100,
-    live = rest ? { ...c, energy: rest.energy, health: rest.health } : c; // the needs shown on the screen follow the sleep as it goes
+    pct = endMs > 0 ? Math.min(100, Math.round((elapsedMs / endMs) * 100)) : 100;
   // a quick clock only while asleep, so energy climbs smoothly without the whole page ticking the rest of the time
   useEffect(() => {
     if (!sleeping) return;
@@ -361,8 +358,6 @@ export default function GameHome({
     sellLabel:
       BigInt(sel.paidKobo) > 0n ? fmtN(sellKobo(sel.paidKobo) / 100n) : null,
   };
-  const status = statusOf(live),
-    score = roomScore(items);
   const examToday = a.nextExamWeek === st.week && !a.satThisWeek,
     stopped = !!fz;
   const hours = fz ? left : 0;
@@ -538,80 +533,6 @@ export default function GameHome({
         </button></>
         {buying && (() => { const yard = api.current?.getView?.() === "yard"; return <button type="button" className="gx-round" aria-label={yard ? "Look at the house" : "Look at the yard"} title={yard ? "Look at the house" : "Look at the yard"} aria-pressed={yard} onClick={() => { api.current?.setView?.(yard ? "house" : "yard"); bumpView((n) => n + 1); }}><Icon name={yard ? "hostel" : "farm"} size={20} /></button>; })()}
       </div>
-
-      {/* bottom left: you */}
-      {!buying && (
-        <section
-          className="gx-me"
-          data-open={needsOpen ? "1" : "0"}
-          style={{ "--cls": `var(--${c.class.toLowerCase()})` }}
-          aria-label="How you are doing"
-        >
-          {status && (
-            <div className="gx-status" data-tone={status.tone}>
-              <Icon name="warn" size={14} />
-              {status.text}
-            </div>
-          )}
-          <div className="gx-me-card">
-            <button
-              type="button"
-              className="gx-face"
-              onClick={() => setNeedsOpen((o) => !o)}
-              aria-expanded={needsOpen}
-              aria-label={needsOpen ? "Hide details" : "Show details"}
-            >
-              <PlayerAvatar name={c.name} size="100%" className="pav-fill" />
-            </button>
-            <div className="gx-needs">
-              {NEEDS.map(([n, k, ic]) => {
-                const v = live[k], // while asleep, Energy and Health climb here as you sleep
-                  tone =
-                    k === "suspicion"
-                      ? v >= 60
-                        ? "risk"
-                        : v >= 30
-                          ? "warn"
-                          : "ok"
-                      : v < 25
-                        ? "low"
-                        : "ok";
-                return (
-                  <div
-                    key={k}
-                    className="gx-need"
-                    data-tone={tone}
-                    title={`${n} ${v}`}
-                  >
-                    <Icon name={ic} size={15} />
-                    {needsOpen && <span className="gx-need-n">{n}</span>}
-                    <div
-                      className="gx-bar"
-                      role="meter"
-                      aria-label={n}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={v}
-                    >
-                      <i style={{ width: v + "%" }} />
-                    </div>
-                    {needsOpen && <b className="num">{v}</b>}
-                  </div>
-                );
-              })}
-            </div>
-            {needsOpen && (
-              <div className="gx-id">
-                <b>{c.name}</b>
-                <span className="mut">
-                  {c.class} · {c.faculty} · {c.hostel}
-                </span>
-                <span className="mut">Room score {score}</span>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
 
       {/* the room itself is the menu: tap your bed to sleep, tap the phone on your desk or bedside table to call home */}
       {!buying && use && !sleeping && !going && (

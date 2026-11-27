@@ -11,10 +11,6 @@
 .hw-btn { border-radius: 22px; background: rgba(15, 23, 41, 0.72); border: 1px solid rgba(255, 255, 255, 0.14); backdrop-filter: blur(14px); }
 /* the old room's own buttons mean nothing in the walkable world */
 .gx[data-world="1"] .gx-out, .gx[data-world="1"] .gx-tr { display: none; }
-/* the needs card steps out of the way of the walking stick: just the face, centred above the bottom bar, until tapped */
-.gx[data-world="1"] .gx-me { left: 50%; transform: translateX(-50%); }
-.gx[data-world="1"] .gx-me[data-open="0"] .gx-needs, .gx[data-world="1"] .gx-me[data-open="0"] .gx-status { display: none; }
-.gx[data-world="1"] .gx-me[data-open="0"] .gx-me-card { padding: 6px; border-radius: 50%; }
 .hw-err { flex-direction: column; text-align: center; }
 
 /* the Home Activity Panel (components/HomeActivityPanel.js): a compact sheet above the bottom bar, a one-line status while an activity runs */

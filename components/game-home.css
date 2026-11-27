@@ -38,7 +38,7 @@
 @keyframes gx-pop { from { opacity: 0; transform: translateY(8px) scale(0.9); } }
 
 /* glass */
-.gx-card, .gx-alert, .gx-pill, .gx-do, .gx-me-card, .bs { background: var(--glass); backdrop-filter: blur(18px) saturate(1.35); -webkit-backdrop-filter: blur(18px) saturate(1.35); border: 1px solid var(--glass-line); box-shadow: var(--lift); }
+.gx-card, .gx-alert, .gx-pill, .gx-do, .bs { background: var(--glass); backdrop-filter: blur(18px) saturate(1.35); -webkit-backdrop-filter: blur(18px) saturate(1.35); border: 1px solid var(--glass-line); box-shadow: var(--lift); }
 .gx h2 { font-size: 1rem; margin: 0; }
 .gx p { margin: 0; }
 
@@ -73,24 +73,7 @@
 .gx[data-drive="1"] .gx-out { display: none; }
 .gx-round:hover:not(:disabled) { background-color: rgba(40, 56, 90, 0.9); }
 /* at the wheel of a vehicle in the compound the screen is for driving: the rest steps aside */
-.gx[data-drive="1"] .gx-tl, .gx[data-drive="1"] .gx-tr, .gx[data-drive="1"] .gx-me, .gx[data-drive="1"] .gx-alert { display: none; }
-
-/* bottom left: you */
-.gx-me { position: absolute; z-index: 4; left: var(--edge); bottom: calc(var(--safe-b) + 24px); display: grid; gap: 8px; justify-items: start; }
-.gx-status { padding: 5px 12px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; display: inline-flex; gap: 6px; align-items: center; background: #d9506a; color: #fff; box-shadow: 0 6px 16px -6px rgba(217, 80, 106, 0.8); animation: gx-pop 380ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
-.gx-status[data-tone="warn"] { background: #e8a23a; color: #1a1100; box-shadow: 0 6px 16px -6px rgba(232, 162, 58, 0.8); }
-.gx-me-card { display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 10px; border-radius: 26px; flex-wrap: wrap; max-width: min(390px, calc(100vw - 2 * var(--edge))); }
-.gx-face { display: block; width: 56px; height: 56px; min-height: 56px; padding: 0; overflow: hidden; border-radius: 50%; border: 3px solid var(--cls, var(--green-text)); background: #21314f; flex: none; position: relative; }
-/* The picture fills the ring by being pinned to it. (It used to be height: 100% of a button whose height was automatic, which resolves to nothing: the ring showed empty.) */
-.gx-face .pav.pav-fill { position: absolute; inset: 0; }
-.gx-face span { font: 700 1.4rem var(--font-head); color: var(--cls, #fff); }
-.gx-needs { display: grid; grid-template-columns: repeat(3, 76px); gap: 8px 12px; }
-.gx-need { display: flex; align-items: center; gap: 6px; color: var(--green-text); min-width: 0; }
-.gx-need[data-tone="low"], .gx-need[data-tone="warn"] { color: var(--gold-text); } .gx-need[data-tone="risk"] { color: var(--danger-text); }
-.gx-need svg { flex: none; }
-.gx-me[data-open="1"] .gx-needs { grid-template-columns: 1fr; gap: 9px; width: 238px; }
-.gx-me[data-open="1"] .gx-need .gx-bar { flex: 1; } .gx-need-n { width: 76px; font-size: 0.82rem; color: var(--text); } .gx-need b { font-size: 0.82rem; width: 26px; text-align: right; color: var(--text); font-weight: 600; }
-.gx-id { display: grid; width: 100%; gap: 1px; padding: 8px 4px 2px; border-top: 1px solid var(--glass-line); font-size: 0.85rem; } .gx-id b { font: 600 1rem var(--font-head); } .gx-id .mut { font-size: 0.78rem; }
+.gx[data-drive="1"] .gx-tl, .gx[data-drive="1"] .gx-tr, .gx[data-drive="1"] .gx-alert { display: none; }
 
 /* right: what will you do */
 .gx-do { position: absolute; z-index: 4; right: var(--edge); top: 50%; transform: translateY(-46%); display: grid; gap: 4px; padding: 8px; border-radius: 28px; width: 252px; }
@@ -131,12 +114,9 @@
 
 /* big screens: more room, bigger cards */
 @media (min-width: 1500px) { .gx { --sheet-h: 350px; } .bs-card { width: 208px; } .bs-thumb { height: 128px; } .bs-thumb img { width: 128px; height: 128px; } .gx-do { width: 272px; } }
-@media (min-width: 900px) { .gx-me { bottom: calc(var(--safe-b) + 22px); } }
 @media (max-width: 1100px) { .gx-do { width: auto; } .gx-act { grid-template-columns: 46px; padding: 6px; justify-items: center; } .gx-act-txt { display: none; } }
 @media (max-width: 899px) {
   .gx { --gx-bottom: 108px; --sheet-h: 292px; }
-  .gx-me { bottom: calc(var(--nav-h) + var(--safe-b) + 20px); }
-  .gx-me-card { padding: 8px 12px 8px 8px; } .gx-needs { grid-template-columns: repeat(3, 64px); gap: 8px; } .gx-face { width: 48px; height: 48px; min-height: 48px; }
   .gx[data-mode="home"] { --gx-bottom: calc(var(--nav-h) + var(--safe-b) + 96px); }
   .gx-tl { width: min(300px, calc(100% - 2 * var(--edge) - 72px)); }
   .gx-do { top: auto; bottom: calc(var(--nav-h) + var(--safe-b) + 20px); transform: none; padding: 6px; border-radius: 24px; }
@@ -144,7 +124,6 @@
 }
 @media (max-width: 560px) {
   .gx-do { grid-auto-flow: column; left: auto; } .gx-act { min-height: 50px; } .gx-act-ico { width: 40px; height: 40px; border-radius: 13px; }
-  .gx-me { bottom: calc(var(--nav-h) + var(--safe-b) + 84px); }
   .gx-tl { width: calc(100% - 2 * var(--edge)); } .gx-tr { top: calc(var(--safe-t) + 86px); }
   .gx[data-mode="buy"] .gx-tl { width: auto; }
   .bs { padding: 12px 12px 10px; border-radius: 24px; } .bs-title { display: none; } .bs-card { width: 160px; } .bs-thumb { height: 96px; } .bs-thumb img { width: 96px; height: 96px; }
