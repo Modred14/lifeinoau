@@ -50,12 +50,19 @@ export function buildGrass(data, S, tex, { margin = 1200 } = {}) {
   return mesh;
 }
 
+/** Does point i of a line need its round joint: an end of the line, or a bend sharp enough to leave a notch more than 0.3 m deep without one? */
+function rounded(pts, i, half) {
+  const o = pts[i - 1], a = pts[i], b = pts[i + 1]; if (!o || !b) return true;
+  const turn = Math.atan2(b[1] - a[1], b[0] - a[0]) - Math.atan2(a[1] - o[1], a[0] - o[0]);
+  return Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn))) * half > 0.3;
+}
+
 /** Bands along polylines ([{ pts: [[x, z]], half }] in metres) with round joints, as one flat mesh at height y; `layer` is the polygon offset, as for the other ground layers. */
 export function buildStrips(lines, S, tex, y, layer) {
   const pos = [];
   const tri = (a, b, c) => pos.push(a[0] * S, 0, a[1] * S, b[0] * S, 0, b[1] * S, c[0] * S, 0, c[1] * S);
   for (const { pts, half } of lines) for (let i = 0; i < pts.length; i++) {
-    const a = pts[i]; for (let k = 0; k < 8; k++) { const u = (k / 8) * Math.PI * 2, v = ((k + 1) / 8) * Math.PI * 2; tri(a, [a[0] + Math.cos(v) * half, a[1] + Math.sin(v) * half], [a[0] + Math.cos(u) * half, a[1] + Math.sin(u) * half]); }
+    const a = pts[i]; if (rounded(pts, i, half)) for (let k = 0; k < 8; k++) { const u = (k / 8) * Math.PI * 2, v = ((k + 1) / 8) * Math.PI * 2; tri(a, [a[0] + Math.cos(v) * half, a[1] + Math.sin(v) * half], [a[0] + Math.cos(u) * half, a[1] + Math.sin(u) * half]); }
     const b = pts[i + 1]; if (!b) continue;
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = (-(b[1] - a[1]) / len) * half, nz = ((b[0] - a[0]) / len) * half;
     tri([a[0] + nx, a[1] + nz], [b[0] + nx, b[1] + nz], [b[0] - nx, b[1] - nz]); tri([a[0] + nx, a[1] + nz], [b[0] - nx, b[1] - nz], [a[0] - nx, a[1] - nz]);

@@ -77,10 +77,20 @@ Tests: `node tests/admin-console.test.mjs` (no database) runs with `npm test`. `
 
 ### How it looks
 
-The main map is drawn in the Campuslife style of commit `c2b9477`: its facades and roofs, grass, paving, footpaths, verges, and trees at their surveyed positions, with buildings at their real height. Only the drawing differs; footprints, roads, places and driving come from the map data below. Trees and plants are decoration and are not solid.
+The main map is drawn in the Campuslife style of commit `c2b9477`: its facades and roofs, grass, paving, footpaths, verges, trees at their surveyed positions, street lamps, food stalls and hawkers' trays, banners and notice boards, the Main Gate arch and the separate blocks of the walled hostel compounds, with buildings at their real height (a published height of a named place, such as the Senate Building's, wins). Footprints, roads, places and driving come from the map data below.
+
+**What is solid.** Tree trunks, stalls, trays, banner posts and the gate are solid. `lib3d/campuslife/decor.js` decides which of them stand, once, for both the collision world and the drawing:
+
+- nothing stands on a road or its pavement, against a wall, on street furniture, in front of a door or on the walk from a door to its kerb (a prop is moved to the nearest clear ground; a tree is left out);
+- they never decide where a home compound goes, and a compound clears them from its own yard;
+- bushes, rocks and flowers are walk-through. Of all these only the gate makes the trip camera move round it.
+
+`node tests/campus-decor.test.mjs` compares the map with and without them: the same building doors, trips and home lots.
+
+On a phone the map draws plainer distant trees, no grass tufts or rocks, no shadows from planting and props, no light cones under the lamps, and shorter draw distances. The solid things are the same on every device.
 
 - To go back to the plain buildings, set `MAP_LOOK = "classic"` in `lib3d/mapLook.js`. The legacy map always uses them.
-- The look data is `public/data/oau-campuslife.json`. Rebuild it with `node tools/oau/bake-campuslife.mjs && npm run assets:manifest` (the commit must be in the git history).
+- The look data is `public/data/oau-campuslife.json`. Rebuild it with `node tools/oau/bake-campuslife.mjs && node scripts/assets-manifest.mjs` (the commit must be in the git history; `npx` fetches esbuild the first time).
 - The drawing code is in `lib3d/campuslife/`.
 - The data licences require credit: see "Source and credits" below.
 

@@ -11,6 +11,9 @@ import { addBillboardCollision } from "./billboardSite.js";
 import { planFurniture } from "./furnitureplan.js";
 import { woodlandTrees, addWoodlandCollision } from "./woodland.js";
 import { addFurnitureCollision, addEmbankmentCollision } from "./structuresolid.js";
+import { addCampusDecor } from "./campuslife/decor.js";
+import { loadCampusLook } from "./campusData.js";
+import { MAP_LOOK } from "./mapLook.js";
 
 /**
  * The columns of the expressway are solid on the ground (people and ground vehicles cannot walk or drive through one); the deck itself is 10 m up and is not. Columns standing in the lake need
@@ -24,15 +27,24 @@ export function addPierCollision(world, hw) {
   return n;
 }
 
-/** Builds the services from the merged map data and the generated road graph JSON (`rawGraph`). Takes about a quarter of a second. */
-export function buildServices(data, rawGraph) {
+/** Is the Campuslife look drawn on this map? (It is laid out on the new map only.) */
+export const wantsLook = (data) => MAP_LOOK === "campuslife" && !!data.meta?.oldToNew;
+
+/**
+ * Builds the services from the merged map data and the generated road graph JSON (`rawGraph`). Takes about half a second. `look` (public/data/oau-campuslife.json), when given and drawn on this map,
+ * adds its solid decoration (trees, stalls, banners, the gate) and leaves the list of it on graph.campusDecor for the map to draw (lib3d/campuslife/decor.js).
+ */
+export function buildServices(data, rawGraph, look = null) {
   const world = buildWorldCollision(data), graph = buildRoadGraph(rawGraph, { sdf: (x, z) => world.sdf(x, z, 16) });
   addPierCollision(world, rawGraph.expressway);   // after the graph: ground roads are laid out against buildings and water only, the piers were placed clear of them
   addBillboardCollision(world, data.places);       // the two concrete footings of each billboard are solid (the screen is 8 m up and is not); they stand well clear of every road, so nothing that drives or walks is ever in their way
   // Street furniture and the low parts of ramps and descents are solid too. The furniture is planned once, here, from the finished graph; the meshes (lib3d/roadfurniture.js) are built from the same plan, so what
   // stands in the street is exactly what cannot be walked or driven through. (Planned before its own posts exist, so the plan does not see them.)
   graph.furniturePlan = planFurniture(graph); addFurnitureCollision(world, graph.furniturePlan); addEmbankmentCollision(world, graph); addWoodlandCollision(world, woodlandTrees(data), graph);
-  const nav = createNav({ world, graph }), net = buildRoadNet(data);
+  const net = buildRoadNet(data);
+  // a failure in the decoration must never take driving and walking down with it
+  if (look && wantsLook(data)) { try { graph.campusDecor = addCampusDecor(world, { data, look, graph, net }); } catch (e) { world.suspendDecor(); console.warn("campus decoration unavailable", e); } }
+  const nav = createNav({ world, graph });
   return { data, world, graph, nav, net };
 }
 
@@ -49,7 +61,7 @@ export function fetchRoadGraphRaw() {
 export function loadServices(data) {
   if (cache?.data === data) return cache.promise;
   const entry = { data, promise: null, svc: null };
-  entry.promise = fetchRoadGraphRaw().then((raw) => (entry.svc = buildServices(data, raw))).catch((e) => { if (cache === entry) cache = null; throw e; });
+  entry.promise = Promise.all([fetchRoadGraphRaw(), wantsLook(data) ? loadCampusLook() : null]).then(([raw, look]) => (entry.svc = buildServices(data, raw, look))).catch((e) => { if (cache === entry) cache = null; throw e; });
   cache = entry; return entry.promise;
 }
 

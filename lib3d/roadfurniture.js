@@ -11,6 +11,7 @@ import { XS } from "./roadgraph.js";
 import { planFurniture } from "./furnitureplan.js";
 import { glowMaterial } from "./glow.js";
 import { ROAD_LAYER_Y } from "./roadsurface.js";
+import { isPhone } from "./campuslife/device.js";
 
 const rng = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 const cyl = (r0, r1, h, y, seg = 6) => { const g = new THREE.CylinderGeometry(r0, r1, h, seg); g.translate(0, y + h / 2, 0); return g; };
@@ -23,6 +24,15 @@ function lampGeometry() {
   const pole = [paint(cyl(0.09, 0.13, 7.5, 0), "#4b5058"), paint(box(0.4, 0.3, 0.4, 0, 0, 0), "#3b4047"), paint(box(2.4, 0.09, 0.09, 1.2, 7.4, 0), "#4b5058")], head = [paint(box(0.85, 0.16, 0.32, 2.3, 7.22, 0), "#f4e9b8")];
   return { pole: merged(pole), head: merged(head) };
 }
+/** The Campuslife street light (lib3d/campuslife; campus/client/game/scenery/lamps.ts of commit c2b9477), on the same spots: a slim 6.2 m post, the arm toward +x, a dark head whose bulb glows. */
+const CL = { height: 6.2, reach: 2.4, cone: 3.4 };
+function campusLampGeometry() {
+  const { height: H, reach: R } = CL;
+  const pole = [paint(cyl(0.06, 0.1, H, 0), "#5b6066"), paint(box(R + 0.1, 0.08, 0.08, (R + 0.1) / 2, H - 0.09, 0), "#5b6066"), paint(box(0.62, 0.12, 0.3, R, H - 0.16, 0), "#3a3d42")], head = [paint(box(0.5, 0.05, 0.22, R, H - 0.215, 0), "#cfc8b4")];
+  return { pole: merged(pole), head: merged(head) };
+}
+/** The faint cone of light under a Campuslife lamp head. Drawn additively, only at night. */
+function coneGeometry() { const g = new THREE.CylinderGeometry(0.12, CL.cone, CL.height - 0.25, 12, 1, true); g.translate(CL.reach, (CL.height - 0.25) / 2 + 0.05, 0); return merged([g]); }
 /** The light a lamp spills on the road: a flat round pool under the lamp head, at ground level (the mesh is lifted to the road by its own position). Drawn additively, only at night.
  *  It is wider than the gap between lights (LAMP_GAP in buildRoadFurniture), so neighbouring pools overlap and the road has no dark stretches. */
 const POOL = 40;
@@ -37,9 +47,11 @@ export function buildRoadFurniture(graph, S, { seed = 11 } = {}) {
   const matV = () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.2 });
   const yawPlace = (o, [x, z, yaw], k = 1) => { o.position.set(x * S, 0, z * S); o.rotation.set(0, yaw, 0); o.scale.setScalar(S * k); };
   // the lamps: pole (always the same), head (glows at night, see userData.lampHead) and the pool of light on the road (userData.lampPool). campusReal.js sets the glow from the night level.
+  const campus = !!graph.campusDecor;   // the Campuslife look is on this map: its lamp design, and a cone of light (userData.lampCone) except on a phone
   const headMat = () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0, emissive: "#ffcf70", emissiveIntensity: 0 }), poolMat = glowMaterial(0xffc46b);
-  { const g = lampGeometry(), poles = instanced(g.pole, matV(), lamps, (o, it) => yawPlace(o, it)), heads = instanced(g.head, headMat(), lamps, (o, it) => yawPlace(o, it), false);
+  { const g = campus ? campusLampGeometry() : lampGeometry(), poles = instanced(g.pole, matV(), lamps, (o, it) => yawPlace(o, it)), heads = instanced(g.head, headMat(), lamps, (o, it) => yawPlace(o, it), false);
     if (heads) heads.userData.lampHead = true;
+    if (campus && !isPhone()) { const cones = instanced(coneGeometry(), new THREE.MeshBasicMaterial({ color: 0xffe2a8, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }), lamps, (o, it) => yawPlace(o, it), false); if (cones) { cones.userData.lampCone = true; cones.visible = false; cones.renderOrder = 2; } }
     if (poolMat.map) { const pools = instanced(poolGeometry(), poolMat, lamps, (o, it) => yawPlace(o, it), false); if (pools) { pools.userData.lampPool = true; pools.userData.layerY = ROAD_LAYER_Y + 0.004; pools.position.y = pools.userData.layerY; pools.renderOrder = 1; } }
     void poles;
   }

@@ -210,6 +210,8 @@ export function classify(b, fp) {
         spec.wall = rgb(parseHex(b.paint.wall));
     if (b.paint?.roof)
         spec.roofColor = rgb(parseHex(b.paint.roof));
+    if (b.tall)
+        spec.floors = Math.max(spec.floors, Math.round(b.tall / spec.storey));
     if (spec.roof !== "flat")
         spec.storey = Math.max(spec.storey, spec.floors === 1 ? MIN_PITCHED_STOREY : 2.9);
     return spec;

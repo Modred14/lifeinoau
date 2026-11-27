@@ -1,7 +1,7 @@
 // lib3d/campuslife/scenery/plan.js
 // Where the planting stands, in METRES: the real tree and shrub positions of the Campuslife campus, plus rocks, grass tufts and a few flower beds, kept off everything the game's map has: buildings, roads,
 // footpaths, water, car parks, pitches, the two grounds, places, billboards and the expressway. Adapted from campus/client/game/scenery/plan.ts (commit c2b9477). Pure JS, deterministic.
-// Planting is DECORATION: it is not part of the collision world, so it cannot change routes, driving, trips or where a home compound is laid out.
+// Trees and palms are the same whatever the density (every player must meet the same trunks: lib3d/campuslife/decor.js makes them solid); density only thins the small plants, which stay walk-through.
 export const SCATTER_KINDS = ["tree", "palm", "bush", "scrub", "rock", "tuft", "flower", "bed"];
 export const SCATTER_STRIDE = 5;   // x, z, scale, yaw, tint
 export const SCATTER_CHUNK_M = 250;
@@ -39,8 +39,8 @@ function regions(polys, reach = 4) {
   return (x, z, m) => made.some((r) => within(r, x, z) || r.near(x, z, (e) => segD(x, z, e.pts[0], e.pts[1]) < m));
 }
 
-/** data: the merged game map. look: oau-campuslife.json. keepOut: [[x, z, radius]] circles to leave bare. density 0..1. Returns { chunks: [{ cx, cz, items: { kind: [x, z, scale, yaw, tint, ...] } }], counts, beds }. */
-export function planScatter(data, look, { density = 1, keepOut = [] } = {}) {
+/** data: the merged game map. treesOnly: just the trees and palms. look: oau-campuslife.json. keepOut: [[x, z, radius]] circles to leave bare. density 0..1. Returns { chunks: [{ cx, cz, items: { kind: [x, z, scale, yaw, tint, ...] } }], counts, beds }. */
+export function planScatter(data, look, { density = 1, keepOut = [], treesOnly = false, chunkSize = SCATTER_CHUNK_M } = {}) {
   const b = data.bounds;
   const buildings = index(data.buildings.map((q) => shape(q.pts, 5)));
   const onRoad = regions(data.roads);   // (inside a hole, away from its edge, is not on the road)
@@ -63,7 +63,7 @@ export function planScatter(data, look, { density = 1, keepOut = [] } = {}) {
   const bedPoint = (bed, x, z) => { const c = Math.cos(bed.yaw), s = Math.sin(bed.yaw); return [bed.x + x * c + z * s, bed.z - x * s + z * c]; };
   const inBed = (bed, x, z, m) => { const dx = x - bed.x, dz = z - bed.z, c = Math.cos(bed.yaw), s = Math.sin(bed.yaw); return ((dx * c - dz * s) / (BED_SIZE.radiusX + m)) ** 2 + ((dx * s + dz * c) / (BED_SIZE.radiusZ + m)) ** 2 <= 1; };
   const bedFits = (bed) => { if (beds.some((o) => Math.hypot(o.x - bed.x, o.z - bed.z) < 15)) return false; for (let x = -BED_SIZE.radiusX; x <= BED_SIZE.radiusX + 0.01; x += 1.2) for (let z = -BED_SIZE.radiusZ; z <= BED_SIZE.radiusZ + 0.01; z += 0.7) if (!clear("bed", ...bedPoint(bed, x, z))) return false; return true; };
-  for (const [id, count] of density > 0 ? BED_PLACES : []) {
+  for (const [id, count] of BED_PLACES) {
     const p = data.places.find((q) => q.id === id); if (!p) continue;
     let made = 0;
     for (let r = 14; r <= 60 && made < count; r += 4) for (let k = 0; k < 16 && made < count; k++) { const a = (k / 16) * Math.PI * 2, bed = { x: p.x + Math.sin(a) * r, z: p.z + Math.cos(a) * r, yaw: a, place: id }; if (bedFits(bed)) { beds.push(bed); made++; } }
@@ -72,11 +72,11 @@ export function planScatter(data, look, { density = 1, keepOut = [] } = {}) {
     if (!clear(kind, x, z)) return;
     if ((kind === "rock" || kind === "tuft" || kind === "scrub") && lawns(x, z, (s) => inRing(x, z, s.pts))) return;
     if (kind !== "bed" && kind !== "flower" && kind !== "bush" && beds.some((bed) => inBed(bed, x, z, kind === "tree" || kind === "palm" ? 4.5 * scale : 1.5 * scale))) return;
-    const i = Math.floor(x / SCATTER_CHUNK_M), j = Math.floor(z / SCATTER_CHUNK_M), key = i + "," + j;
-    let chunk = chunks.get(key); if (!chunk) chunks.set(key, (chunk = { cx: (i + 0.5) * SCATTER_CHUNK_M, cz: (j + 0.5) * SCATTER_CHUNK_M, items: Object.fromEntries(SCATTER_KINDS.map((k) => [k, []])) }));
+    const i = Math.floor(x / chunkSize), j = Math.floor(z / chunkSize), key = i + "," + j;
+    let chunk = chunks.get(key); if (!chunk) chunks.set(key, (chunk = { cx: (i + 0.5) * chunkSize, cz: (j + 0.5) * chunkSize, items: Object.fromEntries(SCATTER_KINDS.map((k) => [k, []])) }));
     chunk.items[kind].push(x, z, scale, yaw, tint); counts[kind]++;
   };
-  for (const [i, bed] of beds.entries()) {
+  for (const [i, bed] of treesOnly ? [] : beds.entries()) {
     put("bed", bed.x, bed.z, 1, bed.yaw, 0.5);
     for (const x of [-2.8, -1.4, 0, 1.4, 2.8]) put("bush", ...bedPoint(bed, x, -0.85), 0.62, bed.yaw, 0.5);
     const spacing = density < 1 ? 0.8 : 0.55;
@@ -84,19 +84,18 @@ export function planScatter(data, look, { density = 1, keepOut = [] } = {}) {
   }
   for (let i = 0; i < look.trees.length; i += 3) {
     const mx = look.trees[i], mz = look.trees[i + 1], h = look.trees[i + 2], r = (n) => hash(mx, mz, n);
-    if (r(30) >= density) continue;
     const palm = h >= 6 && h <= 16 && r(40) < 0.22;
     put(palm ? "palm" : "tree", mx + r(31), mz + r(32), palm ? palmScale(h) : treeScale(h), r(34) * Math.PI * 2, r(35));
   }
-  for (let i = 0; i < look.shrubs.length; i += 3) { const mx = look.shrubs[i], mz = look.shrubs[i + 1], r = (n) => hash(mx, mz, n); if (r(60) >= density) continue; put("scrub", mx + r(61), mz + r(62), scrubScale(look.shrubs[i + 2]) * (0.9 + r(63) * 0.2), r(64) * Math.PI * 2, r(65)); }
+  for (let i = 0; i < (treesOnly ? 0 : look.shrubs.length); i += 3) { const mx = look.shrubs[i], mz = look.shrubs[i + 1], r = (n) => hash(mx, mz, n); if (r(60) >= density) continue; put("scrub", mx + r(61), mz + r(62), scrubScale(look.shrubs[i + 2]) * (0.9 + r(63) * 0.2), r(64) * Math.PI * 2, r(65)); }
   // rocks and grass tufts: more of them beside roads and paths
   const verge = (x, z) => onRoad(x, z, 3.9) || onPath(x, z, 3);
-  for (let gz = 0; gz * CELL < b.z1; gz++) for (let gx = 0; gx * CELL < b.x1; gx++) {
+  for (let gz = 0; !treesOnly && gz * CELL < b.z1; gz++) for (let gx = 0; gx * CELL < b.x1; gx++) {
     const r = (n) => hash(gx, gz, n), x0 = gx * CELL, z0 = gz * CELL;
     if (r(50) >= 0.016 * density && r(80) >= 0.2 * density) continue;
     const near = verge(x0 + CELL / 2, z0 + CELL / 2), lawn = lawns(x0 + CELL / 2, z0 + CELL / 2, (s) => inRing(x0 + CELL / 2, z0 + CELL / 2, s.pts)); if (lawn) continue;
     if (r(50) < (near ? 0.012 : 0.016) * density) { const n = 1 + Math.floor(r(51) * 2.4), bx = x0 + r(52) * CELL, bz = z0 + r(53) * CELL; for (let k = 0; k < n; k++) put("rock", bx + (r(54 + k) - 0.5) * 2.2, bz + (r(58 + k) - 0.5) * 2.2, 0.5 + r(62 + k) * 1.3, r(66 + k) * Math.PI * 2, r(70 + k)); }
     if (r(80) < (near ? 0.2 : 0.04) * density) { const n = 1 + Math.floor(r(81) * 2.5); for (let k = 0; k < n; k++) put("tuft", x0 + r(86 + k) * CELL, z0 + r(90 + k) * CELL, 0.7 + r(94 + k) * 0.8, r(98 + k) * Math.PI * 2, r(106 + k) * 0.99); }
   }
-  return { chunks: [...chunks.values()], counts, beds };
+  return { chunks: [...chunks.values()], counts, beds, chunkSize };
 }

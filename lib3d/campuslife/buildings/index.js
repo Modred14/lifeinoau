@@ -35,6 +35,19 @@ function buildPlain(buf, b) {
   flatRoof(buf, fp, b.height, b.height, spec.roofColor, shade(spec.wall, 0.8));
 }
 
+/** The wall round a compound: both faces and a coping along each side of the footprint. */
+function buildFence(buf, b) {
+  const fp = footprintOf(b.poly, b.id); if (fp.pts.length < 3) return;
+  const spec = { ...classify(b, fp), floors: 1, storey: b.height }, n = fp.pts.length, OUT = 0.06, IN = 0.14;   // a hair outside the footprint, so it never fights a block's wall standing on the same line
+  for (let i = 0; i < n; i++) {
+    const p = fp.pts[i], q = fp.pts[(i + 1) % n], o = outward(fp, p, q), len = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1, ux = (q[0] - p[0]) / len, uz = (q[1] - p[1]) / len;
+    const at = ([x, z], k, along) => [x + o[0] * k + ux * along, z + o[1] * k + uz * along], a = at(p, OUT, -OUT), c = at(q, OUT, OUT), d = at(q, -IN, OUT), e = at(p, -IN, -OUT);
+    wallRun(buf, { a, b: c, normal: o, row: ROW.plain, groundRow: ROW.plain, salt: i }, spec, b.id, b.height, spec.wall);
+    wallRun(buf, { a: d, b: e, normal: [-o[0], -o[1]], row: ROW.plain, groundRow: ROW.plain, salt: i }, spec, b.id, b.height, spec.wall);
+    flatRoof(buf, { ...fp, pts: [a, c, d, e] }, b.height, b.height, shade(spec.wall, 0.7), shade(spec.wall, 0.7));
+  }
+}
+
 /**
  * list: [{ id, poly: [x, z, x, z, ...] metres, bbox: { x, y, w, h }, height, kind, name?, preset?, paint?, plain? }]
  * Returns { chunks: [{ buf, ranges: [{ bid, v0, v1 }] }], tops: Map(id -> highest point drawn, metres), failed: [ids drawn plain after an error, or not at all] }.
@@ -45,11 +58,11 @@ export function buildCampusBuildings(list, chunkSize = CHUNK_M) {
     const key = `${Math.floor((b.bbox.x + b.bbox.w / 2) / chunkSize)},${Math.floor((b.bbox.y + b.bbox.h / 2) / chunkSize)}`;
     let c = chunks.get(key); if (!c) chunks.set(key, (c = { buf: emptyBuffers(), ranges: [] }));
     const { buf } = c, mark = [buf.pos.length, buf.uv.length, buf.col.length, buf.idx.length], rewind = () => { [buf.pos.length, buf.uv.length, buf.col.length, buf.idx.length] = mark; };
-    try { (b.plain ? buildPlain : buildBuilding)(buf, b); }
+    try { (b.fence ? buildFence : b.plain ? buildPlain : buildBuilding)(buf, b); }
     catch { rewind(); failed.push(b.id); try { buildPlain(buf, b); } catch { rewind(); /* a malformed footprint is skipped, never fatal */ } }
     if (buf.pos.length === mark[0]) continue;
     let top = 0; for (let i = mark[0] + 1; i < buf.pos.length; i += 3) top = Math.max(top, buf.pos[i]);
-    tops.set(b.id, top); c.ranges.push({ bid: b.id, v0: mark[0] / 3, v1: buf.pos.length / 3 });
+    tops.set(b.id, Math.max(top, tops.get(b.id) ?? 0)); c.ranges.push({ bid: b.id, v0: mark[0] / 3, v1: buf.pos.length / 3 });
   }
   return { chunks: [...chunks.values()].filter((c) => c.ranges.length), tops, failed };
 }

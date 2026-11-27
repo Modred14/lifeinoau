@@ -63,7 +63,7 @@ export function buildRealCampus(data, meta = {}, look = null) {
   // ---- buildings: real footprints. Campuslife look: lib3d/campuslife/ (facades and roofs). Classic: merged into one wall mesh and one roof mesh ----
   const placeAt = new Map(); for (const p of data.places) if (p.bid != null) placeAt.set(p.bid, p);
   let win = null, wallMesh = null, capMesh = null; const ranges = [];
-  if (cl) root.add(cl.buildings, cl.scenery);
+  if (cl) root.add(cl.buildings, cl.scenery, cl.dressing);
   else {
     win = windowTextures(5); const rep = 1 / (12 * S); for (const t of [win.map, win.emis]) t.repeat.set(rep, rep);
     const sides = [], caps = []; let vs = 0, vc = 0;
@@ -138,7 +138,7 @@ export function buildRealCampus(data, meta = {}, look = null) {
   // `n` is the night level (0 day .. 1 night, lib3d/daylight.js), arriving from the sky rig a few times a minute at most. Windows are the wall material's emissive map (the lit panes of the
   // window texture), so more emissive = more windows glowing; street lights are the glowing lamp heads and the pools of light on the road (lib3d/roadfurniture.js). Nothing here allocates.
   let night = 0, verge = null;
-  const applyLamps = (n) => { for (const grp of [furniture, highway]) grp?.traverse((o) => { if (o.userData.lampHead) o.material.emissiveIntensity = 2.6 * n; else if (o.userData.lampPool) o.material.opacity = 0.6 * n; }); };   // the street lights of the roads and of the expressway
+  const applyLamps = (n) => { for (const grp of [furniture, highway]) grp?.traverse((o) => { if (o.userData.lampHead) o.material.emissiveIntensity = 2.6 * n; else if (o.userData.lampPool) o.material.opacity = 0.6 * n; else if (o.userData.lampCone) { o.material.opacity = 0.085 * n; o.visible = n > 0.05; } }); };   // the street lights of the roads and of the expressway
   const setNight = (n) => { night = n; if (wallMesh) wallMesh.material.emissiveIntensity = 0.18 + 1.1 * n; cl?.setNight(n); applyLamps(n); };
 
   /**

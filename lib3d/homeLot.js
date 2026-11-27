@@ -83,11 +83,14 @@ export function homeLots(svc, room, anchor, { radius = 420, limit = 40 } = {}) {
   }
   found.sort((a, b) => a.dist - b.dist || a.edge - b.edge || a.s - b.s || b.dx - a.dx);
   const out = [], mids = [];
-  for (const lot of found) {
-    if (mids.some((m) => Math.hypot(m[0] - lot.mid[0], m[1] - lot.mid[1]) < KEEP_APART)) continue;
-    if (!lotIsFree(svc, room, lot)) continue;
-    mids.push(lot.mid); delete lot.mid; out.push(lot); if (out.length >= limit) break;
-  }
+  const restore = svc.world.suspendDecor?.();   // decoration (trees, stalls, banners) never decides where a house stands: it makes way for it (lib3d/homeCompound.js)
+  try {
+    for (const lot of found) {
+      if (mids.some((m) => Math.hypot(m[0] - lot.mid[0], m[1] - lot.mid[1]) < KEEP_APART)) continue;
+      if (!lotIsFree(svc, room, lot)) continue;
+      mids.push(lot.mid); delete lot.mid; out.push(lot); if (out.length >= limit) break;
+    }
+  } finally { restore?.(); }
   return out;
 }
 

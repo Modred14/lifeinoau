@@ -11,10 +11,12 @@ import { tree } from "./trees.js";
 import { makeVehicle } from "./vehicles.js";
 import { ROAD_TOP } from "./roadsurface.js";
 import { CELL_M } from "./compoundUnits.js";
-import { homeLot } from "./homeLot.js";
+import { homeLot, compoundRing } from "./homeLot.js";
 import { homeSite, homePortal, homeBuilding, addSiteCollision, removeSiteCollision } from "./homeSite.js";
 import { ITEMS, sizeOf } from "../lib/furniture.js";
 import { isOutside } from "../lib/room.js";
+
+const inRing = (x, z, p) => { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) if ((p[i][1] > z) !== (p[j][1] > z) && x < ((p[j][0] - p[i][0]) * (z - p[i][1])) / (p[j][1] - p[i][1]) + p[i][0]) c = !c; return c; };
 
 export const WALL_H = 3.4; // the same height the home screen gives the walls (lib3d/room.js)
 const LAWN_Y = -0.3;      // an outdoor piece stands this far down from the floor level, on the lawn (as on the home screen)
@@ -30,6 +32,8 @@ export function createHomeCompound({ parent, svc, room, items = [], vehicles = [
   const site = homeSite(room, items, vehicles, lot, { interior }), portal = homePortal(room, site), F = site.F;
   removeSiteCollision(svc.world); addSiteCollision(svc.world, site);
   // the house is its footprint exactly (the solid the walker plans round and the door opens in), not the wider apron the vehicles keep clear
+  // the yard, the house and the driveway are cleared of trees, stalls and banners for as long as the compound stands (lib3d/campuslife/decor.js)
+  const ring = compoundRing(room, lot), restoreDecor = svc.world.suspendDecor?.((p) => p.tag.pts.some(([x, z]) => inRing(x, z, ring)));
   const root = new THREE.Group(); root.name = "home-compound"; parent.add(root);
   const mats = [], mat = (color, o = {}) => { const m = new THREE.MeshStandardMaterial({ color, roughness: 0.8, metalness: 0, ...o }); mats.push(m); return m; };
   const frame = new THREE.Group(); frame.position.set(F.group.x, ROAD_TOP - GROUND * CELL_M, F.group.z); frame.rotation.y = F.group.rotY; frame.scale.setScalar(CELL_M); root.add(frame);
@@ -88,7 +92,7 @@ export function createHomeCompound({ parent, svc, room, items = [], vehicles = [
   function dispose() {
     for (const id of bodies) svc.world.removeBody(id);
     removeSiteCollision(svc.world);
-    parent.remove(root); for (const c of cars) { parent.remove(c.root); c.dispose?.(); }
+    restoreDecor?.(); parent.remove(root); for (const c of cars) { parent.remove(c.root); c.dispose?.(); }
     plot.group.traverse((o) => { if (!o.geometry?.userData?.shared) o.geometry?.dispose?.(); }); plot.release?.(); shell.dispose();
     frame.traverse((o) => { if (o.parent && (outdoor.includes(o) || indoor.includes(o))) o.traverse((q) => { q.geometry?.dispose?.(); }); }); for (const m of mats) m.dispose();
   }

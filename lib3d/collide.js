@@ -14,12 +14,13 @@ const inPoly = (x, z, pts) => { let c = false; for (let i = 0, j = pts.length - 
 
 export class CollisionWorld {
   constructor(cell = 12) {
-    this.cell = cell; this.hash = new Map(); this.phash = new Map(); this.polys = []; this.E = []; this.bodies = new Map(); this.stamp = 0; this.rev = 0; this.sd = [];   // rev: counts every change to the static solids (a home's walls going up or coming down), so a cache built from them can tell it is stale
+    this.cell = cell; this.hash = new Map(); this.phash = new Map(); this.polys = []; this.E = []; this.bodies = new Map(); this.stamp = 0; this.rev = 0; this.sd = []; this.decor = [];   // rev: counts every change to the static solids (a home's walls going up or coming down), so a cache built from them can tell it is stale
   }
   /** A solid area (a building, a lake). `pts` is a ring of [x, z]. */
   addPolygon(pts, tag = null) {
     this.rev++;
     if (pts.length < 3) return -1;
+    if (tag?.decor) this.decor.push(this.polys.length);
     let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const p of pts) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]); }
     const pi = this.polys.length, first = this.E.length; this.polys.push({ pts, tag, bb: [x0, z0, x1, z1], first, count: pts.length });
     for (let i = 0; i < pts.length; i++) this._edge(pts[i], pts[(i + 1) % pts.length], pi);
@@ -36,6 +37,16 @@ export class CollisionWorld {
     for (const e of this.E) if (!e.dead && (e.poly >= 0 ? this.polys[e.poly].tag : e.tag)?.owner === owner) { e.dead = true; if (e.poly < 0) n++; }
     if (n) this.rev++;
     return n;
+  }
+  /**
+   * Takes decoration (solids tagged `{ decor: true }`: planted trees, stalls, banners, the gate) out of the world for a while: those `pred(poly)` accepts, or all of them. Returns a function that puts
+   * exactly those back. A home compound clears its yard this way, and the search for a home lot ignores decoration so that adding it never moves anybody's house (lib3d/homeLot.js).
+   */
+  suspendDecor(pred = null) {
+    const off = [], set = (p, dead) => { p.dead = dead; for (let k = 0; k < p.count; k++) this.E[p.first + k].dead = dead; };
+    for (const i of this.decor) { const p = this.polys[i]; if (!p.dead && (!pred || pred(p))) { set(p, true); off.push(p); } }
+    if (off.length) this.rev++;
+    return () => { for (const p of off.splice(0)) set(p, false); this.rev++; };
   }
   /** A post or pole: a small octagon. */
   addPost(x, z, r, tag = null) { const p = []; for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + Math.PI / 8; p.push([x + Math.cos(a) * r, z + Math.sin(a) * r]); } return this.addPolygon(p, tag); }
@@ -114,7 +125,7 @@ export class CollisionWorld {
   raycast(ax, az, bx, bz) {
     const l = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(l / (this.cell * 0.5))); let best = null; const seen = new Set();
     for (let i = 0; i <= n; i++) { const x = ax + ((bx - ax) * i) / n, z = az + ((bz - az) * i) / n, c = this.cell;
-      for (let a = Math.floor(x / c) - 0; a <= Math.floor(x / c); a++) for (let b = Math.floor(z / c); b <= Math.floor(z / c); b++) for (const id of this.hash.get(KEY(a, b)) ?? []) { if (seen.has(id)) continue; seen.add(id); const e = this.E[id]; if (e.dead) continue; const t = segHit(ax, az, bx, bz, e.ax, e.az, e.bx, e.bz); if (t != null && (best == null || t < best)) best = t; } }
+      for (let a = Math.floor(x / c) - 0; a <= Math.floor(x / c); a++) for (let b = Math.floor(z / c); b <= Math.floor(z / c); b++) for (const id of this.hash.get(KEY(a, b)) ?? []) { if (seen.has(id)) continue; seen.add(id); const e = this.E[id]; if (e.dead || (e.poly >= 0 && this.polys[e.poly].tag?.seeThrough)) continue; const t = segHit(ax, az, bx, bz, e.ax, e.az, e.bx, e.bz); if (t != null && (best == null || t < best)) best = t; } }
     return best;
   }
 }
