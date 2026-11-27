@@ -96,6 +96,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
   const [now, setNow] = useState(() => serverDate());
   const [app, setApp] = useState(null);
   const [peer, setPeer] = useState(null); // the player Messages should open on when another app sends you there (the Developer app's Message button)
+  const [groupId, setGroupId] = useState(null); // the custom group Groups should open on, when a group chat's info is tapped
   const unread = useChat((s) => s.unread); // pushed by the chat connection: nothing is polled for it any more
   const gamesBadge = useGamesBadge(open); // challenges waiting for you, or a match where it is your move
   const updateAvailable = usePwaUpdate();
@@ -113,7 +114,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
     setWasShown(open);
     if (open) {
       setApp(APPS[initialApp] && (!held || !CUSTODY_HIDDEN.includes(initialApp)) ? initialApp : null);
-      setPeer(null);
+      setPeer(null); setGroupId(null);
       setFresh(true);
       setPhase(phase === "leave" || reduced() ? "open" : "enter");
     } else if (phase !== "closed") setPhase(reduced() || phase === "enter" ? "closed" : "leave"); // closed before it ever showed: nothing to animate
@@ -144,7 +145,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
   useEffect(() => {
     if (!open) return;
     void checkPwaUpdate(); // ask the browser quietly when the player opens the phone
-    setPeer(null);
+    setPeer(null); setGroupId(null);
     setApp(APPS[initialApp] && (!held || !CUSTODY_HIDDEN.includes(initialApp)) ? initialApp : null);
     setNow(serverDate());
     const t = setInterval(() => setNow(serverDate()), 15000);
@@ -165,7 +166,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
     return () => document.removeEventListener("keydown", k, true);
   }, [open, app, onClose]);
   const home = useCallback(() => { setFresh(false); setApp(null); }, []);
-  const openApp = useCallback((id, who = null) => { setPeer(typeof who === "string" ? who : null); setFresh(false); setApp(id); }, []); // `who` is only ever a player name from the server
+  const openApp = useCallback((id, who = null) => { setPeer(typeof who === "string" ? who : null); setGroupId(typeof who === "number" ? who : null); setFresh(false); setApp(id); }, []); // `who` is a player name (Messages) or a custom group id (Groups), both from the server
   if (phase === "closed") return null;
   const c = st?.character, a = st?.academics, info = c && CLASS_INFO[c.class];
   const cur = app && APPS[app];
@@ -231,7 +232,7 @@ export default function Phone({ open, onClose, st, held = false, firstApp, initi
                 </header>
               )}
               <div className="pa-body" aria-hidden={appLoading || undefined} inert={appLoading || undefined}>
-                {Cur ? (cur.own ? <Cur onHome={home} onClose={onClose} onOpenApp={openApp} onLogout={onLogout} loggingOut={loggingOut} /> : <div className="pa-content"><Cur onOpenApp={openApp} onClose={onClose} /></div>) : <MessagesApp onHome={home} initialWho={app === "messages" ? (peer ?? initialWith) : null} />}
+                {Cur ? (cur.own ? <Cur onHome={home} onClose={onClose} onOpenApp={openApp} onLogout={onLogout} loggingOut={loggingOut} /> : <div className="pa-content"><Cur onOpenApp={openApp} onClose={onClose} initialGroup={groupId} /></div>) : <MessagesApp onHome={home} onOpenApp={openApp} initialWho={app === "messages" ? (peer ?? initialWith) : null} />}
               </div>
               {appLoading && <div className="ph-app-loading" role="status" aria-live="polite" aria-busy="true" aria-label={`Loading ${cur.name}`}><span className="ph-spin-ring" aria-hidden="true" /></div>}
             </section>

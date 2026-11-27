@@ -33,6 +33,8 @@ import { Icon } from "../Icon";
 import { Spinner } from "../Loader";
 import PlayerAvatar from "../PlayerAvatar";
 import "./messages-app.css";
+import GroupConversation, { GroupAvatar } from "./GroupConversation";
+import { useLive } from "./sugKit";
 
 const lc = (n = "") => String(n).toLowerCase();
 const samePushKey = (subscription, expected) => {
@@ -161,23 +163,26 @@ const Banner = ({ kind }) => (
 );
 
 /* ============================== top level ============================== */
-export default function MessagesApp({ onHome, initialWho = null }) {
+export default function MessagesApp({ onHome, onOpenApp, initialWho = null }) {
   const [who, setWho] = useState(initialWho || null); // a name tag's "Message" opens straight into a chat with that player
+  const [group, setGroup] = useState(null); // an open group chat { kind, id, name }
   useEffect(() => {
     chat.setForeground(true);
     return () => chat.setForeground(false);
   }, []);
+  if (group) return <GroupConversation key={`${group.kind}-${group.id}`} group={group} time={{ hm, sameDay, dayLabel }} onBack={() => setGroup(null)} onInfo={() => onOpenApp?.("faculty", group.kind === "custom" ? group.id : null)} />;
   return who ? (
     <ChatView key={who} who={who} onBack={() => setWho(null)} />
   ) : (
-    <Inbox onHome={onHome} onOpen={setWho} />
+    <Inbox onHome={onHome} onOpen={setWho} onOpenGroup={setGroup} />
   );
 }
 
 /* ============================== inbox ============================== */
-function Inbox({ onHome, onOpen }) {
+function Inbox({ onHome, onOpen, onOpenGroup }) {
   const router = useRouter();
   const st = useChat();
+  const groups = useLive("/api/groups/chats", 10000); // the faculty group and custom groups, listed among the private chats
   const [q, setQ] = useState(""),
     [found, setFound] = useState(null),
     [filter, setFilter] = useState("all"),
@@ -273,7 +278,10 @@ function Inbox({ onHome, onOpen }) {
   const inbox = st.inbox,
     unread = st.unread,
     live = st.link === "live";
-  const rows = (inbox ?? []).filter((c) =>
+  const groupChats = groups.d?.chats ?? [],
+    groupUnread = groupChats.reduce((n, g) => n + g.unread, 0);
+  // one list, newest first, as in any chat app. Groups have no online state.
+  const rows = [...(inbox ?? []), ...(filter === "online" ? [] : groupChats.map((g) => ({ ...g, group: true })))].sort((a, b) => new Date(b.at ?? 0) - new Date(a.at ?? 0)).filter((c) =>
     filter === "unread"
       ? c.unread > 0
       : filter === "online"
@@ -282,7 +290,7 @@ function Inbox({ onHome, onOpen }) {
   );
   const filters = [
     ["all", "All"],
-    ["unread", unread ? `Unread ${unread}` : "Unread"],
+    ["unread", unread || groupUnread ? `Unread ${unread + groupUnread}` : "Unread"],
     ...(live ? [["online", "Online"]] : []),
   ];
 
@@ -379,10 +387,12 @@ function Inbox({ onHome, onOpen }) {
           ) : (
             <p className="ms-empty">No player found with that name.</p>
           )
-        ) : inbox === null ? (
+        ) : inbox === null && !groupChats.length ? (
           <Spinner />
         ) : rows.length ? (
-          rows.map((c) => (
+          rows.map((c) => c.group ? (
+            <GroupRow key={`${c.kind}-${c.id}`} g={c} onOpen={() => onOpenGroup({ kind: c.kind, id: c.id, name: c.name })} />
+          ) : (
             <Row
               key={c.name}
               c={c}
@@ -396,9 +406,9 @@ function Inbox({ onHome, onOpen }) {
             <span className="ms-emptyico">
               <Icon name="chat" size={30} weight="fill" />
             </span>
-            <b>{inbox.length ? "Nothing here" : "No conversations yet"}</b>
+            <b>{inbox?.length || groupChats.length ? "Nothing here" : "No conversations yet"}</b>
             <span>
-              {inbox.length
+              {inbox?.length || groupChats.length
                 ? "No chats match this filter."
                 : "Search for a player above and say hi."}
             </span>
@@ -451,6 +461,27 @@ function Row({ c, online, typing, onOpen }) {
               {c.unread > 99 ? "99+" : c.unread}
             </i>
           )}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function GroupRow({ g, onOpen }) {
+  const who = g.last && !g.last.deleted ? (g.last.mine ? "You: " : `${g.last.from}: `) : "";
+  return (
+    <button type="button" className="ms-conv" onClick={onOpen} aria-label={`${g.name}, group${g.unread ? `, ${g.unread} unread` : ""}`}>
+      <GroupAvatar group={g} />
+      <span className="ms-c">
+        <span className="ms-c1">
+          <b>{g.name}</b>
+          <time className={g.unread ? "unread" : ""}>{g.last ? listTime(g.at) : ""}</time>
+        </span>
+        <span className="ms-c2">
+          <small className={g.unread ? "unread" : ""}>
+            <span>{g.last ? who + g.last.body : g.kind === "faculty" ? "Your faculty group. Say hello." : "No messages yet"}</span>
+          </small>
+          {g.unread > 0 && <i className="ms-dot" aria-hidden="true">{g.unread > 99 ? "99+" : g.unread}</i>}
         </span>
       </span>
     </button>

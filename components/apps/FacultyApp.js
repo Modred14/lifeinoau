@@ -231,8 +231,8 @@ function Elections({ ovReload, onOpenApp }) {
 const TABS = [["group", "Group"], ["discussion", "Chat"], ["members", "Members"], ["elections", "Elections"]];
 const SECTIONS = [["faculty", "My Faculty"], ["mine", "My Groups"], ["discover", "Discover"]];
 
-export default function GroupsApp({ onOpenApp }) {
-  const [section, setSection] = useState("faculty"), [open, setOpen] = useState(null), [creating, setCreating] = useState(false);
+export default function GroupsApp({ onOpenApp, initialGroup = null }) {
+  const [section, setSection] = useState(initialGroup ? "mine" : "faculty"), [open, setOpen] = useState(initialGroup), [creating, setCreating] = useState(false);
   const pick = (k) => { setSection(k); setOpen(null); setCreating(false); };
   return (
     <div className="fg">

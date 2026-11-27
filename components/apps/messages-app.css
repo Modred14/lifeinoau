@@ -155,6 +155,15 @@
 .ms .ms-jump { position: absolute; z-index: 6; right: 14px; bottom: 98px; min-width: 40px; height: 40px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; background: #fff; color: var(--text); font-weight: 600; font-size: 0.82rem; box-shadow: 0 0 0 1px var(--line), 0 6px 16px -6px rgba(16, 24, 40, 0.4); }
 .ms .ms-jump span { color: #fff; background: var(--green); border-radius: 999px; min-width: 20px; height: 20px; display: grid; place-items: center; padding: 0 5px; font-size: 0.72rem; }
 
+/* ---------- group chats ---------- */
+.ms-gav { flex: none; display: inline-grid; place-items: center; border-radius: 50%; background: #3a5bd9; color: #fff; }
+.ms-gav[data-kind="faculty"] { background: #12806a; }
+.ms-group-item { display: flex; flex-direction: column; }
+.ms-row.theirs { padding-left: 34px; }
+.ms-gsender { position: absolute; left: 0; bottom: 0; }
+.ms-gname { display: block; font: 600 0.8rem var(--font-head); line-height: 1.3; }
+.ms-empty > .ms-gav { margin-bottom: 4px; }
+
 /* ---------- composer ---------- */
 .ms-compose { flex: none; display: flex; align-items: flex-end; gap: 8px; padding: 8px 10px max(2.25px, env(safe-area-inset-bottom)); background: #fff; border-top: 1px solid var(--line); }
 .ms-compose textarea { flex: 1; min-width: 0; resize: none; min-height: 44px; max-height: 112px; padding: 11px 16px; border-radius: 22px; border: 1.5px solid transparent; background: var(--surface); color: var(--text); font: inherit; font-size: 0.95rem; line-height: 1.3; }

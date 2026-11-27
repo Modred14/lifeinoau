@@ -14,6 +14,7 @@ const one = await import("../src/app/api/groups/[id]/route.js");
 const msgs = await import("../src/app/api/groups/[id]/messages/route.js");
 const fmsgs = await import("../src/app/api/faculty-groups/messages/route.js");
 const overview = await import("../src/app/api/faculty-groups/route.js");
+const chats = await import("../src/app/api/groups/chats/route.js");
 const characterRoute = await import("../src/app/api/character/route.js");
 const { PERSONALITIES } = await import("../lib/rules.js");
 
@@ -124,6 +125,24 @@ ok((await as(guest, one.POST, "/g", { action: "join" }, g)).json.requested, "aft
 ok((await as(admin, one.POST, "/g", { action: "invite", name: "%" }, g)).status === 404, "a wildcard is not a player name");
 const blocked = await mk("blk"); await db.block.create({ data: { blockerId: blocked.id, blockedId: admin.id } });
 ok((await as(admin, one.POST, "/g", { action: "invite", name: blocked.name }, g)).status === 403, "a block stops invitations");
+
+console.log("\n== group chats in Messages ==");
+const listOf = async (p) => (await as(p, chats.GET, "/api/groups/chats")).json.chats;
+await as(out, msgs.POST, "/m", { body: "hello club" }, g);
+let list = await listOf(owner);
+ok(list.filter((c) => c.kind === "faculty").length === 1 && list.some((c) => c.kind === "custom" && c.id === g), "Messages lists my faculty group and my custom groups", list);
+let row = list.find((c) => c.id === g && c.kind === "custom");
+ok(row.last.body === "hello club" && row.last.from === out.name && !row.last.mine && row.unread >= 1, "with the last post, its sender and the unread count", row);
+await as(owner, msgs.GET, "/m", undefined, g);
+ok((await listOf(owner)).find((c) => c.id === g && c.kind === "custom").unread === 0, "opening the chat clears its unread count");
+const lone = await mk("lone", facB.id);
+list = await listOf(lone);
+ok(list.length === 1 && list[0].kind === "faculty" && !JSON.stringify(list).includes("hello faculty"), "a player in no custom group sees only their own faculty group", list);
+await db.block.create({ data: { blockerId: owner.id, blockedId: out.id } });
+ok((await listOf(owner)).find((c) => c.id === g && c.kind === "custom").last?.body !== "hello club", "a blocked player's post is not previewed");
+await db.block.deleteMany({ where: { blockerId: owner.id } });
+const nobody = await user("nochar");
+ok((await listOf(nobody)).length === 0 && (await as(null, chats.GET, "/api/groups/chats")).status === 401, "no character: an empty list; no login: refused");
 
 console.log("\n== leave, transfer, delete ==");
 ok((await as(owner, one.POST, "/g", { action: "leave" }, g)).status === 409, "the owner cannot walk out on a group with members");
